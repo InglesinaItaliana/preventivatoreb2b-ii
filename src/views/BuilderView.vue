@@ -96,7 +96,7 @@ const tipiCanalinoDisp = computed(() => catalog.listino.CANALINO ? Object.keys(c
 const dimensioniCanalinoDisp = computed(() => (tipoCanalino.value && catalog.listino.CANALINO?.[tipoCanalino.value]) ? Object.keys(catalog.listino.CANALINO[tipoCanalino.value]) : []);
 const finitureCanalinoDisp = computed(() => (dimensioneCanalino.value && catalog.listino.CANALINO?.[tipoCanalino.value]?.[dimensioneCanalino.value]) ? Object.keys(catalog.listino.CANALINO[tipoCanalino.value][dimensioneCanalino.value]) : []);
 
-// Fix TypeScript: cast a string o check esistenza
+// Fix TypeScript
 watch(tipiGrigliaDisp, (v) => { if (v.length === 1) tipoGriglia.value = v[0] as string; });
 watch(dimensioniGrigliaDisp, (v) => { if (v.length === 1) dimensioneGriglia.value = v[0] as string; });
 watch(finitureGrigliaDisp, (v) => { if (v.length === 1) finituraGriglia.value = v[0] as string; });
@@ -149,7 +149,7 @@ const uploadFile = async (event: Event) => {
         url: url, 
         tipo: file.name.split('.').pop()?.toUpperCase() || 'FILE', 
         dataCaricamento: new Date().toISOString()
-    } as any);
+    });
   } catch (e) { 
     alert("Errore upload."); 
     console.error(e); 
@@ -161,36 +161,90 @@ const rimuoviAllegato = (index: number) => {
     if(confirm("Rimuovere allegato?")) listaAllegati.value.splice(index, 1);
 };
 
+// --- FUNZIONI NAVIGAZIONE ---
+
+const vaiDashboard = () => {
+  // Se ci sono modifiche non salvate, avvisa
+  if (preventivo.value.length > 0 && !currentDocId.value) {
+    if (!confirm("Hai un preventivo in corso non salvato. Vuoi uscire?")) return;
+  }
+  
+  if (isAdmin.value) router.push('/admin');
+  else router.push('/dashboard');
+};
+
+const nuovaCommessa = () => {
+  if (preventivo.value.length > 0 && !confirm("Attenzione: perderai le modifiche non salvate. Iniziare una nuova commessa?")) {
+    return;
+  }
+  
+  // RESET TOTALE
+  preventivo.value = [];
+  currentDocId.value = null;
+  statoCorrente.value = 'DRAFT';
+  riferimentoCommessa.value = '';
+  codiceRicerca.value = '';
+  noteCliente.value = '';
+  scontoApplicato.value = 0;
+  listaAllegati.value = [];
+  
+  // Reset input parziali
+  Object.assign(pannello, { base: 0, altezza: 0, righe: 0, colonne: 0, qty: 1 });
+  Object.assign(opzioniTelaio, { nonEquidistanti: false, curva: false, tacca: false });
+};
+
 const salvaPreventivo = async (azione?: string) => {
   if (preventivo.value.length === 0) return alert("Preventivo vuoto.");
 
-  if (azione === 'RICHIESTA_ORDINE') {
-      if (isAdmin.value) return alert("L'admin non può ordinare.");
-      showLegalModal.value = true;
-      return;
-  }
-
   isSaving.value = true;
+
   try {
     const codice = codiceRicerca.value || `${new Date().getFullYear()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
     
+    // --- LOGICA STATI RIGIDA ---
     let nuovoStato: StatoPreventivo = 'DRAFT';
-    if (currentDocId.value && !azione && !richiedeValidazione.value) nuovoStato = statoCorrente.value;
-    if (richiedeValidazione.value && statoCorrente.value !== 'SIGNED') nuovoStato = 'PENDING_VAL';
-    
+
+    // 1. Se sto solo salvando dati in bozza
+    if (currentDocId.value && !azione) {
+        nuovoStato = statoCorrente.value === 'DRAFT' ? 'DRAFT' : statoCorrente.value;
+    }
+
+    // 2. Se il cliente chiede validazione (O se ci sono curve/note) -> PENDING_VAL
+    // (Questo vale per TUTTI gli ordini nuovi, indipendentemente dall'importo)
+    if (azione === 'RICHIEDI_VALIDAZIONE' || richiedeValidazione.value) {
+        // Non permettiamo di tornare indietro se è già approvato/firmato
+        if (!['QUOTE_READY', 'SIGNED', 'IN_PRODUZIONE', 'ORDER_REQ', 'WAITING_SIGN'].includes(statoCorrente.value)) {
+             nuovoStato = 'PENDING_VAL';
+        }
+    }
+
+    // 3. Logica Admin
     if (isAdmin.value && azione) {
        if (azione === 'APPROVA') nuovoStato = 'QUOTE_READY';
        if (azione === 'RIFIUTA') nuovoStato = 'REJECTED';
     }
+    
+    // Casi speciali (Firma > 5000)
+    if (azione === 'RICHIESTA_CONTRATTO') nuovoStato = 'ORDER_REQ';
 
     const docData = {
       codice, 
       cliente: nomeCliente.value,
       clienteEmail: clienteEmail.value, 
       commessa: riferimentoCommessa.value,
-      totaleImponibile: totaleImponibile.value, scontoPercentuale: scontoApplicato.value, totaleScontato: totaleFinale.value,
-      stato: nuovoStato, noteCliente: noteCliente.value, allegati: listaAllegati.value,
-      dataCreazione: serverTimestamp(), dataScadenza: new Date(Date.now() + 30*24*60*60*1000),
+      
+      totaleImponibile: totaleImponibile.value,
+      scontoPercentuale: scontoApplicato.value,
+      totaleScontato: totaleFinale.value,
+      
+      stato: nuovoStato,
+      noteCliente: noteCliente.value,
+      allegati: listaAllegati.value,
+      
+      dataModifica: serverTimestamp(),
+      ...(currentDocId.value ? {} : { dataCreazione: serverTimestamp() }),
+      dataScadenza: new Date(Date.now() + 30*24*60*60*1000),
+      
       elementi: preventivo.value.map(r => ({ ...r }))
     };
 
@@ -202,41 +256,55 @@ const salvaPreventivo = async (azione?: string) => {
     }
     
     statoCorrente.value = nuovoStato;
-    alert(`✅ Salvato: ${nuovoStato}`);
-    if (isAdmin.value) router.push('/admin'); else caricaListaStorico();
+    
+    // Feedback
+    let msg = "✅ Salvato.";
+    if (nuovoStato === 'PENDING_VAL') msg = "⚠️ Inviato all'amministrazione per validazione.";
+    if (nuovoStato === 'QUOTE_READY') msg = "✅ Preventivo Validato.";
+    
+    alert(msg);
+    
+    if (isAdmin.value) router.push('/admin');
+    else caricaListaStorico();
+
   } catch (e) { alert("Errore salvataggio."); console.error(e); } 
   finally { isSaving.value = false; }
 };
 
 const confermaOrdineLegale = async () => {
     if (!legalCheck1.value || !legalCheck2.value) return alert("Devi accettare tutte le condizioni.");
+    
     isConfirming.value = true;
     try {
+        // ... (recupero IP e User uguale a prima) ...
         const ipRes = await fetch('https://api.ipify.org?format=json');
         const ipData = await ipRes.json();
-        
         const user = auth.currentUser;
+        
         const datiLegali = {
             accettazioneTermini: true, accettazioneClausole: true,
             ipCliente: ipData.ip, userAgent: navigator.userAgent,
             dataFirma: new Date().toISOString(), firmatarioEmail: user?.email, firmatarioUid: user?.uid
         };
 
-        const nextState = 'ORDER_REQ'; 
+        // STATO FINALE: SIGNED (Perché siamo < 5000)
+        const nextState = 'SIGNED'; 
+
         if (currentDocId.value) {
             await setDoc(doc(db, 'preventivi', currentDocId.value), {
                 stato: nextState,
                 datiLegali: datiLegali,
-                dataOrdine: serverTimestamp()
+                dataOrdine: serverTimestamp(),
+                dataConferma: serverTimestamp() // Aggiungiamo data conferma
             }, { merge: true });
         }
 
-        alert(`✅ Ordine Confermato! Inviata mail a ${user?.email}`);
+        alert(`✅ Ordine Confermato e Firmato Digitalmente!`);
         showLegalModal.value = false;
         statoCorrente.value = nextState;
         router.push('/dashboard');
 
-    } catch(e) { console.error(e); alert("Errore firma digitale"); }
+    } catch(e) { console.error(e); alert("Errore firma"); }
     finally { isConfirming.value = false; }
 };
 
@@ -272,6 +340,7 @@ const caricaListaStorico = async () => {
     if (isAdmin.value) {
          q = query(collection(db, 'preventivi'), orderBy('dataCreazione', 'desc'), limit(20));
     } else {
+         // Query Ibrida
          q = query(collection(db, 'preventivi'), where('clienteEmail', '==', user.email), orderBy('dataCreazione', 'desc'), limit(20));
     }
     const s = await getDocs(q);
@@ -315,7 +384,7 @@ onMounted(() => {
         }
     });
     
-    if(route.query.codice) { codiceRicerca.value = route.query.codice as string; setTimeout(caricaPreventivo, 500); }
+    if(route.query.codice) { codiceRicerca.value = route.query.codice as string; setTimeout(caricaPreventivo, 1000); }
 });
 </script>
 
@@ -324,14 +393,25 @@ onMounted(() => {
     
     <header class="bg-white shadow-sm p-4 sticky top-0 z-30 border-b border-gray-200">
       <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-        <div class="flex items-center gap-3">
+        <div class="flex items-center gap-4">
+           <button @click="vaiDashboard" class="text-gray-400 hover:text-gray-700 transition-colors p-2 rounded-full hover:bg-gray-100" title="Torna alla Dashboard">
+             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
+           </button>
+           
            <img src="/logo.svg" class="h-8 w-auto" alt="Logo" />
            <div class="pl-3 border-l border-gray-300">
              <div class="font-bold text-xl font-heading leading-none text-gray-800">PREVENTIVATORE</div>
              <div class="text-xs text-gray-500 font-medium uppercase tracking-wide mt-0.5">{{ nomeCliente }}</div>
            </div>
         </div>
+        
         <div class="flex items-center gap-2 bg-gray-100 rounded-full px-4 py-1.5 border border-gray-200 shadow-inner">
+            
+          <button @click="nuovaCommessa" class="text-xs font-bold text-green-700 hover:bg-green-50 px-2 py-1 rounded uppercase flex items-center gap-1 mr-2 border-r border-gray-300 pr-3">
+             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
+             NUOVO
+          </button>
+
           <button @click="mostraStorico = true" class="text-sm font-bold text-gray-600 hover:text-black flex items-center gap-2 transition-colors">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
             Storico
@@ -366,12 +446,10 @@ onMounted(() => {
                     Richiede validazione
                 </div>
             </div>
-
             <div>
                 <label class="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Allegati (PDF, DWG)</label>
                 <div class="relative border-2 border-dashed border-gray-200 rounded-lg p-4 hover:bg-gray-50 hover:border-yellow-400 transition-all text-center cursor-pointer group" :class="isLocked ? 'opacity-50 pointer-events-none' : ''">
                     <input type="file" @change="uploadFile" :disabled="isLocked" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
-                    
                     <div v-if="isUploading" class="flex flex-col items-center gap-2">
                         <svg class="animate-spin h-5 w-5 text-yellow-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
                         <span class="text-xs font-bold text-gray-500">Caricamento...</span>
@@ -381,7 +459,6 @@ onMounted(() => {
                         <span class="text-xs text-gray-400"><strong class="text-yellow-600">Clicca</strong> o trascina file</span>
                     </div>
                 </div>
-                
                 <div v-if="listaAllegati.length > 0" class="mt-3 space-y-2">
                     <div v-for="(file, idx) in listaAllegati" :key="file.url" class="flex justify-between items-center text-xs bg-gray-50 border border-gray-200 p-2 rounded-md">
                         <a :href="file.url" target="_blank" class="flex items-center gap-2 text-gray-700 hover:text-blue-600 font-medium truncate max-w-[180px]">
@@ -463,11 +540,84 @@ onMounted(() => {
 
       </div>
 
-      <div class="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col min-h-[600px]">
+      <div class="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col min-h-[600px] overflow-hidden">
         
-        <div class="p-5 border-b border-gray-100 flex justify-between items-center">
-          <h2 class="font-bold text-lg font-heading text-gray-800">Riepilogo Ordine</h2>
-          <span class="bg-gray-100 text-gray-600 px-3 py-1 rounded-full text-xs font-bold">{{ preventivo.length }} Elementi</span>
+        <div class="p-6 bg-gray-900 text-white flex justify-between items-center">
+            <div class="space-y-1">
+                <div class="text-xs text-gray-400 uppercase tracking-widest font-bold">Totale Ordine</div>
+                <div class="flex items-baseline gap-3">
+                    <div class="text-3xl font-heading font-bold text-yellow-400">{{ totaleFinale.toFixed(2) }} €</div>
+                    <div v-if="scontoApplicato > 0" class="text-sm text-green-400 line-through opacity-60">{{ totaleImponibile.toFixed(2) }} €</div>
+                </div>
+                <div class="mt-2">
+                    <span v-if="statoCorrente === 'QUOTE_READY'" class="px-2 py-1 bg-green-500/20 text-green-400 rounded text-xs font-bold border border-green-500/50">✅ PREVENTIVO PRONTO</span>
+                    <span v-else-if="statoCorrente === 'PENDING_VAL'" class="px-2 py-1 bg-orange-500/20 text-orange-400 rounded text-xs font-bold border border-orange-500/50">⚠️ DA VALIDARE</span>
+                    <span v-else-if="statoCorrente === 'ORDER_REQ'" class="px-2 py-1 bg-purple-500/20 text-purple-400 rounded text-xs font-bold border border-purple-500/50">🚀 ORDINE RICHIESTO</span>
+                </div>
+            </div>
+
+            <div class="flex gap-3">
+                <template v-if="!isAdmin">
+                    
+                    <div v-if="statoCorrente === 'QUOTE_READY'">
+                        <button 
+                            @click="avviaProceduraOrdine" 
+                            class="bg-green-600 hover:bg-green-700 text-white px-6 py-3 rounded-lg font-bold shadow-lg shadow-green-900/30 flex items-center gap-2 animate-pulse"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>
+                            CONFERMA ORDINE
+                        </button>
+                    </div>
+
+                    <div v-else-if="statoCorrente === 'PENDING_VAL'">
+                         <button disabled class="bg-orange-100 text-orange-500 px-6 py-3 rounded-lg font-bold cursor-not-allowed border border-orange-200 flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd" /></svg>
+                            IN ATTESA DI VALIDAZIONE...
+                        </button>
+                    </div>
+
+                    <div v-else-if="['ORDER_REQ', 'WAITING_SIGN', 'SIGNED', 'IN_PRODUZIONE'].includes(statoCorrente)" class="text-right px-4">
+                        <span class="text-sm font-bold text-gray-600">Ordine in lavorazione</span>
+                    </div>
+
+                    <div v-else>
+                        <button 
+                            @click="salvaPreventivo('RICHIEDI_VALIDAZIONE')" 
+                            :disabled="preventivo.length === 0"
+                            class="bg-yellow-400 hover:bg-yellow-500 text-black px-8 py-3 rounded-lg font-bold shadow-lg flex items-center gap-2 transition-transform active:scale-95"
+                        >
+                            INVIA PER VALIDAZIONE
+                        </button>
+                    </div>
+                </template>
+
+                <template v-else>
+                    <div v-if="statoCorrente === 'ORDER_REQ'" class="flex gap-2">
+                        <button @click="alert('Usa la Dashboard per inviare la mail di conferma!')" class="bg-purple-100 text-purple-700 border border-purple-200 px-4 py-2 rounded-lg font-bold hover:bg-purple-200">
+                            📧 GESTISCI ORDINE
+                        </button>
+                        <button @click="salvaPreventivo()" class="text-gray-400 hover:text-gray-600 text-xs underline">Salva forzato</button>
+                    </div>
+
+                    <div v-else-if="statoCorrente === 'PENDING_VAL' || statoCorrente === 'DRAFT'" class="flex gap-2">
+                        <button @click="salvaPreventivo('RIFIUTA')" class="text-red-400 hover:text-red-300 font-bold px-4 text-sm">RIFIUTA</button>
+                        <button @click="salvaPreventivo('APPROVA')" class="bg-green-600 hover:bg-green-500 text-white px-8 py-3 rounded-lg font-bold shadow-lg flex items-center gap-2">
+                            VALIDA E INVIA
+                        </button>
+                    </div>
+
+                    <div v-else>
+                        <button @click="salvaPreventivo()" class="bg-gray-800 text-white px-6 py-2 rounded-lg font-bold hover:bg-black">
+                            💾 SALVA MODIFICHE
+                        </button>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+        <div class="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+          <h2 class="font-bold text-lg font-heading text-gray-800">Dettaglio Elementi</h2>
+          <span class="bg-white border border-gray-200 text-gray-600 px-3 py-1 rounded-full text-xs font-bold">{{ preventivo.length }} Articoli</span>
         </div>
 
         <div class="flex-1 overflow-auto p-0">
@@ -540,87 +690,6 @@ onMounted(() => {
                     <input v-model.number="adminExtraPrice" type="number" class="w-20 p-2 border border-gray-300 rounded-md text-sm text-right outline-none">
                     <button @click="aggiungiExtraAdmin" class="bg-gray-800 text-white w-8 rounded-md hover:bg-black shadow-sm flex items-center justify-center font-bold text-lg">+</button>
                 </div>
-            </div>
-        </div>
-
-        <div class="p-6 bg-gray-900 text-white rounded-b-xl flex justify-between items-center">
-            <div class="space-y-1">
-                <div class="text-xs text-gray-400 uppercase tracking-widest font-bold">Totale Ordine</div>
-                <div class="flex items-baseline gap-3">
-                    <div class="text-3xl font-heading font-bold text-yellow-400">{{ totaleFinale.toFixed(2) }} €</div>
-                    <div v-if="scontoApplicato > 0" class="text-sm text-green-400 line-through opacity-60">{{ totaleImponibile.toFixed(2) }} €</div>
-                </div>
-                <div class="mt-2">
-                    <span v-if="statoCorrente === 'QUOTE_READY'" class="px-2 py-1 bg-green-500/20 text-green-400 rounded text-xs font-bold border border-green-500/50">✅ PREVENTIVO PRONTO</span>
-                    <span v-else-if="statoCorrente === 'PENDING_VAL'" class="px-2 py-1 bg-orange-500/20 text-orange-400 rounded text-xs font-bold border border-orange-500/50">⚠️ DA VALIDARE</span>
-                    <span v-else-if="statoCorrente === 'ORDER_REQ'" class="px-2 py-1 bg-purple-500/20 text-purple-400 rounded text-xs font-bold border border-purple-500/50">🚀 ORDINE RICHIESTO</span>
-                </div>
-            </div>
-
-            <div class="flex gap-3">
-                <template v-if="!isAdmin">
-                    <div v-if="['ORDER_REQ', 'WAITING_SIGN', 'SIGNED', 'IN_PRODUZIONE'].includes(statoCorrente)" class="text-right px-4">
-                        <span class="text-sm font-bold" :class="statoCorrente === 'ORDER_REQ' ? 'text-purple-600' : 'text-green-600'">
-                            {{ statoCorrente === 'ORDER_REQ' ? 'Richiesta Inviata' : 'Ordine Confermato' }}
-                        </span>
-                        <div class="text-[10px] text-gray-400">Non modificabile</div>
-                    </div>
-
-                    <div v-else-if="statoCorrente === 'QUOTE_READY'">
-                        <button @click="salvaPreventivo('RICHIESTA_ORDINE')" class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg font-bold shadow-lg shadow-purple-900/50 flex items-center gap-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" /></svg>
-                            ORDINA ORA
-                        </button>
-                    </div>
-                    
-                    <div v-else-if="statoCorrente === 'PENDING_VAL'">
-                         <button disabled class="bg-orange-100 text-orange-400 px-6 py-3 rounded-lg font-bold cursor-not-allowed border border-orange-200">
-                            ⏳ IN VALIDAZIONE...
-                        </button>
-                    </div>
-
-                    <div v-else>
-                        <button 
-                            v-if="!richiedeValidazione"
-                            @click="salvaPreventivo('RICHIESTA_ORDINE')" 
-                            :disabled="preventivo.length === 0"
-                            class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-3 rounded-lg font-bold shadow-lg flex items-center gap-2"
-                        >
-                            ORDINA SUBITO
-                        </button>
-
-                        <button 
-                            @click="salvaPreventivo()" 
-                            :disabled="preventivo.length === 0"
-                            class="bg-yellow-400 hover:bg-yellow-500 text-black px-8 py-3 rounded-lg font-bold shadow-lg flex items-center gap-2"
-                        >
-                            <span v-if="richiedeValidazione">RICHIEDI VALIDAZIONE</span>
-                            <span v-else>SALVA BOZZA</span>
-                        </button>
-                    </div>
-                </template>
-
-                <template v-else>
-                    <div v-if="statoCorrente === 'ORDER_REQ'" class="flex gap-2">
-                        <button @click="alert('Usa la Dashboard per inviare la mail di conferma!')" class="bg-purple-100 text-purple-700 border border-purple-200 px-4 py-2 rounded-lg font-bold hover:bg-purple-200">
-                            📧 GESTISCI ORDINE
-                        </button>
-                        <button @click="salvaPreventivo()" class="text-gray-400 hover:text-gray-600 text-xs underline">Salva forzato</button>
-                    </div>
-
-                    <div v-else-if="statoCorrente === 'PENDING_VAL' || statoCorrente === 'DRAFT'" class="flex gap-2">
-                        <button @click="salvaPreventivo('RIFIUTA')" class="text-red-400 hover:text-red-500 font-bold px-4 text-sm">RIFIUTA</button>
-                        <button @click="salvaPreventivo('APPROVA')" class="bg-green-600 hover:bg-green-500 text-white px-8 py-3 rounded-lg font-bold shadow-lg flex items-center gap-2">
-                            VALIDA E INVIA
-                        </button>
-                    </div>
-
-                    <div v-else>
-                        <button @click="salvaPreventivo()" class="bg-gray-800 text-white px-6 py-2 rounded-lg font-bold hover:bg-black">
-                            💾 SALVA MODIFICHE
-                        </button>
-                    </div>
-                </template>
             </div>
         </div>
 
