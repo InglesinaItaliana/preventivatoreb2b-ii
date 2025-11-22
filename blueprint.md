@@ -26,9 +26,10 @@ This is a standard Vue.js project initialized with Vite. It's set up to use Type
 
 ## Current Plan
 
-This was the plan for the latest changes:
+This is the plan for the requested changes:
 
-1.  **Critical Bug Fix & Refinement:**
-    *   **Race Condition Fix:** Corrected a critical race condition in `src/Data/catalog.ts` where the loading state was not managed correctly, causing the UI to render before data was fully loaded.
-    *   **UI Logic Refinement:** Refined the logic in `src/views/BuilderView.vue` to be more robust and ensure correct population of the dropdown lists.
-2.  **Update `blueprint.md`**: Update the blueprint to document the critical bug fix and refinements.
+1.  **Update "New Job" Button:**
+    *   **Modify `ClientDashboard.vue`:** I will edit the `ClientDashboard.vue` component to update the main call-to-action button.
+    *   **Change Button Text:** The button text will be changed from "NUOVO PREVENTIVO" to "NUOVA COMMESSA".
+    *   **Ensure Black Icon:** I will verify that the plus icon (`PlusIcon`) is black as requested.
+2.  **Update `blueprint.md`**: I will update this blueprint to document the change.

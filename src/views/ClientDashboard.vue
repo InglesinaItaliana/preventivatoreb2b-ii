@@ -7,21 +7,17 @@ import { useRouter } from 'vue-router';
 import { onAuthStateChanged } from 'firebase/auth';
 import { jsPDF } from "jspdf";
 import {
-  PencilIcon,
-  ShieldExclamationIcon,
-  CheckCircleIcon,
-  PaperAirplaneIcon, // Mancava
-  ClockIcon,
-  XCircleIcon, // Mancava
-  CogIcon,
-  WrenchScrewdriverIcon,
-  DocumentTextIcon,
-  EyeIcon,
-  ArrowPathIcon,
-  CurrencyEuroIcon,
-  ShoppingCartIcon,
-  PlayIcon
-} from '@heroicons/vue/24/solid'
+    PencilIcon,
+    ShieldExclamationIcon,
+    CheckCircleIcon,
+    PaperAirplaneIcon,
+    ClockIcon,
+    XCircleIcon,
+    CogIcon,
+    WrenchScrewdriverIcon,
+    DocumentTextIcon,
+    PlusIcon
+} from '@heroicons/vue/24/outline';
 
 const router = useRouter();
 const listaMieiPreventivi = ref<any[]>([]);
@@ -203,7 +199,7 @@ const getStatusStyling = (stato: string) => {
         'ATTESA_FIRMA': { badge: 'bg-blue-50 text-blue-600 border-blue-100', icon: ClockIcon, iconBg: 'bg-blue-100 text-blue-600' },
         'REJECTED': { badge: 'bg-red-100 text-red-700 border-red-200', icon: XCircleIcon, iconBg: 'bg-red-100 text-red-600' },
         'SIGNED': { badge: 'bg-green-700 text-white border-green-800', icon: CogIcon, iconBg: 'bg-green-200 text-green-800' },
-        'IN_PRODUZIONE': { badge: 'bg-green-100 text-green-800 border-green-200', icon: CogIcon, iconBg: 'bg-green-100 text-green-700' },
+        'IN_PRODUZIONE': { badge: 'bg-green-100 text-green-800 border-green-200', icon: WrenchScrewdriverIcon, iconBg: 'bg-green-100 text-green-700' },
     };
     return styles[stato] || { badge: 'bg-gray-100 text-gray-500 border-gray-200', icon: DocumentTextIcon, iconBg: 'bg-gray-100 text-gray-500' };
 }
@@ -244,8 +240,8 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
              </div>
         </div>
         <button @click="vaiAlBuilder()" class="bg-yellow-400 hover:bg-yellow-500 text-black px-6 py-3 rounded-lg font-bold shadow-md flex items-center gap-2 transition-transform active:scale-95">
-            <PlusIcon class="h-5 w-5" />
-            NUOVO PREVENTIVO
+            <PlusIcon class="h-5 w-5 text-black" />
+            NUOVA COMMESSA
         </button>
       </div>
 
