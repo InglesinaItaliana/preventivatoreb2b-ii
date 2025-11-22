@@ -1,35 +1,62 @@
-# Project Blueprint
+# Panoramica del Progetto
 
-## Overview
+Questa è un'applicazione per la gestione di preventivi e ordini di prodotti configurabili, come inglesine per finestre. L'applicazione gestisce l'intero ciclo di vita di un ordine, dalla configurazione iniziale da parte del cliente, alla validazione tecnica, all'approvazione amministrativa, fino alla produzione.
 
-This is a standard Vue.js project initialized with Vite. It's set up to use TypeScript and the Composition API.
+## Design e Stile
 
-## Project Structure and Features
+L'interfaccia è moderna e pulita, basata su Vue.js e Tailwind CSS. L'obiettivo è fornire un'esperienza utente chiara e intuitiva, con stati visivi ben definiti (es. "In attesa di validazione", "Ordine pronto") che guidano sia il cliente che l'amministratore attraverso il processo.
 
-- **Vue Router:** The project uses Vue Router for client-side routing.
-  - The router is configured in `src/router.ts`.
-  - The main application component (`src/App.vue`) uses `<RouterView />` to display routed content.
-- **Login Page:** A stylish login page is available at the root URL (`/`).
-  - The login view is defined in `src/views/LoginView.vue`.
-  - It includes a form with a single field for the VAT number (`Partita IVA`).
-  - On successful login, the user is redirected to the `/preventivatore` route.
-- **Builder Page:** A fully functional builder page for the `preventivatore` is available at `/preventivatore`.
-  - The view is defined in `src/views/BuilderView.vue`.
-- **Styling:** The project uses Tailwind CSS for styling.
-- **Data Management:** The project uses Pinia for state management and `papaparse` to parse CSV data.
-  - The `src/Data/catalog.ts` file defines a Pinia store that fetches and processes data from a Google Sheet. It now correctly handles asynchronous data loading, preventing race conditions that caused the UI to render with incomplete data.
-  - The data is then used to populate the `BuilderView.vue` component.
-- **UI/UX Improvements:**
-  - **Auto-selection:** The `BuilderView.vue` component now features an intelligent auto-selection mechanism. If a selection in a dropdown menu results in only one available option in the subsequent dropdown, that option is automatically selected. This streamlines the user's workflow and provides a more intuitive experience.
-  - **Filtered Categories:** The "Griglia" section now exclusively displays the `INGLESINA`, `DUPLEX`, and `MUNTIN` categories, providing a more focused selection process.
-- **Types:** The project uses custom types defined in `src/types.ts`.
+## Funzionalità Implementate
 
-## Current Plan
+*   **Configuratore Prodotto (Builder):** I clienti possono configurare un prodotto specificando dimensioni, quantità e altri attributi.
+*   **Calcolo Prezzo Dinamico:** Il sistema calcola il prezzo in tempo reale.
+*   **Dashboard Cliente:** I clienti possono visualizzare e gestire i loro preventivi e ordini.
+*   **Dashboard Admin:** Gli amministratori possono validare preventivi complessi, confermare ordini e aggiornare lo stato di produzione.
+*   **Ciclo di Vita della Commessa:** Gestione di vari stati come Bozza, In attesa di validazione, Validato, Firmato, In produzione.
 
-This is the plan for the requested changes:
+## Piano di Modifica Attuale
 
-1.  **Update "New Job" Button:**
-    *   **Modify `ClientDashboard.vue`:** I will edit the `ClientDashboard.vue` component to update the main call-to-action button.
-    *   **Change Button Text:** The button text will be changed from "NUOVO PREVENTIVO" to "NUOVA COMMESSA".
-    *   **Ensure Black Icon:** I will verify that the plus icon (`PlusIcon`) is black as requested.
-2.  **Update `blueprint.md`**: I will update this blueprint to document the change.
+L'obiettivo è ristrutturare il flusso di gestione delle commesse per introdurre un maggiore controllo da parte dell'amministrazione prima della formalizzazione dell'ordine e per offrire due percorsi di accettazione distinti per il cliente.
+
+**Fasi del Nuovo Flusso:**
+
+1.  **Fase di Creazione (Builder):**
+    *   **Scenario Standard (Semplice):** Il cliente vede il prezzo e può salvare il preventivo o inviare una richiesta d'ordine diretta (`ORDER_REQ`).
+    *   **Scenario Complesso (con note/curve):** Il cliente non vede il prezzo e deve inviare il preventivo per una validazione tecnica (`PENDING_VAL`).
+    *   La modifica di un preventivo già validato (`QUOTE_READY`) lo riporterà allo stato `PENDING_VAL`, richiedendo una nuova approvazione.
+
+2.  **Fase di Negoziazione (Admin/Cliente):**
+    *   L'Admin valida i preventivi in `PENDING_VAL`, spostandoli in `QUOTE_READY`.
+    *   Il Cliente, vedendo il preventivo `QUOTE_READY` con il prezzo finale, può ordinarlo (passando a `ORDER_REQ`) o modificarlo (riavviando il ciclo di validazione).
+
+3.  **Fase di Controllo (Admin):**
+    *   Tutte le richieste d'ordine arrivano nello stato `ORDER_REQ`.
+    *   L'Admin decide il percorso di formalizzazione scegliendo tra:
+        *   **Veloce:** Per ordini semplici/clienti fidati, sposta lo stato in `WAITING_FAST`.
+        *   **Firma:** Per ordini complessi/importi alti, sposta lo stato in `WAITING_SIGN`.
+    *   Viene rimosso l'automatismo basato sulla soglia di 5000€.
+
+4.  **Fase di Formalizzazione (Cliente):**
+    *   **Scenario Veloce (`WAITING_FAST`):** Il cliente accetta tramite una modale con checkbox dei termini e condizioni.
+    *   **Scenario Burocratico (`WAITING_SIGN`):** Il cliente deve scaricare un contratto, firmarlo e ricaricarlo.
+
+5.  **Fase Esecutiva (Admin):**
+    *   Un ordine accettato (`SIGNED`) viene messo in produzione (`IN_PRODUZIONE`).
+    *   Viene introdotto un nuovo stato `READY` per indicare che la merce è pronta per il ritiro/spedizione.
+
+**Azioni da Eseguire:**
+
+1.  **Aggiornare `src/views/BuilderView.vue`:**
+    *   Modificare la logica dei pulsanti per distinguere tra preventivi semplici e complessi.
+    *   Rimuovere la logica di controllo automatico sulla soglia di prezzo.
+    *   Implementare la regressione di stato a `PENDING_VAL` quando si modifica un preventivo `QUOTE_READY`.
+2.  **Aggiornare `src/views/AdminView.vue`:**
+    *   Nella card `ORDER_REQ`, sostituire l'azione automatica con due pulsanti: "Veloce" e "Firma".
+    *   Aggiungere l'azione per spostare un ordine da `IN_PRODUZIONE` a `READY`.
+3.  **Aggiornare `src/views/ClientDashboard.vue`:**
+    *   Implementare le diverse viste e azioni per gli stati `WAITING_FAST` e `WAITING_SIGN`.
+    *   Creare la modale "Fast Track" per l'accettazione veloce.
+4.  **Aggiornare `src/types.ts`:**
+    *   Aggiungere i nuovi stati `ORDER_REQ`, `WAITING_FAST`, `WAITING_SIGN`, `READY`.
+    *   Rimuovere `PENDING_SIGN` e `PENDING_FAST_SIGN`.
+

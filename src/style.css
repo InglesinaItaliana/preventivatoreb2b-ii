@@ -2,6 +2,11 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+body {
+  font-family: 'Open Sans', sans-serif;
+}
+
 /* Aggiungi in fondo al file css */
 @keyframes slideIn {
     from { transform: translateX(100%); }

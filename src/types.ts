@@ -3,13 +3,15 @@ export type Modello = 'VARSAVIA' | 'GERMANELLA' | 'ALLUMINIO' | 'BORDO_CALDO' | 
 
 // STATI DEL LIFECYCLE (Single Entity)
 export type StatoPreventivo = 
-  | 'DRAFT'             // Bozza (Cliente)
-  | 'PENDING_VAL'       // In attesa di validazione (Note o Curve)
-  | 'QUOTE_READY'       // Preventivo Pronto/Validato (Prezzo visibile)
-  | 'ORDER_REQ'         // Richiesta Ordine inviata
-  | 'WAITING_SIGN'      // Attesa Firma (PDF inviato)
-  | 'SIGNED'            // Firmato / Confermato
+  | 'DRAFT'             // Bozza
+  | 'PENDING_VAL'       // In attesa di validazione (Tecnica)
+  | 'QUOTE_READY'       // Pronto/Validato (Prezzo visibile)
+  | 'ORDER_REQ'         // Ordine Richiesto (Check Admin)
+  | 'WAITING_FAST'      // Attesa Accettazione Veloce (Checkbox) - NUOVO
+  | 'WAITING_SIGN'      // Attesa Firma (Upload)
+  | 'SIGNED'            // Firmato
   | 'IN_PRODUZIONE'     // In Produzione
+  | 'READY'             // Ordine Pronto - NUOVO
   | 'REJECTED';         // Rifiutato
 
 export interface Allegato {
