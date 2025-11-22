@@ -10,6 +10,7 @@ import { useCatalogStore } from '../Data/catalog';
 import type { Categoria, RigaPreventivo, StatoPreventivo, Allegato } from '../types';
 import { calculatePrice } from '../logic/pricing';
 import { onAuthStateChanged } from 'firebase/auth';
+import { jsPDF } from "jspdf"; // Aggiunto per generare il contratto
 
 const route = useRoute();
 const router = useRouter();
@@ -68,9 +69,11 @@ const isStandard = computed(() => {
 
 // LOGICA BLOCCO MODIFICHE
 const isLocked = computed(() => {
-  if (isAdmin.value) return false;
-  // Il cliente può modificare solo se è DRAFT. 
-  // QUOTE_READY è bloccato a meno che non prema "MODIFICA" (che gestiamo resettando visivamente lo stato a DRAFT)
+  // Admin: Bloccato se siamo in attesa del cliente, firmato, o in produzione
+  if (isAdmin.value) {
+    return ['WAITING_FAST', 'WAITING_SIGN', 'SIGNED', 'IN_PRODUZIONE', 'READY', 'REJECTED'].includes(statoCorrente.value);
+  }
+  // Cliente: Modifica consentita solo in DRAFT
   return statoCorrente.value !== 'DRAFT';
 });
 
@@ -330,6 +333,90 @@ const aggiungiExtraAdmin = () => {
   adminExtraPrice.value=0;
 };
 
+// --- LOGICA FIRMA & ACCETTAZIONE (CLONATA DA DASHBOARD) ---
+
+// Variabili per le modali
+const showContractModal = ref(false);
+const uploadedContractUrl = ref('');
+const legalCheck1 = ref(false);
+const legalCheck2 = ref(false);
+const isConfirming = ref(false);
+
+// Apre la modale corretta in base allo stato
+const apriModaleAzione = () => {
+  if (statoCorrente.value === 'WAITING_FAST') {
+    legalCheck1.value = false; legalCheck2.value = false;
+    showLegalModal.value = true; // Variabile già esistente nel tuo file
+  } else if (statoCorrente.value === 'WAITING_SIGN') {
+    uploadedContractUrl.value = '';
+    showContractModal.value = true;
+  }
+};
+
+// 1. Logica Fast Track
+const confermaOrdineFast = async () => {
+  if (!legalCheck1.value || !legalCheck2.value) return alert("Devi accettare tutte le condizioni.");
+  isConfirming.value = true;
+  try {
+    if (!currentDocId.value) return;
+    await updateDoc(doc(db, 'preventivi', currentDocId.value), {
+      stato: 'SIGNED',
+      dataConferma: serverTimestamp(),
+      metodoConferma: 'FAST_TRACK'
+    });
+    statoCorrente.value = 'SIGNED';
+    showLegalModal.value = false;
+    alert("✅ Ordine Confermato! In attesa di messa in produzione.");
+    router.push('/dashboard'); // Reindirizza dopo il successo
+  } catch(e) { console.error(e); alert("Errore conferma."); } 
+  finally { isConfirming.value = false; }
+};
+
+// 2. Logica Firma (PDF + Upload)
+const generaPDFContratto = () => {
+  const docPDF = new jsPDF();
+  docPDF.setFontSize(20); docPDF.text("CONTRATTO DI FORNITURA", 20, 20);
+  docPDF.setFontSize(12); docPDF.text(`Rif: ${codiceRicerca.value}`, 20, 30); docPDF.text(`Cliente: ${nomeCliente.value}`, 20, 40);
+  
+  let y = 60;
+  preventivo.value.slice(0,15).forEach((el:any) => { 
+    docPDF.text(`- ${el.quantita}x ${el.descrizioneCompleta} (${el.base_mm}x${el.altezza_mm})`, 20, y); 
+    y+=8; 
+  });
+  
+  docPDF.text(`TOTALE: ${(totaleFinale.value).toFixed(2)} €`, 20, y+20);
+  docPDF.setFontSize(10); docPDF.text("Firma per accettazione: _______________________", 20, y+40);
+  docPDF.save(`Contratto_${codiceRicerca.value}.pdf`);
+};
+
+const uploadContratto = async (event: Event) => {
+  const files = (event.target as HTMLInputElement).files; 
+  if (!files || !files.length) return;
+  isUploading.value = true;
+  try {
+    const file = files[0];
+    const path = `contratti_firmati/${codiceRicerca.value}_${file.name}`;
+    const fileRef = storageRef(storage, path);
+    await uploadBytes(fileRef, file);
+    uploadedContractUrl.value = await getDownloadURL(fileRef);
+  } catch (e) { alert("Errore upload."); } 
+  finally { isUploading.value = false; }
+};
+
+const chiudiOrdineUpload = async () => {
+  if (!currentDocId.value) return;
+  await updateDoc(doc(db, 'preventivi', currentDocId.value), { 
+    stato: 'SIGNED', 
+    dataConferma: serverTimestamp(), 
+    contrattoFirmatoUrl: uploadedContractUrl.value, 
+    metodoConferma: 'UPLOAD_FIRMA' 
+  });
+  statoCorrente.value = 'SIGNED';
+  showContractModal.value = false;
+  alert("✅ Ordine Confermato e inviato in produzione!");
+  router.push('/dashboard');
+};
+
 onMounted(() => {
   catalog.fetchCatalog();
   const storedName = localStorage.getItem('clientName');
@@ -547,7 +634,11 @@ onMounted(() => {
                   CONFERMA ORDINE
                 </button>
               </div>
-
+              <template v-else-if="['WAITING_FAST', 'WAITING_SIGN'].includes(statoCorrente)">
+               <button @click="apriModaleAzione()" class="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-lg font-bold shadow-lg animate-pulse flex items-center gap-2">
+                 {{ statoCorrente === 'WAITING_FAST' ? 'ACCETTA ORDINE' : 'FIRMA ORDINE' }}
+               </button>
+              </template>
               <div v-else class="text-right px-4">
                 <span class="text-sm font-bold text-gray-500">ORDINE IN LAVORAZIONE</span>
               </div>
@@ -570,10 +661,13 @@ onMounted(() => {
               </div>
 
               <div v-else>
-                <button @click="salvaPreventivo()" class="bg-gray-800 text-white px-6 py-2 rounded-lg font-bold hover:bg-black">
-                  💾 SALVA MODIFICHE
-                </button>
-              </div>
+              <button v-if="!isLocked" @click="salvaPreventivo()" class="bg-gray-800 text-white px-6 py-2 rounded-lg font-bold hover:bg-black">
+                💾 SALVA MODIFICHE
+              </button>
+              <span v-else class="text-gray-400 font-bold text-sm border border-gray-300 px-3 py-1 rounded bg-gray-50">
+                🔒 SOLA LETTURA
+              </span>
+            </div>
             </template>
           </div>
         </div>
@@ -688,6 +782,46 @@ onMounted(() => {
     </div>
 
   </div>
+  <div v-if="showLegalModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+      <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+        <h2 class="font-bold text-lg mb-4 text-blue-600">Conferma Ordine Veloce</h2>
+        <div class="bg-blue-50 p-3 rounded text-sm text-blue-800 mb-4">
+          Confermi l'ordine <strong>{{ codiceRicerca }}</strong> di <strong>{{ totaleFinale.toFixed(2) }} €</strong>?
+        </div>
+        <div class="space-y-3">
+          <label class="flex gap-3 cursor-pointer"><input type="checkbox" v-model="legalCheck1"><span class="text-sm">Accetto l'ordine come descritto.</span></label>
+          <label class="flex gap-3 cursor-pointer"><input type="checkbox" v-model="legalCheck2"><span class="text-sm">Accetto Condizioni di Vendita.</span></label>
+        </div>
+        <div class="flex justify-end gap-2 mt-6">
+          <button @click="showLegalModal = false" class="px-4 py-2 text-gray-500 font-bold">Annulla</button>
+          <button @click="confermaOrdineFast" :disabled="!legalCheck1 || !legalCheck2 || isConfirming" class="bg-blue-600 text-white px-6 py-2 rounded font-bold disabled:opacity-50">
+            {{ isConfirming ? 'Attendi...' : 'CONFERMA' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <div v-if="showContractModal" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+      <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6">
+        <h2 class="font-bold text-lg mb-4 text-blue-600">Firma Contratto</h2>
+        <div class="space-y-4">
+          <div class="flex justify-between items-center border p-3 rounded">
+            <span>1. Scarica PDF</span>
+            <button @click="generaPDFContratto" class="text-blue-600 font-bold underline">Scarica</button>
+          </div>
+          <div class="border-2 border-dashed p-4 text-center rounded relative">
+            <input type="file" @change="uploadContratto" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+            <div v-if="isUploading">Caricamento...</div>
+            <div v-else-if="uploadedContractUrl" class="text-green-600 font-bold">✅ Caricato!</div>
+            <div v-else>2. Clicca per caricare Firmato</div>
+          </div>
+          <div class="flex justify-end gap-2 mt-4">
+            <button @click="showContractModal = false" class="text-gray-400 font-bold px-4">Annulla</button>
+            <button @click="chiudiOrdineUpload" :disabled="!uploadedContractUrl" class="bg-green-600 text-white px-6 py-2 rounded font-bold disabled:opacity-50">INVIA</button>
+          </div>
+        </div>
+      </div>
+    </div>
 </template>
 
 <style scoped>

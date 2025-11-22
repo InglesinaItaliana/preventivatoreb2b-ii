@@ -53,10 +53,10 @@ L'obiettivo è ristrutturare il flusso di gestione delle commesse per introdurre
 2.  **Aggiornare `src/views/AdminView.vue`:**
     *   Nella card `ORDER_REQ`, sostituire l'azione automatica con due pulsanti: "Veloce" e "Firma".
     *   Aggiungere l'azione per spostare un ordine da `IN_PRODUZIONE` a `READY`.
+    *   Per gli stati `WAITING_FAST` e `WAITING_SIGN`, visualizzare solo un pulsante "APRI" che permette la visualizzazione (non modificabile).
 3.  **Aggiornare `src/views/ClientDashboard.vue`:**
     *   Implementare le diverse viste e azioni per gli stati `WAITING_FAST` e `WAITING_SIGN`.
     *   Creare la modale "Fast Track" per l'accettazione veloce.
 4.  **Aggiornare `src/types.ts`:**
     *   Aggiungere i nuovi stati `ORDER_REQ`, `WAITING_FAST`, `WAITING_SIGN`, `READY`.
     *   Rimuovere `PENDING_SIGN` e `PENDING_FAST_SIGN`.
-

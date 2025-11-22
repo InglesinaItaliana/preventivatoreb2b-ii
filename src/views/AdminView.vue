@@ -178,7 +178,7 @@ const getStatusStyling = (stato: string) => {
     'READY': { badge: 'bg-amber-100 text-amber-800 border-amber-200', icon: CubeIcon, iconBg: 'bg-amber-100 text-amber-700' },
   };
   return styles[stato] || { badge: 'bg-gray-100 text-gray-500 border-gray-200', icon: DocumentTextIcon, iconBg: 'bg-gray-100 text-gray-500' };
-}
+};
 
 const getStatusLabel = (stato: string) => {
   const map: Record<string, string> = {
@@ -203,7 +203,12 @@ const getActionData = (p: any) => {
     return { text: 'GESTISCI', class: 'text-purple-600 bg-purple-50 border-purple-200 hover:bg-purple-100 animate-pulse', action: () => apriEditor(p.codice), icon: CogIcon };
   }
 
-  if (st === 'SIGNED' || st === 'WAITING_SIGN' || st === 'ATTESA_FIRMA' || st === 'WAITING_FAST')
+  // Modifica per WAITING_FAST e WAITING_SIGN: Solo pulsante "APRI" per visualizzare (non modificabile)
+  if (st === 'WAITING_FAST' || st === 'WAITING_SIGN' || st === 'ATTESA_FIRMA') {
+    return { text: 'APRI', class: 'text-gray-500 border-gray-200 hover:bg-gray-100', action: () => apriEditor(p.codice, true), icon: EyeIcon };
+  }
+
+  if (st === 'SIGNED')
     return { text: 'AVVIA PRODUZIONE', class: 'text-white bg-green-700 border-green-800 hover:bg-green-800', action: () => confermaProduzione(p), icon: CogIcon };
 
   if (st === 'IN_PRODUZIONE') 
@@ -226,7 +231,13 @@ const toggleStato = (stato: string) => {
   else statiEspansi.value.push(stato);
 };
 
-const apriEditor = (codice: string) => router.push(`/preventivatore?codice=${codice}&admin=true`);
+const apriEditor = (codice: string, readonly: boolean = false) => {
+  if (readonly) {
+    router.push(`/preventivatore?codice=${codice}&admin=true&readonly=true`);
+  } else {
+    router.push(`/preventivatore?codice=${codice}&admin=true`);
+  }
+};
 const formatDate = (seconds: number) => seconds ? new Date(seconds * 1000).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' }) : '-';
 
 onMounted(() => {
