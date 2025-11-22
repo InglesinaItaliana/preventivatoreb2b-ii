@@ -7,17 +7,21 @@ import { useRouter } from 'vue-router';
 import { onAuthStateChanged } from 'firebase/auth';
 import { jsPDF } from "jspdf";
 import {
-    PencilIcon,
-    ShieldExclamationIcon,
-    CheckCircleIcon,
-    PaperAirplaneIcon,
-    ClockIcon,
-    XCircleIcon,
-    CogIcon,
-    WrenchScrewdriverIcon,
-    DocumentTextIcon,
-    PlusIcon
-} from '@heroicons/vue/24/outline';
+  PencilIcon,
+  ShieldExclamationIcon,
+  CheckCircleIcon,
+  PaperAirplaneIcon, // Mancava
+  ClockIcon,
+  XCircleIcon, // Mancava
+  CogIcon,
+  WrenchScrewdriverIcon,
+  DocumentTextIcon,
+  EyeIcon,
+  ArrowPathIcon,
+  CurrencyEuroIcon,
+  ShoppingCartIcon,
+  PlayIcon
+} from '@heroicons/vue/24/solid'
 
 const router = useRouter();
 const listaMieiPreventivi = ref<any[]>([]);
@@ -199,7 +203,7 @@ const getStatusStyling = (stato: string) => {
         'ATTESA_FIRMA': { badge: 'bg-blue-50 text-blue-600 border-blue-100', icon: ClockIcon, iconBg: 'bg-blue-100 text-blue-600' },
         'REJECTED': { badge: 'bg-red-100 text-red-700 border-red-200', icon: XCircleIcon, iconBg: 'bg-red-100 text-red-600' },
         'SIGNED': { badge: 'bg-green-700 text-white border-green-800', icon: CogIcon, iconBg: 'bg-green-200 text-green-800' },
-        'IN_PRODUZIONE': { badge: 'bg-green-100 text-green-800 border-green-200', icon: WrenchScrewdriverIcon, iconBg: 'bg-green-100 text-green-700' },
+        'IN_PRODUZIONE': { badge: 'bg-green-100 text-green-800 border-green-200', icon: CogIcon, iconBg: 'bg-green-100 text-green-700' },
     };
     return styles[stato] || { badge: 'bg-gray-100 text-gray-500 border-gray-200', icon: DocumentTextIcon, iconBg: 'bg-gray-100 text-gray-500' };
 }
@@ -233,7 +237,6 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
       
       <div class="flex flex-col md:flex-row justify-between items-end mb-8 gap-4">
         <div class="flex items-center gap-4">
-             <img src="/logo.svg" alt="Logo" class="h-12 w-auto" />
              <div>
                  <h1 class="text-2xl font-bold font-heading text-gray-900">Area Riservata</h1>
                  <p class="text-lg font-medium text-gray-800 leading-none">{{ clientName }}</p>

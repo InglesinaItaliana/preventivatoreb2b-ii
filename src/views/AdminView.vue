@@ -196,7 +196,7 @@ const getStatusStyling = (stato: string) => {
     'ATTESA_FIRMA': { badge: 'bg-blue-50 text-blue-600 border-blue-100', icon: ClockIcon, iconBg: 'bg-blue-100 text-blue-600' },
     'REJECTED': { badge: 'bg-red-100 text-red-700 border-red-200', icon: XCircleIcon, iconBg: 'bg-red-100 text-red-600' },
     'SIGNED': { badge: 'bg-green-700 text-white border-green-800', icon: CogIcon, iconBg: 'bg-green-200 text-green-800' },
-    'IN_PRODUZIONE': { badge: 'bg-green-100 text-green-800 border-green-200', icon: WrenchScrewdriverIcon, iconBg: 'bg-green-100 text-green-700' },
+    'IN_PRODUZIONE': { badge: 'bg-green-100 text-green-800 border-green-200', icon: CogIcon, iconBg: 'bg-green-100 text-green-700' },
   };
   return styles[stato] || { badge: 'bg-gray-100 text-gray-500 border-gray-200', icon: DocumentTextIcon, iconBg: 'bg-gray-100 text-gray-500' };
 }
@@ -284,9 +284,8 @@ onUnmounted(() => {
     
      <div class="flex justify-between items-center mb-8">
        <div class="flex items-center gap-4">
-           <img src="/logo.svg" alt="Logo" class="h-12 w-auto" />
            <div>
-               <h1 class="text-2xl md:text-3xl font-bold text-gray-900 font-heading tracking-tight">Dashboard Admin</h1>
+               <h1 class="text-2xl md:text-3xl font-bold text-gray-900 font-heading tracking-tight">Dashboard Inglesina Italiana</h1>
                <p class="text-gray-500 text-sm">Panoramica operativa</p>
            </div>
        </div>
@@ -325,7 +324,7 @@ onUnmounted(() => {
        <div class="bg-white p-5 rounded-xl shadow-sm border-t-4 border-green-600 transition-colors hover:bg-green-50">
            <div class="flex justify-between items-start">
                <span class="text-xs font-bold text-gray-400 uppercase">In Produzione</span>
-               <WrenchScrewdriverIcon class="h-6 w-6 text-green-500" />
+               <CogIcon class="h-6 w-6 text-green-500" />
            </div>
            <div class="mt-2"><span class="text-3xl font-bold text-gray-900">{{ globalStats.in_produzione }}</span></div>
        </div>
