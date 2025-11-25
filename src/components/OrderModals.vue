@@ -4,8 +4,7 @@ import { jsPDF } from "jspdf";
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage } from '../firebase';
 import { 
-  CheckCircleIcon, DocumentTextIcon, CloudArrowUpIcon, CogIcon, 
-  WrenchScrewdriverIcon, ClipboardDocumentIcon, ClipboardDocumentCheckIcon // Nuove icone
+  CheckCircleIcon, DocumentTextIcon, CloudArrowUpIcon, CogIcon, ClipboardDocumentIcon, ClipboardDocumentCheckIcon // Nuove icone
 } from '@heroicons/vue/24/solid';
 
 const props = defineProps<{

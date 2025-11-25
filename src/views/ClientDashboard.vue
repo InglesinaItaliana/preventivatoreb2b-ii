@@ -90,11 +90,15 @@ const gestisciAzioneOrdine = (p: any) => {
 // --- CALLBACK DAL COMPONENTE MODALE ---
 const onConfirmFast = async () => {
   if(!selectedOrder.value) return;
+  const user = auth.currentUser; 
+  if (!user) return alert("Utente non loggato");
+
   try {
     await updateDoc(doc(db, 'preventivi', selectedOrder.value.id), {
       stato: 'SIGNED',
       dataConferma: serverTimestamp(),
-      metodoConferma: 'FAST_TRACK'
+      metodoConferma: 'FAST_TRACK',
+      clienteUID: user.uid
     });
     showModals.value = false;
     alert("✅ Ordine Confermato!");
@@ -104,15 +108,21 @@ const onConfirmFast = async () => {
   }
 };
 
-const onConfirmSign = async (url: string) => {
+const onConfirmSign = async (url: string) => { // <--- Assicurati che (url: string) sia qui
   if(!selectedOrder.value) return;
+  
+  const user = auth.currentUser;
+  if (!user) return alert("Utente non loggato");
+
   try {
     await updateDoc(doc(db, 'preventivi', selectedOrder.value.id), {
       stato: 'SIGNED',
       dataConferma: serverTimestamp(),
-      contrattoFirmatoUrl: url,
-      metodoConferma: 'UPLOAD_FIRMA'
+      contrattoFirmatoUrl: url, // Ora 'url' esiste
+      metodoConferma: 'UPLOAD_FIRMA',
+      clienteUID: user.uid
     });
+
     showModals.value = false;
     alert("✅ Ordine Confermato e inviato in produzione!");
   } catch(e) { console.error(e); alert("Errore conferma."); }
@@ -166,7 +176,7 @@ onMounted(() => {
   onAuthStateChanged(auth, (user) => {
     if (user && user.email) {
       currentUserEmail.value = user.email;
-      if (clientName.value === 'Cliente') clientName.value = user.email.split('@')[0];
+      if (clientName.value === 'Cliente') clientName.value = user.email?.split('@')[0] || 'Utente';
       caricaProfilo(user.uid);
       avviaAscoltoDati(user.email);
     } else { router.push('/'); }

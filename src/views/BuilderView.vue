@@ -14,27 +14,10 @@ import { jsPDF } from "jspdf";
 import OrderModals from '../components/OrderModals.vue';
 import { STATUS_DETAILS } from '../types';
 import {
-  PencilIcon,
-  CheckCircleIcon,
-  DocumentTextIcon,
-  EyeIcon,
-  ClockIcon,
-  ArchiveBoxIcon,
-  ArrowPathIcon,
-  XCircleIcon,
-  PaperAirplaneIcon,
-  CogIcon,
-  CurrencyEuroIcon,
-  ShieldExclamationIcon,
-  ShoppingCartIcon,
-  WrenchScrewdriverIcon,
-  UserIcon,
-  MagnifyingGlassIcon,
   RectangleStackIcon,
   PlusIcon,
   ChevronLeftIcon,
-  InformationCircleIcon,
-  CubeIcon 
+  InformationCircleIcon, 
 } from '@heroicons/vue/24/solid'
 
 const toastMessage = ref('');

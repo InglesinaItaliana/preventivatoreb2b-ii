@@ -21,7 +21,7 @@ const PAYMENT_METHOD_ID = 1; // ID Bonifico Bancario o metodo predefinito
 
 exports.sincronizzaClientiFIC = functions
     .region('europe-west1')
-    .https.onRequest(async (req, res) => {
+    .https.onRequest(async (_req, res) => {
 
         // 1. CARICA TUTTI GLI UTENTI DA FIRESTORE
         const usersSnapshot = await admin.firestore().collection('users').get();
