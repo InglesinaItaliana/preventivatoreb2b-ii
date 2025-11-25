@@ -10,7 +10,6 @@ import { useCatalogStore } from '../Data/catalog';
 import type { Categoria, RigaPreventivo, StatoPreventivo, Allegato, RiepilogoRiga } from '../types';
 import { calculatePrice } from '../logic/pricing';
 import { onAuthStateChanged } from 'firebase/auth';
-import { jsPDF } from "jspdf"; 
 import OrderModals from '../components/OrderModals.vue';
 import { STATUS_DETAILS } from '../types';
 import {
@@ -29,7 +28,7 @@ const showCustomToast = (message: string) => {
   setTimeout(() => {
     showToast.value = false;
     toastMessage.value = '';
-  }, 3000); // Durata del messaggio: 3 secondi
+  }, 3000); 
 };
 
 const route = useRoute();
@@ -151,8 +150,12 @@ const aggiungi = () => {
 const uploadFile = async (event: Event) => {
   const target = event.target as HTMLInputElement;
   const files = target.files;
+  
+  // FIX: Type safe check (TS18048)
   if (!files || files.length === 0) return;
   const file = files[0];
+  if (!file) return;
+
   isUploading.value = true;
   try {
     const path = `allegati/${Date.now()}_${file.name}`;
@@ -168,16 +171,6 @@ const uploadFile = async (event: Event) => {
     });
   } catch (e) { alert("Errore upload."); console.error(e); }
   finally { isUploading.value = false; }
-};
-
-const getStatusLabel = (stato: string) => {
-  const map: Record<string, string> = {
-    'DRAFT': 'BOZZA', 'PENDING_VAL': 'ATTESA VALIDAZIONE DA INGLESINA ITALIANA', 'QUOTE_READY': 'PREVENTIVO VALIDATO',
-    'ORDER_REQ': 'ATTESA VALIDAZIONE DA INGLESINA ITALIANA', 
-    'WAITING_FAST': 'ORDINE DA ACCETTARE', 'WAITING_SIGN': 'ORDINE DA FIRMARE',
-    'SIGNED': 'ATTESA PRODUZIONE DA INGLESINA ITALIANA', 'IN_PRODUZIONE': 'ORDINE INVIATO IN PRODUZIONE', 'READY': 'ORDINE PRONTO', 'REJECTED': 'ANNULLATO'
-  };
-  return map[stato] || stato;
 };
 
 const rimuoviAllegato = (index: number) => { if(confirm("Rimuovere allegato?")) listaAllegati.value.splice(index, 1); };
@@ -276,7 +269,8 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
       } else {
         sommario.push({
           descrizione: r.descrizioneCompleta,
-          canalino: r.infoCanalino,
+          // FIX: type mismatch (TS2322)
+          canalino: r.infoCanalino || '',
           quantitaTotale: r.quantita
         });
       }
@@ -293,7 +287,7 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
       stato: nuovoStato,
       noteCliente: noteCliente.value,
       allegati: listaAllegati.value,
-      sommarioPreventivo: sommario, // Salvo il sommario calcolato
+      sommarioPreventivo: sommario, 
       dataModifica: serverTimestamp(),
       uid: auth.currentUser?.uid,
       ...(currentDocId.value ? {} : { dataCreazione: serverTimestamp(), }),
@@ -331,14 +325,11 @@ const sbloccaPerModifica = () => {
 };
 
 const caricaPreventivo = async () => {
-  // Se l'input è vuoto e c'è un codiceRicerca (es. da URL), usa quello, altrimenti usa l'input
   const termine = inputRicerca.value || codiceRicerca.value;
   if (!termine) return;
 
   isSaving.value = true;
   try {
-    // MODIFICA: La query ora cerca nel campo 'commessa' invece che 'codice'
-    // Nota: Se inputRicerca è vuoto (es. caricamento da URL), cerchiamo per 'codice' come fallback
     let q;
     if (inputRicerca.value) {
         q = query(collection(db, 'preventivi'), where('commessa', '==', inputRicerca.value));
@@ -349,11 +340,14 @@ const caricaPreventivo = async () => {
     const snap = await getDocs(q);
     if (snap.empty) return alert("Commessa non trovata (Attenzione a maiuscole/minuscole)");
     
-    const d = snap.docs[0].data();
-    currentDocId.value = snap.docs[0].id;
+    // FIX: Safe access to docs[0] (TS2532)
+    const docSnapshot = snap.docs[0];
+    if (!docSnapshot) return;
+    const d = docSnapshot.data();
+    currentDocId.value = docSnapshot.id;
     
     // Aggiorniamo i dati locali
-    codiceRicerca.value = d.codice; // Importante: allinea il codice interno
+    codiceRicerca.value = d.codice;
     nomeCliente.value = d.cliente;
     riferimentoCommessa.value = d.commessa;
     statoCorrente.value = d.stato || 'DRAFT';
@@ -390,21 +384,34 @@ const caricaListaStorico = async () => {
 const modificaRiga = async (index: number) => {
   if (isLocked.value) return;
   const r = preventivo.value[index];
-  categoriaGriglia.value = r?.categoria; await nextTick();
-  tipoGriglia.value = r?.modello; await nextTick();
-  dimensioneGriglia.value = r?.dimensione; await nextTick();
-  finituraGriglia.value = r?.finitura;
+  
+  // FIX: Cast/Default values for refs (TS2322)
+  categoriaGriglia.value = r?.categoria as Categoria || 'INGLESINA'; await nextTick();
+  tipoGriglia.value = r?.modello || ''; await nextTick();
+  dimensioneGriglia.value = r?.dimensione || ''; await nextTick();
+  finituraGriglia.value = r?.finitura || '';
+  
   if (r?.rawCanalino) {
     tipoCanalino.value = r.rawCanalino.tipo; await nextTick();
     dimensioneCanalino.value = r.rawCanalino.dim; await nextTick();
     finituraCanalino.value = r.rawCanalino.fin;
   }
-  pannello.base = r?.base_mm; pannello.altezza = r?.altezza_mm;
-  pannello.righe = r?.righe; pannello.colonne = r?.colonne;
-  pannello.qty = r?.quantita;
-  opzioniTelaio.nonEquidistanti = r?.nonEquidistanti || false; opzioniTelaio.curva = r?.curva; opzioniTelaio.tacca = r?.tacca;
+  
+  // FIX: Defaults for numeric refs
+  pannello.base = r?.base_mm || 0; 
+  pannello.altezza = r?.altezza_mm || 0;
+  pannello.righe = r?.righe || 0; 
+  pannello.colonne = r?.colonne || 0;
+  pannello.qty = r?.quantita || 1;
+  
+  // FIX: Defaults for boolean refs
+  opzioniTelaio.nonEquidistanti = r?.nonEquidistanti || false; 
+  opzioniTelaio.curva = r?.curva || false; 
+  opzioniTelaio.tacca = r?.tacca || false;
+  
   preventivo.value.splice(index, 1);
 };
+
 const eliminaRiga = (i:number) => { if(!isLocked.value) preventivo.value.splice(i,1); };
 const aggiungiExtraAdmin = () => {
   preventivo.value.push({ id: Date.now().toString(), categoria: 'EXTRA', modello: 'MANUALE' as any, dimensione:'-', finitura:'-', descrizioneCompleta:`[ADMIN] ${adminExtraDesc.value}`, infoCanalino:'', base_mm:0, altezza_mm:0, righe:0, colonne:0, quantita:1, prezzo_unitario:adminExtraPrice.value, prezzo_totale:adminExtraPrice.value, curva:false, tacca:false });
@@ -617,8 +624,8 @@ onMounted(() => {
             </div>
             <div class="mt-2">
               <span class="px-2 py-1 rounded text-xs font-bold border uppercase" 
-                    :class="STATUS_DETAILS[statoCorrente]?.badge || 'bg-gray-500 text-white'">
-                {{ STATUS_DETAILS[statoCorrente]?.label || statoCorrente }}
+                    :class="STATUS_DETAILS[statoCorrente as keyof typeof STATUS_DETAILS]?.badge || 'bg-gray-500 text-white'">
+                {{ STATUS_DETAILS[statoCorrente as keyof typeof STATUS_DETAILS]?.label || statoCorrente }}
               </span>
             </div>
           </div>
@@ -784,8 +791,8 @@ onMounted(() => {
             <div class="flex justify-between items-start mb-1 pl-3">
               <span class="font-bold text-lg text-gray-800 truncate">{{ ordine.commessa || 'Senza Nome' }}</span>
               <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider border" 
-                    :class="STATUS_DETAILS[ordine.stato]?.badge || 'bg-gray-100 text-gray-500 border-gray-200'">
-                {{ STATUS_DETAILS[ordine.stato]?.label || ordine.stato || 'BOZZA' }}
+                    :class="STATUS_DETAILS[ordine.stato as keyof typeof STATUS_DETAILS]?.badge || 'bg-gray-100 text-gray-500 border-gray-200'">
+                {{ STATUS_DETAILS[ordine.stato as keyof typeof STATUS_DETAILS]?.label || ordine.stato || 'BOZZA' }}
               </span>            </div>
             <div class="flex justify-between text-sm text-gray-500 pl-3 mt-1">
               <span class="font-mono text-xs bg-gray-100 px-1 rounded">{{ ordine.codice }}</span>

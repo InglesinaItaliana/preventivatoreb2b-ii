@@ -4,12 +4,12 @@ import { jsPDF } from "jspdf";
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage } from '../firebase';
 import { 
-  CheckCircleIcon, DocumentTextIcon, CloudArrowUpIcon, CogIcon, ClipboardDocumentIcon, ClipboardDocumentCheckIcon // Nuove icone
+  CheckCircleIcon, DocumentTextIcon, CloudArrowUpIcon, CogIcon, ClipboardDocumentIcon, ClipboardDocumentCheckIcon 
 } from '@heroicons/vue/24/solid';
 
 const props = defineProps<{
   show: boolean;
-  mode: 'FAST' | 'SIGN' | 'PRODUCTION'; // Aggiunto PRODUCTION
+  mode: 'FAST' | 'SIGN' | 'PRODUCTION';
   order: any; 
   clientName: string;
 }>();
@@ -38,7 +38,7 @@ const close = () => emit('close');
 
 const handleFastConfirm = async () => {
   isConfirming.value = true;
-  await new Promise(r => setTimeout(r, 500)); // UX delay
+  await new Promise(r => setTimeout(r, 500)); 
   emit('confirmFast');
   isConfirming.value = false;
 };
@@ -75,12 +75,16 @@ const downloadPdf = () => {
 };
 
 const handleUpload = async (event: Event) => {
-  const files = (event.target as HTMLInputElement).files;
-  if (!files || !files.length) return;
+  const target = event.target as HTMLInputElement;
+  const files = target.files;
+  
+  // FIX: TypeScript Check strict 
+  if (!files || files.length === 0) return;
+  const file = files[0];
+  if (!file) return; 
   
   isUploading.value = true;
   try {
-    const file = files[0];
     const path = `contratti_firmati/${props.order.codice}_${Date.now()}_${file.name}`;
     const fileRef = storageRef(storage, path);
     await uploadBytes(fileRef, file);
@@ -113,7 +117,6 @@ const groupedElements = computed(() => {
 });
 
 const copyToClipboard = (key: string, items: any[]) => {
-  // Formato Excel-friendly: Qty | Base | Altezza | Righe | Colonne
   const rows = items.map(i => `${i.quantita}\t${i.base_mm}\t${i.altezza_mm}\t${i.righe || 0}\t${i.colonne || 0}`);
   const textToCopy = rows.join('\n');
   navigator.clipboard.writeText(textToCopy).then(() => {
@@ -123,12 +126,10 @@ const copyToClipboard = (key: string, items: any[]) => {
 };
 
 const handleProductionConfirm = () => emit('confirmProduction');
-
 </script>
 
 <template>
   <div v-if="show" class="fixed inset-0 z-[999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-    
     <div v-if="mode === 'FAST'" class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 animate-in fade-in zoom-in duration-200">
       <div class="flex items-center gap-3 mb-4 text-blue-600">
         <CheckCircleIcon class="w-8 h-8" />

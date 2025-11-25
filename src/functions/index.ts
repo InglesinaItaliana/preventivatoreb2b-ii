@@ -1,195 +1,201 @@
-import * as functions from 'firebase-functions/v1';
-import admin from 'firebase-admin';
+import * as functions from 'firebase-functions/v1'; // ✅ IMPORTAZIONE FORZATA ALLA V1
+import * as admin from 'firebase-admin';
 import axios from 'axios';
 
-// Inizializza l'app Firebase (necessario per accedere a Firestore)
+// Inizializza l'app Firebase
 if (admin.apps.length === 0) {
     admin.initializeApp();
 }
 
-// --- CONFIGURAZIONE FATTURE IN CLOUD (DA SOSTITUIRE) ---
+// --- CONFIGURAZIONE ---
 const FIC_API_URL = "https://api-v2.fattureincloud.it";
-// !!! SOSTITUISCI CON I TUOI VALORI REALI !!!
+// !!! I TUOI DATI REALI !!!
 const COMPANY_ID = "185254";
-const ACCESS_TOKEN = "a/eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJyZWYiOiJVcG5pR0dSSm5qazV1U0NwQTZiejljWmJpZE94Q09yMiIsImV4cCI6MTc2NDE2NDA4MH0.aIoepTRU8tb7GkXbRaC_2b6SOsfwNjr4eqrXUgsgPQo"; // ATTENZIONE: Token temporaneo (vedi nota sotto)
+const ACCESS_TOKEN = "a/eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJyZWYiOiJVcG5pR0dSSm5qazV1U0NwQTZiejljWmJpZE94Q09yMiIsImV4cCI6MTc2NDE2NDA4MH0.aIoepTRU8tb7GkXbRaC_2b6SOsfwNjr4eqrXUgsgPQo"; 
 
-// --- CONFIGURAZIONE VALORI DEFAULT ---
-const VAT_ID = 0;   // ID IVA che ha funzionato nel test (oppure usa 4/22 per 22%)
-const VAT_VALUE = 22; // Aliquota IVA (necessaria se si usa VAT ID generico)
-const PAYMENT_METHOD_ID = 1; // ID Bonifico Bancario o metodo predefinito
+const VAT_ID = 0;   
+const VAT_VALUE = 22; 
 
+// --- FUNZIONE HELPER PER CALCOLARE LA DATA ---
+function calcolaScadenza(giorni: number, tipo: string): string {
+    const data = new Date();
+    // Aggiungi i giorni
+    data.setDate(data.getDate() + (giorni || 0));
 
+    // Se è "Fine Mese", vai all'ultimo giorno di quel mese
+    if (tipo === 'end_of_month') {
+        // Imposta al giorno 1 del mese successivo, poi torna indietro di 1 giorno
+        data.setMonth(data.getMonth() + 1);
+        data.setDate(0); 
+    }
+
+    return data.toISOString().split('T')[0]; // Formato YYYY-MM-DD
+}
+
+// --- SINCRONIZZAZIONE ---
 exports.sincronizzaClientiFIC = functions
     .region('europe-west1')
-    .https.onRequest(async (_req, res) => {
-
-        // 1. CARICA TUTTI GLI UTENTI DA FIRESTORE
+    // ✅ AGGIUNTI TIPI ESPLICITI PER REQ E RES
+    .https.onRequest(async (_req: functions.https.Request, res: functions.Response) => {
         const usersSnapshot = await admin.firestore().collection('users').get();
         const batch = admin.firestore().batch();
         let updatedCount = 0;
 
         for (const userDoc of usersSnapshot.docs) {
             const userData = userDoc.data();
-            const pivaCliente = userData.piva;
-            const clienteUID = userDoc.id;
-
-            if (!pivaCliente || userData.ficId) continue; // Salta se manca P.IVA o ID FIC è già presente
+            // ✅ GESTIONE UNDEFINED: Se manca piva, diventa stringa vuota per evitare errori TS
+            const pivaCliente = userData.piva || "";
+            
+            if (!pivaCliente || userData.ficId) continue;
 
             try {
-                // 2. CERCA CLIENTE SU FIC TRAMITE P.IVA
                 const searchRes: any = await axios.get(`${FIC_API_URL}/c/${COMPANY_ID}/entities/clients`, {
-                  headers: { Authorization: `Bearer ${ACCESS_TOKEN}` },
-                  params: { "q": pivaCliente }
+                    headers: { Authorization: `Bearer ${ACCESS_TOKEN}` },
+                    params: { "q": pivaCliente } 
                 });
 
                 let ficId: number | null = null;
 
-                // Controlla se la ricerca ha prodotto risultati e se la partita IVA corrisponde
                 if (searchRes.data.data && searchRes.data.data.length > 0) {
                     const client = searchRes.data.data.find((c: any) => c.vat_number === pivaCliente);
-                    if (client) {
-                         ficId = client.id;
-                    }
-                }
-
-                if (ficId) {
-                    // Cliente trovato
-                     console.log(`[FIC] Cliente trovato per P.IVA ${pivaCliente} (ID: ${ficId})`);
+                    if (client) ficId = client.id;
                 } else {
-                    // 3. SE NON ESISTE, CREALO
-                    console.log(`[FIC] Cliente non trovato per P.IVA ${pivaCliente}, creazione in corso...`);
+                    // Crea se non esiste
                     const createRes: any = await axios.post(`${FIC_API_URL}/c/${COMPANY_ID}/entities/clients`, {
-                      data: {
-                          name: userData.ragioneSociale,
-                          vat_number: pivaCliente,
-                          email: userData.email,
-                          type: 'company'
-                      }
-                  }, { headers: { Authorization: `Bearer ${ACCESS_TOKEN}` } });
-
+                        data: {
+                            name: userData.ragioneSociale,
+                            vat_number: pivaCliente,
+                            email: userData.email,
+                            type: 'company'
+                        }
+                    }, { headers: { Authorization: `Bearer ${ACCESS_TOKEN}` } });
                     ficId = createRes.data.data.id;
-                    console.log(`[FIC] Cliente creato per P.IVA ${pivaCliente} (ID: ${ficId})`);
                 }
 
                 if (ficId) {
-                    // 4. AGGIORNA FIRESTORE CON L'ID FIC
                     batch.update(userDoc.ref, { ficId: ficId });
                     updatedCount++;
                 }
-
             } catch (error: any) {
-                console.error(`Errore sync per UID ${clienteUID}:`, error.message);
-                if (error.response) {
-                    console.error("Dettaglio errore FIC:", JSON.stringify(error.response.data, null, 2));
-                }
+                console.error(`Errore sync UID ${userDoc.id}:`, error.message);
             }
         }
-
         await batch.commit();
-        res.status(200).send(`Sincronizzazione completata. Aggiornati ${updatedCount} clienti.`);
+        res.status(200).send(`Sync completato. Aggiornati: ${updatedCount}`);
     });
 
 
-/**
- * Cloud Function Triggered on Firestore Update:
- * Genera un documento "Ordine" su Fatture in Cloud quando un Preventivo
- * viene autorizzato dall'amministratore.
- */
-export const generaOrdineFIC = functions
+// --- CREAZIONE ORDINE ---
+exports.generaOrdineFIC = functions
     .region('europe-west1')
     .firestore
     .document('preventivi/{docId}')
     .onUpdate(async (
         change: functions.Change<admin.firestore.DocumentSnapshot>,
-        context: functions.EventContext
+        // ✅ RINOMINATO IN _context PER EVITARE L'ERRORE DI VARIABILE INUTILIZZATA
+        _context: functions.EventContext 
     ) => {
-        // 1. GESTIONE DEI DATI E CONTROLLO INIZIALE
         const newData = change.after.data();
         const oldData = change.before.data();
 
         if (!newData) return null;
 
-        // 2. VERIFICA CONDIZIONE DI ATTIVAZIONE
         const statiAttivazione = ['WAITING_FAST', 'WAITING_SIGN'];
+        // Usa optional chaining per evitare errori se oldData è undefined
         const eraRichiesto = oldData?.stato === 'ORDER_REQ';
         const eAttivato = statiAttivazione.includes(newData.stato);
 
-        if (!eraRichiesto || !eAttivato) {
-            return null;
-        }
-
-        console.log(`[FIC] Avvio creazione Ordine per preventivo: ${context.params.docId}`);
+        if (!eraRichiesto || !eAttivato) return null;
 
         const clienteUID = newData.clienteUID;
-
         if (!clienteUID) {
-            console.error("[FIC] Manca il clienteUID nel documento Preventivo.");
+            console.error("[FIC] Manca clienteUID nel preventivo.");
             return null;
         }
 
         try {
-            // 3. RECUPERA DATI UTENTE E ID FIC
+            // 1. RECUPERA ID FIC DA FIRESTORE
             const userDoc = await admin.firestore().collection('users').doc(clienteUID).get();
-            if (!userDoc.exists) {
-                console.error(`[FIC] Documento utente non trovato per UID: ${clienteUID}`);
+            const userData = userDoc.data();
+            const ficId = userData?.ficId;
+
+            if (!ficId) {
+                console.error(`[FIC] Utente ${clienteUID} non sincronizzato.`);
                 return null;
             }
 
-            const userData = userDoc.data();
-            const ficId = userData?.ficId;
-            const ragioneSociale = userData?.ragioneSociale || newData.cliente || "Cliente Sconosciuto";
+            // 2. RECUPERA DETTAGLI PAGAMENTO DA FIC
+            console.log(`[FIC] Recupero dettagli cliente ID: ${ficId}...`);
+            const clientDetailsRes: any = await axios.get(`${FIC_API_URL}/c/${COMPANY_ID}/entities/clients/${ficId}`, {
+                headers: { Authorization: `Bearer ${ACCESS_TOKEN}` }
+            });
+            
+            const clientData = clientDetailsRes.data.data;
+            
+            const defaultPaymentMethodId = clientData.default_payment_method?.id || null; 
+            const defaultPaymentTerms = clientData.default_payment_terms || 0;           
+            const defaultPaymentType = clientData.default_payment_terms_type || 'standard'; 
 
-            if (!ficId) {
-              console.error(`[FIC] ID Fatture in Cloud (ficId) non trovato per l'utente ${clienteUID}. Eseguire prima la sincronizzazione manuale.`);
-              // Potresti voler aggiornare lo stato del preventivo per segnalare l'errore
-              await change.after.ref.update({ stato: 'REJECTED', erroreFic: 'Cliente non sincronizzato con Fatture in Cloud.' });
-              return null;
-            }
+            console.log(`[FIC] Dati Pagamento: ID=${defaultPaymentMethodId}, Giorni=${defaultPaymentTerms}`);
 
-            console.log(`[FIC] Trovato ID Fatture in Cloud: ${ficId} per utente: ${ragioneSociale}`);
-
-            // 4. PREPARAZIONE DEL PAYLOAD ORDINE
-            const totalAmountDue = newData.totaleScontato || newData.totaleImponibile || 0;
+            // 3. CALCOLO SCADENZA E TOTALI
+            const dataScadenza = calcolaScadenza(defaultPaymentTerms, defaultPaymentType);
             const today = new Date().toISOString().split('T')[0];
-            const itemsList = (newData.sommarioPreventivo || []).map((item: any) => ({
-                name: item.descrizione,
-                qty: item.quantitaTotale || 1,
-                net_price: item.prezzoUnitario || 0,
-                vat: {
-                    id: VAT_ID,
-                    value: VAT_VALUE
-                }
-            }));
+            
+            // Recuperiamo il NETTO dal database
+            const importoNetto = newData.totaleScontato || newData.totaleImponibile || 0;
+            
+            // CALCOLO DEL LORDO (Netto + 22%)
+            // Usiamo toFixed(2) per arrotondare correttamente ai centesimi e parseFloat per tornare a numero
+            const importoLordo = parseFloat((importoNetto * (1 + (VAT_VALUE / 100))).toFixed(2));
 
-            const orderPayload = {
+            console.log(`[FIC] Importi: Netto=${importoNetto}, Lordo=${importoLordo}`);
+
+            // 4. PREPARAZIONE RIGHE
+            const itemsList = (newData.elementi || []).map((item: any) => {
+                const descrizioneDettaglio = `Dim: ${item.base_mm}x${item.altezza_mm} mm${item.infoCanalino ? ` - ${item.infoCanalino}` : ''}`;
+                return {
+                    name: item.descrizioneCompleta || "Articolo",
+                    description: descrizioneDettaglio,
+                    qty: item.quantita || 1,
+                    net_price: item.prezzo_unitario || 0, // Qui va il NETTO (giusto così)
+                    vat: { id: VAT_ID, value: VAT_VALUE }
+                };
+            });
+
+            // 5. PAYLOAD FINALE
+            const orderPayload: any = {
                 data: {
                     type: "order",
                     entity: {
                         id: ficId,
-                        name: ragioneSociale
+                        name: clientData.name 
                     },
                     date: today,
-                    visible_subject: newData.commessa || `Ordine Rif. Codice: ${newData.codice}`,
+                    visible_subject: newData.commessa || `Rif: ${newData.codice}`,
                     items_list: itemsList,
                     payments_list: [
                         {
-                            amount: totalAmountDue,
-                            due_date: "2025-12-31", // Sostituisci con la logica della tua scadenza
-                            payment_method_id: PAYMENT_METHOD_ID,
+                            amount: importoLordo, // ✅ QUI USIAMO IL LORDO (96.62)
+                            due_date: dataScadenza, 
                             status: "not_paid"
                         }
                     ]
                 }
             };
 
-            // 5. INVIO DEL DOCUMENTO ORDINE A FIC
+            if (defaultPaymentMethodId) {
+                orderPayload.data.payment_method = { id: defaultPaymentMethodId };
+                orderPayload.data.payments_list[0].payment_method = { id: defaultPaymentMethodId };
+            }
+
+            // 6. INVIO
             const orderRes: any = await axios.post(`${FIC_API_URL}/c/${COMPANY_ID}/issued_documents`, orderPayload, {
-              headers: { Authorization: `Bearer ${ACCESS_TOKEN}` }
+                headers: { Authorization: `Bearer ${ACCESS_TOKEN}` }
             });
 
-            console.log(`✅ [FIC] Ordine creato con successo! FIC ID: ${orderRes.data.data.id}`);
+            console.log(`✅ [FIC] Ordine creato! ID: ${orderRes.data.data.id}`);
 
-            // 6. SALVARE RIFERIMENTO SU FIRESTORE
             await change.after.ref.update({
                 fic_order_id: orderRes.data.data.id,
                 fic_order_url: orderRes.data.data.url,
@@ -197,15 +203,8 @@ export const generaOrdineFIC = functions
             });
 
         } catch (error: any) {
-            console.error("❌ [FIC] Errore critico durante la generazione dell'ordine.");
-
-            if (error.response) {
-                console.error("Dettaglio errore FIC:", JSON.stringify(error.response.data, null, 2));
-            } else {
-                console.error("Errore generico:", error.message);
-            }
-            // Opzionale: aggiorna lo stato per segnalare l'errore e permettere un nuovo tentativo
-            await change.after.ref.update({ stato: 'REJECTED', erroreFic: 'Errore API Fatture in Cloud.' });
+            console.error("❌ [FIC] Errore:", error.message);
+            if (error.response) console.error("Dettaglio:", JSON.stringify(error.response.data, null, 2));
         }
 
         return null;

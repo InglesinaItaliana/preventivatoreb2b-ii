@@ -7,14 +7,13 @@ import { useRouter } from 'vue-router';
 import { STATUS_DETAILS } from '../types';
 import OrderModals from '../components/OrderModals.vue';
 
-// IMPORT ICONE HEROICONS (Originali mantenuti + CubeIcon)
+// IMPORT ICONE HEROICONS
 import {
   PencilIcon,
   CheckCircleIcon,
   DocumentTextIcon,
   EyeIcon,
   ClockIcon,
-  ArchiveBoxIcon,
   ArrowPathIcon,
   XCircleIcon,
   PaperAirplaneIcon,
@@ -22,9 +21,8 @@ import {
   CurrencyEuroIcon,
   ShieldExclamationIcon,
   ShoppingCartIcon,
-  WrenchScrewdriverIcon,
   UserIcon,
-  CubeIcon // NUOVA ICONA PER STATO READY
+  CubeIcon 
 } from '@heroicons/vue/24/solid'
 
 const router = useRouter();
@@ -37,7 +35,7 @@ const modalMode = ref<'FAST' | 'SIGN' | 'PRODUCTION'>('PRODUCTION');
 const selectedOrder = ref<any>(null);
 const selectedClientName = ref('');
 
-// MAPPA ICONE LOCALE (Necessaria perché qui usiamo le SOLID, diverse da quelle in types.ts)
+// MAPPA ICONE LOCALE
 const iconMap: Record<string, any> = {
   'DRAFT': PencilIcon,
   'PENDING_VAL': ShieldExclamationIcon,
@@ -52,21 +50,16 @@ const iconMap: Record<string, any> = {
 };
 
 // STATO UI
-// activeView: decide se raggruppare per Cliente o per Stato
 const activeView = ref<'CLIENTI' | 'COMMESSE'>('CLIENTI');
-// activeCategory: le 3 Tab principali (come ClientDashboard)
 const activeCategory = ref<'PREVENTIVI' | 'ORDINI' | 'PRODUZIONE'>('ORDINI');
-
-// --- FILTRO PERIODO ---
 const filtroPeriodo = ref<'TUTTO' | 'CORRENTE' | 'SCORSO'>('CORRENTE');
 
-// Calcolo conteggi per i badge delle Tab
+// Calcolo conteggi
 const categoryCounts = computed(() => {
   const counts = { PREVENTIVI: 0, ORDINI: 0, PRODUZIONE: 0 };
   const now = new Date();
   
   listaPreventivi.value.forEach(p => {
-    // Applica solo filtro periodo per i conteggi
     if (filtroPeriodo.value !== 'TUTTO' && p.dataCreazione?.seconds) {
       const d = new Date(p.dataCreazione.seconds * 1000);
       if (filtroPeriodo.value === 'CORRENTE' && (d.getMonth() !== now.getMonth() || d.getFullYear() !== now.getFullYear())) return;
@@ -98,7 +91,7 @@ const preventiviFiltrati = computed(() => {
       }
     }
 
-    // 2. Filtro Categoria (Tab Principali)
+    // 2. Filtro Categoria
     const st = p.stato || 'DRAFT';
     if (activeCategory.value === 'PREVENTIVI') return ['DRAFT', 'PENDING_VAL', 'QUOTE_READY', 'REJECTED'].includes(st);
     if (activeCategory.value === 'ORDINI') return ['ORDER_REQ', 'WAITING_FAST', 'WAITING_SIGN', 'SIGNED'].includes(st);
@@ -109,7 +102,6 @@ const preventiviFiltrati = computed(() => {
 });
 
 const clientiEspansi = ref<string[]>([]);
-// Aggiunto WAITING_FAST e READY agli stati espansi di default
 const statiEspansi = ref<string[]>(['PENDING_VAL', 'ORDER_REQ', 'WAITING_SIGN', 'SIGNED', 'IN_PRODUZIONE']);
 let refreshInterval: any = null;
 
@@ -137,8 +129,6 @@ const caricaTutti = async () => {
 };
 
 // --- AZIONI RAPIDE ADMIN ---
-
-// C. APRE MODALE PRODUZIONE
 const confermaProduzione = (preventivo: any) => {
   selectedOrder.value = preventivo;
   selectedClientName.value = anagraficaClienti.value[preventivo.clienteEmail] || preventivo.cliente || 'Cliente';
@@ -146,12 +136,10 @@ const confermaProduzione = (preventivo: any) => {
   showModals.value = true;
 };
 
-// Callback chiamata dalla modale
 const onConfirmProduction = async () => {
   if (!selectedOrder.value) return;
   try {
     await updateDoc(doc(db, 'preventivi', selectedOrder.value.id), { stato: 'IN_PRODUZIONE' });
-    // Aggiorna locale per reattività immediata
     const item = listaPreventivi.value.find(p => p.id === selectedOrder.value.id);
     if (item) item.stato = 'IN_PRODUZIONE';
     
@@ -160,7 +148,6 @@ const onConfirmProduction = async () => {
   } catch (e) { console.error(e); alert("Errore aggiornamento stato."); }
 };
 
-// D. ORDINE PRONTO (Da In Produzione) - NUOVO
 const ordinePronto = async (preventivo: any) => {
   if(!confirm("Confermi che la merce è PRONTA per il ritiro/spedizione?")) return;
   await updateDoc(doc(db, 'preventivi', preventivo.id), { stato: 'READY' });
@@ -173,13 +160,11 @@ const globalStats = computed(() => {
   preventiviFiltrati.value.forEach(p => {
         const st = p.stato;
     
-    // Conteggi numerici (rimasti invariati)
     if (st === 'PENDING_VAL') stats.da_validare++;
     if (st === 'ORDER_REQ') stats.richieste_ord++;
     if (st === 'IN_PRODUZIONE') stats.in_produzione++;
     if (st === 'SIGNED') stats.signed++;
     
-    // MODIFICA: Somma valore solo per SIGNED, IN_PRODUZIONE e READY
     if (['SIGNED', 'IN_PRODUZIONE', 'READY'].includes(st)) {
       stats.totale_valore_aperto += (p.totaleScontato || p.totale || 0);
     }
@@ -187,11 +172,10 @@ const globalStats = computed(() => {
   return stats;
 });
 
-// --- RAGGRUPPAMENTO PER CLIENTE (AGGIORNATO) ---
+// --- RAGGRUPPAMENTO PER CLIENTE ---
 const clientiRaggruppati = computed(() => {
   const gruppi: Record<string, any> = {};
     preventiviFiltrati.value.forEach(p => {
-    // FILTRO RICHIESTO: Admin non vede QUOTE_READY
     if (p.stato === 'QUOTE_READY') return;
 
     const nomeReale = anagraficaClienti.value[p.clienteEmail] || p.cliente || 'Sconosciuto';
@@ -200,33 +184,28 @@ const clientiRaggruppati = computed(() => {
       gruppi[nomeReale] = {
         nome: nomeReale,
         preventivi: [],
-        conteggi: {}, // Mappa dinamica { 'STATO': numero }
+        conteggi: {}, 
         totaleValore: 0,
         priorita: 0
       };
     }
 
     let st = p.stato || 'DRAFT';
-    // Unifico visivamente WAITING_FAST dentro WAITING_SIGN
     if (st === 'WAITING_FAST') st = 'WAITING_SIGN';
 
-    // 1. Incrementa il contatore specifico per questo stato
     if (!gruppi[nomeReale].conteggi[st]) gruppi[nomeReale].conteggi[st] = 0;
     gruppi[nomeReale].conteggi[st]++;
 
-    // 2. Calcola Priorità
     if (st === 'PENDING_VAL') gruppi[nomeReale].priorita = Math.max(gruppi[nomeReale].priorita, 3);
     else if (st === 'ORDER_REQ') gruppi[nomeReale].priorita = Math.max(gruppi[nomeReale].priorita, 2);
     else if (st === 'SIGNED') gruppi[nomeReale].priorita = Math.max(gruppi[nomeReale].priorita, 1);
 
-    // 3. Aggiungi alla lista espandibile
     if (st !== 'DRAFT' && st !== 'REJECTED') {
       gruppi[nomeReale].preventivi.push(p);
       gruppi[nomeReale].totaleValore += (p.totaleScontato || p.totale || 0);
     }
   });
 
-  // Filtra gruppi vuoti e ordina per priorità
   return Object.values(gruppi)
     .filter((g: any) => g.preventivi.length > 0 || g.conteggi['DRAFT'] > 0)
     .sort((a: any, b: any) => b.priorita - a.priorita);
@@ -240,16 +219,15 @@ const preventiviPerStato = computed(() => {
   ordineStati.forEach(st => gruppi[st] = []);
 
   preventiviFiltrati.value.forEach(p => {
-    // FILTRO: Nascondi QUOTE_READY
     if (p.stato === 'QUOTE_READY') return;
 
     let st = p.stato || 'DRAFT';
-    // Normalizzazione vecchi stati se presenti
     if(st === 'IN_ATTESA') st = 'PENDING_VAL';
     if(st === 'RICHIESTA_ORDINE') st = 'ORDER_REQ';
     if(st === 'ATTESA_FIRMA') st = 'WAITING_SIGN';
     if(st === 'WAITING_FAST') st = 'WAITING_SIGN';
 
+    // FIX: Check if gruppo exists before pushing (TS2532)
     if (!gruppi[st]) gruppi[st] = [];
     gruppi[st].push(p);
   });
@@ -259,12 +237,9 @@ const preventiviPerStato = computed(() => {
     .filter(g => g.lista && g.lista.length > 0);
 });
 
-
-// --- HELPERS STILE (INTEGRATI CON TYPES.TS) ---
+// --- HELPERS STILE ---
 const getStatusStyling = (stato: string) => {
-  // Recupera colori da types.ts
   const config = STATUS_DETAILS[stato as keyof typeof STATUS_DETAILS] || STATUS_DETAILS['DRAFT'];
-  // Aggiunge l'icona specifica locale (SOLID)
   return { ...config, icon: iconMap[stato] || DocumentTextIcon };
 }
 
@@ -272,42 +247,32 @@ const getStatusLabel = (stato: string) => {
   return STATUS_DETAILS[stato as keyof typeof STATUS_DETAILS]?.label || stato;
 };
 
-// Funzione helper per recuperare configurazione UI (Icone + Colori)
 const getUiConfig = (stato: string) => {
-  // Recupera colori da types.ts
   const config = STATUS_DETAILS[stato as keyof typeof STATUS_DETAILS] || STATUS_DETAILS['DRAFT'];
-  // Unisce la configurazione con l'icona specifica locale
   return { ...config, icon: iconMap[stato] || DocumentTextIcon };
 };
 
-// LOGICA BOTTONE AZIONE (AGGIORNATA)
 const getActionData = (p: any) => {
   const st = p.stato;
   
-  // PENDING_VAL -> Valida
   if (st === 'PENDING_VAL') 
     return { text: 'CONTROLLA E ACCETTA', class: 'text-orange-500 bg-orange-100 border-orange-200 hover:bg-orange-100 animate-pulse', action: () => apriEditor(p.codice), icon: PencilIcon };
   
-  // ORDER_REQ -> Gestisci Bivio (Veloce/Firma)
   if (st === 'ORDER_REQ') 
     return { text: 'CONTROLLA E ACCETTA', class: 'text-cyan-600 bg-cyan-50 border-cyan-200 hover:bg-cyan-100 animate-pulse', action: () => apriEditor(p.codice), icon: PencilIcon };
 
-  // SIGNED -> Avvia Produzione
   if (st === 'SIGNED')
     return { text: 'AVVIA PRODUZIONE', class: 'text-amber-900 border-amber-200 bg-amber-100  hover:bg-amber-200', action: () => confermaProduzione(p), icon: CogIcon };
     
   if (st === 'WAITING_SIGN' || st === 'WAITING_FAST')
     return { text: 'APRI', class: 'border border-gray-300 text-gray-600 px-4 py-2 rounded-lg font-bold text-xs hover:bg-gray-50', action: () => apriEditor(p.codice), icon: EyeIcon };
 
-  // IN_PRODUZIONE -> Ordine Pronto
   if (st === 'IN_PRODUZIONE')
     return { text: 'ORDINE PRONTO', class: 'bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-200', action: () => ordinePronto(p), icon: CubeIcon };
   
-  // READY -> Archivia
   if (st === 'READY')
     return { text: 'APRI', class: 'border border-gray-300 text-gray-600 px-4 py-2 rounded-lg font-bold text-xs hover:bg-gray-50', action: () => apriEditor(p.codice), icon: EyeIcon };
 
-  // Default
   return { text: 'APRI', class: 'text-gray-500 border-gray-200', action: () => apriEditor(p.codice), icon: DocumentTextIcon };
 };
 
@@ -336,7 +301,6 @@ const raggruppaPreventiviClientePerStato = (preventivi: any[]) => {
     if (!gruppi[st]) gruppi[st] = [];
     gruppi[st].push(p);
   });
-  // Ordina in base all'ordineStati definito
   return ordineStati
     .filter(st => gruppi[st] && gruppi[st].length > 0)
     .map(st => ({ stato: st, lista: gruppi[st] }));
@@ -365,9 +329,6 @@ onUnmounted(() => {
           </div>
         </div>
         <div class="flex items-center gap-3">
-  
-          
-
           <span class="text-xs text-gray-400 animate-pulse hidden md:block">Live Sync</span>
           <button @click="caricaTutti" class="flex items-center gap-2 bg-white border border-gray-200 px-4 py-2 rounded-lg hover:bg-yellow-50 text-sm font-bold text-gray-700 transition-all shadow-sm hover:border-gray-300">
             <ArrowPathIcon class="h-4 w-4" />
@@ -491,7 +452,7 @@ onUnmounted(() => {
                 </div>
                 
                 <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/60 shadow-sm border border-black/5 text-inherit">
-                  {{ statoGruppo.lista.length }}
+                  {{ statoGruppo.lista?.length || 0 }}
                 </span>
               </div>
 
