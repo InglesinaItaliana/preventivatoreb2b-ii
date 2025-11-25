@@ -25,6 +25,10 @@ const salvaProfilo = async () => {
         piva: piva.value,
         indirizzo: indirizzo.value,
         dataRegistrazione: serverTimestamp(),
+        
+        // ✅ AGGIUNGI QUESTO CAMPO PER LA SINCRONIZZAZIONE FIC
+        ficId: null, 
+        
         uid: user.uid
     };
 

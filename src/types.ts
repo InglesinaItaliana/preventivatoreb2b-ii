@@ -1,8 +1,6 @@
 export type Categoria = 'INGLESINA' | 'DUPLEX' | 'MUNTIN' | 'CANALINO' | 'EXTRA';
 export type Modello = 'VARSAVIA' | 'GERMANELLA' | 'ALLUMINIO' | 'BORDO_CALDO' | 'MANUALE';
 
-import { PencilIcon, ArchiveBoxIcon, ShieldExclamationIcon, CheckCircleIcon, PaperAirplaneIcon, EyeIcon, ClockIcon, XCircleIcon, CogIcon, WrenchScrewdriverIcon, DocumentTextIcon, PlusIcon, CubeIcon } from '@heroicons/vue/24/solid';
-
 // STATI DEL LIFECYCLE (Single Entity)
 export type StatoPreventivo = 
   | 'DRAFT'             // Preventivo - Bozza
@@ -105,57 +103,65 @@ export const STATUS_DETAILS: Record<StatoPreventivo, { label: string, badge: str
   },
   'PENDING_VAL': { 
     label: 'PREVENTIVO IN ATTESA DI ACCETTAZIONE', 
-    badge: 'bg-orange-100 text-orange-500 border-orange-200 hoover-orange-200', 
+    badge: 'bg-orange-100 text-orange-500 border-orange-200 hover:bg-orange-200', 
     iconBg: 'bg-orange-100 text-orange-500', 
-    darkBadge: 'bg-orange-500 text-orange-100 hoover-orange-200',
-    hoverBadge: 'hoover-orange-200'
+    darkBadge: 'bg-orange-500 text-orange-100 hover:bg-orange-600',
+    hoverBadge: 'hover:bg-orange-200'
   },
   'QUOTE_READY': { 
     label: 'PREVENTIVO VALIDATO', 
     badge: 'bg-green-100 text-green-700 border-green-200', 
     iconBg: 'bg-green-100 text-green-600', 
-    darkBadge: 'bg-green-600 text-green-100'
+    darkBadge: 'bg-green-600 text-green-100',
+    hoverBadge: 'hover:bg-green-200'
   },
   'ORDER_REQ': { 
     label: 'ORDINE IN ATTESA DI ACCETTAZIONE', 
     badge: 'bg-cyan-100 text-cyan-700 border-cyan-200', 
     iconBg: 'bg-cyan-100 text-cyan-600', 
-    darkBadge: 'bg-cyan-600 text-cyan-100'
+    darkBadge: 'bg-cyan-600 text-cyan-100',
+    hoverBadge: 'hover:bg-cyan-200'
   },
   'WAITING_FAST': { 
     label: 'ORDINE IN ATTESA FIRMA DEL CLIENTE', 
     badge: 'bg-cyan-100 text-cyan-700 border-cyan-200', 
     iconBg: 'bg-cyan-100 text-cyan-600', 
-    darkBadge: 'bg-cyan-600 text-cyan-100'
+    darkBadge: 'bg-cyan-600 text-cyan-100',
+    hoverBadge: 'hover:bg-cyan-200'
   },
   'WAITING_SIGN': { 
     label: 'ORDINE IN ATTESA FIRMA DEL CLIENTE', 
     badge: 'bg-cyan-100 text-cyan-700 border-cyan-200', 
     iconBg: 'bg-cyan-100 text-cyan-600', 
-    darkBadge: 'bg-cyan-600 text-cyan-100'
+    darkBadge: 'bg-cyan-600 text-cyan-100',
+    hoverBadge: 'hover:bg-cyan-200'
   },
   'SIGNED': { 
     label: 'ORDINE DA METTERE IN PRODUZIONE', 
     badge: 'bg-amber-100 text-amber-900 border-amber-200', 
     iconBg: 'bg-amber-100 text-amber-800', 
-    darkBadge: 'bg-amber-800 text-amber-100'
+    darkBadge: 'bg-amber-800 text-amber-100',
+    hoverBadge: 'hover:bg-amber-200'
   },
   'IN_PRODUZIONE': { 
     label: 'ORDINE IN PRODUZIONE', 
     badge: 'bg-amber-100 text-amber-900 border-amber-200', 
     iconBg: 'bg-amber-100 text-amber-800', 
-    darkBadge: 'bg-amber-800 text-amber-100'
+    darkBadge: 'bg-amber-800 text-amber-100',
+    hoverBadge: 'hover:bg-amber-200'
   },
   'READY': { 
     label: 'ORDINE PRONTO', 
     badge: 'bg-emerald-100 text-emerald-800 border-emerald-200', 
     iconBg: 'bg-emerald-100 text-emerald-700', 
-    darkBadge: 'bg-emerald-700 text-emerald-100'
+    darkBadge: 'bg-emerald-700 text-emerald-100',
+    hoverBadge: 'hover:bg-emerald-200'
   },
   'REJECTED': { 
     label: 'ORDINE ANNULLATO', 
     badge: 'bg-red-100 text-red-700 border-red-200', 
     iconBg: 'bg-red-100 text-red-600', 
-    darkBadge: 'bg-red-700 text-white' 
+    darkBadge: 'bg-red-700 text-white',
+    hoverBadge: 'hover:bg-red-200'
   }
 };

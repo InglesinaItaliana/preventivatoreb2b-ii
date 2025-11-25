@@ -52,30 +52,58 @@ const iconMap: Record<string, any> = {
 };
 
 // STATO UI
-const activeTab = ref<'CLIENTI' | 'COMMESSE'>('CLIENTI');
+// activeView: decide se raggruppare per Cliente o per Stato
+const activeView = ref<'CLIENTI' | 'COMMESSE'>('CLIENTI');
+// activeCategory: le 3 Tab principali (come ClientDashboard)
+const activeCategory = ref<'PREVENTIVI' | 'ORDINI' | 'PRODUZIONE'>('ORDINI');
 
 // --- FILTRO PERIODO ---
 const filtroPeriodo = ref<'TUTTO' | 'CORRENTE' | 'SCORSO'>('CORRENTE');
 
-const preventiviFiltrati = computed(() => {
-  if (filtroPeriodo.value === 'TUTTO') return listaPreventivi.value;
-
+// Calcolo conteggi per i badge delle Tab
+const categoryCounts = computed(() => {
+  const counts = { PREVENTIVI: 0, ORDINI: 0, PRODUZIONE: 0 };
   const now = new Date();
-  const currentMonth = now.getMonth();
-  const currentYear = now.getFullYear();
-
-  return listaPreventivi.value.filter(p => {
-    if (!p.dataCreazione?.seconds) return false;
-    const d = new Date(p.dataCreazione.seconds * 1000);
+  
+  listaPreventivi.value.forEach(p => {
+    // Applica solo filtro periodo per i conteggi
+    if (filtroPeriodo.value !== 'TUTTO' && p.dataCreazione?.seconds) {
+      const d = new Date(p.dataCreazione.seconds * 1000);
+      if (filtroPeriodo.value === 'CORRENTE' && (d.getMonth() !== now.getMonth() || d.getFullYear() !== now.getFullYear())) return;
+      if (filtroPeriodo.value === 'SCORSO') {
+        const last = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        if (d.getMonth() !== last.getMonth() || d.getFullYear() !== last.getFullYear()) return;
+      }
+    }
     
-    if (filtroPeriodo.value === 'CORRENTE') {
-      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    const st = p.stato || 'DRAFT';
+    if (['DRAFT', 'PENDING_VAL', 'QUOTE_READY', 'REJECTED'].includes(st)) counts.PREVENTIVI++;
+    else if (['ORDER_REQ', 'WAITING_FAST', 'WAITING_SIGN', 'SIGNED'].includes(st)) counts.ORDINI++;
+    else if (['IN_PRODUZIONE', 'READY'].includes(st)) counts.PRODUZIONE++;
+  });
+  return counts;
+});
+
+const preventiviFiltrati = computed(() => {
+  const now = new Date();
+  
+  return listaPreventivi.value.filter(p => {
+    // 1. Filtro Data
+    if (filtroPeriodo.value !== 'TUTTO' && p.dataCreazione?.seconds) {
+      const d = new Date(p.dataCreazione.seconds * 1000);
+      if (filtroPeriodo.value === 'CORRENTE' && (d.getMonth() !== now.getMonth() || d.getFullYear() !== now.getFullYear())) return false;
+      if (filtroPeriodo.value === 'SCORSO') {
+        const last = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        if (d.getMonth() !== last.getMonth() || d.getFullYear() !== last.getFullYear()) return false;
+      }
     }
-    if (filtroPeriodo.value === 'SCORSO') {
-      // Calcolo mese scorso gestendo il cambio anno (es. Gennaio -> Dicembre)
-      const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      return d.getMonth() === lastMonthDate.getMonth() && d.getFullYear() === lastMonthDate.getFullYear();
-    }
+
+    // 2. Filtro Categoria (Tab Principali)
+    const st = p.stato || 'DRAFT';
+    if (activeCategory.value === 'PREVENTIVI') return ['DRAFT', 'PENDING_VAL', 'QUOTE_READY', 'REJECTED'].includes(st);
+    if (activeCategory.value === 'ORDINI') return ['ORDER_REQ', 'WAITING_FAST', 'WAITING_SIGN', 'SIGNED'].includes(st);
+    if (activeCategory.value === 'PRODUZIONE') return ['IN_PRODUZIONE', 'READY'].includes(st);
+    
     return true;
   });
 });
@@ -392,21 +420,38 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <div class="flex border-b border-gray-200 mb-6">
-        <button @click="activeTab = 'CLIENTI'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative" :class="activeTab === 'CLIENTI' ? 'text-gray-900' : 'text-gray-400 hover:text-gray-600'">
-          VISTA CLIENTI
-          <div v-if="activeTab === 'CLIENTI'" class="absolute bottom-0 left-0 w-full h-1 bg-yellow-400 rounded-t-full"></div>
-        </button>
-        <button @click="activeTab = 'COMMESSE'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative" :class="activeTab === 'COMMESSE' ? 'text-gray-900' : 'text-gray-400 hover:text-gray-600'">
-          VISTA STATO
-          <div v-if="activeTab === 'COMMESSE'" class="absolute bottom-0 left-0 w-full h-1 bg-yellow-400 rounded-t-full"></div>
-        </button>
+      <div class="flex flex-col md:flex-row border-b border-gray-200 mb-6 justify-between items-end gap-4">
+        
+        <div class="flex overflow-x-auto">
+          <button @click="activeCategory = 'PREVENTIVI'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative whitespace-nowrap" :class="activeCategory === 'PREVENTIVI' ? 'text-gray-900 border-b-4 border-yellow-400' : 'text-gray-400 hover:text-gray-600'">
+            PREVENTIVI
+            <span v-if="categoryCounts.PREVENTIVI" class="ml-2 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[10px] border">{{ categoryCounts.PREVENTIVI }}</span>
+          </button>
+          <button @click="activeCategory = 'ORDINI'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative whitespace-nowrap" :class="activeCategory === 'ORDINI' ? 'text-gray-900 border-b-4 border-yellow-400' : 'text-gray-400 hover:text-gray-600'">
+            ORDINI
+            <span v-if="categoryCounts.ORDINI" class="ml-2 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[10px] border">{{ categoryCounts.ORDINI }}</span>
+          </button>
+          <button @click="activeCategory = 'PRODUZIONE'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative whitespace-nowrap" :class="activeCategory === 'PRODUZIONE' ? 'text-gray-900 border-b-4 border-yellow-400' : 'text-gray-400 hover:text-gray-600'">
+            PRODUZIONE
+            <span v-if="categoryCounts.PRODUZIONE" class="ml-2 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[10px] border">{{ categoryCounts.PRODUZIONE }}</span>
+          </button>
+        </div>
+
+        <div class="flex items-center gap-2 bg-gray-100 p-1 rounded-lg mb-2">
+          <span class="text-[10px] font-bold text-gray-400 px-2 uppercase">Raggruppa per:</span>
+          <button @click="activeView = 'CLIENTI'" class="px-3 py-1 rounded text-xs font-bold transition-all" :class="activeView === 'CLIENTI' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'">
+            Clienti
+          </button>
+          <button @click="activeView = 'COMMESSE'" class="px-3 py-1 rounded text-xs font-bold transition-all" :class="activeView === 'COMMESSE' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'">
+            Stato
+          </button>
+        </div>
       </div>
 
       <div v-if="loading" class="text-center py-20 text-gray-400">Caricamento...</div>
 
-      <div v-else-if="activeTab === 'CLIENTI'" class="space-y-4">
-        <div v-for="gruppo in clientiRaggruppati" :key="gruppo.nome" class="bg-white rounded-xl shadow-sm border overflow-hidden" :class="gruppo.priorita > 0 ? 'border-2 border-orange-300 ring-1 ring-orange-200' : 'border-gray-200'">
+      <div v-else-if="activeView === 'CLIENTI'" class="space-y-4">
+                <div v-for="gruppo in clientiRaggruppati" :key="gruppo.nome" class="bg-white rounded-xl shadow-sm border overflow-hidden" :class="gruppo.priorita > 0 ? 'border-2 border-orange-300 ring-1 ring-orange-200' : 'border-gray-200'">
 
           <div @click="toggleCliente(gruppo.nome)" class="p-5 cursor-pointer hover:bg-gray-50 flex flex-col md:flex-row justify-between items-center gap-4">
             <div class="flex items-center gap-4 w-full md:w-auto">
@@ -492,7 +537,7 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <div v-else-if="activeTab === 'COMMESSE'" class="space-y-4">
+      <div v-else-if="activeView === 'COMMESSE'" class="space-y-4">
         <div v-for="gruppo in preventiviPerStato" :key="gruppo.stato" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
 
           <div @click="toggleStato(gruppo.stato)" class="p-4 cursor-pointer hover:bg-gray-50 flex justify-between items-center border-l-4" :class="getStatusStyling(gruppo.stato).badge.replace('text-','border-').split(' ')[0]">

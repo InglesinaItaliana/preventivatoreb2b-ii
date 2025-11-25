@@ -4,7 +4,7 @@ import { collection, query, where, updateDoc, doc, serverTimestamp, getDoc, onSn
 import { db, auth } from '../firebase';
 import { useRouter } from 'vue-router';
 import { onAuthStateChanged } from 'firebase/auth';
-import { PencilIcon, ShieldExclamationIcon, CheckCircleIcon, PaperAirplaneIcon, ClockIcon, XCircleIcon, CogIcon, WrenchScrewdriverIcon, DocumentTextIcon, PlusIcon, CubeIcon } from '@heroicons/vue/24/solid';
+import { PencilIcon, ShieldExclamationIcon, CheckCircleIcon, ClockIcon, XCircleIcon, CogIcon, PlusIcon, CubeIcon } from '@heroicons/vue/24/solid';
 // IMPORT NUOVO COMPONENTE
 import OrderModals from '../components/OrderModals.vue';
 
@@ -131,7 +131,10 @@ const ordiniInProduzione = computed(() =>
   listaMieiPreventivi.value.filter(p => ['IN_PRODUZIONE', 'READY'].includes(p.stato))
 );
 
-const vaiAlBuilder = (codice?: string) => router.push(codice ? `/preventivatore?codice=${codice}` : '/preventivatore');
+const vaiAlBuilder = (codice?: string) => {
+  const route = codice ? `/preventivatore?codice=${codice}` : '/preventivatore';
+  router.push(route);
+};
 
 const getStatusStyling = (stato: string) => {
   const styles: Record<string, any> = {
