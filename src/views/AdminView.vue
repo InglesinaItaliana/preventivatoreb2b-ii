@@ -214,6 +214,8 @@ const clientiRaggruppati = computed(() => {
 // --- RAGGRUPPAMENTO PER STATO ---
 const ordineStati = ['PENDING_VAL', 'ORDER_REQ', 'WAITING_SIGN', 'SIGNED', 'IN_PRODUZIONE', 'READY', 'DRAFT', 'REJECTED'];
 
+// Replace the preventiviPerStato computed property with this fixed version:
+
 const preventiviPerStato = computed(() => {
   const gruppi: Record<string, any[]> = {};
   ordineStati.forEach(st => gruppi[st] = []);
@@ -227,14 +229,16 @@ const preventiviPerStato = computed(() => {
     if(st === 'ATTESA_FIRMA') st = 'WAITING_SIGN';
     if(st === 'WAITING_FAST') st = 'WAITING_SIGN';
 
-    // FIX: Check if gruppo exists before pushing (TS2532)
-    if (!gruppi[st]) gruppi[st] = [];
-    gruppi[st].push(p);
+    // FIX: Initialize array if it doesn't exist before pushing
+    if (!gruppi[st]) {
+      gruppi[st] = [];
+    }
+    gruppi[st]!.push(p);
   });
 
   return ordineStati
-    .map(key => ({ stato: key, lista: gruppi[key] }))
-    .filter(g => g.lista && g.lista.length > 0);
+    .map(key => ({ stato: key, lista: gruppi[key] || [] }))
+    .filter(g => g.lista.length > 0);
 });
 
 // --- HELPERS STILE ---
@@ -299,7 +303,7 @@ const raggruppaPreventiviClientePerStato = (preventivi: any[]) => {
   preventivi.forEach(p => {
     const st = p.stato || 'DRAFT';
     if (!gruppi[st]) gruppi[st] = [];
-    gruppi[st].push(p);
+    gruppi[st]!.push(p);
   });
   return ordineStati
     .filter(st => gruppi[st] && gruppi[st].length > 0)

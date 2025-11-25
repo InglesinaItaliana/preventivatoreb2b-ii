@@ -276,7 +276,8 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
       }
     });
 
-    const docData = {
+    // 1. Prepariamo i dati base
+    const docData: any = {
       codice,
       cliente: nomeCliente.value,
       clienteEmail: clienteEmail.value,
@@ -289,11 +290,18 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
       allegati: listaAllegati.value,
       sommarioPreventivo: sommario, 
       dataModifica: serverTimestamp(),
-      uid: auth.currentUser?.uid,
-      ...(currentDocId.value ? {} : { dataCreazione: serverTimestamp(), }),
       dataScadenza: new Date(Date.now() + 30*24*60*60*1000),
       elementi: preventivo.value.map(r => ({ ...r }))
     };
+
+    // 2. ✅ LOGICA DI SICUREZZA PER L'UID
+    // Se è un NUOVO preventivo, assegniamo l'UID dell'utente corrente.
+    // Se stiamo MODIFICANDO, NON tocchiamo l'UID (così rimane del proprietario originale).
+    if (!currentDocId.value) {
+        docData.dataCreazione = serverTimestamp();
+        docData.uid = auth.currentUser?.uid;
+        docData.clienteUID = auth.currentUser?.uid;
+    }
 
     if (currentDocId.value) {
       await setDoc(doc(db, 'preventivi', currentDocId.value), docData, { merge: true });
