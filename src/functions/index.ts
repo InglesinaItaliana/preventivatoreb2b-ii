@@ -2,16 +2,6 @@ import * as functions from 'firebase-functions/v1';
 import admin from 'firebase-admin';
 import axios from 'axios';
 
-// Interfacce per le risposte dell'API di Fatture in Cloud
-interface FicEntity<T> {
-    data: T;
-}
-
-interface FicIssuedDocument {
-    id: number;
-    url: string;
-}
-
 // Inizializza l'app Firebase (necessario per accedere a Firestore)
 if (admin.apps.length === 0) {
     admin.initializeApp();
