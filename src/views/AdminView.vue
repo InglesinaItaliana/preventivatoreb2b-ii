@@ -3,14 +3,18 @@ import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { collection, query, orderBy, getDocs, limit, updateDoc, doc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useRouter } from 'vue-router';
+// IMPORT CONFIGURAZIONE CONDIVISA (Modifica richiesta)
+import { STATUS_DETAILS } from '../types';
+import OrderModals from '../components/OrderModals.vue';
 
-// IMPORT ICONE HEROICONS
+// IMPORT ICONE HEROICONS (Originali mantenuti + CubeIcon)
 import {
   PencilIcon,
   CheckCircleIcon,
   DocumentTextIcon,
   EyeIcon,
   ClockIcon,
+  ArchiveBoxIcon,
   ArrowPathIcon,
   XCircleIcon,
   PaperAirplaneIcon,
@@ -28,11 +32,30 @@ const listaPreventivi = ref<any[]>([]);
 const anagraficaClienti = ref<Record<string, string>>({});
 const loading = ref(true);
 
+const showModals = ref(false);
+const modalMode = ref<'FAST' | 'SIGN' | 'PRODUCTION'>('PRODUCTION');
+const selectedOrder = ref<any>(null);
+const selectedClientName = ref('');
+
+// MAPPA ICONE LOCALE (Necessaria perché qui usiamo le SOLID, diverse da quelle in types.ts)
+const iconMap: Record<string, any> = {
+  'DRAFT': PencilIcon,
+  'PENDING_VAL': ShieldExclamationIcon,
+  'QUOTE_READY': CheckCircleIcon,
+  'ORDER_REQ': ShoppingCartIcon,
+  'WAITING_FAST': ClockIcon,
+  'WAITING_SIGN': ClockIcon,
+  'SIGNED': CheckCircleIcon,
+  'IN_PRODUZIONE': CogIcon,
+  'READY': CubeIcon,
+  'REJECTED': XCircleIcon
+};
+
 // STATO UI
 const activeTab = ref<'CLIENTI' | 'COMMESSE'>('CLIENTI');
 const clientiEspansi = ref<string[]>([]);
 // Aggiunto WAITING_FAST e READY agli stati espansi di default
-const statiEspansi = ref<string[]>(['PENDING_VAL', 'ORDER_REQ', 'WAITING_SIGN', 'WAITING_FAST', 'SIGNED', 'IN_PRODUZIONE']);
+const statiEspansi = ref<string[]>(['PENDING_VAL', 'ORDER_REQ', 'WAITING_SIGN', 'SIGNED', 'IN_PRODUZIONE']);
 let refreshInterval: any = null;
 
 // --- 1. CARICAMENTO ANAGRAFICA ---
@@ -60,15 +83,26 @@ const caricaTutti = async () => {
 
 // --- AZIONI RAPIDE ADMIN ---
 
-// C. CONFERMA PRODUZIONE (Da Firmato)
-const confermaProduzione = async (preventivo: any) => {
-  const msg = preventivo.stato === 'SIGNED'
-    ? "Ordine firmato digitalmente. Avviare produzione?"
-    : "Hai ricevuto la firma manuale? Passa in PRODUZIONE?";
+// C. APRE MODALE PRODUZIONE
+const confermaProduzione = (preventivo: any) => {
+  selectedOrder.value = preventivo;
+  selectedClientName.value = anagraficaClienti.value[preventivo.clienteEmail] || preventivo.cliente || 'Cliente';
+  modalMode.value = 'PRODUCTION';
+  showModals.value = true;
+};
 
-  if(!confirm(msg)) return;
-  await updateDoc(doc(db, 'preventivi', preventivo.id), { stato: 'IN_PRODUZIONE' });
-  preventivo.stato = 'IN_PRODUZIONE';
+// Callback chiamata dalla modale
+const onConfirmProduction = async () => {
+  if (!selectedOrder.value) return;
+  try {
+    await updateDoc(doc(db, 'preventivi', selectedOrder.value.id), { stato: 'IN_PRODUZIONE' });
+    // Aggiorna locale per reattività immediata
+    const item = listaPreventivi.value.find(p => p.id === selectedOrder.value.id);
+    if (item) item.stato = 'IN_PRODUZIONE';
+    
+    showModals.value = false;
+    alert("✅ Ordine inviato in produzione!");
+  } catch (e) { console.error(e); alert("Errore aggiornamento stato."); }
 };
 
 // D. ORDINE PRONTO (Da In Produzione) - NUOVO
@@ -83,58 +117,64 @@ const globalStats = computed(() => {
   const stats = { da_validare: 0, richieste_ord: 0, in_produzione: 0, totale_valore_aperto: 0 };
   listaPreventivi.value.forEach(p => {
     const st = p.stato;
-    if (st === 'PENDING_VAL' || st === 'IN_ATTESA') stats.da_validare++;
-    if (st === 'ORDER_REQ' || st === 'RICHIESTA_ORDINE') stats.richieste_ord++;
+    if (st === 'PENDING_VAL') stats.da_validare++;
+    if (st === 'ORDER_REQ') stats.richieste_ord++;
     if (st === 'IN_PRODUZIONE') stats.in_produzione++;
-    // Escludiamo READY e REJECTED dal totale valore attivo
-    if (st !== 'DRAFT' && st !== 'BOZZA' && st !== 'REJECTED' && st !== 'RIFIUTATO' && st !== 'READY') {
+    // Escludiamo READY, QUOTE_READY e REJECTED dal totale valore attivo
+    if (st !== 'DRAFT' && st !== 'REJECTED' && st !== 'READY' && st !== 'QUOTE_READY') {
       stats.totale_valore_aperto += (p.totaleScontato || p.totale || 0);
     }
   });
   return stats;
 });
 
-// --- RAGGRUPPAMENTO PER CLIENTE ---
+// --- RAGGRUPPAMENTO PER CLIENTE (AGGIORNATO) ---
 const clientiRaggruppati = computed(() => {
   const gruppi: Record<string, any> = {};
   listaPreventivi.value.forEach(p => {
     // FILTRO RICHIESTO: Admin non vede QUOTE_READY
     if (p.stato === 'QUOTE_READY') return;
 
-    const nomeReale = anagraficaClienti.value[p.clienteEmail] || anagraficaClienti.value[p.cliente] || p.cliente || 'Sconosciuto';
-    const chiave = nomeReale;
+    const nomeReale = anagraficaClienti.value[p.clienteEmail] || p.cliente || 'Sconosciuto';
 
-    if (!gruppi[chiave]) {
-      gruppi[chiave] = {
-        nome: nomeReale, preventivi: [],
-        contatori: { validare: 0, richiedere: 0, firmare: 0, prod: 0, bozze: 0, tot: 0 },
+    if (!gruppi[nomeReale]) {
+      gruppi[nomeReale] = {
+        nome: nomeReale,
+        preventivi: [],
+        conteggi: {}, // Mappa dinamica { 'STATO': numero }
+        totaleValore: 0,
         priorita: 0
       };
     }
 
-    const st = p.stato || 'DRAFT';
-    const c = gruppi[chiave].contatori;
+    let st = p.stato || 'DRAFT';
+    // Unifico visivamente WAITING_FAST dentro WAITING_SIGN
+    if (st === 'WAITING_FAST') st = 'WAITING_SIGN';
 
-    if (st === 'PENDING_VAL' || st === 'IN_ATTESA') { c.validare++; gruppi[chiave].priorita = Math.max(gruppi[chiave].priorita, 3); }
-    else if (st === 'ORDER_REQ' || st === 'RICHIESTA_ORDINE') { c.richiedere++; gruppi[chiave].priorita = Math.max(gruppi[chiave].priorita, 2); }
-    else if (['WAITING_SIGN', 'ATTESA_FIRMA', 'WAITING_FAST', 'SIGNED'].includes(st)) { c.firmare++; }
-    else if (st === 'IN_PRODUZIONE') { c.prod++; }
-    else if (st === 'DRAFT' || st === 'BOZZA') { c.bozze++; }
+    // 1. Incrementa il contatore specifico per questo stato
+    if (!gruppi[nomeReale].conteggi[st]) gruppi[nomeReale].conteggi[st] = 0;
+    gruppi[nomeReale].conteggi[st]++;
 
-    if (st !== 'DRAFT' && st !== 'BOZZA') {
-      gruppi[chiave].preventivi.push(p);
-      gruppi[chiave].contatori.tot += (p.totaleScontato || p.totale || 0);
+    // 2. Calcola Priorità
+    if (st === 'PENDING_VAL') gruppi[nomeReale].priorita = Math.max(gruppi[nomeReale].priorita, 3);
+    else if (st === 'ORDER_REQ') gruppi[nomeReale].priorita = Math.max(gruppi[nomeReale].priorita, 2);
+    else if (st === 'SIGNED') gruppi[nomeReale].priorita = Math.max(gruppi[nomeReale].priorita, 1);
+
+    // 3. Aggiungi alla lista espandibile
+    if (st !== 'DRAFT' && st !== 'REJECTED') {
+      gruppi[nomeReale].preventivi.push(p);
+      gruppi[nomeReale].totaleValore += (p.totaleScontato || p.totale || 0);
     }
   });
 
+  // Filtra gruppi vuoti e ordina per priorità
   return Object.values(gruppi)
-    .filter((g: any) => g.preventivi.length > 0 || g.contatori.bozze > 0)
+    .filter((g: any) => g.preventivi.length > 0 || g.conteggi['DRAFT'] > 0)
     .sort((a: any, b: any) => b.priorita - a.priorita);
 });
 
 // --- RAGGRUPPAMENTO PER STATO ---
-// Aggiunto READY e WAITING_FAST
-const ordineStati = ['PENDING_VAL', 'ORDER_REQ', 'WAITING_SIGN', 'WAITING_FAST', 'SIGNED', 'IN_PRODUZIONE', 'READY', 'DRAFT', 'REJECTED'];
+const ordineStati = ['PENDING_VAL', 'ORDER_REQ', 'WAITING_SIGN', 'SIGNED', 'IN_PRODUZIONE', 'READY', 'DRAFT', 'REJECTED'];
 
 const preventiviPerStato = computed(() => {
   const gruppi: Record<string, any[]> = {};
@@ -145,9 +185,11 @@ const preventiviPerStato = computed(() => {
     if (p.stato === 'QUOTE_READY') return;
 
     let st = p.stato || 'DRAFT';
+    // Normalizzazione vecchi stati se presenti
     if(st === 'IN_ATTESA') st = 'PENDING_VAL';
     if(st === 'RICHIESTA_ORDINE') st = 'ORDER_REQ';
     if(st === 'ATTESA_FIRMA') st = 'WAITING_SIGN';
+    if(st === 'WAITING_FAST') st = 'WAITING_SIGN';
 
     if (!gruppi[st]) gruppi[st] = [];
     gruppi[st].push(p);
@@ -159,66 +201,54 @@ const preventiviPerStato = computed(() => {
 });
 
 
-// --- HELPERS STILE ---
+// --- HELPERS STILE (INTEGRATI CON TYPES.TS) ---
 const getStatusStyling = (stato: string) => {
-  const styles: Record<string, { badge: string; icon: any; iconBg: string; }> = {
-    'DRAFT': { badge: 'bg-gray-100 text-gray-500 border-gray-200', icon: PencilIcon, iconBg: 'bg-gray-100 text-gray-500' },
-    'PENDING_VAL': { badge: 'bg-orange-100 text-orange-700 border-orange-200', icon: ShieldExclamationIcon, iconBg: 'bg-orange-100 text-orange-600' },
-    'QUOTE_READY': { badge: 'bg-green-100 text-green-700 border-green-200', icon: CheckCircleIcon, iconBg: 'bg-green-100 text-green-600' },
-    'ORDER_REQ': { badge: 'bg-purple-100 text-purple-700 border-purple-200', icon: PaperAirplaneIcon, iconBg: 'bg-purple-100 text-purple-600' },
-    
-    'WAITING_FAST': { badge: 'bg-blue-50 text-blue-600 border-blue-100', icon: ClockIcon, iconBg: 'bg-blue-100 text-blue-600' },
-    'WAITING_SIGN': { badge: 'bg-blue-50 text-blue-600 border-blue-100', icon: ClockIcon, iconBg: 'bg-blue-100 text-blue-600' },
-    'ATTESA_FIRMA': { badge: 'bg-blue-50 text-blue-600 border-blue-100', icon: ClockIcon, iconBg: 'bg-blue-100 text-blue-600' },
-    
-    'REJECTED': { badge: 'bg-red-100 text-red-700 border-red-200', icon: XCircleIcon, iconBg: 'bg-red-100 text-red-600' },
-    'SIGNED': { badge: 'bg-green-700 text-white border-green-800', icon: CogIcon, iconBg: 'bg-green-200 text-green-800' },
-    'IN_PRODUZIONE': { badge: 'bg-green-100 text-green-800 border-green-200', icon: CogIcon, iconBg: 'bg-green-100 text-green-700' },
-    // NUOVO STATO READY
-    'READY': { badge: 'bg-amber-100 text-amber-800 border-amber-200', icon: CubeIcon, iconBg: 'bg-amber-100 text-amber-700' },
-  };
-  return styles[stato] || { badge: 'bg-gray-100 text-gray-500 border-gray-200', icon: DocumentTextIcon, iconBg: 'bg-gray-100 text-gray-500' };
-};
+  // Recupera colori da types.ts
+  const config = STATUS_DETAILS[stato as keyof typeof STATUS_DETAILS] || STATUS_DETAILS['DRAFT'];
+  // Aggiunge l'icona specifica locale (SOLID)
+  return { ...config, icon: iconMap[stato] || DocumentTextIcon };
+}
 
 const getStatusLabel = (stato: string) => {
-  const map: Record<string, string> = {
-    'DRAFT': 'BOZZA', 'PENDING_VAL': 'DA VALIDARE', 'QUOTE_READY': 'PRONTO',
-    'ORDER_REQ': 'ORDINE DA CONFERMARE', 
-    'WAITING_SIGN': 'ATTESA FIRMA', 'WAITING_FAST': 'ATTESA OK VELOCE', 'ATTESA_FIRMA': 'ATTESA FIRMA',
-    'SIGNED': 'ORDINE FIRMATO', 'IN_PRODUZIONE': 'IN PRODUZIONE', 'READY': 'ORDINE PRONTO', 'REJECTED': 'ANNULLATO'
-  };
-  return map[stato] || stato || 'BOZZA';
+  return STATUS_DETAILS[stato as keyof typeof STATUS_DETAILS]?.label || stato;
 };
 
-// LOGICA BOTTONE AZIONE (Con Icone)
+// Funzione helper per recuperare configurazione UI (Icone + Colori)
+const getUiConfig = (stato: string) => {
+  // Recupera colori da types.ts
+  const config = STATUS_DETAILS[stato as keyof typeof STATUS_DETAILS] || STATUS_DETAILS['DRAFT'];
+  // Unisce la configurazione con l'icona specifica locale
+  return { ...config, icon: iconMap[stato] || DocumentTextIcon };
+};
+
+// LOGICA BOTTONE AZIONE (AGGIORNATA)
 const getActionData = (p: any) => {
   const st = p.stato;
-  const tot = p.totaleScontato || p.totale || 0;
   
-  if (st === 'PENDING_VAL' || st === 'IN_ATTESA')
-    return { text: 'VALIDA', class: 'text-orange-600 bg-orange-50 border-orange-200 hover:bg-orange-100', action: () => apriEditor(p.codice), icon: PencilIcon };
+  // PENDING_VAL -> Valida
+  if (st === 'PENDING_VAL') 
+    return { text: 'CONTROLLA E ACCETTA', class: 'text-orange-500 bg-orange-100 border-orange-200 hover:bg-orange-100 animate-pulse', action: () => apriEditor(p.codice), icon: PencilIcon };
   
-  // ORDER_REQ: Ora è "GESTISCI" perché l'admin deve scegliere tra Veloce e Firma nel builder
-  if (st === 'ORDER_REQ' || st === 'RICHIESTA_ORDINE') {
-    return { text: 'GESTISCI', class: 'text-purple-600 bg-purple-50 border-purple-200 hover:bg-purple-100 animate-pulse', action: () => apriEditor(p.codice), icon: CogIcon };
-  }
+  // ORDER_REQ -> Gestisci Bivio (Veloce/Firma)
+  if (st === 'ORDER_REQ') 
+    return { text: 'CONTROLLA E ACCETTA', class: 'text-cyan-600 bg-cyan-50 border-cyan-200 hover:bg-cyan-100 animate-pulse', action: () => apriEditor(p.codice), icon: PencilIcon };
 
-  // Modifica per WAITING_FAST e WAITING_SIGN: Solo pulsante "APRI" per visualizzare (non modificabile)
-  if (st === 'WAITING_FAST' || st === 'WAITING_SIGN' || st === 'ATTESA_FIRMA') {
-    return { text: 'APRI', class: 'text-gray-500 border-gray-200 hover:bg-gray-100', action: () => apriEditor(p.codice, true), icon: EyeIcon };
-  }
-
+  // SIGNED -> Avvia Produzione
   if (st === 'SIGNED')
-    return { text: 'AVVIA PRODUZIONE', class: 'text-white bg-green-700 border-green-800 hover:bg-green-800', action: () => confermaProduzione(p), icon: CogIcon };
+    return { text: 'AVVIA PRODUZIONE', class: 'text-amber-900 border-amber-200 bg-amber-100  hover:bg-amber-200', action: () => confermaProduzione(p), icon: CogIcon };
+    
+  if (st === 'WAITING_SIGN' || st === 'WAITING_FAST')
+    return { text: 'APRI', class: 'border border-gray-300 text-gray-600 px-4 py-2 rounded-lg font-bold text-xs hover:bg-gray-50', action: () => apriEditor(p.codice), icon: EyeIcon };
 
-  if (st === 'IN_PRODUZIONE') 
-    return { text: 'ORDINE PRONTO', class: 'text-amber-800 bg-amber-100 border-amber-200 hover:bg-amber-200', action: () => ordinePronto(p), icon: CubeIcon };
+  // IN_PRODUZIONE -> Ordine Pronto
+  if (st === 'IN_PRODUZIONE')
+    return { text: 'ORDINE PRONTO', class: 'bg-green-100 text-green-800 border-green-200 hover:bg-green-200', action: () => ordinePronto(p), icon: CubeIcon };
   
-  if (st === 'READY') 
-    return { text: 'ARCHIVIA', class: 'text-gray-400 bg-gray-100 border-gray-200', action: () => {}, icon: CheckCircleIcon };
+  // READY -> Archivia
+  if (st === 'READY')
+    return { text: 'ARCHIVIA', class: 'text-gray-400 bg-gray-100 border-gray-200', action: () => {}, icon: ArchiveBoxIcon };
 
-  if (st === 'QUOTE_READY' || st === 'APPROVATO') return { text: 'VEDI', class: 'text-green-600 bg-green-50 border-green-200', action: () => apriEditor(p.codice), icon: EyeIcon };
-  
+  // Default
   return { text: 'APRI', class: 'text-gray-500 border-gray-200', action: () => apriEditor(p.codice), icon: DocumentTextIcon };
 };
 
@@ -252,171 +282,202 @@ onUnmounted(() => {
 </script>
 
 <template>
-<div class="min-h-screen bg-gray-50 p-6 font-sans text-gray-700">
-<div class="max-w-7xl mx-auto">
+  <div class="min-h-screen bg-gray-50 p-6 font-sans text-gray-700">
+    <div class="max-w-7xl mx-auto">
 
-  <div class="flex justify-between items-center mb-8">
-    <div class="flex items-center gap-4">
-      <div>
-        <h1 class="text-2xl md:text-3xl font-bold text-gray-900 font-heading tracking-tight">Dashboard Admin</h1>
-        <p class="text-gray-500 text-sm">Panoramica operativa</p>
-      </div>
-    </div>
-    <div class="flex items-center gap-3">
-      <span class="text-xs text-gray-400 animate-pulse">Live Sync</span>
-      <button @click="caricaTutti" class="flex items-center gap-2 bg-white border border-gray-200 px-4 py-2 rounded-lg hover:bg-yellow-50 text-sm font-bold text-gray-700 transition-all shadow-sm hover:border-gray-300">
-        <ArrowPathIcon class="h-4 w-4" />
-        Aggiorna
-      </button>
-    </div>
-  </div>
-
-  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-    <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-yellow-100 cursor-pointer">
-      <div class="h-12 w-12 rounded-full flex items-center justify-center bg-yellow-100">
-        <CurrencyEuroIcon class="h-6 w-6 text-yellow-500" />
-      </div>
-      <div>
-        <div class="text-xs font-bold text-gray-500 uppercase">Valore Ordini Attivi</div>
-        <div class="text-2xl font-bold font-heading text-gray-900">€ {{ globalStats.totale_valore_aperto.toLocaleString('it-IT', {maximumFractionDigits: 0}) }}</div>
-      </div>
-    </div>
-    <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-orange-100 cursor-pointer">
-      <div class="h-12 w-12 rounded-full flex items-center justify-center bg-orange-100">
-        <ShieldExclamationIcon class="h-6 w-6 text-orange-500" />
-      </div>
-      <div>
-        <div class="text-xs font-bold text-gray-400 uppercase">Da Validare</div>
-        <div class="text-2xl font-bold text-gray-900">{{ globalStats.da_validare }}</div>
-      </div>
-    </div>
-    <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-purple-100 cursor-pointer">
-      <div class="h-12 w-12 rounded-full flex items-center justify-center bg-purple-100">
-        <ShoppingCartIcon class="h-6 w-6 text-purple-500" />
-      </div>
-      <div>
-        <div class="text-xs font-bold text-gray-400 uppercase">Nuovi Ordini</div>
-        <div class="text-2xl font-bold text-gray-900">{{ globalStats.richieste_ord }}</div>
-      </div>
-    </div>
-    <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-green-100 cursor-pointer">
-      <div class="h-12 w-12 rounded-full flex items-center justify-center bg-green-100">
-        <CogIcon class="h-6 w-6 text-green-500" />
-      </div>
-      <div>
-        <div class="text-xs font-bold text-gray-400 uppercase">In Produzione</div>
-        <div class="text-2xl font-bold text-gray-900">{{ globalStats.in_produzione }}</div>
-      </div>
-    </div>
-  </div>
-
-  <div class="flex border-b border-gray-200 mb-6">
-    <button @click="activeTab = 'CLIENTI'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative" :class="activeTab === 'CLIENTI' ? 'text-gray-900' : 'text-gray-400 hover:text-gray-600'">
-      VISTA CLIENTI
-      <div v-if="activeTab === 'CLIENTI'" class="absolute bottom-0 left-0 w-full h-1 bg-yellow-400 rounded-t-full"></div>
-    </button>
-    <button @click="activeTab = 'COMMESSE'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative" :class="activeTab === 'COMMESSE' ? 'text-blue-600' : 'text-gray-400 hover:text-gray-600'">
-      VISTA PER STATO
-      <div v-if="activeTab === 'COMMESSE'" class="absolute bottom-0 left-0 w-full h-1 bg-blue-600 rounded-t-full"></div>
-    </button>
-  </div>
-
-  <div v-if="loading" class="text-center py-20 text-gray-400">Caricamento...</div>
-
-  <div v-else-if="activeTab === 'CLIENTI'" class="space-y-4">
-    <div v-for="gruppo in clientiRaggruppati" :key="gruppo.nome" class="bg-white rounded-xl shadow-sm border overflow-hidden" :class="gruppo.priorita > 0 ? 'border-orange-300 ring-1 ring-orange-100' : 'border-gray-200'">
-
-      <div @click="toggleCliente(gruppo.nome)" class="p-5 cursor-pointer hover:bg-gray-50 flex flex-col md:flex-row justify-between items-center gap-4">
-        <div class="flex items-center gap-4 w-full md:w-auto">
-          <div class="h-12 w-12 rounded-full flex items-center justify-center text-xl font-bold text-white shadow-sm shrink-0 font-heading" :class="gruppo.priorita > 0 ? 'bg-orange-500' : 'bg-gray-800'">
-            <UserIcon class="h-6 w-6" />
+      <div class="flex justify-between items-center mb-8">
+        <div class="flex items-center gap-4">
+          <div>
+            <h1 class="text-2xl md:text-3xl font-bold text-gray-900 font-heading tracking-tight">Dashboard Inglesina Italiana</h1>
+            <p class="text-gray-500 text-sm">Panoramica operativa</p>
           </div>
-          <div><h2 class="text-lg font-bold text-gray-900 font-heading">{{ gruppo.nome }}</h2><p class="text-xs text-gray-500 font-medium mt-0.5">Totale: € {{ gruppo.contatori.tot.toFixed(2) }}</p></div>
         </div>
-        <div class="flex gap-2 w-full md:w-auto justify-start md:justify-end flex-wrap">
-          <div v-if="gruppo.contatori.validare > 0" class="px-2 py-0.5 bg-orange-100 text-orange-800 rounded border border-orange-200 text-[10px] font-bold animate-pulse">{{ gruppo.contatori.validare }} DA VALIDARE</div>
-          <div v-if="gruppo.contatori.richiedere > 0" class="px-2 py-0.5 bg-purple-100 text-purple-800 rounded border border-purple-200 text-[10px] font-bold">{{ gruppo.contatori.richiedere }} RICHIESTE</div>
-          <div v-if="gruppo.contatori.firmare > 0" class="px-2 py-0.5 bg-blue-50 text-blue-600 rounded border border-blue-100 text-[10px] font-bold">{{ gruppo.contatori.firmare }} FIRME</div>
-          <div v-if="gruppo.contatori.prod > 0" class="px-2 py-0.5 bg-green-100 text-green-800 rounded border border-green-200 text-[10px] font-bold">{{ gruppo.contatori.prod }} PROD.</div>
-          <div v-if="gruppo.contatori.bozze > 0" class="px-2 py-0.5 bg-gray-100 text-gray-500 rounded border border-gray-200 text-[10px] font-bold">{{ gruppo.contatori.bozze }} BOZZE</div>
+        <div class="flex items-center gap-3">
+          <span class="text-xs text-gray-400 animate-pulse">Live Sync</span>
+          <button @click="caricaTutti" class="flex items-center gap-2 bg-white border border-gray-200 px-4 py-2 rounded-lg hover:bg-yellow-50 text-sm font-bold text-gray-700 transition-all shadow-sm hover:border-gray-300">
+            <ArrowPathIcon class="h-4 w-4" />
+            Aggiorna
+          </button>
         </div>
-        <div class="text-gray-300 hidden md:block transform transition-transform" :class="clientiEspansi.includes(gruppo.nome) ? 'rotate-180' : ''">▼</div>
       </div>
 
-      <div v-if="clientiEspansi.includes(gruppo.nome)" class="border-t border-gray-100 bg-gray-50 p-4 animate-fade-in">
-        <table class="min-w-full divide-y divide-gray-200 bg-white rounded-lg overflow-hidden shadow-sm">
-          <thead class="bg-gray-100 text-[10px] text-gray-500 uppercase font-bold tracking-wider">
-            <tr><th class="px-4 py-3 text-left">Stato</th><th class="px-4 py-3 text-left">Rif. / Codice</th><th class="px-4 py-3 text-right">Importo</th><th class="px-4 py-3 text-right">Azioni</th></tr>
-          </thead>
-          <tbody class="divide-y divide-gray-100 text-sm">
-            <tr v-for="p in gruppo.preventivi" :key="p.id" class="hover:bg-yellow-50/50 transition-colors">
-              <td class="px-4 py-3 text-center"><span class="px-2 py-1 text-[10px] font-bold rounded border uppercase" :class="getStatusStyling(p.stato).badge">{{ getStatusLabel(p.stato) }}</span></td>
-              <td class="px-4 py-3"><div class="font-bold text-gray-800">{{ p.commessa || 'Nessun Rif.' }}</div><div class="text-xs font-mono text-gray-400">{{ formatDate(p.dataCreazione?.seconds) }} • {{ p.codice }}</div></td>
-              <td class="px-4 py-3 text-right text-sm font-bold text-gray-900 font-heading">{{ (p.totaleScontato || p.totale || 0).toFixed(2) }} €</td>
-              <td class="px-4 py-3 text-right flex justify-end gap-2 items-center">
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-yellow-100 cursor-pointer">
+          <div class="h-12 w-12 rounded-full flex items-center justify-center bg-yellow-100">
+            <CurrencyEuroIcon class="h-6 w-6 text-yellow-500" />
+          </div>
+          <div>
+            <div class="text-xs font-bold text-gray-500 uppercase">Valore Ordini Attivi</div>
+            <div class="text-2xl font-bold font-heading text-gray-900">€ {{ globalStats.totale_valore_aperto.toLocaleString('it-IT', {maximumFractionDigits: 0}) }}</div>
+          </div>
+        </div>
+        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-orange-100 cursor-pointer">
+          <div class="h-12 w-12 rounded-full flex items-center justify-center bg-orange-100">
+            <ShieldExclamationIcon class="h-6 w-6 text-orange-500" />
+          </div>
+          <div>
+            <div class="text-xs font-bold text-gray-400 uppercase">Da Validare</div>
+            <div class="text-2xl font-bold text-gray-900">{{ globalStats.da_validare }}</div>
+          </div>
+        </div>
+        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-purple-100 cursor-pointer">
+          <div class="h-12 w-12 rounded-full flex items-center justify-center bg-cyan-100">
+            <ShoppingCartIcon class="h-6 w-6 text-cyan-500" />
+          </div>
+          <div>
+            <div class="text-xs font-bold text-gray-400 uppercase">Nuovi Ordini</div>
+            <div class="text-2xl font-bold text-gray-900">{{ globalStats.richieste_ord }}</div>
+          </div>
+        </div>
+        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-green-100 cursor-pointer">
+          <div class="h-12 w-12 rounded-full flex items-center justify-center bg-green-100">
+            <CogIcon class="h-6 w-6 text-green-500" />
+          </div>
+          <div>
+            <div class="text-xs font-bold text-gray-400 uppercase">In Produzione</div>
+            <div class="text-2xl font-bold text-gray-900">{{ globalStats.in_produzione }}</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex border-b border-gray-200 mb-6">
+        <button @click="activeTab = 'CLIENTI'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative" :class="activeTab === 'CLIENTI' ? 'text-gray-900' : 'text-gray-400 hover:text-gray-600'">
+          VISTA CLIENTI
+          <div v-if="activeTab === 'CLIENTI'" class="absolute bottom-0 left-0 w-full h-1 bg-yellow-400 rounded-t-full"></div>
+        </button>
+        <button @click="activeTab = 'COMMESSE'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative" :class="activeTab === 'COMMESSE' ? 'text-gray-900' : 'text-gray-400 hover:text-gray-600'">
+          VISTA STATO
+          <div v-if="activeTab === 'COMMESSE'" class="absolute bottom-0 left-0 w-full h-1 bg-yellow-400 rounded-t-full"></div>
+        </button>
+      </div>
+
+      <div v-if="loading" class="text-center py-20 text-gray-400">Caricamento...</div>
+
+      <div v-else-if="activeTab === 'CLIENTI'" class="space-y-4">
+        <div v-for="gruppo in clientiRaggruppati" :key="gruppo.nome" class="bg-white rounded-xl shadow-sm border overflow-hidden" :class="gruppo.priorita > 0 ? 'border-2 border-orange-300 ring-1 ring-orange-200' : 'border-gray-200'">
+
+          <div @click="toggleCliente(gruppo.nome)" class="p-5 cursor-pointer hover:bg-gray-50 flex flex-col md:flex-row justify-between items-center gap-4">
+            <div class="flex items-center gap-4 w-full md:w-auto">
+              <div class="h-12 w-12 rounded-full flex items-center justify-center text-xl font-bold text-white shadow-sm shrink-0 font-heading" :class="gruppo.priorita > 0 ? 'bg-orange-500' : 'bg-gray-800'">
+                <UserIcon class="h-6 w-6" />
+              </div>
+              <div>
+                <h2 class="text-lg font-bold text-gray-900 font-heading">{{ gruppo.nome }}</h2>
+                <p class="text-xs text-gray-500 font-medium mt-0.5">Totale: € {{ gruppo.totaleValore.toFixed(2) }}</p>
+              </div>
+            </div>
+
+            <div class="flex gap-2 w-full md:flex-1 justify-end flex-wrap">
+              <template v-for="st in ordineStati" :key="st">
+                <div v-if="gruppo.conteggi[st]" 
+                     class="px-2 py-0.5 rounded border text-[10px] font-bold uppercase transition-colors flex items-center gap-1" 
+                     :class="getStatusStyling(st).badge">
+                  <component :is="getStatusStyling(st).icon" class="w-3 h-3" />
+                  {{ gruppo.conteggi[st] }} {{ getStatusLabel(st) }}
+                </div>
+              </template>
+            </div>
+
+            <div class="text-gray-300 hidden md:block transform transition-transform" :class="clientiEspansi.includes(gruppo.nome) ? 'rotate-180' : ''">▼</div>
+          </div>
+
+          <div v-if="clientiEspansi.includes(gruppo.nome)" class="border-t border-gray-100 bg-gray-50 p-4 animate-fade-in">
+            <table class="min-w-full divide-y divide-gray-200 bg-white rounded-lg overflow-hidden shadow-sm">
+              <thead class="bg-gray-100 text-[10px] text-gray-500 uppercase font-bold tracking-wider">
+                <tr><th class="px-4 py-3 text-left">Stato</th><th class="px-4 py-3 text-left">Rif. / Codice</th><th class="px-4 py-3 text-right">Importo</th><th class="px-4 py-3 text-right">Azioni</th></tr>
+              </thead>
+              <tbody class="divide-y divide-gray-100 text-sm">
+                <tr v-for="p in gruppo.preventivi" :key="p.id" class="hover:bg-yellow-50/50 transition-colors">
+                  <td class="px-4 py-3 text-center"><span class="px-2 py-1 text-[10px] font-bold rounded border uppercase" :class="getStatusStyling(p.stato).badge">{{ getStatusLabel(p.stato) }}</span></td>
+                  <td class="px-4 py-3">
+                    <div v-if="p.sommarioPreventivo">
+                      <div v-for="(item, idx) in p.sommarioPreventivo" :key="idx" class="text text-gray-600 font-medium">
+                        <span class="font-bold">{{ item.quantitaTotale }} x</span> {{ item.descrizione }} 
+                        <span v-if="item.canalino" class="text-gray-400 italic"> • {{ item.canalino }}</span>
+                      </div>
+                    </div>
+                    <div class="text-xs font-mono text-gray-400">{{ formatDate(p.dataCreazione?.seconds) }} • {{ p.commessa || 'Nessun Rif.' }}</div>
+
+                  </td>
+                  <td class="px-4 py-3 text-right text-sm font-bold text-gray-900 font-heading">{{ (p.totaleScontato || p.totale || 0).toFixed(2) }} €</td>
+                  <td class="align-middle px-4 py-3 text-right justify-end gap-2 items-center">
+                    <div class="flex justify-end items-center gap-2">
+                      <button
+                      @click.stop="getActionData(p).action()"
+                      class="text-xs font-bold px-3 py-1.5 rounded border transition-all shadow-sm hover:shadow hover:brightness-95 flex items-center gap-2"
+                      :class="getActionData(p).class"
+                      >
+                      <component :is="getActionData(p).icon" class="h-4 w-4" />
+                      <span>{{ getActionData(p).text }}</span>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div v-else-if="activeTab === 'COMMESSE'" class="space-y-4">
+        <div v-for="gruppo in preventiviPerStato" :key="gruppo.stato" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+
+          <div @click="toggleStato(gruppo.stato)" class="p-4 cursor-pointer hover:bg-gray-50 flex justify-between items-center border-l-4" :class="getStatusStyling(gruppo.stato).badge.replace('text-','border-').split(' ')[0]">
+            <div class="flex items-center gap-3">
+              <span class="font-bold font-heading text-sm uppercase" :class="getStatusStyling(gruppo.stato).badge.split(' ')[1]">{{ getStatusLabel(gruppo.stato) }}</span>
+              <span class="px-2 py-0.5 rounded-full text-xs font-bold" :class="getUiConfig(gruppo.stato).darkBadge">{{ gruppo.lista?.length || 0 }}</span>            </div>
+            <div class="text-current transform transition-transform" :class="statiEspansi.includes(gruppo.stato) ? 'rotate-180' : ''">▼</div>
+          </div>
+
+          <div v-if="statiEspansi.includes(gruppo.stato)" class="border-t border-gray-100 bg-gray-50 p-4 grid gap-3 animate-fade-in">
+            <div v-for="p in gruppo.lista" :key="p.id" class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-all flex flex-col md:flex-row justify-between items-center gap-4">
+
+              <div class="flex items-center gap-4 w-full md:w-auto">
+                <div class="h-10 w-10 rounded-full flex items-center justify-center" :class="getStatusStyling(p.stato).iconBg">
+                  <component :is="getStatusStyling(p.stato).icon" class="h-6 w-6" />
+                </div>
+                <div>
+                  <div class="flex items-center gap-2">
+                    <h3 class="font-bold text-gray-900">{{ p.commessa || 'Senza Nome' }}</h3>
+                    <span class="text-xs text-gray-500"> - {{ p.cliente }}</span>
+                  </div>
+                  <p class="text-xs text-gray-500 font-mono">Cod: {{ p.codice }} • {{ formatDate(p.dataCreazione?.seconds) }}</p>
+                  <div v-if="p.sommarioPreventivo" class="mt-2 flex flex-wrap gap-2">
+                    <span v-for="(item, idx) in p.sommarioPreventivo" :key="idx" class="text-[10px] bg-gray-50 px-2 py-1 rounded border text-gray-600">
+                      <strong>{{ item.quantitaTotale }}x</strong> {{ item.descrizione }}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end">
+                <div class="text-right">
+                  <div class="font-bold text-gray-900">{{ (p.totaleScontato || p.totale || 0).toFixed(2) }} €</div>
+                </div>
                 <button
                   @click.stop="getActionData(p).action()"
-                  class="text-xs font-bold px-3 py-1.5 rounded border transition-all shadow-sm hover:shadow hover:brightness-95 flex items-center gap-2"
+                  class="text-xs font-bold px-3 py-2 rounded border transition-all shadow-sm hover:shadow whitespace-nowrap flex items-center gap-2"
                   :class="getActionData(p).class"
                 >
                   <component :is="getActionData(p).icon" class="h-4 w-4" />
                   <span>{{ getActionData(p).text }}</span>
                 </button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-
-  <div v-else-if="activeTab === 'COMMESSE'" class="space-y-4">
-    <div v-for="gruppo in preventiviPerStato" :key="gruppo.stato" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-
-      <div @click="toggleStato(gruppo.stato)" class="p-4 cursor-pointer hover:bg-gray-50 flex justify-between items-center border-l-4" :class="getStatusStyling(gruppo.stato).badge.replace('text-','border-').split(' ')[0]">
-        <div class="flex items-center gap-3">
-          <span class="font-bold font-heading text-sm uppercase" :class="getStatusStyling(gruppo.stato).badge.split(' ')[1]">{{ getStatusLabel(gruppo.stato) }}</span>
-          <span class="bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-xs font-bold">{{ gruppo.lista.length }}</span>
-        </div>
-        <div class="text-gray-300 transform transition-transform" :class="statiEspansi.includes(gruppo.stato) ? 'rotate-180' : ''">▼</div>
-      </div>
-
-      <div v-if="statiEspansi.includes(gruppo.stato)" class="border-t border-gray-100 bg-gray-50 p-4 grid gap-3 animate-fade-in">
-        <div v-for="p in gruppo.lista" :key="p.id" class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-all flex flex-col md:flex-row justify-between items-center gap-4">
-
-          <div class="flex items-center gap-4 w-full md:w-auto">
-            <div class="h-10 w-10 rounded-full flex items-center justify-center" :class="getStatusStyling(p.stato).iconBg">
-              <component :is="getStatusStyling(p.stato).icon" class="h-6 w-6" />
-            </div>
-            <div>
-              <div class="flex items-center gap-2">
-                <h3 class="font-bold text-gray-900">{{ p.commessa || 'Senza Nome' }}</h3>
-                <span class="text-xs text-gray-500">({{ anagraficaClienti[p.clienteEmail] || p.cliente }})</span>
               </div>
-              <p class="text-xs text-gray-500 font-mono">Cod: {{ p.codice }} • {{ formatDate(p.dataCreazione?.seconds) }}</p>
             </div>
-          </div>
-
-          <div class="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end">
-            <div class="text-right">
-              <div class="font-bold text-gray-900">{{ (p.totaleScontato || p.totale || 0).toFixed(2) }} €</div>
-            </div>
-            <button
-              @click.stop="getActionData(p).action()"
-              class="text-xs font-bold px-3 py-2 rounded border transition-all shadow-sm hover:shadow whitespace-nowrap flex items-center gap-2"
-              :class="getActionData(p).class"
-            >
-              <component :is="getActionData(p).icon" class="h-4 w-4" />
-              <span>{{ getActionData(p).text }}</span>
-            </button>
           </div>
         </div>
       </div>
+
     </div>
   </div>
-
-</div>
-</div>
+  <OrderModals 
+      :show="showModals"
+      :mode="modalMode"
+      :order="selectedOrder"
+      :clientName="selectedClientName"
+      @close="showModals = false"
+      @confirmProduction="onConfirmProduction"
+    />
 </template>
 
 <style scoped>

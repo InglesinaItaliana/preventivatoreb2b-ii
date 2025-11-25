@@ -1,17 +1,19 @@
 export type Categoria = 'INGLESINA' | 'DUPLEX' | 'MUNTIN' | 'CANALINO' | 'EXTRA';
 export type Modello = 'VARSAVIA' | 'GERMANELLA' | 'ALLUMINIO' | 'BORDO_CALDO' | 'MANUALE';
 
+import { PencilIcon, ArchiveBoxIcon, ShieldExclamationIcon, CheckCircleIcon, PaperAirplaneIcon, EyeIcon, ClockIcon, XCircleIcon, CogIcon, WrenchScrewdriverIcon, DocumentTextIcon, PlusIcon, CubeIcon } from '@heroicons/vue/24/solid';
+
 // STATI DEL LIFECYCLE (Single Entity)
 export type StatoPreventivo = 
-  | 'DRAFT'             // Bozza
-  | 'PENDING_VAL'       // In attesa di validazione (Tecnica)
-  | 'QUOTE_READY'       // Pronto/Validato (Prezzo visibile)
-  | 'ORDER_REQ'         // Ordine Richiesto (Check Admin)
-  | 'WAITING_FAST'      // Attesa Accettazione Veloce (Checkbox) - NUOVO
-  | 'WAITING_SIGN'      // Attesa Firma (Upload)
-  | 'SIGNED'            // Firmato
-  | 'IN_PRODUZIONE'     // In Produzione
-  | 'READY'             // Ordine Pronto - NUOVO
+  | 'DRAFT'             // Preventivo - Bozza
+  | 'PENDING_VAL'       // Preventivo - In attesa di validazione (Tecnica)
+  | 'QUOTE_READY'       // Preventivo - Pronto/Validato (Prezzo visibile)
+  | 'ORDER_REQ'         // Ordine - Ordine Richiesto (Check Admin)
+  | 'WAITING_FAST'      // Ordine - Attesa Accettazione Veloce (Checkbox) - NUOVO
+  | 'WAITING_SIGN'      // Ordine - Attesa Firma (Upload)
+  | 'SIGNED'            // Ordine - Firmato
+  | 'IN_PRODUZIONE'     // Produzione - In Produzione
+  | 'READY'             // Produzione - Ordine Pronto - NUOVO
   | 'REJECTED';         // Rifiutato
 
 export interface Allegato {
@@ -19,6 +21,12 @@ export interface Allegato {
   url: string;
   tipo: string; // 'pdf', 'img', 'cad', etc.
   dataCaricamento: any;
+}
+
+export interface RiepilogoRiga {
+  descrizione: string;
+  canalino: string;
+  quantitaTotale: number;
 }
 
 export interface RigaPreventivo {
@@ -56,6 +64,9 @@ export interface PreventivoDocumento {
   totaleImponibile: number;
   scontoPercentuale: number; // Nuovo campo Admin
   totaleScontato: number;    // Totale finale
+
+  // Riepilogo
+  sommarioPreventivo?: RiepilogoRiga[];
   
   // GESTIONALI
   stato: StatoPreventivo;
@@ -82,3 +93,69 @@ export interface PreventivoDocumento {
   // ... campi esistenti ...
   datiLegali?: DatiLegali; // <--- NUOVO CAMPO OPZIONALE
 }
+
+// --- CONFIGURAZIONE CONDIVISA COLORI E TESTI ---
+export const STATUS_DETAILS: Record<StatoPreventivo, { label: string, badge: string, iconBg: string, darkBadge: string, hoverBadge:string }> = {
+  'DRAFT': { 
+    label: 'BOZZA', 
+    badge: 'bg-gray-100 text-gray-500 border-gray-200', 
+    iconBg: 'bg-gray-100 text-gray-500', 
+    darkBadge: 'bg-gray-500 text-gray-100',
+    hoverBadge: 'hover:bg-gray-200'
+  },
+  'PENDING_VAL': { 
+    label: 'PREVENTIVO IN ATTESA DI ACCETTAZIONE', 
+    badge: 'bg-orange-100 text-orange-500 border-orange-200 hoover-orange-200', 
+    iconBg: 'bg-orange-100 text-orange-500', 
+    darkBadge: 'bg-orange-500 text-orange-100 hoover-orange-200',
+    hoverBadge: 'hoover-orange-200'
+  },
+  'QUOTE_READY': { 
+    label: 'VALIDATO', 
+    badge: 'bg-green-100 text-green-700 border-green-200', 
+    iconBg: 'bg-green-100 text-green-600', 
+    darkBadge: 'bg-green-600 text-green-100'
+  },
+  'ORDER_REQ': { 
+    label: 'ORDINE IN ATTESA DI ACCETTAZIONE', 
+    badge: 'bg-cyan-100 text-cyan-700 border-cyan-200', 
+    iconBg: 'bg-cyan-100 text-cyan-600', 
+    darkBadge: 'bg-cyan-600 text-cyan-100'
+  },
+  'WAITING_FAST': { 
+    label: 'IN ATTESA FIRMA DEL CLIENTE', 
+    badge: 'bg-stone-100 text-stone-700 border-stone-200', 
+    iconBg: 'bg-stone-100 text-stone-600', 
+    darkBadge: 'bg-stone-600 text-stone-100'
+  },
+  'WAITING_SIGN': { 
+    label: 'IN ATTESA FIRMA DEL CLIENTE', 
+    badge: 'bg-stone-100 text-stone-700 border-stone-200', 
+    iconBg: 'bg-stone-100 text-stone-600', 
+    darkBadge: 'bg-stone-600 text-stone-100'
+  },
+  'SIGNED': { 
+    label: 'DA METTERE IN PRODUZIONE', 
+    badge: 'bg-blue-100 text-blue-700 border-blue-200', 
+    iconBg: 'bg-blue-100 text-blue-600', 
+    darkBadge: 'bg-blue-600 text-blue-100'
+  },
+  'IN_PRODUZIONE': { 
+    label: 'IN PRODUZIONE', 
+    badge: 'bg-amber-100 text-amber-900 border-amber-200', 
+    iconBg: 'bg-amber-100 text-amber-800', 
+    darkBadge: 'bg-amber-800 text-amber-100'
+  },
+  'READY': { 
+    label: 'PRONTO', 
+    badge: 'bg-emerald-100 text-emerald-800 border-emerald-200', 
+    iconBg: 'bg-emerald-100 text-emerald-700', 
+    darkBadge: 'bg-emerald-700 text-emerald-100'
+  },
+  'REJECTED': { 
+    label: 'ANNULLATO', 
+    badge: 'bg-red-100 text-red-700 border-red-200', 
+    iconBg: 'bg-red-100 text-red-600', 
+    darkBadge: 'bg-red-700 text-white' 
+  }
+};

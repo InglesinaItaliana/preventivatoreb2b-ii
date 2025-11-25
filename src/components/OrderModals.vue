@@ -1,62 +1,62 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { jsPDF } from "jspdf";
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage } from '../firebase';
 import { 
-  CheckCircleIcon, DocumentTextIcon, CloudArrowUpIcon 
-} from '@heroicons/vue/24/outline';
+  CheckCircleIcon, DocumentTextIcon, CloudArrowUpIcon, CogIcon, 
+  WrenchScrewdriverIcon, ClipboardDocumentIcon, ClipboardDocumentCheckIcon // Nuove icone
+} from '@heroicons/vue/24/solid';
 
 const props = defineProps<{
   show: boolean;
-  mode: 'FAST' | 'SIGN';
-  order: any; // Oggetto con { id, codice, totale, elementi... }
+  mode: 'FAST' | 'SIGN' | 'PRODUCTION'; // Aggiunto PRODUCTION
+  order: any; 
   clientName: string;
 }>();
 
-const emit = defineEmits(['close', 'confirmFast', 'confirmSign']);
+const emit = defineEmits(['close', 'confirmFast', 'confirmSign', 'confirmProduction']);
 
-// STATO INTERNO FAST TRACK
+// STATO INTERNO
 const legalCheck1 = ref(false);
 const legalCheck2 = ref(false);
 const isConfirming = ref(false);
-
-// STATO INTERNO FIRMA
 const isUploading = ref(false);
 const uploadedUrl = ref('');
 
-// CHIUSURA
-const close = () => {
-  // Reset stati
-  legalCheck1.value = false; legalCheck2.value = false; isConfirming.value = false;
-  uploadedUrl.value = ''; isUploading.value = false;
-  emit('close');
-};
+// Reset quando si apre
+watch(() => props.show, (val) => {
+  if (val) {
+    legalCheck1.value = false;
+    legalCheck2.value = false;
+    isConfirming.value = false;
+    uploadedUrl.value = '';
+    isUploading.value = false;
+  }
+});
 
-// AZIONE 1: FAST TRACK
+const close = () => emit('close');
+
 const handleFastConfirm = async () => {
   isConfirming.value = true;
-  // Simuliamo un piccolo delay per UX
-  await new Promise(r => setTimeout(r, 500));
-  emit('confirmFast'); // Il genitore farà il salvataggio su DB
+  await new Promise(r => setTimeout(r, 500)); // UX delay
+  emit('confirmFast');
   isConfirming.value = false;
 };
 
-// AZIONE 2: GENERAZIONE PDF
 const downloadPdf = () => {
   const doc = new jsPDF();
   const p = props.order;
   const tot = p.totaleScontato || p.totaleImponibile || p.totale || 0;
 
   doc.setFontSize(20); doc.text("CONTRATTO DI FORNITURA", 20, 20);
-  doc.setFontSize(12); doc.text(`Rif: ${p.codice}`, 20, 30);
+  doc.setFontSize(12); doc.text(`Rif: ${p.codice || '-'}`, 20, 30);
   doc.text(`Cliente: ${props.clientName}`, 20, 40);
   doc.text(`Commessa: ${p.commessa || '-'}`, 20, 50);
 
   doc.line(20, 60, 190, 60);
   let y = 70;
   
-  // Gestione sicura degli elementi
   const items = p.elementi || [];
   items.slice(0, 15).forEach((el: any) => {
     const desc = el.descrizioneCompleta || 'Articolo';
@@ -72,10 +72,9 @@ const downloadPdf = () => {
   doc.text("Firma per accettazione:", 20, 250);
   doc.line(20, 265, 100, 265);
 
-  doc.save(`Contratto_${p.codice}.pdf`);
+  doc.save(`Contratto_${p.codice || 'ordine'}.pdf`);
 };
 
-// AZIONE 3: UPLOAD FIRMA
 const handleUpload = async (event: Event) => {
   const files = (event.target as HTMLInputElement).files;
   if (!files || !files.length) return;
@@ -83,14 +82,13 @@ const handleUpload = async (event: Event) => {
   isUploading.value = true;
   try {
     const file = files[0];
-    // Percorso univoco
     const path = `contratti_firmati/${props.order.codice}_${Date.now()}_${file.name}`;
     const fileRef = storageRef(storage, path);
     await uploadBytes(fileRef, file);
     uploadedUrl.value = await getDownloadURL(fileRef);
   } catch (e) {
     console.error(e);
-    alert("Errore durante il caricamento del file.");
+    alert("Errore caricamento file.");
   } finally {
     isUploading.value = false;
   }
@@ -99,6 +97,34 @@ const handleUpload = async (event: Event) => {
 const handleSignConfirm = () => {
   emit('confirmSign', uploadedUrl.value);
 };
+
+// --- LOGICA PRODUZIONE ---
+const copiedState = ref<Record<string, boolean>>({});
+
+// Raggruppa elementi per Descrizione e Canalino
+const groupedElements = computed(() => {
+  if (!props.order?.elementi) return {};
+  const groups: Record<string, any[]> = {};
+  props.order.elementi.forEach((el: any) => {
+    const key = `${el.descrizioneCompleta} ◆ ${el.infoCanalino || 'Nessun canalino'}`;
+    if (!groups[key]) groups[key] = [];
+    groups[key].push(el);
+  });
+  return groups;
+});
+
+const copyToClipboard = (key: string, items: any[]) => {
+  // Formato Excel-friendly: Qty | Base | Altezza | Righe | Colonne
+  const rows = items.map(i => `${i.quantita}\t${i.base_mm}\t${i.altezza_mm}\t${i.righe || 0}\t${i.colonne || 0}`);
+  const textToCopy = rows.join('\n');
+  navigator.clipboard.writeText(textToCopy).then(() => {
+    copiedState.value[key] = true;
+    setTimeout(() => copiedState.value[key] = false, 2000);
+  });
+};
+
+const handleProductionConfirm = () => emit('confirmProduction');
+
 </script>
 
 <template>
@@ -111,8 +137,8 @@ const handleSignConfirm = () => {
       </div>
       
       <div class="bg-blue-50 p-4 rounded-lg text-sm text-blue-800 mb-4 border border-blue-100">
-        <p>Ordine: <strong>{{ order.codice }}</strong></p>
-        <p class="font-bold mt-1 text-lg">Totale: {{ (order.totaleScontato || order.totaleImponibile || 0).toFixed(2) }} €</p>
+        <p>Ordine: <strong>{{ order?.codice }}</strong></p>
+        <p class="font-bold mt-1 text-lg">Totale: {{ (order?.totaleScontato || order?.totaleImponibile || 0).toFixed(2) }} €</p>
       </div>
 
       <div class="space-y-4">
@@ -199,6 +225,37 @@ const handleSignConfirm = () => {
         </button>
       </div>
     </div>
+    <div v-if="mode === 'PRODUCTION'" class="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col animate-in fade-in zoom-in duration-200">
+      <div class="bg-amber-100 p-5 text-amber-900 flex justify-between items-center shrink-0 rounded-t-xl">
+        <h2 class="font-bold text-2xl flex items-center gap-2"><CogIcon class="w-10 h-10"/> Composizione Telai</h2>
+      </div>
 
+      <div class="p-6 overflow-y-auto flex-1 bg-gray-50">
+        <div class="bg-white p-4 rounded-lg shadow-sm mb-6 border border-gray-200 flex justify-between items-center">
+          <div><p class="text-sm text-gray-500 uppercase font-bold">Cliente</p><p class="text-xl font-bold text-gray-900">{{ clientName }}</p></div>
+          <div class="text-right"><p class="text-sm text-gray-500 uppercase font-bold">Commessa</p><p class="font-medium">{{ order?.commessa || order?.codice }}</p></div>
+        </div>
+
+        <div v-for="(items, groupName) in groupedElements" :key="groupName" class="mb-6 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+          <div class="bg-gray-100 px-4 py-3 border-b border-gray-200 flex justify-between items-center">
+            <h3 class="font-bold text-sm text-gray-700">{{ groupName }}</h3>
+            <button @click="copyToClipboard(groupName, items)" class="text-xs flex items-center gap-1 px-2 py-1 rounded border transition-all" :class="copiedState[groupName] ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-white text-gray-600 hover:bg-gray-50 border-gray-300'">
+              <component :is="copiedState[groupName] ? ClipboardDocumentCheckIcon : ClipboardDocumentIcon" class="w-4 h-4"/> {{ copiedState[groupName] ? 'Copiato!' : 'Copia Tabella' }}
+            </button>
+          </div>
+          <table class="w-full text-left text-sm">
+            <thead class="bg-gray-50 text-gray-500 text-[10px] uppercase font-bold"><tr><th class="px-4 py-2 text-center w-16">Q.tà</th><th class="px-4 py-2">Base (mm)</th><th class="px-4 py-2">Altezza (mm)</th><th class="px-4 py-2 text-center">Righe</th><th class="px-4 py-2 text-center">Colonne</th></tr></thead>
+            <tbody class="divide-y divide-gray-100">
+              <tr v-for="item in items" :key="item.id"><td class="px-4 py-2 text-center font-bold">{{ item.quantita }}</td><td class="px-4 py-2 font-mono">{{ item.base_mm }}</td><td class="px-4 py-2 font-mono">{{ item.altezza_mm }}</td><td class="px-4 py-2 text-center">{{ item.righe || 0 }}</td><td class="px-4 py-2 text-center">{{ item.colonne || 0 }}</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="p-4 border-t bg-white shrink-0 flex justify-end gap-3 rounded-b-xl">
+        <button @click="close" class="px-4 py-2 text-gray-500 font-bold hover:bg-gray-100 rounded-lg transition-colors">Annulla</button>
+        <button @click="handleProductionConfirm" class="bg-amber-100 text-amber-900 px-6 py-2 rounded-lg font-bold shadow-md hover:bg-amber-200 flex items-center gap-2">AVVIA PRODUZIONE</button>
+      </div>
+    </div>
   </div>
 </template>

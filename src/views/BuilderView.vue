@@ -2,14 +2,17 @@
 import { ref, reactive, computed, watch, onMounted, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
-  collection, addDoc, setDoc, doc, serverTimestamp, query, where, getDocs, orderBy, limit
+  collection, addDoc, setDoc, doc, serverTimestamp, query, where, getDocs, orderBy, limit, updateDoc
 } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage, auth } from '../firebase';
 import { useCatalogStore } from '../Data/catalog';
-import type { Categoria, RigaPreventivo, StatoPreventivo, Allegato } from '../types';
+import type { Categoria, RigaPreventivo, StatoPreventivo, Allegato, RiepilogoRiga } from '../types';
 import { calculatePrice } from '../logic/pricing';
 import { onAuthStateChanged } from 'firebase/auth';
+import { jsPDF } from "jspdf"; 
+import OrderModals from '../components/OrderModals.vue';
+import { STATUS_DETAILS } from '../types';
 
 const route = useRoute();
 const router = useRouter();
@@ -21,8 +24,9 @@ const riferimentoCommessa = ref('');
 const currentDocId = ref<string | null>(null);
 const statoCorrente = ref<StatoPreventivo>('DRAFT');
 
-// Variabili Modale (Mantenute per compatibilità UI, ma logica spostata)
-const showLegalModal = ref(false);
+const showModals = ref(false);
+const modalMode = ref<'FAST' | 'SIGN'>('FAST');
+
 const noteCliente = ref('');
 const scontoApplicato = ref(0);
 const listaAllegati = ref<Allegato[]>([]);
@@ -33,7 +37,6 @@ const mostraStorico = ref(false);
 const codiceRicerca = ref('');
 const isSaving = ref(false);
 
-// Input Configurazione
 const categoriaGriglia = ref<Categoria>('INGLESINA');
 const tipoGriglia = ref('');
 const dimensioneGriglia = ref('');
@@ -52,31 +55,25 @@ const opzioniTelaio = reactive({ nonEquidistanti: false, curva: false, tacca: fa
 
 const isAdmin = computed(() => route.query?.admin === 'true');
 
-// CALCOLI
 const totaleImponibile = computed(() => preventivo.value.reduce((t, i) => t + i.prezzo_totale, 0));
 const totaleFinale = computed(() => {
   const sconto = (totaleImponibile.value * scontoApplicato.value) / 100;
   return totaleImponibile.value - sconto;
 });
 
-// LOGICA STANDARD vs COMPLESSO
 const isStandard = computed(() => {
   const haCurve = preventivo.value.some(r => r.curva);
   const haNote = noteCliente.value.trim().length > 0;
   return !haCurve && !haNote;
 });
 
-// LOGICA BLOCCO MODIFICHE
 const isLocked = computed(() => {
-  // Admin: Bloccato se siamo in attesa del cliente, firmato, o in produzione
   if (isAdmin.value) {
     return ['WAITING_FAST', 'WAITING_SIGN', 'SIGNED', 'IN_PRODUZIONE', 'READY', 'REJECTED'].includes(statoCorrente.value);
   }
-  // Cliente: Modifica consentita solo in DRAFT
   return statoCorrente.value !== 'DRAFT';
 });
 
-// WATCHERS
 watch(categoriaGriglia, () => { tipoGriglia.value = ''; dimensioneGriglia.value = ''; finituraGriglia.value = ''; });
 watch(tipoGriglia, () => { dimensioneGriglia.value = ''; finituraGriglia.value = ''; });
 watch(dimensioneGriglia, () => { finituraGriglia.value = ''; });
@@ -136,14 +133,13 @@ const uploadFile = async (event: Event) => {
   const files = target.files;
   if (!files || files.length === 0) return;
   const file = files[0];
-  
   isUploading.value = true;
   try {
     const path = `allegati/${Date.now()}_${file.name}`;
     const fileRef = storageRef(storage, path);
     await uploadBytes(fileRef, file);
     const url = await getDownloadURL(fileRef);
-    
+
     listaAllegati.value.push({
       nome: file.name,
       url: url,
@@ -178,7 +174,38 @@ const nuovaCommessa = () => {
   Object.assign(opzioniTelaio, { nonEquidistanti: false, curva: false, tacca: false });
 };
 
-// *** FUNZIONE SALVATAGGIO CON NUOVE LOGICHE ***
+const apriModaleAzione = () => {
+  if (statoCorrente.value === 'WAITING_FAST') modalMode.value = 'FAST';
+  else if (statoCorrente.value === 'WAITING_SIGN') modalMode.value = 'SIGN';
+  showModals.value = true;
+};
+
+const onConfirmFast = async () => {
+  if (!currentDocId.value) return;
+  try {
+    await updateDoc(doc(db, 'preventivi', currentDocId.value), {
+      stato: 'SIGNED', dataConferma: serverTimestamp(), metodoConferma: 'FAST_TRACK'
+    });
+    statoCorrente.value = 'SIGNED';
+    showModals.value = false;
+    alert("✅ Ordine Confermato!");
+    router.push('/dashboard');
+  } catch(e) { console.error(e); alert("Errore conferma."); }
+};
+
+const onConfirmSign = async (url: string) => {
+  if (!currentDocId.value) return;
+  try {
+    await updateDoc(doc(db, 'preventivi', currentDocId.value), {
+      stato: 'SIGNED', dataConferma: serverTimestamp(), contrattoFirmatoUrl: url, metodoConferma: 'UPLOAD_FIRMA'
+    });
+    statoCorrente.value = 'SIGNED';
+    showModals.value = false;
+    alert("✅ Ordine Confermato e inviato in produzione!");
+    router.push('/dashboard');
+  } catch(e) { console.error(e); alert("Errore conferma."); }
+};
+
 const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADMIN_VALIDA' | 'ADMIN_RIFIUTA' | 'ADMIN_VELOCE' | 'ADMIN_FIRMA' | 'FORCE_EDIT') => {
   if (preventivo.value.length === 0) return alert("Preventivo vuoto.");
   isSaving.value = true;
@@ -187,34 +214,43 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
     const codice = codiceRicerca.value || `${new Date().getFullYear()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
     let nuovoStato: StatoPreventivo = statoCorrente.value;
 
-    // --- LOGICA LATO CLIENTE ---
     if (!isAdmin.value) {
-      // 1. Salvataggio semplice Bozza
       if (!azione) {
         if (statoCorrente.value === 'DRAFT') nuovoStato = 'DRAFT';
       }
-      // 2. Invia per Validazione (Se complesso)
       else if (azione === 'RICHIEDI_VALIDAZIONE') {
         nuovoStato = 'PENDING_VAL';
       }
-      // 3. Ordina (Va SEMPRE a ORDER_REQ, bypassa 5000€ check)
       else if (azione === 'ORDINA') {
         nuovoStato = 'ORDER_REQ';
       }
-      // 4. Modifica forzata (Da Quote Ready -> Pending Val)
       else if (azione === 'FORCE_EDIT') {
         nuovoStato = 'PENDING_VAL';
       }
     }
 
-    // --- LOGICA LATO ADMIN ---
     if (isAdmin.value && azione) {
       if (azione === 'ADMIN_VALIDA') nuovoStato = 'QUOTE_READY';
       if (azione === 'ADMIN_RIFIUTA') nuovoStato = 'REJECTED';
-      // Bivio Decisionale Admin
       if (azione === 'ADMIN_VELOCE') nuovoStato = 'WAITING_FAST';
       if (azione === 'ADMIN_FIRMA') nuovoStato = 'WAITING_SIGN';
     }
+
+    // *** CALCOLO SOMMARIO PER RAGGRUPPAMENTO ***
+    const sommario: RiepilogoRiga[] = [];
+    preventivo.value.forEach(r => {
+      const key = r.descrizioneCompleta + '|' + (r.infoCanalino || '');
+      const existing = sommario.find(s => (s.descrizione + '|' + s.canalino) === key);
+      if (existing) {
+        existing.quantitaTotale += r.quantita;
+      } else {
+        sommario.push({
+          descrizione: r.descrizioneCompleta,
+          canalino: r.infoCanalino,
+          quantitaTotale: r.quantita
+        });
+      }
+    });
 
     const docData = {
       codice,
@@ -227,6 +263,7 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
       stato: nuovoStato,
       noteCliente: noteCliente.value,
       allegati: listaAllegati.value,
+      sommarioPreventivo: sommario, // Salvo il sommario calcolato
       dataModifica: serverTimestamp(),
       ...(currentDocId.value ? {} : { dataCreazione: serverTimestamp() }),
       dataScadenza: new Date(Date.now() + 30*24*60*60*1000),
@@ -242,13 +279,12 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
     }
 
     statoCorrente.value = nuovoStato;
-    
-    // Feedback Utente
+
     let msg = "✅ Salvato.";
     if (nuovoStato === 'PENDING_VAL') msg = "⚠️ Inviato per validazione.";
-    if (nuovoStato === 'ORDER_REQ') msg = "🚀 Ordine richiesto.";
+    if (nuovoStato === 'ORDER_REQ') msg = "🚀 Ordine richiesto. In attesa di conferma.";
     if (nuovoStato === 'QUOTE_READY') msg = "✅ Preventivo Validato.";
-    
+
     alert(msg);
 
     if (isAdmin.value) router.push('/admin');
@@ -258,11 +294,8 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
   finally { isSaving.value = false; }
 };
 
-// Funzione sblocco per modifica
 const sbloccaPerModifica = () => {
   if(!confirm("Attenzione: Se modifichi questo preventivo, tornerà in stato 'DA VALIDARE' e dovrà essere riapprovato. Procedere?")) return;
-  // Hack locale: Visivamente DRAFT per permettere editing campi,
-  // ma il tasto salva userà azione 'FORCE_EDIT' per settare PENDING_VAL nel DB.
   statoCorrente.value = 'DRAFT';
 };
 
@@ -512,29 +545,53 @@ onMounted(() => {
               <div v-else class="text-xl font-bold text-gray-500">DA CALCOLARE</div>
             </div>
             <div class="mt-2">
-              <span v-if="statoCorrente === 'QUOTE_READY'" class="px-2 py-1 bg-green-500/20 text-green-400 rounded text-xs font-bold border border-green-500/50" >✅ PREVENTIVO VALIDATO</ span>
-              <span v-else-if="statoCorrente === 'PENDING_VAL'" class="px-2 py-1 bg-orange-500/20 text-orange-400 rounded text-xs font-bold border border-orange-500/50">⚠️ IN ATTESA DI VALIDAZIONE</span>
-              <span v-else-if="statoCorrente === 'ORDER_REQ'" class="px-2 py-1 bg-purple-500/20 text-purple-400 rounded text-xs font-bold border border-purple-500/50">🚀 ORDINE RICHIESTO</span>
+              <span class="px-2 py-1 rounded text-xs font-bold border uppercase" 
+                    :class="STATUS_DETAILS[statoCorrente]?.badge || 'bg-gray-500 text-white'">
+                {{ STATUS_DETAILS[statoCorrente]?.label || statoCorrente }}
+              </span>
             </div>
           </div>
 
           <div class="flex gap-3">
-            <template v-if="!isAdmin">
+            <template v-if="isAdmin">
+              <div v-if="statoCorrente === 'ORDER_REQ'" class="flex flex-col items-end gap-1">
+                <span class="text-[10px] text-gray-400 uppercase font-bold">CONFERMA ORDINE COME:</span>
+                <div class="flex gap-2">
+                  <button @click="salvaPreventivo('ADMIN_VELOCE')" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded font-bold text-xs">VELOCE</button>
+                  <button @click="salvaPreventivo('ADMIN_FIRMA')" class="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded font-bold text-xs">FIRMA</button>
+                </div>
+              </div>
+              
+              <div v-else-if="statoCorrente === 'PENDING_VAL' || statoCorrente === 'DRAFT'" class="flex gap-2">
+                <button @click="salvaPreventivo('ADMIN_RIFIUTA')" class="text-red-400 hover:text-red-300 font-bold px-4 text-sm">RIFIUTA</button>
+                <button @click="salvaPreventivo('ADMIN_VALIDA')" class="bg-green-600 hover:bg-green-500 text-white px-8 py-3 rounded-lg font-bold shadow-lg flex items-center gap-2">
+                  VALIDA E INVIA
+                </button>
+              </div>
 
-              <div v-if="statoCorrente === 'DRAFT'" class="flex items-center gap-3">
+              <div v-else>
+                <button v-if="!isLocked" @click="salvaPreventivo()" class="bg-gray-800 text-white px-6 py-2 rounded-lg font-bold hover:bg-black">
+                  💾 SALVA MODIFICHE
+                </button>
+                <span v-else class="text-gray-400 font-bold text-sm border border-gray-300 px-3 py-1 rounded bg-gray-50">
+                  🔒 SOLA LETTURA
+                </span>
+              </div>
+            </template>
+
+            <template v-else>
+              <template v-if="statoCorrente === 'DRAFT'">
                 <button @click="salvaPreventivo()" class="text-gray-400 hover:text-white font-bold text-sm">SALVA PREVENTIVO</button>
-                
                 <button v-if="isStandard" @click="salvaPreventivo('ORDINA')" class="bg-green-600 hover:bg-green-500 text-white px-6 py-3 rounded-lg font-bold shadow-lg">
                   ORDINA
                 </button>
-                
                 <div v-else class="flex flex-col items-end">
                   <button @click="salvaPreventivo('RICHIEDI_VALIDAZIONE')" class="bg-yellow-400 hover:bg-yellow-500 text-black px-6 py-3 rounded-lg font-bold shadow-lg">
                     INVIA PER VALIDAZIONE
                   </button>
                   <span class="text-[10px] text-gray-400 mt-1">Richiesta verifica tecnica</span>
                 </div>
-              </div>
+              </template>
 
               <div v-else-if="statoCorrente === 'PENDING_VAL'" class="text-right">
                 <span class="text-orange-400 font-bold text-sm flex items-center gap-2">
@@ -549,40 +606,16 @@ onMounted(() => {
                   CONFERMA ORDINE
                 </button>
               </div>
+
               <template v-else-if="['WAITING_FAST', 'WAITING_SIGN'].includes(statoCorrente)">
-               <button @click="router.push('/dashboard')" class="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-lg font-bold shadow-lg animate-pulse flex items-center gap-2">
-                 {{ statoCorrente === 'WAITING_FAST' ? 'ACCETTA ORDINE' : 'FIRMA ORDINE' }}
-               </button>
-            </template>
+                <button @click="apriModaleAzione()" class="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-lg font-bold shadow-lg animate-pulse flex items-center gap-2">
+                  {{ statoCorrente === 'WAITING_FAST' ? 'ACCETTA ORDINE' : 'FIRMA ORDINE' }}
+                </button>
+              </template>
+
               <div v-else class="text-right px-4">
                 <span class="text-sm font-bold text-gray-500">ORDINE IN LAVORAZIONE</span>
               </div>
-            </template>
-
-            <template v-else>
-              <div v-if="statoCorrente === 'ORDER_REQ'" class="flex flex-col items-end gap-1">
-                <span class="text-[10px] text-gray-400 uppercase font-bold">CONFERMA ORDINE COME:</span>
-                <div class="flex gap-2">
-                  <button @click="salvaPreventivo('ADMIN_VELOCE')" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded font-bold text-xs">VELOCE</button>
-                  <button @click="salvaPreventivo('ADMIN_FIRMA')" class="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded font-bold text-xs">FIRMA</button>
-                </div>
-              </div>
-
-              <div v-else-if="statoCorrente === 'PENDING_VAL' || statoCorrente === 'DRAFT'" class="flex gap-2">
-                <button @click="salvaPreventivo('ADMIN_RIFIUTA')" class="text-red-400 hover:text-red-300 font-bold px-4 text-sm">RIFIUTA</button>
-                <button @click="salvaPreventivo('ADMIN_VALIDA')" class="bg-green-600 hover:bg-green-500 text-white px-8 py-3 rounded-lg font-bold shadow-lg flex items-center gap-2">
-                  VALIDA E INVIA
-                </button>
-              </div>
-
-              <div v-else>
-              <button v-if="!isLocked" @click="salvaPreventivo()" class="bg-gray-800 text-white px-6 py-2 rounded-lg font-bold hover:bg-black">
-                💾 SALVA MODIFICHE
-              </button>
-              <span v-else class="text-gray-400 font-bold text-sm border border-gray-300 px-3 py-1 rounded bg-gray-50">
-                🔒 SOLA LETTURA
-              </span>
-            </div>
             </template>
           </div>
         </div>
@@ -599,7 +632,6 @@ onMounted(() => {
                 <th class="p-3 pl-5">Articolo</th>
                 <th class="p-3 text-center">Q.tà</th>
                 <th class="p-3">Misure</th>
-                <th class="p-3 text-center">Griglia</th>
                 <th class="p-3 text-center">Opzioni</th>
                 <th class="p-3 text-right">Totale</th>
                 <th class="p-3 text-right w-16">Azioni</th>
@@ -616,11 +648,6 @@ onMounted(() => {
                 </td>
                 <td class="p-3 text-center"><span class="bg-gray-100 text-gray-700 font-bold px-2 py-1 rounded text-xs">{{ r.quantita }}</span></td>
                 <td class="p-3 text-gray-600 text-xs font-mono">{{ r.base_mm }} x {{ r.altezza_mm }}</td>
-
-                <td class="p-3 text-center text-xs font-mono text-blue-600 bg-blue-50/30 rounded">
-                  <div v-if="r.righe > 0 || r.colonne > 0">{{ r.righe }}V x {{ r.colonne }}O</div>
-                  <div v-else class="text-gray-300">-</div>
-                </td>
 
                 <td class="p-3 text-center">
                   <div class="flex justify-center gap-1 flex-wrap max-w-[100px] mx-auto">
@@ -695,6 +722,16 @@ onMounted(() => {
         </div>
       </div>
     </div>
+
+    <OrderModals 
+      :show="showModals"
+      :mode="modalMode"
+      :order="{ id: currentDocId, codice: codiceRicerca, totaleScontato: totaleFinale, elementi: preventivo, commessa: riferimentoCommessa }"
+      :clientName="nomeCliente"
+      @close="showModals = false"
+      @confirmFast="onConfirmFast"
+      @confirmSign="onConfirmSign"
+    />
 
   </div>
 </template>

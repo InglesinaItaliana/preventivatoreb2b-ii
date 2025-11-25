@@ -16,47 +16,34 @@ L'interfaccia è moderna e pulita, basata su Vue.js e Tailwind CSS. L'obiettivo 
 
 ## Piano di Modifica Attuale
 
-L'obiettivo è ristrutturare il flusso di gestione delle commesse per introdurre un maggiore controllo da parte dell'amministrazione prima della formalizzazione dell'ordine e per offrire due percorsi di accettazione distinti per il cliente.
+L'obiettivo è arricchire i dati salvati per ogni preventivo, aggiungendo un campo di riepilogo che aggreghi le righe con le stesse caratteristiche.
 
-**Fasi del Nuovo Flusso:**
+**Logica di Funzionamento:**
 
-1.  **Fase di Creazione (Builder):**
-    *   **Scenario Standard (Semplice):** Il cliente vede il prezzo e può salvare il preventivo o inviare una richiesta d'ordine diretta (`ORDER_REQ`).
-    *   **Scenario Complesso (con note/curve):** Il cliente non vede il prezzo e deve inviare il preventivo per una validazione tecnica (`PENDING_VAL`).
-    *   La modifica di un preventivo già validato (`QUOTE_READY`) lo riporterà allo stato `PENDING_VAL`, richiedendo una nuova approvazione.
+1.  **Aggiunta del Campo `sommarioPreventivo`:**
+    *   Ogni preventivo nel database includerà un nuovo campo opzionale chiamato `sommarioPreventivo`.
+    *   Questo campo sarà un array di oggetti, dove ogni oggetto rappresenta un raggruppamento di righe.
 
-2.  **Fase di Negoziazione (Admin/Cliente):**
-    *   L'Admin valida i preventivi in `PENDING_VAL`, spostandoli in `QUOTE_READY`.
-    *   Il Cliente, vedendo il preventivo `QUOTE_READY` con il prezzo finale, può ordinarlo (passando a `ORDER_REQ`) o modificarlo (riavviando il ciclo di validazione).
+2.  **Logica di Raggruppamento:**
+    *   Le righe del preventivo verranno raggruppate quando i valori dei campi `descrizioneCompleta` e `infoCanalino` sono identici.
+    *   Per ogni gruppo, verrà sommato il valore del campo `quantita`.
 
-3.  **Fase di Controllo (Admin):**
-    *   Tutte le richieste d'ordine arrivano nello stato `ORDER_REQ`.
-    *   L'Admin decide il percorso di formalizzazione scegliendo tra:
-        *   **Veloce:** Per ordini semplici/clienti fidati, sposta lo stato in `WAITING_FAST`.
-        *   **Firma:** Per ordini complessi/importi alti, sposta lo stato in `WAITING_SIGN`.
-    *   Viene rimosso l'automatismo basato sulla soglia di 5000€.
+3.  **Struttura del Sommario:**
+    *   Ogni oggetto nell'array `sommarioPreventivo` avrà la seguente struttura:
+        *   `descrizioneCompleta` (string)
+        *   `infoCanalino` (string)
+        *   `quantita` (number)
 
-4.  **Fase di Formalizzazione (Cliente):**
-    *   **Scenario Veloce (`WAITING_FAST`):** Il cliente accetta tramite una modale con checkbox dei termini e condizioni.
-    *   **Scenario Burocratico (`WAITING_SIGN`):** Il cliente deve scaricare un contratto, firmarlo e ricaricarlo.
-
-5.  **Fase Esecutiva (Admin):**
-    *   Un ordine accettato (`SIGNED`) viene messo in produzione (`IN_PRODUZIONE`).
-    *   Viene introdotto un nuovo stato `READY` per indicare che la merce è pronta per il ritiro/spedizione.
+4.  **Integrazione nel Flusso:**
+    *   **Salvataggio (`BuilderView.vue`):** La logica di calcolo del sommario verrà eseguita all'interno della funzione `handleSavePreventivo`, prima di salvare o aggiornare un preventivo nel database.
+    *   **Visualizzazione (`AdminView.vue`):** Il sommario verrà visualizzato nella dashboard dell'amministratore, fornendo una vista aggregata e di rapida consultazione per ogni commessa.
 
 **Azioni da Eseguire:**
 
-1.  **Aggiornare `src/views/BuilderView.vue`:**
-    *   Modificare la logica dei pulsanti per distinguere tra preventivi semplici e complessi.
-    *   Rimuovere la logica di controllo automatico sulla soglia di prezzo.
-    *   Implementare la regressione di stato a `PENDING_VAL` quando si modifica un preventivo `QUOTE_READY`.
-2.  **Aggiornare `src/views/AdminView.vue`:**
-    *   Nella card `ORDER_REQ`, sostituire l'azione automatica con due pulsanti: "Veloce" e "Firma".
-    *   Aggiungere l'azione per spostare un ordine da `IN_PRODUZIONE` a `READY`.
-    *   Per gli stati `WAITING_FAST` e `WAITING_SIGN`, visualizzare solo un pulsante "APRI" che permette la visualizzazione (non modificabile).
-3.  **Aggiornare `src/views/ClientDashboard.vue`:**
-    *   Implementare le diverse viste e azioni per gli stati `WAITING_FAST` e `WAITING_SIGN`.
-    *   Creare la modale "Fast Track" per l'accettazione veloce.
-4.  **Aggiornare `src/types.ts`:**
-    *   Aggiungere i nuovi stati `ORDER_REQ`, `WAITING_FAST`, `WAITING_SIGN`, `READY`.
-    *   Rimuovere `PENDING_SIGN` e `PENDING_FAST_SIGN`.
+1.  **Aggiornare `src/types.ts`:**
+    *   Definire una nuova interfaccia `RiepilogoRiga` per descrivere la struttura degli oggetti nel sommario.
+    *   Aggiungere il campo opzionale `sommarioPreventivo: RiepilogoRiga[]` all'interfaccia `Preventivo`.
+2.  **Aggiornare `src/views/BuilderView.vue`:**
+    *   Modificare la funzione `handleSavePreventivo` per calcolare il `sommarioPreventivo` e aggiungerlo all'oggetto `preventivo` prima di salvarlo.
+3.  **Aggiornare `src/views/AdminView.vue`:**
+    *   Modificare il template per visualizzare i dati del `sommarioPreventivo` all'interno dei dettagli di ogni commessa.
