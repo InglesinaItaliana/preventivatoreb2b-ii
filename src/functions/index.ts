@@ -47,9 +47,9 @@ exports.sincronizzaClientiFIC = functions
 
             try {
                 // 2. CERCA CLIENTE SU FIC TRAMITE P.IVA
-                const searchRes = await axios.get(`${FIC_API_URL}/c/${COMPANY_ID}/entities/clients`, {
-                    headers: { Authorization: `Bearer ${ACCESS_TOKEN}` },
-                    params: { "q": pivaCliente }
+                const searchRes: any = await axios.get(`${FIC_API_URL}/c/${COMPANY_ID}/entities/clients`, {
+                  headers: { Authorization: `Bearer ${ACCESS_TOKEN}` },
+                  params: { "q": pivaCliente }
                 });
 
                 let ficId: number | null = null;
@@ -68,14 +68,14 @@ exports.sincronizzaClientiFIC = functions
                 } else {
                     // 3. SE NON ESISTE, CREALO
                     console.log(`[FIC] Cliente non trovato per P.IVA ${pivaCliente}, creazione in corso...`);
-                    const createRes = await axios.post(`${FIC_API_URL}/c/${COMPANY_ID}/entities/clients`, {
-                        data: {
-                            name: userData.ragioneSociale,
-                            vat_number: pivaCliente,
-                            email: userData.email,
-                            type: 'company'
-                        }
-                    }, { headers: { Authorization: `Bearer ${ACCESS_TOKEN}` } });
+                    const createRes: any = await axios.post(`${FIC_API_URL}/c/${COMPANY_ID}/entities/clients`, {
+                      data: {
+                          name: userData.ragioneSociale,
+                          vat_number: pivaCliente,
+                          email: userData.email,
+                          type: 'company'
+                      }
+                  }, { headers: { Authorization: `Bearer ${ACCESS_TOKEN}` } });
 
                     ficId = createRes.data.data.id;
                     console.log(`[FIC] Cliente creato per P.IVA ${pivaCliente} (ID: ${ficId})`);
@@ -193,8 +193,8 @@ export const generaOrdineFIC = functions
             };
 
             // 5. INVIO DEL DOCUMENTO ORDINE A FIC
-            const orderRes = await axios.post<FicEntity<FicIssuedDocument>>(`${FIC_API_URL}/c/${COMPANY_ID}/issued_documents`, orderPayload, {
-                headers: { Authorization: `Bearer ${ACCESS_TOKEN}` }
+            const orderRes: any = await axios.post(`${FIC_API_URL}/c/${COMPANY_ID}/issued_documents`, orderPayload, {
+              headers: { Authorization: `Bearer ${ACCESS_TOKEN}` }
             });
 
             console.log(`✅ [FIC] Ordine creato con successo! FIC ID: ${orderRes.data.data.id}`);

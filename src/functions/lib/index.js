@@ -47,8 +47,8 @@ if (firebase_admin_1.default.apps.length === 0) {
 // --- CONFIGURAZIONE FATTURE IN CLOUD (DA SOSTITUIRE) ---
 const FIC_API_URL = "https://api-v2.fattureincloud.it";
 // !!! SOSTITUISCI CON I TUOI VALORI REALI !!!
-const COMPANY_ID = "IL_TUO_COMPANY_ID";
-const ACCESS_TOKEN = "IL_TUO_ACCESS_TOKEN"; // ATTENZIONE: Token temporaneo (vedi nota sotto)
+const COMPANY_ID = "185254";
+const ACCESS_TOKEN = "a/eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJyZWYiOiJVcG5pR0dSSm5qazV1U0NwQTZiejljWmJpZE94Q09yMiIsImV4cCI6MTc2NDE2NDA4MH0.aIoepTRU8tb7GkXbRaC_2b6SOsfwNjr4eqrXUgsgPQo"; // ATTENZIONE: Token temporaneo (vedi nota sotto)
 // --- CONFIGURAZIONE VALORI DEFAULT ---
 const VAT_ID = 0; // ID IVA che ha funzionato nel test (oppure usa 4/22 per 22%)
 const VAT_VALUE = 22; // Aliquota IVA (necessaria se si usa VAT ID generico)
