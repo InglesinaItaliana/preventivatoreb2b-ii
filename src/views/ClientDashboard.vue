@@ -230,7 +230,7 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
             <div class="flex items-center gap-6 w-full md:w-auto justify-between md:justify-end">
               <div class="text-right">
                 <div class="text-xl font-bold font-heading text-gray-900">{{ (p.totaleScontato || p.totaleImponibile || 0).toFixed(2) }} €</div>
-                <div class="text-xs text-gray-400">Totale</div>
+                <div class="text-xs text-gray-400">Importo netto</div>
               </div>
               <div class="flex gap-2">
                 
@@ -293,7 +293,7 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
               </div>
               <div class="text-right">
                 <div class="text-xl font-bold font-heading text-green-900">{{ (p.totaleScontato || p.totaleImponibile || 0).toFixed(2) }} €</div>
-                <div class="text-xs text-green-600">Importo Bloccato</div>
+                <div class="text-xs text-green-600">Importo netto</div>
               </div>
               <div>
               <button @click="vaiAlBuilder(p.codice)" class="border border-gray-300 text-gray-600 px-4 py-2 rounded-lg font-bold text-xs hover:bg-gray-50">APRI</button>            
@@ -320,7 +320,7 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
             <div class="flex items-center gap-6 w-full md:w-auto justify-between md:justify-end">
               <div class="text-right">
                 <div class="text-xl font-bold font-heading text-green-900">{{ (p.totaleScontato || p.totaleImponibile || 0).toFixed(2) }} €</div>
-                <div class="text-xs text-green-600">Importo Bloccato</div>
+                <div class="text-xs text-green-600">Importo netto</div>
               </div>
               <button @click="vaiAlBuilder(p.codice)" class="border border-gray-300 text-gray-600 px-4 py-2 rounded-lg font-bold text-xs hover:bg-gray-50">APRI</button>
             </div>

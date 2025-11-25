@@ -111,7 +111,7 @@ export const STATUS_DETAILS: Record<StatoPreventivo, { label: string, badge: str
     hoverBadge: 'hoover-orange-200'
   },
   'QUOTE_READY': { 
-    label: 'VALIDATO', 
+    label: 'PREVENTIVO VALIDATO', 
     badge: 'bg-green-100 text-green-700 border-green-200', 
     iconBg: 'bg-green-100 text-green-600', 
     darkBadge: 'bg-green-600 text-green-100'
@@ -123,37 +123,37 @@ export const STATUS_DETAILS: Record<StatoPreventivo, { label: string, badge: str
     darkBadge: 'bg-cyan-600 text-cyan-100'
   },
   'WAITING_FAST': { 
-    label: 'IN ATTESA FIRMA DEL CLIENTE', 
-    badge: 'bg-stone-100 text-stone-700 border-stone-200', 
-    iconBg: 'bg-stone-100 text-stone-600', 
-    darkBadge: 'bg-stone-600 text-stone-100'
+    label: 'ORDINE IN ATTESA FIRMA DEL CLIENTE', 
+    badge: 'bg-cyan-100 text-cyan-700 border-cyan-200', 
+    iconBg: 'bg-cyan-100 text-cyan-600', 
+    darkBadge: 'bg-cyan-600 text-cyan-100'
   },
   'WAITING_SIGN': { 
-    label: 'IN ATTESA FIRMA DEL CLIENTE', 
-    badge: 'bg-stone-100 text-stone-700 border-stone-200', 
-    iconBg: 'bg-stone-100 text-stone-600', 
-    darkBadge: 'bg-stone-600 text-stone-100'
+    label: 'ORDINE IN ATTESA FIRMA DEL CLIENTE', 
+    badge: 'bg-cyan-100 text-cyan-700 border-cyan-200', 
+    iconBg: 'bg-cyan-100 text-cyan-600', 
+    darkBadge: 'bg-cyan-600 text-cyan-100'
   },
   'SIGNED': { 
-    label: 'DA METTERE IN PRODUZIONE', 
-    badge: 'bg-blue-100 text-blue-700 border-blue-200', 
-    iconBg: 'bg-blue-100 text-blue-600', 
-    darkBadge: 'bg-blue-600 text-blue-100'
+    label: 'ORDINE DA METTERE IN PRODUZIONE', 
+    badge: 'bg-amber-100 text-amber-900 border-amber-200', 
+    iconBg: 'bg-amber-100 text-amber-800', 
+    darkBadge: 'bg-amber-800 text-amber-100'
   },
   'IN_PRODUZIONE': { 
-    label: 'IN PRODUZIONE', 
+    label: 'ORDINE IN PRODUZIONE', 
     badge: 'bg-amber-100 text-amber-900 border-amber-200', 
     iconBg: 'bg-amber-100 text-amber-800', 
     darkBadge: 'bg-amber-800 text-amber-100'
   },
   'READY': { 
-    label: 'PRONTO', 
+    label: 'ORDINE PRONTO', 
     badge: 'bg-emerald-100 text-emerald-800 border-emerald-200', 
     iconBg: 'bg-emerald-100 text-emerald-700', 
     darkBadge: 'bg-emerald-700 text-emerald-100'
   },
   'REJECTED': { 
-    label: 'ANNULLATO', 
+    label: 'ORDINE ANNULLATO', 
     badge: 'bg-red-100 text-red-700 border-red-200', 
     iconBg: 'bg-red-100 text-red-600', 
     darkBadge: 'bg-red-700 text-white' 

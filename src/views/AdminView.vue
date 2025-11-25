@@ -45,7 +45,7 @@ const iconMap: Record<string, any> = {
   'ORDER_REQ': ShoppingCartIcon,
   'WAITING_FAST': ClockIcon,
   'WAITING_SIGN': ClockIcon,
-  'SIGNED': CheckCircleIcon,
+  'SIGNED': PaperAirplaneIcon,
   'IN_PRODUZIONE': CogIcon,
   'READY': CubeIcon,
   'REJECTED': XCircleIcon
@@ -53,6 +53,33 @@ const iconMap: Record<string, any> = {
 
 // STATO UI
 const activeTab = ref<'CLIENTI' | 'COMMESSE'>('CLIENTI');
+
+// --- FILTRO PERIODO ---
+const filtroPeriodo = ref<'TUTTO' | 'CORRENTE' | 'SCORSO'>('CORRENTE');
+
+const preventiviFiltrati = computed(() => {
+  if (filtroPeriodo.value === 'TUTTO') return listaPreventivi.value;
+
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+
+  return listaPreventivi.value.filter(p => {
+    if (!p.dataCreazione?.seconds) return false;
+    const d = new Date(p.dataCreazione.seconds * 1000);
+    
+    if (filtroPeriodo.value === 'CORRENTE') {
+      return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    }
+    if (filtroPeriodo.value === 'SCORSO') {
+      // Calcolo mese scorso gestendo il cambio anno (es. Gennaio -> Dicembre)
+      const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      return d.getMonth() === lastMonthDate.getMonth() && d.getFullYear() === lastMonthDate.getFullYear();
+    }
+    return true;
+  });
+});
+
 const clientiEspansi = ref<string[]>([]);
 // Aggiunto WAITING_FAST e READY agli stati espansi di default
 const statiEspansi = ref<string[]>(['PENDING_VAL', 'ORDER_REQ', 'WAITING_SIGN', 'SIGNED', 'IN_PRODUZIONE']);
@@ -114,14 +141,18 @@ const ordinePronto = async (preventivo: any) => {
 
 // --- HIGHLIGHTS ---
 const globalStats = computed(() => {
-  const stats = { da_validare: 0, richieste_ord: 0, in_produzione: 0, totale_valore_aperto: 0 };
-  listaPreventivi.value.forEach(p => {
-    const st = p.stato;
+  const stats = { da_validare: 0, richieste_ord: 0, in_produzione: 0, signed : 0, totale_valore_aperto: 0 };
+  preventiviFiltrati.value.forEach(p => {
+        const st = p.stato;
+    
+    // Conteggi numerici (rimasti invariati)
     if (st === 'PENDING_VAL') stats.da_validare++;
     if (st === 'ORDER_REQ') stats.richieste_ord++;
     if (st === 'IN_PRODUZIONE') stats.in_produzione++;
-    // Escludiamo READY, QUOTE_READY e REJECTED dal totale valore attivo
-    if (st !== 'DRAFT' && st !== 'REJECTED' && st !== 'READY' && st !== 'QUOTE_READY') {
+    if (st === 'SIGNED') stats.signed++;
+    
+    // MODIFICA: Somma valore solo per SIGNED, IN_PRODUZIONE e READY
+    if (['SIGNED', 'IN_PRODUZIONE', 'READY'].includes(st)) {
       stats.totale_valore_aperto += (p.totaleScontato || p.totale || 0);
     }
   });
@@ -131,7 +162,7 @@ const globalStats = computed(() => {
 // --- RAGGRUPPAMENTO PER CLIENTE (AGGIORNATO) ---
 const clientiRaggruppati = computed(() => {
   const gruppi: Record<string, any> = {};
-  listaPreventivi.value.forEach(p => {
+    preventiviFiltrati.value.forEach(p => {
     // FILTRO RICHIESTO: Admin non vede QUOTE_READY
     if (p.stato === 'QUOTE_READY') return;
 
@@ -180,7 +211,7 @@ const preventiviPerStato = computed(() => {
   const gruppi: Record<string, any[]> = {};
   ordineStati.forEach(st => gruppi[st] = []);
 
-  listaPreventivi.value.forEach(p => {
+  preventiviFiltrati.value.forEach(p => {
     // FILTRO: Nascondi QUOTE_READY
     if (p.stato === 'QUOTE_READY') return;
 
@@ -242,11 +273,11 @@ const getActionData = (p: any) => {
 
   // IN_PRODUZIONE -> Ordine Pronto
   if (st === 'IN_PRODUZIONE')
-    return { text: 'ORDINE PRONTO', class: 'bg-green-100 text-green-800 border-green-200 hover:bg-green-200', action: () => ordinePronto(p), icon: CubeIcon };
+    return { text: 'ORDINE PRONTO', class: 'bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-200', action: () => ordinePronto(p), icon: CubeIcon };
   
   // READY -> Archivia
   if (st === 'READY')
-    return { text: 'ARCHIVIA', class: 'text-gray-400 bg-gray-100 border-gray-200', action: () => {}, icon: ArchiveBoxIcon };
+    return { text: 'APRI', class: 'border border-gray-300 text-gray-600 px-4 py-2 rounded-lg font-bold text-xs hover:bg-gray-50', action: () => apriEditor(p.codice), icon: EyeIcon };
 
   // Default
   return { text: 'APRI', class: 'text-gray-500 border-gray-200', action: () => apriEditor(p.codice), icon: DocumentTextIcon };
@@ -269,6 +300,19 @@ const apriEditor = (codice: string, readonly: boolean = false) => {
   }
 };
 const formatDate = (seconds: number) => seconds ? new Date(seconds * 1000).toLocaleDateString('it-IT', { day: '2-digit', month: '2-digit' }) : '-';
+
+const raggruppaPreventiviClientePerStato = (preventivi: any[]) => {
+  const gruppi: Record<string, any[]> = {};
+  preventivi.forEach(p => {
+    const st = p.stato || 'DRAFT';
+    if (!gruppi[st]) gruppi[st] = [];
+    gruppi[st].push(p);
+  });
+  // Ordina in base all'ordineStati definito
+  return ordineStati
+    .filter(st => gruppi[st] && gruppi[st].length > 0)
+    .map(st => ({ stato: st, lista: gruppi[st] }));
+};
 
 onMounted(() => {
   caricaAnagrafica();
@@ -293,21 +337,29 @@ onUnmounted(() => {
           </div>
         </div>
         <div class="flex items-center gap-3">
-          <span class="text-xs text-gray-400 animate-pulse">Live Sync</span>
+  
+          
+
+          <span class="text-xs text-gray-400 animate-pulse hidden md:block">Live Sync</span>
           <button @click="caricaTutti" class="flex items-center gap-2 bg-white border border-gray-200 px-4 py-2 rounded-lg hover:bg-yellow-50 text-sm font-bold text-gray-700 transition-all shadow-sm hover:border-gray-300">
             <ArrowPathIcon class="h-4 w-4" />
             Aggiorna
           </button>
+          <select v-model="filtroPeriodo" class="bg-white border border-gray-200 text-sm font-bold text-gray-700 rounded-lg px-3 py-2 outline-none focus:border-yellow-400 cursor-pointer shadow-sm">
+            <option value="TUTTO">Tutto</option>
+            <option value="CORRENTE">Mese Corrente</option>
+            <option value="SCORSO">Mese Scorso</option>
+          </select>
         </div>
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-yellow-100 cursor-pointer">
-          <div class="h-12 w-12 rounded-full flex items-center justify-center bg-yellow-100">
-            <CurrencyEuroIcon class="h-6 w-6 text-yellow-500" />
+        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-emerald-100 cursor-pointer">
+          <div class="h-12 w-12 rounded-full flex items-center justify-center bg-emerald-100">
+            <CurrencyEuroIcon class="h-6 w-6 text-emerald-500" />
           </div>
           <div>
-            <div class="text-xs font-bold text-gray-500 uppercase">Valore Ordini Attivi</div>
+            <div class="text-xs font-bold text-gray-500 uppercase">Valore Ordini</div>
             <div class="text-2xl font-bold font-heading text-gray-900">€ {{ globalStats.totale_valore_aperto.toLocaleString('it-IT', {maximumFractionDigits: 0}) }}</div>
           </div>
         </div>
@@ -316,11 +368,11 @@ onUnmounted(() => {
             <ShieldExclamationIcon class="h-6 w-6 text-orange-500" />
           </div>
           <div>
-            <div class="text-xs font-bold text-gray-400 uppercase">Da Validare</div>
+            <div class="text-xs font-bold text-gray-400 uppercase">Nuovi Preventivi</div>
             <div class="text-2xl font-bold text-gray-900">{{ globalStats.da_validare }}</div>
           </div>
         </div>
-        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-purple-100 cursor-pointer">
+        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-cyan-100 cursor-pointer">
           <div class="h-12 w-12 rounded-full flex items-center justify-center bg-cyan-100">
             <ShoppingCartIcon class="h-6 w-6 text-cyan-500" />
           </div>
@@ -329,13 +381,13 @@ onUnmounted(() => {
             <div class="text-2xl font-bold text-gray-900">{{ globalStats.richieste_ord }}</div>
           </div>
         </div>
-        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-green-100 cursor-pointer">
-          <div class="h-12 w-12 rounded-full flex items-center justify-center bg-green-100">
-            <CogIcon class="h-6 w-6 text-green-500" />
+        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-yellow-100 cursor-pointer">
+          <div class="h-12 w-12 rounded-full flex items-center justify-center bg-yellow-100">
+            <PaperAirplaneIcon class="h-6 w-6 text-yellow-500" />
           </div>
           <div>
-            <div class="text-xs font-bold text-gray-400 uppercase">In Produzione</div>
-            <div class="text-2xl font-bold text-gray-900">{{ globalStats.in_produzione }}</div>
+            <div class="text-xs font-bold text-gray-400 uppercase">Nuovi Prodotti</div>
+            <div class="text-2xl font-bold text-gray-900">{{ globalStats.signed }}</div>
           </div>
         </div>
       </div>
@@ -368,7 +420,7 @@ onUnmounted(() => {
             </div>
 
             <div class="flex gap-2 w-full md:flex-1 justify-end flex-wrap">
-              <template v-for="st in ordineStati" :key="st">
+              <template v-for="st in ['PENDING_VAL', 'ORDER_REQ', 'SIGNED']" :key="st">
                 <div v-if="gruppo.conteggi[st]" 
                      class="px-2 py-0.5 rounded border text-[10px] font-bold uppercase transition-colors flex items-center gap-1" 
                      :class="getStatusStyling(st).badge">
@@ -381,40 +433,61 @@ onUnmounted(() => {
             <div class="text-gray-300 hidden md:block transform transition-transform" :class="clientiEspansi.includes(gruppo.nome) ? 'rotate-180' : ''">▼</div>
           </div>
 
-          <div v-if="clientiEspansi.includes(gruppo.nome)" class="border-t border-gray-100 bg-gray-50 p-4 animate-fade-in">
-            <table class="min-w-full divide-y divide-gray-200 bg-white rounded-lg overflow-hidden shadow-sm">
-              <thead class="bg-gray-100 text-[10px] text-gray-500 uppercase font-bold tracking-wider">
-                <tr><th class="px-4 py-3 text-left">Stato</th><th class="px-4 py-3 text-left">Rif. / Codice</th><th class="px-4 py-3 text-right">Importo</th><th class="px-4 py-3 text-right">Azioni</th></tr>
-              </thead>
-              <tbody class="divide-y divide-gray-100 text-sm">
-                <tr v-for="p in gruppo.preventivi" :key="p.id" class="hover:bg-yellow-50/50 transition-colors">
-                  <td class="px-4 py-3 text-center"><span class="px-2 py-1 text-[10px] font-bold rounded border uppercase" :class="getStatusStyling(p.stato).badge">{{ getStatusLabel(p.stato) }}</span></td>
-                  <td class="px-4 py-3">
-                    <div v-if="p.sommarioPreventivo">
-                      <div v-for="(item, idx) in p.sommarioPreventivo" :key="idx" class="text text-gray-600 font-medium">
-                        <span class="font-bold">{{ item.quantitaTotale }} x</span> {{ item.descrizione }} 
-                        <span v-if="item.canalino" class="text-gray-400 italic"> • {{ item.canalino }}</span>
-                      </div>
-                    </div>
-                    <div class="text-xs font-mono text-gray-400">{{ formatDate(p.dataCreazione?.seconds) }} • {{ p.commessa || 'Nessun Rif.' }}</div>
+          <div v-if="clientiEspansi.includes(gruppo.nome)" class="border-t border-gray-100 bg-gray-50 p-4 animate-fade-in space-y-4">
+            
+            <div v-for="statoGruppo in raggruppaPreventiviClientePerStato(gruppo.preventivi)" :key="statoGruppo.stato" class="bg-white rounded-lg border border-gray-200 overflow-hidden shadow-sm">
+              
+              <div class="px-4 py-2 border-b flex items-center justify-between" 
+                   :class="getStatusStyling(statoGruppo.stato).badge">
+                
+                <div class="flex items-center gap-2">
+                  <component :is="getStatusStyling(statoGruppo.stato).icon" class="h-4 w-4" />
+                  <span class="text-xs font-bold uppercase">{{ getStatusLabel(statoGruppo.stato) }}</span>
+                </div>
+                
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full bg-white/60 shadow-sm border border-black/5 text-inherit">
+                  {{ statoGruppo.lista.length }}
+                </span>
+              </div>
 
-                  </td>
-                  <td class="px-4 py-3 text-right text-sm font-bold text-gray-900 font-heading">{{ (p.totaleScontato || p.totale || 0).toFixed(2) }} €</td>
-                  <td class="align-middle px-4 py-3 text-right justify-end gap-2 items-center">
-                    <div class="flex justify-end items-center gap-2">
-                      <button
-                      @click.stop="getActionData(p).action()"
-                      class="text-xs font-bold px-3 py-1.5 rounded border transition-all shadow-sm hover:shadow hover:brightness-95 flex items-center gap-2"
-                      :class="getActionData(p).class"
-                      >
-                      <component :is="getActionData(p).icon" class="h-4 w-4" />
-                      <span>{{ getActionData(p).text }}</span>
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+              <table class="min-w-full divide-y divide-gray-100">
+                <thead class="bg-gray-50 text-[10px] text-gray-500 uppercase font-bold tracking-wider">
+                  <tr>
+                    <th class="px-4 py-2 text-left">Rif. / Codice</th>
+                    <th class="px-4 py-2 text-right w-64">Azioni</th>
+                    <th class="px-4 py-2 text-right w-32">Importo</th>
+                  </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-50 text-sm">
+                  <tr v-for="p in statoGruppo.lista" :key="p.id" class="hover:bg-gray-50 transition-colors">
+                    <td class="px-4 py-3">
+                      <div v-if="p.sommarioPreventivo">
+                        <div v-for="(item, idx) in p.sommarioPreventivo" :key="idx" class="text text-gray-600 font-medium">
+                          <span class="font-bold">{{ item.quantitaTotale }} x</span> {{ item.descrizione }} 
+                          <span v-if="item.canalino" class="text-gray-400 italic"> • {{ item.canalino }}</span>
+                        </div>
+                      </div>
+                      <div class="text-xs text-gray-400 mt-1">DATA: {{ formatDate(p.dataCreazione?.seconds) }} • COMMESSA: {{ p.commessa || 'Nessun Rif.' }}</div>
+                    </td>
+                    <td class="align-middle px-4 py-3 text-right">
+                      <div class="flex justify-end items-center gap-2 w-64">
+                        <button
+                        @click.stop="getActionData(p).action()"
+                        class="text-xs font-bold px-3 py-1.5 rounded border transition-all shadow-sm hover:shadow hover:brightness-95 flex items-center gap-2"
+                        :class="getActionData(p).class"
+                        >
+                        <component :is="getActionData(p).icon" class="h-4 w-4" />
+                        <span>{{ getActionData(p).text }}</span>
+                        </button>
+                      </div>
+                    </td>
+                    <td class="px-4 py-3 text-right text-sm font-bold text-gray-900 font-heading w-24">{{ (p.totaleScontato || p.totale || 0).toFixed(2) }} €</td>
+                    
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
           </div>
         </div>
       </div>

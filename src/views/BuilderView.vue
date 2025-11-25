@@ -13,6 +13,41 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { jsPDF } from "jspdf"; 
 import OrderModals from '../components/OrderModals.vue';
 import { STATUS_DETAILS } from '../types';
+import {
+  PencilIcon,
+  CheckCircleIcon,
+  DocumentTextIcon,
+  EyeIcon,
+  ClockIcon,
+  ArchiveBoxIcon,
+  ArrowPathIcon,
+  XCircleIcon,
+  PaperAirplaneIcon,
+  CogIcon,
+  CurrencyEuroIcon,
+  ShieldExclamationIcon,
+  ShoppingCartIcon,
+  WrenchScrewdriverIcon,
+  UserIcon,
+  MagnifyingGlassIcon,
+  RectangleStackIcon,
+  PlusIcon,
+  ChevronLeftIcon,
+  InformationCircleIcon,
+  CubeIcon 
+} from '@heroicons/vue/24/solid'
+
+const toastMessage = ref('');
+const showToast = ref(false);
+
+const showCustomToast = (message: string) => {
+  toastMessage.value = message;
+  showToast.value = true;
+  setTimeout(() => {
+    showToast.value = false;
+    toastMessage.value = '';
+  }, 3000); // Durata del messaggio: 3 secondi
+};
 
 const route = useRoute();
 const router = useRouter();
@@ -26,6 +61,8 @@ const statoCorrente = ref<StatoPreventivo>('DRAFT');
 
 const showModals = ref(false);
 const modalMode = ref<'FAST' | 'SIGN'>('FAST');
+
+const inputRicerca = ref('');
 
 const noteCliente = ref('');
 const scontoApplicato = ref(0);
@@ -50,7 +87,7 @@ const adminExtraDesc = ref('Supplemento');
 const adminExtraPrice = ref(0);
 
 const preventivo = ref<RigaPreventivo[]>([]);
-const pannello = reactive({ base: 0, altezza: 0, righe: 0, colonne: 0, qty: 1 });
+const pannello = reactive({ base: 800, altezza: 1750, righe: 1, colonne: 4, qty: 1 });
 const opzioniTelaio = reactive({ nonEquidistanti: false, curva: false, tacca: false });
 
 const isAdmin = computed(() => route.query?.admin === 'true');
@@ -148,6 +185,16 @@ const uploadFile = async (event: Event) => {
     });
   } catch (e) { alert("Errore upload."); console.error(e); }
   finally { isUploading.value = false; }
+};
+
+const getStatusLabel = (stato: string) => {
+  const map: Record<string, string> = {
+    'DRAFT': 'BOZZA', 'PENDING_VAL': 'ATTESA VALIDAZIONE DA INGLESINA ITALIANA', 'QUOTE_READY': 'PREVENTIVO VALIDATO',
+    'ORDER_REQ': 'ATTESA VALIDAZIONE DA INGLESINA ITALIANA', 
+    'WAITING_FAST': 'ORDINE DA ACCETTARE', 'WAITING_SIGN': 'ORDINE DA FIRMARE',
+    'SIGNED': 'ATTESA PRODUZIONE DA INGLESINA ITALIANA', 'IN_PRODUZIONE': 'ORDINE INVIATO IN PRODUZIONE', 'READY': 'ORDINE PRONTO', 'REJECTED': 'ANNULLATO'
+  };
+  return map[stato] || stato;
 };
 
 const rimuoviAllegato = (index: number) => { if(confirm("Rimuovere allegato?")) listaAllegati.value.splice(index, 1); };
@@ -265,7 +312,8 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
       allegati: listaAllegati.value,
       sommarioPreventivo: sommario, // Salvo il sommario calcolato
       dataModifica: serverTimestamp(),
-      ...(currentDocId.value ? {} : { dataCreazione: serverTimestamp() }),
+      uid: auth.currentUser?.uid,
+      ...(currentDocId.value ? {} : { dataCreazione: serverTimestamp(), }),
       dataScadenza: new Date(Date.now() + 30*24*60*60*1000),
       elementi: preventivo.value.map(r => ({ ...r }))
     };
@@ -285,7 +333,7 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
     if (nuovoStato === 'ORDER_REQ') msg = "🚀 Ordine richiesto. In attesa di conferma.";
     if (nuovoStato === 'QUOTE_READY') msg = "✅ Preventivo Validato.";
 
-    alert(msg);
+    showCustomToast(msg);
 
     if (isAdmin.value) router.push('/admin');
     else caricaListaStorico();
@@ -300,15 +348,29 @@ const sbloccaPerModifica = () => {
 };
 
 const caricaPreventivo = async () => {
-  if (!codiceRicerca.value) return;
+  // Se l'input è vuoto e c'è un codiceRicerca (es. da URL), usa quello, altrimenti usa l'input
+  const termine = inputRicerca.value || codiceRicerca.value;
+  if (!termine) return;
+
   isSaving.value = true;
   try {
-    const q = query(collection(db, 'preventivi'), where('codice', '==', codiceRicerca.value.trim().toUpperCase()));
+    // MODIFICA: La query ora cerca nel campo 'commessa' invece che 'codice'
+    // Nota: Se inputRicerca è vuoto (es. caricamento da URL), cerchiamo per 'codice' come fallback
+    let q;
+    if (inputRicerca.value) {
+        q = query(collection(db, 'preventivi'), where('commessa', '==', inputRicerca.value));
+    } else {
+        q = query(collection(db, 'preventivi'), where('codice', '==', termine.trim().toUpperCase()));
+    }
+
     const snap = await getDocs(q);
-    if (snap.empty) return alert("Non trovato");
+    if (snap.empty) return alert("Commessa non trovata (Attenzione a maiuscole/minuscole)");
+    
     const d = snap.docs[0].data();
     currentDocId.value = snap.docs[0].id;
-
+    
+    // Aggiorniamo i dati locali
+    codiceRicerca.value = d.codice; // Importante: allinea il codice interno
     nomeCliente.value = d.cliente;
     riferimentoCommessa.value = d.commessa;
     statoCorrente.value = d.stato || 'DRAFT';
@@ -323,7 +385,7 @@ const caricaPreventivo = async () => {
       righe: Number(el.righe) || 0,
       colonne: Number(el.colonne) || 0
     }));
-  } catch(e) { console.error(e); } finally { isSaving.value = false; }
+  } catch(e) { console.error(e); alert("Errore ricerca"); } finally { isSaving.value = false; }
 };
 
 const caricaListaStorico = async () => {
@@ -334,7 +396,8 @@ const caricaListaStorico = async () => {
     if (isAdmin.value) {
       q = query(collection(db, 'preventivi'), orderBy('dataCreazione', 'desc'), limit(20));
     } else {
-      q = query(collection(db, 'preventivi'), where('clienteEmail', '==', user.email), orderBy('dataCreazione', 'desc'), limit(20));
+      // MODIFICA: Filtro per 'uid' invece che per 'clienteEmail'
+      q = query(collection(db, 'preventivi'), where('uid', '==', user.uid), orderBy('dataCreazione', 'desc'), limit(20));
     }
     const s = await getDocs(q);
     storicoPreventivi.value = s.docs.map(d => ({ id: d.id, ...d.data(), stato: d.data().stato || 'DRAFT' }));
@@ -386,114 +449,129 @@ onMounted(() => {
 
     <header class="bg-white shadow-sm p-4 sticky top-0 z-30 border-b border-gray-200">
       <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-        <div class="flex items-center gap-4">
+        <div class="flex items-center gap-1">
           <button @click="vaiDashboard" class="text-gray-400 hover:text-gray-700 transition-colors p-2 rounded-full hover:bg-gray-100" title="Torna alla Dashboard">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-6 h-6"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
-          </button>
+            <ChevronLeftIcon class="h-5 w-5 text-yellow-500" />         
+        </button>
 
-          <img src="/logo.svg" class="h-8 w-auto" alt="Logo" />
           <div class="pl-3 border-l border-gray-300">
-            <div class="font-bold text-xl font-heading leading-none text-gray-800">PREVENTIVATORE</div>
+            <div class="font-bold text-xl font-heading leading-none text-gray-800">Creazione PREVENTIVI e ORDINI</div>
             <div class="text-xs text-gray-500 font-medium uppercase tracking-wide mt-0.5">{{ nomeCliente }}</div>
           </div>
         </div>
 
-        <div class="flex items-center gap-2 bg-gray-100 rounded-full px-4 py-1.5 border border-gray-200 shadow-inner">
-          <button @click="nuovaCommessa" class="text-xs font-bold text-green-700 hover:bg-green-50 px-2 py-1 rounded uppercase flex items-center gap-1 mr-2 border-r border-gray-300 pr-3">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" /></svg>
-            NUOVO
+        <div class="flex items-center gap-3">
+          
+          <button 
+            v-if="!isAdmin"
+            @click="nuovaCommessa" 
+            class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold text-xs uppercase shadow-sm flex items-center gap-2 transition-all">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" class="w-4 h-4">
+              <path fill-rule="evenodd" d="M12 3.75a.75.75 0 01.75.75v6.75h6.75a.75.75 0 010 1.5h-6.75v6.75a.75.75 0 01-1.5 0v-6.75H4.5a.75.75 0 010-1.5h6.75V4.5a.75.75 0 01.75-.75z" clip-rule="evenodd" />
+            </svg>
+            Nuovo
           </button>
-
-          <button @click="mostraStorico = true" class="text-sm font-bold text-gray-600 hover:text-black flex items-center gap-2 transition-colors">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          
+          <button 
+            v-if="!isAdmin" 
+            @click="mostraStorico = true" 
+            class="bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 px-4 py-2 rounded-lg font-bold text-xs uppercase shadow-sm flex items-center gap-2 transition-all">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" class="w-4 h-4">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-13a.75.75 0 00-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 000-1.5h-3.25V5z" clip-rule="evenodd" />
+            </svg>
             Storico
           </button>
-          <div class="w-px h-4 bg-gray-300 mx-2"></div>
-          <input v-model="codiceRicerca" @keyup.enter="caricaPreventivo" type="text" placeholder="CERCA CODICE" class="bg-transparent border-none outline-none text-sm w-32 uppercase font-mono placeholder-gray-400">
-          <button @click="caricaPreventivo" class="text-xs font-bold text-blue-600 hover:bg-blue-50 px-2 py-1 rounded uppercase">Apri</button>
+          <img src="/logo.svg" class="h-8 w-auto" alt="Logo" />
+
         </div>
       </div>
     </header>
 
-    <main class="max-w-7xl mx-auto p-4 grid grid-cols-1 lg:grid-cols-3 gap-6 mt-4">
+    <main class="max-w-7xl mx-auto p-4 flex flex-col gap-6 mt-4">
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+        <h2 class="font-bold text-lg font-heading border-b pb-2 mb-4 flex items-center gap-2 text-gray-800">
+          Dati Commessa
+        </h2>
 
-      <div class="lg:col-span-1 space-y-6">
-
-        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-5">
-          <h2 class="font-bold text-lg font-heading border-b pb-2 flex items-center gap-2 text-gray-800">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5 text-yellow-500"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" /></svg>
-            Dati Commessa
-          </h2>
-
-          <div>
-            <label class="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Riferimento Cantiere</label>
-            <input v-model="riferimentoCommessa" :disabled="isLocked" type="text" class="w-full p-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-yellow-400 focus:border-transparent outline-none transition-all" placeholder="Es. Rossi Cucina">
+        <div class="flex flex-col lg:flex-row gap-4 items-start">
+          <div class="flex-1 w-full flex flex-col justify-between">
+              <div>
+                  <label class="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Riferimento Cantiere</label>
+                  <input v-model="riferimentoCommessa" :disabled="isLocked" type="text" class="w-full p-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-yellow-400 focus:border-transparent outline-none transition-all" placeholder="Es. Rossi Cucina">
+              </div>
+              <div></div>
           </div>
 
-          <div>
-            <label class="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Note Tecniche (Opzionale)</label>
-            <textarea v-model="noteCliente" :disabled="isLocked" rows="2" class="w-full p-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-yellow-400 outline-none transition-all" placeholder="Es. Consegna tassativa entro..."></textarea>
-            <div v-if="noteCliente" class="flex items-center gap-1 mt-1 text-orange-600 text-xs font-bold animate-pulse">
-              <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>
-              Nota presente (Richiede Validazione)
+          <div class="flex-1 w-full flex flex-col justify-between">
+            <div>
+                <label class="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Note Tecniche</label>
+                <textarea v-model="noteCliente" :disabled="isLocked" rows="1" class="w-full p-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-yellow-400 focus:border-transparent outline-none transition-all resize-none" placeholder="Es. Consegna tassativa..."></textarea>
+            </div>
+            
+            <div v-if="noteCliente" class="flex items-center gap-1 mt-1 text-yellow-500 text-xs font-bold animate-pulse">
+                <InformationCircleIcon class="h-5 w-5 text-yellow-500" />         
+                La presenza di una nota richiede una validazione
             </div>
           </div>
-          <div>
-            <label class="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Allegati (PDF, DWG)</label>
-            <div class="relative border-2 border-dashed border-gray-200 rounded-lg p-4 hover:bg-gray-50 hover:border-yellow-400 transition-all text-center cursor-pointer group" :class="isLocked ? 'opacity-50 pointer-events-none' : ''">
-              <input type="file" @change="uploadFile" :disabled="isLocked" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
-              <div v-if="isUploading" class="flex flex-col items-center gap-2">
-                <svg class="animate-spin h-5 w-5 text-yellow-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                <span class="text-xs font-bold text-gray-500">Caricamento...</span>
-              </div>
-              <div v-else class="flex flex-col items-center gap-1">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6 text-gray-300 group-hover:text-yellow-500 transition-colors"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>
-                <span class="text-xs text-gray-400"><strong class="text-yellow-600">Clicca</strong> o trascina file</span>
-              </div>
+
+          <div class="flex-1 w-full flex flex-col justify-between">
+            <div>
+                <label class="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Allegati</label>
+                <div class="flex gap-2 items-center">
+                    <div class="relative border border-dashed border-gray-300 rounded-lg px-3 py-2 bg-gray-50 hover:bg-white transition-all text-center cursor-pointer flex-1" :class="isLocked ? 'opacity-50 pointer-events-none' : ''">
+                        <input type="file" @change="uploadFile" :disabled="isLocked" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
+                        <span v-if="isUploading" class="text-xs text-yellow-600 font-bold">Caricamento...</span>
+                        <span v-else class="text-xs text-gray-500">Carica File</span>
+                    </div>
+                    <div v-if="listaAllegati.length > 0" class="flex flex-wrap gap-1">
+                        <div v-for="(file, idx) in listaAllegati" :key="file.url" class="bg-blue-50 text-blue-700 border border-blue-100 px-2 py-1 rounded text-[10px] font-bold flex items-center gap-1">
+                            <a :href="file.url" target="_blank" class="truncate max-w-[60px]">{{ file.nome }}</a>
+                            <button @click="rimuoviAllegato(idx)" :disabled="isLocked" class="hover:text-red-500">×</button>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div v-if="listaAllegati.length > 0" class="mt-3 space-y-2">
-              <div v-for="(file, idx) in listaAllegati" :key="file.url" class="flex justify-between items-center text-xs bg-gray-50 border border-gray-200 p-2 rounded-md">
-                <a :href="file.url" target="_blank" class="flex items-center gap-2 text-gray-700 hover:text-blue-600 font-medium truncate max-w-[180px]">
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3 h-3 text-gray-400"><path fill-rule="evenodd" d="M15.621 4.379a3 3 0 00-4.242 0l-7 7a3 3 0 004.241 4.243h.001l.497-.5a.75.75 0 011.064 1.057l-.498.501-.002.002a4.5 4.5 0 01-6.364-6.364l7-7a4.5 4.5 0 016.368 6.36l-3.455 3.553A2.625 2.625 0 119.52 9.52l3.45-3.551a.75.75 0 111.061 1.06l-3.45 3.551a1.125 1.125 0 001.587 1.595l3.456-3.553a3 3 0 000-4.242z" clip-rule="evenodd" /></svg>
-                  {{ file.nome }}
-                </a>
-                <button @click="rimuoviAllegato(idx)" :disabled="isLocked" class="text-gray-400 hover:text-red-500 p-1 disabled:opacity-30"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-3 h-3"><path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" /></svg></button>
-              </div>
+            
+            <div v-if="listaAllegati.length > 0" class="flex items-center gap-1 mt-1 text-yellow-500 text-xs font-bold animate-pulse">
+                <InformationCircleIcon class="h-5 w-5 text-yellow-500" />         
+                Ci sono file in allegato
             </div>
           </div>
         </div>
-
-        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-4">
-          <h2 class="font-bold text-lg border-b pb-2 font-heading text-gray-800">1. Griglia</h2>
-          <div v-if="catalog.loading" class="text-center p-4 text-sm text-gray-400">Caricamento...</div>
-          <div v-else>
+      </div>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+    
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-4 h-full">
+        <h2 class="font-bold text-lg border-b pb-2 font-heading text-gray-800">1. Griglia</h2>
+        <div v-if="catalog.loading" class="text-center p-4 text-sm text-gray-400">Caricamento...</div>
+        <div v-else>
             <div class="flex bg-gray-50 p-1 rounded-lg">
               <button v-for="c in categorieGrigliaDisp" :key="c" @click="categoriaGriglia = c as Categoria" :disabled="isLocked" :class="categoriaGriglia === c ? 'bg-white shadow text-black' : 'text-gray-500'" class="flex-1 py-2 text-xs font-bold rounded-md transition-all uppercase disabled:opacity-50">{{ c }}</button>
             </div>
             <select v-model="tipoGriglia" :disabled="!tipiGrigliaDisp.length || isLocked" class="w-full p-2 border rounded mt-4 bg-white text-sm disabled:opacity-60"><option value="" disabled>Seleziona Tipo</option><option v-for="m in tipiGrigliaDisp" :key="m" :value="m">{{ m }}</option></select>
             <select v-if="tipoGriglia" v-model="dimensioneGriglia" :disabled="!dimensioniGrigliaDisp.length || isLocked" class="w-full p-2 border rounded mt-4 bg-white text-sm disabled:opacity-60"><option value="" disabled>Seleziona Dimensione</option><option v-for="d in dimensioniGrigliaDisp" :key="d" :value="d">{{ d }}</option></select>
             <select v-if="dimensioneGriglia" v-model="finituraGriglia" :disabled="!finitureGrigliaDisp.length || isLocked" class="w-full p-2 border rounded mt-4 bg-white text-sm disabled:opacity-60"><option value="" disabled>Seleziona Finitura</option><option v-for="f in finitureGrigliaDisp" :key="f" :value="f">{{ f }}</option></select>
-          </div>
         </div>
+      </div>
 
-        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-4">
-          <div class="flex justify-between items-center border-b pb-2">
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-4 h-full">
+        <div class="flex justify-between items-center border-b pb-2">
             <h2 class="font-bold text-lg font-heading text-gray-800">2. Canalino</h2>
-            <label v-if="categoriaGriglia === 'DUPLEX'" class="flex items-center gap-2 text-[10px] font-bold text-blue-600 cursor-pointer bg-blue-50 px-2 py-1 rounded hover:bg-blue-100 uppercase">
-              <input type="checkbox" v-model="copiaDuplex" :disabled="isLocked" class="rounded border-blue-300 text-blue-600 focus:ring-blue-500">
-              Copia da Griglia
+            <label v-if="categoriaGriglia === 'DUPLEX'" class="flex items-center gap-2 text-[10px] font-bold text-yellow-600 cursor-pointer bg-yellow-50 px-2 py-1 rounded hover:bg-yellow-100 uppercase">
+              <input type="checkbox" v-model="copiaDuplex" :disabled="isLocked" class="rounded border-yellow-300 text-yellow-600 focus:ring-yellow-500">
+              Copia
             </label>
-          </div>
-          <div v-if="catalog.loading" class="text-center p-4 text-sm text-gray-400">Caricamento...</div>
+        </div>
+        <div v-if="catalog.loading" class="text-center p-4 text-sm text-gray-400">Caricamento...</div>
           <div v-else>
             <select v-model="tipoCanalino" :disabled="copiaDuplex || !tipiCanalinoDisp.length || isLocked" class="w-full p-2 border rounded bg-gray-50 text-sm disabled:opacity-60"><option value="" disabled>Seleziona Tipo</option><option v-for="t in tipiCanalinoDisp" :key="t" :value="t">{{ t }}</option></select>
             <select v-if="tipoCanalino" v-model="dimensioneCanalino" :disabled="copiaDuplex || !dimensioniCanalinoDisp.length || isLocked" class="w-full p-2 border rounded bg-gray-50 mt-4 text-sm disabled:opacity-60"><option value="" disabled>Seleziona Dimensione</option><option v-for="d in dimensioniCanalinoDisp" :key="d" :value="d">{{ d }}</option></select>
             <select v-if="dimensioneCanalino" v-model="finituraCanalino" :disabled="copiaDuplex || !finitureCanalinoDisp.length || isLocked" class="w-full p-2 border rounded bg-gray-50 mt-4 text-sm disabled:opacity-60"><option value="" disabled>Seleziona Finitura</option><option v-for="f in finitureCanalinoDisp" :key="f" :value="f">{{ f }}</option></select>
           </div>
-        </div>
+      </div>
 
-        <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-4" :class="{'opacity-50': !finituraGriglia}">
-          <h2 class="font-bold text-lg border-b pb-2 font-heading text-gray-800">3. Telaio</h2>
+      <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-4 h-full" :class="{'opacity-50': !finituraGriglia}">
+        <h2 class="font-bold text-lg border-b pb-2 font-heading text-gray-800">3. Telaio</h2>
           <div class="grid grid-cols-2 gap-4">
             <div><label class="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Base (mm)</label><input v-model.number="pannello.base" :disabled="isLocked" type="number" class="border p-2 rounded w-full text-sm focus:ring-2 focus:ring-yellow-400 outline-none disabled:bg-gray-100"></div>
             <div><label class="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Altezza (mm)</label><input v-model.number="pannello.altezza" :disabled="isLocked" type="number" class="border p-2 rounded w-full text-sm focus:ring-2 focus:ring-yellow-400 outline-none disabled:bg-gray-100"></div>
@@ -515,23 +593,33 @@ onMounted(() => {
           </div>
 
           <div class="grid grid-cols-3 gap-4 pt-4 border-t mt-4">
-            <label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" v-model="opzioniTelaio.nonEquidistanti" :disabled="isLocked" class="h-4 w-4 rounded border-gray-300 text-red-600 focus:ring-red-500"><span class="text-xs text-gray-700 font-bold">Non Eq.</span></label>
-            <label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" v-model="opzioniTelaio.curva" :disabled="isLocked" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"><span class="text-xs text-gray-700 font-bold">Curva</span></label>
-            <label class="flex items-center space-x-2 cursor-pointer"><input type="checkbox" v-model="opzioniTelaio.tacca" :disabled="isLocked" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"><span class="text-xs text-gray-700 font-bold">Tacca</span></label>
+            <label 
+              class="flex items-center space-x-2 cursor-pointer"
+              title="Indica che le divisioni interne del telaio (montanti e traversi) non sono distanziate uniformemente." >
+              <input type="checkbox" v-model="opzioniTelaio.nonEquidistanti" :disabled="isLocked" class="h-4 w-4 rounded border-teal-600 text-teal-400">
+              <span class="text-[10px] text-gray-700 font-bold">Non Equidistanti</span>
+            </label>
+            <label 
+              class="flex items-center space-x-2 cursor-pointer"
+              title="Indica che il telaio ha una forma non rettangolare con una o più sezioni curve.">
+              <input type="checkbox" v-model="opzioniTelaio.curva" :disabled="isLocked" class="h-4 w-4 rounded border-orange-760 text-orange-400">
+              <span class="text-[10px] text-gray-700 font-bold">Curva</span>
+            </label>
+            <label 
+              class="flex items-center space-x-2 cursor-pointer"
+              title="Aggiunge un piccolo intaglio o un recesso (tacca) sul perimetro del telaio per facilitare l'installazione in profili specifici.">
+              <input type="checkbox" v-model="opzioniTelaio.tacca" :disabled="isLocked" class="h-4 w-4 rounded border-gray-600 text-purple-400">
+              <span class="text-[10px] text-gray-700 font-bold">Tacca</span>
+            </label>
           </div>
 
-          <button
-            @click="aggiungi"
-            :disabled="!pannello.base || !pannello.altezza || !finituraGriglia || isLocked"
-            class="w-full bg-yellow-400 hover:bg-yellow-500 text-black font-bold py-3 rounded-lg shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 transition-all flex justify-center items-center gap-2"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-11a1 1 0 10-2 0v2H7a1 1 0 100 2h2v2a1 1 0 102 0v-2h2a1 1 0 100-2h-2V7z" clip-rule="evenodd" /></svg>
-            AGGIUNGI PANNELLO
+          <button @click="aggiungi" :disabled="!pannello.base || !pannello.altezza || !finituraGriglia || isLocked" class="w-full bg-yellow-400 hover:bg-yellow-500 text-black font-bold py-3 rounded-lg shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 transition-all flex justify-center items-center gap-2">
+            <PlusIcon class="h-5 w-5 text-black" />         
+            AGGIUNGI
           </button>
-        </div>
-
       </div>
 
+    </div>
       <div class="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col min-h-[600px] overflow-hidden">
 
         <div class="p-6 bg-gray-900 text-white flex justify-between items-center">
@@ -558,7 +646,7 @@ onMounted(() => {
                 <span class="text-[10px] text-gray-400 uppercase font-bold">CONFERMA ORDINE COME:</span>
                 <div class="flex gap-2">
                   <button @click="salvaPreventivo('ADMIN_VELOCE')" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded font-bold text-xs">VELOCE</button>
-                  <button @click="salvaPreventivo('ADMIN_FIRMA')" class="bg-purple-600 hover:bg-purple-500 text-white px-4 py-2 rounded font-bold text-xs">FIRMA</button>
+                  <button @click="salvaPreventivo('ADMIN_FIRMA')" class="bg-yellow-600 hover:bg-yellow-500 text-black px-4 py-2 rounded font-bold text-xs">FIRMA</button>
                 </div>
               </div>
               
@@ -594,15 +682,15 @@ onMounted(() => {
               </template>
 
               <div v-else-if="statoCorrente === 'PENDING_VAL'" class="text-right">
-                <span class="text-orange-400 font-bold text-sm flex items-center gap-2">
+                <span class="text-yellow-500 font-bold text-2xl flex items-center gap-2">
                   <svg class="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                  IN ELABORAZIONE
+                  ATTESA VALIDAZIONE DA INGLESINA ITALIANA
                 </span>
               </div>
 
               <div v-else-if="statoCorrente === 'QUOTE_READY'" class="flex gap-3">
                 <button @click="sbloccaPerModifica()" class="bg-gray-700 text-white px-4 py-3 rounded-lg font-bold hover:bg-gray-600 text-sm">MODIFICA</button>
-                <button @click="salvaPreventivo('ORDINA')" class="bg-green-600 hover:bg-green-500 text-white px-6 py-3 rounded-lg font-bold shadow-lg animate-pulse">
+                <button @click="salvaPreventivo('ORDINA')" class="bg-yellow-400 hover:bg-yellow-300 text-yellow-50 px-6 py-3 rounded-lg font-bold shadow-lg animate-pulse">
                   CONFERMA ORDINE
                 </button>
               </div>
@@ -614,8 +702,10 @@ onMounted(() => {
               </template>
 
               <div v-else class="text-right px-4">
-                <span class="text-sm font-bold text-gray-500">ORDINE IN LAVORAZIONE</span>
-              </div>
+                <span class="text-yellow-500 font-bold text-2xl flex items-center gap-2">
+                  <svg class="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                  ORDINE IN LAVORAZIONE DA INGLESINA ITALIANA
+                </span>              </div>
             </template>
           </div>
         </div>
@@ -642,7 +732,6 @@ onMounted(() => {
                 <td class="p-3 pl-5">
                   <div class="font-bold text-gray-900 text-sm">{{ r.descrizioneCompleta }}</div>
                   <div class="text-[10px] text-gray-500 uppercase mt-0.5 flex items-center gap-1">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
                     {{ r.infoCanalino || (r.rawCanalino ? `${r.rawCanalino.tipo} ${r.rawCanalino.fin}` : 'Senza Canalino') }}
                   </div>
                 </td>
@@ -651,7 +740,7 @@ onMounted(() => {
 
                 <td class="p-3 text-center">
                   <div class="flex justify-center gap-1 flex-wrap max-w-[100px] mx-auto">
-                    <span v-if="r.nonEquidistanti" class="px-1.5 py-0.5 rounded bg-red-100 text-red-700 text-[9px] font-bold border border-red-200">Non Eq.</span>
+                    <span v-if="r.nonEquidistanti" class="px-1.5 py-0.5 rounded bg-teal-100 text-teal-700 text-[9px] font-bold border border-teal-200">Non Eq.</span>
                     <span v-if="r.curva" class="px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 text-[9px] font-bold border border-orange-200">Curva</span>
                     <span v-if="r.tacca" class="px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 text-[9px] font-bold border border-purple-200">Tacca</span>
                   </div>
@@ -671,8 +760,9 @@ onMounted(() => {
             </tbody>
           </table>
           <div v-else class="h-full flex flex-col items-center justify-center text-gray-400 gap-4">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 opacity-20" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
-            <p>Inizia configurando il prodotto a sinistra</p>
+            <br>
+            <RectangleStackIcon class="h-10 w-10 text-black" />         
+            <p>Inizia configurando il prodotto in alto</p>
           </div>
         </div>
 
@@ -710,8 +800,10 @@ onMounted(() => {
             <div class="absolute left-0 top-0 bottom-0 w-1.5" :class="{'bg-gray-300': !ordine.stato || ordine.stato === 'DRAFT', 'bg-orange-500': ordine.stato === 'PENDING_VAL', 'bg-green-500': ordine.stato === 'QUOTE_READY' || ordine.stato === 'SIGNED', 'bg-purple-500': ordine.stato === 'ORDER_REQ', 'bg-red-500': ordine.stato === 'REJECTED'}"></div>
             <div class="flex justify-between items-start mb-1 pl-3">
               <span class="font-bold text-lg text-gray-800 truncate">{{ ordine.commessa || 'Senza Nome' }}</span>
-              <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider border" :class="{'bg-gray-100 text-gray-500 border-gray-200': !ordine.stato || ordine.stato === 'DRAFT', 'bg-orange-50 text-orange-600 border-orange-200': ordine.stato === 'PENDING_VAL', 'bg-green-50 text-green-600 border-green-200': ordine.stato === 'QUOTE_READY', 'bg-purple-50 text-purple-600 border-purple-200': ordine.stato === 'ORDER_REQ'}">{{ ordine.stato || 'DRAFT' }}</span>
-            </div>
+              <span class="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider border" 
+                    :class="STATUS_DETAILS[ordine.stato]?.badge || 'bg-gray-100 text-gray-500 border-gray-200'">
+                {{ STATUS_DETAILS[ordine.stato]?.label || ordine.stato || 'BOZZA' }}
+              </span>            </div>
             <div class="flex justify-between text-sm text-gray-500 pl-3 mt-1">
               <span class="font-mono text-xs bg-gray-100 px-1 rounded">{{ ordine.codice }}</span>
               <span>{{ ordine.dataLeggibile }}</span>
@@ -732,7 +824,16 @@ onMounted(() => {
       @confirmFast="onConfirmFast"
       @confirmSign="onConfirmSign"
     />
-
+    <div 
+      v-if="showToast" 
+      class="fixed inset-0 z-[60] flex items-center justify-center transition-all duration-300"
+      :class="showToast ? 'opacity-100 backdrop-blur-sm bg-black/10' : 'opacity-0'">
+      <div 
+        class="bg-gray-800 text-white px-6 py-3 rounded-xl shadow-2xl transition-all duration-300 transform scale-100"
+        :class="showToast ? 'translate-y-0' : 'translate-y-10'">
+        <p class="font-bold text-lg whitespace-nowrap">{{ toastMessage }}</p>
+      </div>
+    </div>
   </div>
 </template>
 
