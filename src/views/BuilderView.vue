@@ -276,7 +276,7 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
       }
     });
 
-    // 1. Prepariamo i dati base
+    // 1. DEFINIZIONE DATI (SENZA UID!)
     const docData: any = {
       codice,
       cliente: nomeCliente.value,
@@ -292,16 +292,17 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
       dataModifica: serverTimestamp(),
       dataScadenza: new Date(Date.now() + 30*24*60*60*1000),
       elementi: preventivo.value.map(r => ({ ...r }))
-    };
+      };
 
-    // 2. ✅ LOGICA DI SICUREZZA PER L'UID
-    // Se è un NUOVO preventivo, assegniamo l'UID dell'utente corrente.
-    // Se stiamo MODIFICANDO, NON tocchiamo l'UID (così rimane del proprietario originale).
+    // 2. ASSEGNAZIONE UID (SOLO SE È UN NUOVO PREVENTIVO)
     if (!currentDocId.value) {
-        docData.dataCreazione = serverTimestamp();
-        docData.uid = auth.currentUser?.uid;
-        docData.clienteUID = auth.currentUser?.uid;
-    }
+      // Siamo in fase di CREAZIONE (fatta dal Cliente)
+      docData.dataCreazione = serverTimestamp();
+      docData.uid = auth.currentUser?.uid;         // Salva l'autore (Cliente)
+      docData.clienteUID = auth.currentUser?.uid;  // Salva l'autore (Cliente)
+    } 
+    // Se siamo in fase di MODIFICA (fatta dall'Admin), questi campi NON vengono toccati
+    // e rimangono quelli originali del database.
 
     if (currentDocId.value) {
       await setDoc(doc(db, 'preventivi', currentDocId.value), docData, { merge: true });
