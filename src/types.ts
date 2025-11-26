@@ -95,70 +95,70 @@ export interface PreventivoDocumento {
 // --- CONFIGURAZIONE CONDIVISA COLORI E TESTI ---
 export const STATUS_DETAILS: Record<StatoPreventivo, { label: string, badge: string, iconBg: string, darkBadge: string, hoverBadge:string }> = {
   'DRAFT': { 
-    label: 'BOZZA', 
+    label: 'BOZZE', 
     badge: 'bg-gray-100 text-gray-500 border-gray-200', 
     iconBg: 'bg-gray-100 text-gray-500', 
     darkBadge: 'bg-gray-500 text-gray-100',
     hoverBadge: 'hover:bg-gray-200'
   },
   'PENDING_VAL': { 
-    label: 'PREVENTIVO IN ATTESA DI ACCETTAZIONE', 
+    label: 'PREVENTIVI DA QUOTARE', 
     badge: 'bg-orange-100 text-orange-500 border-orange-200 hover:bg-orange-200', 
     iconBg: 'bg-orange-100 text-orange-500', 
     darkBadge: 'bg-orange-500 text-orange-100 hover:bg-orange-600',
     hoverBadge: 'hover:bg-orange-200'
   },
   'QUOTE_READY': { 
-    label: 'PREVENTIVO VALIDATO', 
-    badge: 'bg-green-100 text-green-700 border-green-200', 
-    iconBg: 'bg-green-100 text-green-600', 
-    darkBadge: 'bg-green-600 text-green-100',
-    hoverBadge: 'hover:bg-green-200'
+    label: 'PREVENTIVI QUOTATI', 
+    badge: 'bg-stone-200 text-stone-500 border-stone-200', 
+    iconBg: 'bg-stone-200 text-stone-500', 
+    darkBadge: 'bg-stone-500 text-stone-100',
+    hoverBadge: 'hover:bg-stone-200'
   },
   'ORDER_REQ': { 
-    label: 'ORDINE IN ATTESA DI ACCETTAZIONE', 
-    badge: 'bg-cyan-100 text-cyan-700 border-cyan-200', 
-    iconBg: 'bg-cyan-100 text-cyan-600', 
-    darkBadge: 'bg-cyan-600 text-cyan-100',
+    label: 'ORDINI DA ACCETTARE', 
+    badge: 'bg-cyan-100 text-cyan-500 border-cyan-200', 
+    iconBg: 'bg-cyan-100 text-cyan-500', 
+    darkBadge: 'bg-cyan-500 text-cyan-100',
     hoverBadge: 'hover:bg-cyan-200'
   },
   'WAITING_FAST': { 
-    label: 'ORDINE IN ATTESA FIRMA DEL CLIENTE', 
-    badge: 'bg-cyan-100 text-cyan-700 border-cyan-200', 
-    iconBg: 'bg-cyan-100 text-cyan-600', 
-    darkBadge: 'bg-cyan-600 text-cyan-100',
+    label: 'ORDINI IN ATTESA FIRMA DEL CLIENTE', 
+    badge: 'bg-cyan-100 text-cyan-500 border-cyan-200', 
+    iconBg: 'bg-cyan-100 text-cyan-500', 
+    darkBadge: 'bg-cyan-500 text-cyan-100',
     hoverBadge: 'hover:bg-cyan-200'
   },
   'WAITING_SIGN': { 
-    label: 'ORDINE IN ATTESA FIRMA DEL CLIENTE', 
-    badge: 'bg-cyan-100 text-cyan-700 border-cyan-200', 
-    iconBg: 'bg-cyan-100 text-cyan-600', 
-    darkBadge: 'bg-cyan-600 text-cyan-100',
-    hoverBadge: 'hover:bg-cyan-200'
+    label: 'ORDINI IN ATTESA FIRMA DEL CLIENTE', 
+    badge: 'bg-stone-200 text-stone-500 border-stone-200', 
+    iconBg: 'bg-stone-200 text-stone-500', 
+    darkBadge: 'bg-stone-500 text-stone-100',
+    hoverBadge: 'hover:bg-stone-200'
   },
   'SIGNED': { 
-    label: 'ORDINE DA METTERE IN PRODUZIONE', 
-    badge: 'bg-amber-100 text-amber-900 border-amber-200', 
-    iconBg: 'bg-amber-100 text-amber-800', 
-    darkBadge: 'bg-amber-800 text-amber-100',
-    hoverBadge: 'hover:bg-amber-200'
-  },
-  'IN_PRODUZIONE': { 
-    label: 'ORDINE IN PRODUZIONE', 
-    badge: 'bg-amber-100 text-amber-900 border-amber-200', 
-    iconBg: 'bg-amber-100 text-amber-800', 
-    darkBadge: 'bg-amber-800 text-amber-100',
-    hoverBadge: 'hover:bg-amber-200'
-  },
-  'READY': { 
-    label: 'ORDINE PRONTO', 
-    badge: 'bg-emerald-100 text-emerald-800 border-emerald-200', 
-    iconBg: 'bg-emerald-100 text-emerald-700', 
-    darkBadge: 'bg-emerald-700 text-emerald-100',
+    label: 'ORDINI DA METTERE IN PRODUZIONE', 
+    badge: 'bg-emerald-100 text-emerald-600 border-emerald-200', 
+    iconBg: 'bg-emerald-100 text-emerald-600', 
+    darkBadge: 'bg-emerald-600 text-emerald-100',
     hoverBadge: 'hover:bg-emerald-200'
   },
+  'IN_PRODUZIONE': { 
+    label: 'ORDINI IN PRODUZIONE', 
+    badge: 'bg-emerald-100 text-emerald-600 border-emerald-200', 
+    iconBg: 'bg-emerald-100 text-emerald-600', 
+    darkBadge: 'bg-emerald-600 text-emerald-100',
+    hoverBadge: 'hover:bg-emerald-200'
+  },
+  'READY': { 
+    label: 'ORDINI PRONTI', 
+    badge: 'bg-amber-100 text-amber-800 border-amber-200', 
+    iconBg: 'bg-amber-100 text-amber-800', 
+    darkBadge: 'bg-amber-800 text-amber-100',
+    hoverBadge: 'hover:bg-amber-200'
+  },
   'REJECTED': { 
-    label: 'ORDINE ANNULLATO', 
+    label: 'ANNULLATI', 
     badge: 'bg-red-100 text-red-700 border-red-200', 
     iconBg: 'bg-red-100 text-red-600', 
     darkBadge: 'bg-red-700 text-white',

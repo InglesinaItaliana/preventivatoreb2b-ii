@@ -43,10 +43,11 @@ const axios_1 = __importDefault(require("axios"));
 if (admin.apps.length === 0) {
     admin.initializeApp();
 }
-// --- CONFIGURAZIONE REALE ---
+// --- CONFIGURAZIONE ---
 const FIC_API_URL = "https://api-v2.fattureincloud.it";
 const COMPANY_ID = "185254";
-const ACCESS_TOKEN = "a/eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJyZWYiOiJVcG5pR0dSSm5qazV1U0NwQTZiejljWmJpZE94Q09yMiIsImV4cCI6MTc2NDE2NDA4MH0.aIoepTRU8tb7GkXbRaC_2b6SOsfwNjr4eqrXUgsgPQo";
+const FIC_CLIENT_ID = "m6V7Abz1NneFHAXvmEPP6X8vO96QdIVv";
+const FIC_CLIENT_SECRET = "FvVpcC0YyyPnaKNR9mNMuCslrk6ycDqrdGHl0v6szYu3nVpBFs7jfqU2IvoWF96U";
 const VAT_ID = 0;
 const VAT_VALUE = 22;
 // --- HELPER DATE ---
@@ -59,7 +60,53 @@ function calcolaScadenza(giorni, tipo) {
     }
     return data.toISOString().split('T')[0] || '';
 }
-// --- FUNZIONE UNICA INTELLIGENTE ---
+// --- FUNZIONE RINNOVO TOKEN (ACCESS TOKEN MANAGER) ---
+async function getValidFicToken() {
+    var _a;
+    const db = admin.firestore();
+    const docRef = db.collection('config').doc('fic');
+    const docSnap = await docRef.get();
+    if (!docSnap.exists) {
+        throw new Error("Documento config/fic non trovato nel DB!");
+    }
+    const data = docSnap.data();
+    if (!data)
+        throw new Error("Dati mancanti in config/fic");
+    const now = new Date();
+    // Verifica se esiste una data di scadenza valida
+    const expiryDate = data.token_scadenza ? data.token_scadenza.toDate() : new Date(0);
+    // Se il token è ancora valido (mancano più di 5 minuti), usalo
+    if (expiryDate > new Date(now.getTime() + 5 * 60000)) {
+        return data.access_token;
+    }
+    console.log("[FIC] Token scaduto. Rinnovo in corso...");
+    try {
+        const response = await axios_1.default.post(`${FIC_API_URL}/oauth/token`, {
+            grant_type: 'refresh_token',
+            refresh_token: data.refresh_token,
+            client_id: FIC_CLIENT_ID,
+            client_secret: FIC_CLIENT_SECRET
+        });
+        const newAccessToken = response.data.access_token;
+        const newRefreshToken = response.data.refresh_token; // FiC potrebbe ruotarlo
+        const expiresIn = response.data.expires_in; // di solito 86400 (24h)
+        // Calcola nuova scadenza
+        const nuovaScadenza = new Date(now.getTime() + (expiresIn * 1000));
+        // Salva tutto nel DB
+        await docRef.update({
+            access_token: newAccessToken,
+            refresh_token: newRefreshToken,
+            token_scadenza: admin.firestore.Timestamp.fromDate(nuovaScadenza)
+        });
+        console.log("[FIC] Token rinnovato con successo.");
+        return newAccessToken;
+    }
+    catch (error) {
+        console.error("❌ ERRORE CRITICO rinnovo token:", ((_a = error.response) === null || _a === void 0 ? void 0 : _a.data) || error.message);
+        throw new Error("Impossibile rinnovare il token FiC");
+    }
+}
+// --- FUNZIONE PRINCIPALE: GENERA ORDINE ---
 exports.generaOrdineFIC = functions
     .region('europe-west1')
     .firestore
@@ -82,6 +129,8 @@ exports.generaOrdineFIC = functions
         return null;
     }
     try {
+        // RECUPERA TOKEN VALIDO (Nuova logica)
+        const accessToken = await getValidFicToken();
         // 2. RECUPERA DATI UTENTE DA FIREBASE
         const userDoc = await admin.firestore().collection('users').doc(clienteUID).get();
         const userData = userDoc.data();
@@ -98,8 +147,8 @@ exports.generaOrdineFIC = functions
         let clientData = null;
         // Chiamata API per cercare il cliente
         const searchRes = await axios_1.default.get(`${FIC_API_URL}/c/${COMPANY_ID}/entities/clients`, {
-            headers: { Authorization: `Bearer ${ACCESS_TOKEN}` },
-            params: { "q": `vat_number = '${pivaCliente}'` } // Filtro preciso per P.IVA
+            headers: { Authorization: `Bearer ${accessToken}` }, // Usa il token dinamico
+            params: { "q": `vat_number = '${pivaCliente}'` }
         });
         if (searchRes.data.data && searchRes.data.data.length > 0) {
             // TROVATO! Prendiamo il primo risultato
@@ -117,20 +166,19 @@ exports.generaOrdineFIC = functions
                     email: (userData === null || userData === void 0 ? void 0 : userData.email) || "",
                     type: 'company'
                 }
-            }, { headers: { Authorization: `Bearer ${ACCESS_TOKEN}` } });
-            clientData = createRes.data.data; // Usiamo i dati del nuovo cliente
+            }, { headers: { Authorization: `Bearer ${accessToken}` } });
+            clientData = createRes.data.data;
             ficId = clientData.id;
             console.log(`[FIC] Nuovo Cliente creato. ID: ${ficId}`);
         }
-        // 4. ESTRAZIONE DATI PAGAMENTO (DAL CLIENTE TROVATO/CREATO)
+        // 4. ESTRAZIONE DATI PAGAMENTO
         const defaultPaymentMethodId = ((_a = clientData.default_payment_method) === null || _a === void 0 ? void 0 : _a.id) || null;
         const defaultPaymentTerms = clientData.default_payment_terms || 0;
         const defaultPaymentType = clientData.default_payment_terms_type || 'standard';
-        // 5. CALCOLI ECONOMICI (NETTO + IVA)
+        // 5. CALCOLI ECONOMICI
         const dataScadenza = calcolaScadenza(defaultPaymentTerms, defaultPaymentType);
         const today = new Date().toISOString().split('T')[0];
         const importoNetto = newData.totaleScontato || newData.totaleImponibile || 0;
-        // Calcolo del lordo per evitare errore 422
         const importoLordo = parseFloat((importoNetto * (1 + (VAT_VALUE / 100))).toFixed(2));
         // 6. PREPARAZIONE RIGHE ORDINE
         const itemsList = (newData.elementi || []).map((item) => {
@@ -139,16 +187,16 @@ exports.generaOrdineFIC = functions
                 name: item.descrizioneCompleta || "Articolo Vetrata",
                 description: desc,
                 qty: item.quantita || 1,
-                net_price: item.prezzo_unitario || 0, // Prezzo Netto
+                net_price: item.prezzo_unitario || 0,
                 vat: { id: VAT_ID, value: VAT_VALUE }
             };
         });
-        // 7. CREAZIONE ORDINE (PAYLOAD COMPLETO)
+        // 7. CREAZIONE ORDINE
         const orderPayload = {
             data: {
                 type: "order",
                 entity: {
-                    id: ficId, // Usiamo l'ID trovato dinamicamente
+                    id: ficId,
                     name: clientData.name
                 },
                 date: today,
@@ -156,24 +204,22 @@ exports.generaOrdineFIC = functions
                 items_list: itemsList,
                 payments_list: [
                     {
-                        amount: importoLordo, // Importo LORDO corretto
+                        amount: importoLordo,
                         due_date: dataScadenza,
                         status: "not_paid"
                     }
                 ]
             }
         };
-        // Aggiunge metodo di pagamento SOLO se presente nella scheda cliente
         if (defaultPaymentMethodId) {
             orderPayload.data.payment_method = { id: defaultPaymentMethodId };
             orderPayload.data.payments_list[0].payment_method = { id: defaultPaymentMethodId };
         }
-        // 8. INVIO A FATTURE IN CLOUD
+        // 8. INVIO A FATTURE IN CLOUD (Usa token dinamico)
         const orderRes = await axios_1.default.post(`${FIC_API_URL}/c/${COMPANY_ID}/issued_documents`, orderPayload, {
-            headers: { Authorization: `Bearer ${ACCESS_TOKEN}` }
+            headers: { Authorization: `Bearer ${accessToken}` }
         });
         console.log(`✅ [FIC] ORDINE CREATO SUCCESSO! ID FIC: ${orderRes.data.data.id}`);
-        // Aggiorna Firebase col link al documento
         await change.after.ref.update({
             fic_order_id: orderRes.data.data.id,
             fic_order_url: orderRes.data.data.url,

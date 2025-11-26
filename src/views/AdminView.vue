@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue';
-import { collection, query, orderBy, getDocs, limit, updateDoc, doc } from 'firebase/firestore';
+import { collection, query, orderBy, getDocs, limit, updateDoc, doc, onSnapshot } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useRouter } from 'vue-router';
 // IMPORT CONFIGURAZIONE CONDIVISA (Modifica richiesta)
@@ -10,19 +10,18 @@ import OrderModals from '../components/OrderModals.vue';
 // IMPORT ICONE HEROICONS
 import {
   PencilIcon,
-  CheckCircleIcon,
+  ChevronDoubleRightIcon,
   DocumentTextIcon,
   EyeIcon,
-  ClockIcon,
   ArrowPathIcon,
   XCircleIcon,
-  PaperAirplaneIcon,
   CogIcon,
   CurrencyEuroIcon,
-  ShieldExclamationIcon,
   ShoppingCartIcon,
   UserIcon,
-  CubeIcon 
+  CubeIcon,
+  TruckIcon,      // NUOVO: Per Spedizioni
+  ArchiveBoxIcon  // NUOVO: Per Archivio
 } from '@heroicons/vue/24/solid'
 
 const router = useRouter();
@@ -38,12 +37,12 @@ const selectedClientName = ref('');
 // MAPPA ICONE LOCALE
 const iconMap: Record<string, any> = {
   'DRAFT': PencilIcon,
-  'PENDING_VAL': ShieldExclamationIcon,
-  'QUOTE_READY': CheckCircleIcon,
+  'PENDING_VAL': PencilIcon,
+  'QUOTE_READY': PencilIcon,
   'ORDER_REQ': ShoppingCartIcon,
-  'WAITING_FAST': ClockIcon,
-  'WAITING_SIGN': ClockIcon,
-  'SIGNED': PaperAirplaneIcon,
+  'WAITING_FAST': ShoppingCartIcon,
+  'WAITING_SIGN': ShoppingCartIcon,
+  'SIGNED': ChevronDoubleRightIcon, //ChevronDoubleRightIcon,
   'IN_PRODUZIONE': CogIcon,
   'READY': CubeIcon,
   'REJECTED': XCircleIcon
@@ -51,12 +50,13 @@ const iconMap: Record<string, any> = {
 
 // STATO UI
 const activeView = ref<'CLIENTI' | 'COMMESSE'>('CLIENTI');
-const activeCategory = ref<'PREVENTIVI' | 'ORDINI' | 'PRODUZIONE'>('ORDINI');
+// Aggiornato tipo per includere le nuove viste
+const activeCategory = ref<'PREVENTIVI' | 'ORDINI' | 'PRODUZIONE' | 'SPEDIZIONI' | 'ARCHIVIO'>('ORDINI');
 const filtroPeriodo = ref<'TUTTO' | 'CORRENTE' | 'SCORSO'>('CORRENTE');
 
 // Calcolo conteggi
 const categoryCounts = computed(() => {
-  const counts = { PREVENTIVI: 0, ORDINI: 0, PRODUZIONE: 0 };
+  const counts = { PREVENTIVI: 0, ORDINI: 0, PRODUZIONE: 0, SPEDIZIONI: 0, ARCHIVIO: 0 };
   const now = new Date();
   
   listaPreventivi.value.forEach(p => {
@@ -70,9 +70,13 @@ const categoryCounts = computed(() => {
     }
     
     const st = p.stato || 'DRAFT';
-    if (['DRAFT', 'PENDING_VAL', 'QUOTE_READY', 'REJECTED'].includes(st)) counts.PREVENTIVI++;
-    else if (['ORDER_REQ', 'WAITING_FAST', 'WAITING_SIGN', 'SIGNED'].includes(st)) counts.ORDINI++;
-    else if (['IN_PRODUZIONE', 'READY'].includes(st)) counts.PRODUZIONE++;
+    
+    // LOGICA AGGIORNATA PER CONTEGGI
+    if (['PENDING_VAL', 'QUOTE_READY'].includes(st)) counts.PREVENTIVI++;
+    else if (['ORDER_REQ', 'WAITING_FAST', 'WAITING_SIGN'].includes(st)) counts.ORDINI++;
+    else if (['SIGNED', 'IN_PRODUZIONE'].includes(st)) counts.PRODUZIONE++;
+    else if (['READY'].includes(st)) counts.SPEDIZIONI++;
+    else if (['REJECTED'].includes(st)) counts.ARCHIVIO++;
   });
   return counts;
 });
@@ -91,11 +95,23 @@ const preventiviFiltrati = computed(() => {
       }
     }
 
-    // 2. Filtro Categoria
+    // 2. Filtro Categoria (LOGICA AGGIORNATA)
     const st = p.stato || 'DRAFT';
-    if (activeCategory.value === 'PREVENTIVI') return ['DRAFT', 'PENDING_VAL', 'QUOTE_READY', 'REJECTED'].includes(st);
-    if (activeCategory.value === 'ORDINI') return ['ORDER_REQ', 'WAITING_FAST', 'WAITING_SIGN', 'SIGNED'].includes(st);
-    if (activeCategory.value === 'PRODUZIONE') return ['IN_PRODUZIONE', 'READY'].includes(st);
+    
+    // Preventivi: via DRAFT e REJECTED
+    if (activeCategory.value === 'PREVENTIVI') return ['PENDING_VAL', 'QUOTE_READY'].includes(st);
+    
+    // Ordini: via SIGNED (spostato in produzione)
+    if (activeCategory.value === 'ORDINI') return ['ORDER_REQ', 'WAITING_FAST', 'WAITING_SIGN'].includes(st);
+    
+    // Produzione: include SIGNED e IN_PRODUZIONE (via READY)
+    if (activeCategory.value === 'PRODUZIONE') return ['SIGNED', 'IN_PRODUZIONE'].includes(st);
+
+    // Spedizioni: solo READY
+    if (activeCategory.value === 'SPEDIZIONI') return ['READY'].includes(st);
+
+    // Archivio: REJECTED (Draft nascosti)
+    if (activeCategory.value === 'ARCHIVIO') return ['REJECTED'].includes(st);
     
     return true;
   });
@@ -103,7 +119,7 @@ const preventiviFiltrati = computed(() => {
 
 const clientiEspansi = ref<string[]>([]);
 const statiEspansi = ref<string[]>(['PENDING_VAL', 'ORDER_REQ', 'WAITING_SIGN', 'SIGNED', 'IN_PRODUZIONE']);
-let refreshInterval: any = null;
+let unsubscribe: null | (() => void) = null;
 
 // --- 1. CARICAMENTO ANAGRAFICA ---
 const caricaAnagrafica = async () => {
@@ -118,14 +134,19 @@ const caricaAnagrafica = async () => {
   } catch (e) { console.error("Errore anagrafica", e); }
 };
 
-// --- 2. CARICAMENTO PREVENTIVI ---
-const caricaTutti = async () => {
-  try {
-    const q = query(collection(db, 'preventivi'), orderBy('dataCreazione', 'desc'), limit(300));
-    const snapshot = await getDocs(q);
+// --- 2. CARICAMENTO PREVENTIVI (REAL TIME) ---
+const caricaTutti = () => {
+  if (unsubscribe) unsubscribe();
+
+  const q = query(collection(db, 'preventivi'), orderBy('dataCreazione', 'desc'), limit(300));
+  
+  unsubscribe = onSnapshot(q, (snapshot) => {
     listaPreventivi.value = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-  } catch (e) { console.error("Errore refresh", e); }
-  finally { loading.value = false; }
+    loading.value = false;
+  }, (error) => {
+    console.error("Errore real-time:", error);
+    loading.value = false;
+  });
 };
 
 // --- AZIONI RAPIDE ADMIN ---
@@ -157,18 +178,33 @@ const ordinePronto = async (preventivo: any) => {
 // --- HIGHLIGHTS ---
 const globalStats = computed(() => {
   const stats = { da_validare: 0, richieste_ord: 0, in_produzione: 0, signed : 0, totale_valore_aperto: 0 };
-  preventiviFiltrati.value.forEach(p => {
-        const st = p.stato;
+  const now = new Date();
+  const currentMonth = now.getMonth();
+  const currentYear = now.getFullYear();
+
+  listaPreventivi.value.forEach(p => {
     
+    if (filtroPeriodo.value !== 'TUTTO' && p.dataCreazione?.seconds) {
+      const d = new Date(p.dataCreazione.seconds * 1000);
+      if (filtroPeriodo.value === 'CORRENTE') {
+        if (d.getMonth() !== currentMonth || d.getFullYear() !== currentYear) return;
+      }
+      if (filtroPeriodo.value === 'SCORSO') {
+        const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        if (d.getMonth() !== lastMonthDate.getMonth() || d.getFullYear() !== lastMonthDate.getFullYear()) return;
+      }
+    }
+
+    const st = p.stato;
     if (st === 'PENDING_VAL') stats.da_validare++;
     if (st === 'ORDER_REQ') stats.richieste_ord++;
-    if (st === 'IN_PRODUZIONE') stats.in_produzione++;
-    if (st === 'SIGNED') stats.signed++;
+    if (st === 'SIGNED') stats.signed++; 
     
     if (['SIGNED', 'IN_PRODUZIONE', 'READY'].includes(st)) {
-      stats.totale_valore_aperto += (p.totaleScontato || p.totale || 0);
+      stats.totale_valore_aperto += (p.totaleScontato || p.totaleImponibile || p.totale || 0);
     }
   });
+
   return stats;
 });
 
@@ -176,8 +212,6 @@ const globalStats = computed(() => {
 const clientiRaggruppati = computed(() => {
   const gruppi: Record<string, any> = {};
     preventiviFiltrati.value.forEach(p => {
-    if (p.stato === 'QUOTE_READY') return;
-
     const nomeReale = anagraficaClienti.value[p.clienteEmail] || p.cliente || 'Sconosciuto';
 
     if (!gruppi[nomeReale]) {
@@ -200,7 +234,7 @@ const clientiRaggruppati = computed(() => {
     else if (st === 'ORDER_REQ') gruppi[nomeReale].priorita = Math.max(gruppi[nomeReale].priorita, 2);
     else if (st === 'SIGNED') gruppi[nomeReale].priorita = Math.max(gruppi[nomeReale].priorita, 1);
 
-    if (st !== 'DRAFT' && st !== 'REJECTED') {
+    if (st !== 'DRAFT') {
       gruppi[nomeReale].preventivi.push(p);
       gruppi[nomeReale].totaleValore += (p.totaleScontato || p.totale || 0);
     }
@@ -212,24 +246,19 @@ const clientiRaggruppati = computed(() => {
 });
 
 // --- RAGGRUPPAMENTO PER STATO ---
-const ordineStati = ['PENDING_VAL', 'ORDER_REQ', 'WAITING_SIGN', 'SIGNED', 'IN_PRODUZIONE', 'READY', 'DRAFT', 'REJECTED'];
-
-// Replace the preventiviPerStato computed property with this fixed version:
+const ordineStati = ['PENDING_VAL', 'QUOTE_READY', 'ORDER_REQ', 'WAITING_SIGN', 'SIGNED', 'IN_PRODUZIONE', 'READY', 'DRAFT', 'REJECTED'];
 
 const preventiviPerStato = computed(() => {
   const gruppi: Record<string, any[]> = {};
   ordineStati.forEach(st => gruppi[st] = []);
 
   preventiviFiltrati.value.forEach(p => {
-    if (p.stato === 'QUOTE_READY') return;
-
     let st = p.stato || 'DRAFT';
     if(st === 'IN_ATTESA') st = 'PENDING_VAL';
     if(st === 'RICHIESTA_ORDINE') st = 'ORDER_REQ';
     if(st === 'ATTESA_FIRMA') st = 'WAITING_SIGN';
     if(st === 'WAITING_FAST') st = 'WAITING_SIGN';
 
-    // FIX: Initialize array if it doesn't exist before pushing
     if (!gruppi[st]) {
       gruppi[st] = [];
     }
@@ -260,19 +289,19 @@ const getActionData = (p: any) => {
   const st = p.stato;
   
   if (st === 'PENDING_VAL') 
-    return { text: 'CONTROLLA E ACCETTA', class: 'text-orange-500 bg-orange-100 border-orange-200 hover:bg-orange-100 animate-pulse', action: () => apriEditor(p.codice), icon: PencilIcon };
+    return { text: 'QUOTA E ACCETTA', class: 'text-orange-500 bg-orange-100 border-orange-200 hover:bg-orange-100 animate-pulse', action: () => apriEditor(p.codice), icon: PencilIcon };
   
   if (st === 'ORDER_REQ') 
     return { text: 'CONTROLLA E ACCETTA', class: 'text-cyan-600 bg-cyan-50 border-cyan-200 hover:bg-cyan-100 animate-pulse', action: () => apriEditor(p.codice), icon: PencilIcon };
 
   if (st === 'SIGNED')
-    return { text: 'AVVIA PRODUZIONE', class: 'text-amber-900 border-amber-200 bg-amber-100  hover:bg-amber-200', action: () => confermaProduzione(p), icon: CogIcon };
+    return { text: 'AVVIA PRODUZIONE', class: 'text-emerald-500 border-emerald-200 bg-emerald-100  hover:bg-emerald-200', action: () => confermaProduzione(p), icon: CogIcon };
     
   if (st === 'WAITING_SIGN' || st === 'WAITING_FAST')
     return { text: 'APRI', class: 'border border-gray-300 text-gray-600 px-4 py-2 rounded-lg font-bold text-xs hover:bg-gray-50', action: () => apriEditor(p.codice), icon: EyeIcon };
 
   if (st === 'IN_PRODUZIONE')
-    return { text: 'ORDINE PRONTO', class: 'bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-200', action: () => ordinePronto(p), icon: CubeIcon };
+    return { text: 'ORDINE PRONTO', class: 'text-emerald-500 border-emerald-200 bg-emerald-100  hover:bg-emerald-200', action: () => ordinePronto(p), icon: CubeIcon };
   
   if (st === 'READY')
     return { text: 'APRI', class: 'border border-gray-300 text-gray-600 px-4 py-2 rounded-lg font-bold text-xs hover:bg-gray-50', action: () => apriEditor(p.codice), icon: EyeIcon };
@@ -301,10 +330,13 @@ const formatDate = (seconds: number) => seconds ? new Date(seconds * 1000).toLoc
 const raggruppaPreventiviClientePerStato = (preventivi: any[]) => {
   const gruppi: Record<string, any[]> = {};
   preventivi.forEach(p => {
-    const st = p.stato || 'DRAFT';
+    let st = p.stato || 'DRAFT';
+    if (st === 'WAITING_FAST') st = 'WAITING_SIGN'; 
+
     if (!gruppi[st]) gruppi[st] = [];
     gruppi[st]!.push(p);
   });
+  
   return ordineStati
     .filter(st => gruppi[st] && gruppi[st].length > 0)
     .map(st => ({ stato: st, lista: gruppi[st] }));
@@ -313,32 +345,33 @@ const raggruppaPreventiviClientePerStato = (preventivi: any[]) => {
 onMounted(() => {
   caricaAnagrafica();
   caricaTutti();
-  refreshInterval = setInterval(caricaTutti, 60000);
 });
 
 onUnmounted(() => {
-  if (refreshInterval) clearInterval(refreshInterval);
+  if (unsubscribe) {
+    unsubscribe();
+  }
 });
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50 p-6 font-sans text-gray-700">
+  <div class="min-h-screen bg-gray-50/90 p-6 font-sans text-gray-700">
     <div class="max-w-7xl mx-auto">
 
       <div class="flex justify-between items-center mb-8">
         <div class="flex items-center gap-4">
           <div>
-            <h1 class="text-2xl md:text-3xl font-bold text-gray-900 font-heading tracking-tight">Dashboard Inglesina Italiana</h1>
-            <p class="text-gray-500 text-sm">Panoramica operativa</p>
+            <p class="text-lg font-medium text-gray-800 leading-none">Dashboard POP</p>
+            <h1 class="text-4xl font-bold font-heading text-gray-900">Inglesina Italiana</h1>
           </div>
         </div>
-        <div class="flex items-center gap-3">
+        <div class="flex items-center gap-3"><br>
           <span class="text-xs text-gray-400 animate-pulse hidden md:block">Live Sync</span>
-          <button @click="caricaTutti" class="flex items-center gap-2 bg-white border border-gray-200 px-4 py-2 rounded-lg hover:bg-yellow-50 text-sm font-bold text-gray-700 transition-all shadow-sm hover:border-gray-300">
+          <button @click="caricaTutti" class="flex items-center gap-2 bg-white border border-gray-200 px-4 py-2 rounded-lg hover:bg-stone-100 text-sm font-bold text-gray-700 transition-all shadow-sm hover:border-gray-300">
             <ArrowPathIcon class="h-4 w-4" />
             Aggiorna
           </button>
-          <select v-model="filtroPeriodo" class="bg-white border border-gray-200 text-sm font-bold text-gray-700 rounded-lg px-3 py-2 outline-none focus:border-yellow-400 cursor-pointer shadow-sm">
+          <select v-model="filtroPeriodo" class="bg-white border border-gray-200 text-sm font-bold text-gray-700 rounded-lg px-3 py-2 outline-none hover:bg-stone-100 focus:border-yellow-400 cursor-pointer shadow-sm">
             <option value="TUTTO">Tutto</option>
             <option value="CORRENTE">Mese Corrente</option>
             <option value="SCORSO">Mese Scorso</option>
@@ -348,8 +381,8 @@ onUnmounted(() => {
 
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-emerald-100 cursor-pointer">
-          <div class="h-12 w-12 rounded-full flex items-center justify-center bg-emerald-100">
-            <CurrencyEuroIcon class="h-6 w-6 text-emerald-500" />
+          <div class="h-14 w-14 rounded-full flex items-center justify-center bg-yellow-100">
+            <CurrencyEuroIcon class="h-8 w-8 text-yellow-600" />
           </div>
           <div>
             <div class="text-xs font-bold text-gray-500 uppercase">Valore Ordini</div>
@@ -357,29 +390,29 @@ onUnmounted(() => {
           </div>
         </div>
         <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-orange-100 cursor-pointer">
-          <div class="h-12 w-12 rounded-full flex items-center justify-center bg-orange-100">
-            <ShieldExclamationIcon class="h-6 w-6 text-orange-500" />
+          <div class="h-14 w-14 rounded-full flex items-center justify-center bg-orange-100">
+            <PencilIcon class="h-8 w-8 text-orange-500" />
           </div>
           <div>
-            <div class="text-xs font-bold text-gray-400 uppercase">Nuovi Preventivi</div>
+            <div class="text-xs font-bold text-gray-400 uppercase">Preventivi da quotare</div>
             <div class="text-2xl font-bold text-gray-900">{{ globalStats.da_validare }}</div>
           </div>
         </div>
         <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-cyan-100 cursor-pointer">
-          <div class="h-12 w-12 rounded-full flex items-center justify-center bg-cyan-100">
-            <ShoppingCartIcon class="h-6 w-6 text-cyan-500" />
+          <div class="h-14 w-14 rounded-full flex items-center justify-center bg-cyan-100">
+            <ShoppingCartIcon class="h-8 w-8 text-cyan-500" />
           </div>
           <div>
-            <div class="text-xs font-bold text-gray-400 uppercase">Nuovi Ordini</div>
+            <div class="text-xs font-bold text-gray-400 uppercase">Ordini da accettare</div>
             <div class="text-2xl font-bold text-gray-900">{{ globalStats.richieste_ord }}</div>
           </div>
         </div>
         <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-yellow-100 cursor-pointer">
-          <div class="h-12 w-12 rounded-full flex items-center justify-center bg-yellow-100">
-            <PaperAirplaneIcon class="h-6 w-6 text-yellow-500" />
+          <div class="h-14 w-14 rounded-full flex items-center justify-center bg-emerald-100">
+            <ChevronDoubleRightIcon class="h-8 w-8 text-emerald-800" />
           </div>
           <div>
-            <div class="text-xs font-bold text-gray-400 uppercase">Nuovi Prodotti</div>
+            <div class="text-xs font-bold text-gray-400 uppercase">Da mettere in produzione</div>
             <div class="text-2xl font-bold text-gray-900">{{ globalStats.signed }}</div>
           </div>
         </div>
@@ -388,17 +421,30 @@ onUnmounted(() => {
       <div class="flex flex-col md:flex-row border-b border-gray-200 mb-6 justify-between items-end gap-4">
         
         <div class="flex overflow-x-auto">
-          <button @click="activeCategory = 'PREVENTIVI'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative whitespace-nowrap" :class="activeCategory === 'PREVENTIVI' ? 'text-gray-900 border-b-4 border-yellow-400' : 'text-gray-400 hover:text-gray-600'">
+          <button @click="activeCategory = 'PREVENTIVI'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative whitespace-nowrap flex items-center gap-2" :class="activeCategory === 'PREVENTIVI' ? 'text-gray-900 border-b-4 border-orange-400' : 'text-gray-400 hover:text-gray-600'">
+            <PencilIcon class="h-4 w-4" />
             PREVENTIVI
             <span v-if="categoryCounts.PREVENTIVI" class="ml-2 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[10px] border">{{ categoryCounts.PREVENTIVI }}</span>
           </button>
-          <button @click="activeCategory = 'ORDINI'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative whitespace-nowrap" :class="activeCategory === 'ORDINI' ? 'text-gray-900 border-b-4 border-yellow-400' : 'text-gray-400 hover:text-gray-600'">
+          <button @click="activeCategory = 'ORDINI'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative whitespace-nowrap flex items-center gap-2" :class="activeCategory === 'ORDINI' ? 'text-gray-900 border-b-4 border-cyan-400' : 'text-gray-400 hover:text-gray-600'">
+            <ShoppingCartIcon class="h-4 w-4" />
             ORDINI
             <span v-if="categoryCounts.ORDINI" class="ml-2 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[10px] border">{{ categoryCounts.ORDINI }}</span>
           </button>
-          <button @click="activeCategory = 'PRODUZIONE'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative whitespace-nowrap" :class="activeCategory === 'PRODUZIONE' ? 'text-gray-900 border-b-4 border-yellow-400' : 'text-gray-400 hover:text-gray-600'">
+          <button @click="activeCategory = 'PRODUZIONE'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative whitespace-nowrap flex items-center gap-2" :class="activeCategory === 'PRODUZIONE' ? 'text-gray-900 border-b-4 border-emerald-400' : 'text-gray-400 hover:text-gray-600'">
+            <CogIcon class="h-4 w-4" />
             PRODUZIONE
             <span v-if="categoryCounts.PRODUZIONE" class="ml-2 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[10px] border">{{ categoryCounts.PRODUZIONE }}</span>
+          </button>
+           <button @click="activeCategory = 'SPEDIZIONI'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative whitespace-nowrap flex items-center gap-2" :class="activeCategory === 'SPEDIZIONI' ? 'text-gray-900 border-b-4 border-yellow-400' : 'text-gray-400 hover:text-gray-600'">
+            <TruckIcon class="h-4 w-4" />
+            SPEDIZIONI
+            <span v-if="categoryCounts.SPEDIZIONI" class="ml-2 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[10px] border">{{ categoryCounts.SPEDIZIONI }}</span>
+          </button>
+          <button @click="activeCategory = 'ARCHIVIO'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative whitespace-nowrap flex items-center gap-2" :class="activeCategory === 'ARCHIVIO' ? 'text-gray-900 border-b-4 border-stone-400' : 'text-gray-400 hover:text-gray-600'">
+            <ArchiveBoxIcon class="h-4 w-4" />
+            ARCHIVIO
+            <span v-if="categoryCounts.ARCHIVIO" class="ml-2 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[10px] border">{{ categoryCounts.ARCHIVIO }}</span>
           </button>
         </div>
 
@@ -506,9 +552,22 @@ onUnmounted(() => {
         <div v-for="gruppo in preventiviPerStato" :key="gruppo.stato" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
 
           <div @click="toggleStato(gruppo.stato)" class="p-4 cursor-pointer hover:bg-gray-50 flex justify-between items-center border-l-4" :class="getStatusStyling(gruppo.stato).badge.replace('text-','border-').split(' ')[0]">
+            
             <div class="flex items-center gap-3">
-              <span class="font-bold font-heading text-sm uppercase" :class="getStatusStyling(gruppo.stato).badge.split(' ')[1]">{{ getStatusLabel(gruppo.stato) }}</span>
-              <span class="px-2 py-0.5 rounded-full text-xs font-bold" :class="getUiConfig(gruppo.stato).darkBadge">{{ gruppo.lista?.length || 0 }}</span>            </div>
+                <component 
+                    :is="getStatusStyling(gruppo.stato).icon" 
+                    class="h-8 w-8" 
+                    :class="getStatusStyling(gruppo.stato).badge.split(' ')[1]" 
+                />
+
+              <span class="font-bold font-heading text-l uppercase" :class="getStatusStyling(gruppo.stato).badge.split(' ')[1]">
+                {{ getStatusLabel(gruppo.stato) }}
+              </span>
+              
+              <span class="px-2 py-0.5 rounded-full text-xs font-bold" :class="getUiConfig(gruppo.stato).darkBadge">
+                {{ gruppo.lista?.length || 0 }}
+              </span>            
+            </div>
             <div class="text-current transform transition-transform" :class="statiEspansi.includes(gruppo.stato) ? 'rotate-180' : ''">▼</div>
           </div>
 
@@ -521,10 +580,10 @@ onUnmounted(() => {
                 </div>
                 <div>
                   <div class="flex items-center gap-2">
-                    <h3 class="font-bold text-gray-900">{{ p.commessa || 'Senza Nome' }}</h3>
-                    <span class="text-xs text-gray-500"> - {{ p.cliente }}</span>
+                    <h3 class="font-bold text-gray-900">{{ p.cliente }}</h3>
+                    <p class="text-xs text-gray-500">• {{ formatDate(p.dataCreazione?.seconds) }}</p>
+                    <span class="text-xs text-gray-500">• Rif. {{ p.commessa || 'Senza Nome' }}</span>
                   </div>
-                  <p class="text-xs text-gray-500 font-mono">Cod: {{ p.codice }} • {{ formatDate(p.dataCreazione?.seconds) }}</p>
                   <div v-if="p.sommarioPreventivo" class="mt-2 flex flex-wrap gap-2">
                     <span v-for="(item, idx) in p.sommarioPreventivo" :key="idx" class="text-[10px] bg-gray-50 px-2 py-1 rounded border text-gray-600">
                       <strong>{{ item.quantitaTotale }}x</strong> {{ item.descrizione }}

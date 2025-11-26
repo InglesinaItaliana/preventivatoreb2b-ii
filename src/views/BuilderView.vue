@@ -15,8 +15,10 @@ import { STATUS_DETAILS } from '../types';
 import {
   RectangleStackIcon,
   PlusIcon,
+  PlusCircleIcon,
   ChevronLeftIcon,
   InformationCircleIcon, 
+  MagnifyingGlassCircleIcon,
 } from '@heroicons/vue/24/solid'
 
 const toastMessage = ref('');
@@ -294,13 +296,30 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
       elementi: preventivo.value.map(r => ({ ...r }))
       };
 
-    // 2. ASSEGNAZIONE UID (SOLO SE È UN NUOVO PREVENTIVO)
-    if (!currentDocId.value) {
-      // Siamo in fase di CREAZIONE (fatta dal Cliente)
+    // 2. LOGICA UID / CREAZIONE
+    // Se è un NUOVO preventivo (non ha ID) E NON lo sta creando l'admin (lo crea il cliente)
+    if (!currentDocId.value && !isAdmin.value) {
       docData.dataCreazione = serverTimestamp();
-      docData.uid = auth.currentUser?.uid;         // Salva l'autore (Cliente)
-      docData.clienteUID = auth.currentUser?.uid;  // Salva l'autore (Cliente)
+      
+      // Assegna la proprietà solo se è il cliente a crearlo
+      const user = auth.currentUser;
+      if (user) {
+          docData.uid = user.uid;
+          docData.clienteUID = user.uid;
+          // Se è un nuovo preventivo, l'email è quella dell'utente corrente
+          docData.clienteEmail = user.email; 
+      }
     } 
+    
+    // Se è l'ADMIN a creare un NUOVO preventivo (opzionale, ma utile per chiarezza)
+    if (!currentDocId.value && isAdmin.value) {
+        docData.dataCreazione = serverTimestamp();
+        // L'admin crea per conto terzi? O per se stesso?
+        // Di solito si lascia null o si mette un flag 'creatoDaAdmin'
+        docData.uid = null; // Nessun proprietario "cliente" specifico ancora
+        docData.clienteUID = null;
+    }
+
     // Se siamo in fase di MODIFICA (fatta dall'Admin), questi campi NON vengono toccati
     // e rimangono quelli originali del database.
 
@@ -359,6 +378,7 @@ const caricaPreventivo = async () => {
     codiceRicerca.value = d.codice;
     nomeCliente.value = d.cliente;
     riferimentoCommessa.value = d.commessa;
+    clienteEmail.value = d.clienteEmail || '';
     statoCorrente.value = d.stato || 'DRAFT';
     noteCliente.value = d.noteCliente || '';
     scontoApplicato.value = d.scontoPercentuale || 0;
@@ -444,7 +464,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50 pb-20 font-sans">
+  <div class="min-h-screen bg-gray-50/90 pb-20 font-sans">
 
     <header class="bg-white shadow-sm p-4 sticky top-0 z-30 border-b border-gray-200">
       <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
@@ -464,24 +484,18 @@ onMounted(() => {
           <button 
             v-if="!isAdmin"
             @click="nuovaCommessa" 
-            class="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg font-bold text-xs uppercase shadow-sm flex items-center gap-2 transition-all">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" class="w-4 h-4">
-              <path fill-rule="evenodd" d="M12 3.75a.75.75 0 01.75.75v6.75h6.75a.75.75 0 010 1.5h-6.75v6.75a.75.75 0 01-1.5 0v-6.75H4.5a.75.75 0 010-1.5h6.75V4.5a.75.75 0 01.75-.75z" clip-rule="evenodd" />
-            </svg>
-            Nuovo
+            class="bg-yellow-400 hover:bg-yellow-300 text-black px-6 py-3 rounded-lg font-bold shadow-md flex items-center gap-2 transition-transform active:scale-95">
+            <PlusCircleIcon class="h-7 w-7 text-black" />
+            NUOVO
           </button>
           
           <button 
             v-if="!isAdmin" 
             @click="mostraStorico = true" 
-            class="bg-white hover:bg-gray-50 text-gray-700 border border-gray-300 px-4 py-2 rounded-lg font-bold text-xs uppercase shadow-sm flex items-center gap-2 transition-all">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="currentColor" viewBox="0 0 24 24" class="w-4 h-4">
-              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-13a.75.75 0 00-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 000-1.5h-3.25V5z" clip-rule="evenodd" />
-            </svg>
-            Storico
+            class="bg-stone-100 hover:bg-stone-50 text-black px-6 py-3 rounded-lg font-bold shadow-md flex items-center gap-2 transition-transform active:scale-95">
+            <MagnifyingGlassCircleIcon class="h-7 w-7 text-black" />
+            STORICO
           </button>
-          <img src="/logo.svg" class="h-8 w-auto" alt="Logo" />
-
         </div>
       </div>
     </header>
@@ -721,6 +735,7 @@ onMounted(() => {
                 <th class="p-3 pl-5">Articolo</th>
                 <th class="p-3 text-center">Q.tà</th>
                 <th class="p-3">Misure</th>
+                <th class="p-3 text-center">Griglia</th>
                 <th class="p-3 text-center">Opzioni</th>
                 <th class="p-3 text-right">Totale</th>
                 <th class="p-3 text-right w-16">Azioni</th>
@@ -735,8 +750,10 @@ onMounted(() => {
                   </div>
                 </td>
                 <td class="p-3 text-center"><span class="bg-gray-100 text-gray-700 font-bold px-2 py-1 rounded text-xs">{{ r.quantita }}</span></td>
-                <td class="p-3 text-gray-600 text-xs font-mono">{{ r.base_mm }} x {{ r.altezza_mm }}</td>
-
+                <td class="p-3 text-gray-600 text-xs">{{ r.base_mm }} x {{ r.altezza_mm }}</td>
+                <td class="p-3 text-center text-xs text-gray-600">
+                  {{ r.righe }} x {{ r.colonne }}
+                </td>
                 <td class="p-3 text-center">
                   <div class="flex justify-center gap-1 flex-wrap max-w-[100px] mx-auto">
                     <span v-if="r.nonEquidistanti" class="px-1.5 py-0.5 rounded bg-teal-100 text-teal-700 text-[9px] font-bold border border-teal-200">Non Eq.</span>

@@ -244,7 +244,7 @@ const handleProductionConfirm = () => emit('confirmProduction');
             </button>
           </div>
           <table class="w-full text-left text-sm">
-            <thead class="bg-gray-50 text-gray-500 text-[10px] uppercase font-bold"><tr><th class="px-4 py-2 text-center w-16">Q.tà</th><th class="px-4 py-2">Base (mm)</th><th class="px-4 py-2">Altezza (mm)</th><th class="px-4 py-2 text-center">Righe</th><th class="px-4 py-2 text-center">Colonne</th></tr></thead>
+            <thead class="bg-gray-50 text-gray-500 text-[10px] uppercase font-bold"><tr><th class="px-4 py-2 text-center w-16">Q.tà</th><th class="px-4 py-2">Base (mm)</th><th class="px-4 py-2">Altezza (mm)</th><th class="px-4 py-2 text-center">Verticali</th><th class="px-4 py-2 text-center">Orizzontali</th></tr></thead>
             <tbody class="divide-y divide-gray-100">
               <tr v-for="item in items" :key="item.id"><td class="px-4 py-2 text-center font-bold">{{ item.quantita }}</td><td class="px-4 py-2 font-mono">{{ item.base_mm }}</td><td class="px-4 py-2 font-mono">{{ item.altezza_mm }}</td><td class="px-4 py-2 text-center">{{ item.righe || 0 }}</td><td class="px-4 py-2 text-center">{{ item.colonne || 0 }}</td></tr>
             </tbody>
