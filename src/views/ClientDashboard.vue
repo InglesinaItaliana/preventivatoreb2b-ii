@@ -280,7 +280,7 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
       <div class="flex flex-col md:flex-row justify-between items-end mb-8 gap-4">
         <div class="flex items-center gap-4">
           <div>
-            <p class="text-lg font-medium text-gray-800 leading-none">Dashboard POP</p>
+            <p class="text-lg font-medium text-gray-800 leading-none">P.O.P.S. Dashboard</p>
             <h1 class="text-4xl font-bold font-heading text-gray-900">{{ clientName }}</h1><br>
             <button @click="vaiAlBuilder()" class="bg-yellow-400 hover:bg-yellow-300 text-black px-6 py-3 rounded-lg font-bold shadow-md flex items-center gap-2 transition-transform active:scale-95">
             <PlusCircleIcon class="h-7 w-7 text-black" />
@@ -292,31 +292,31 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
 
       <div class="flex overflow-x-auto border-b border-gray-200 mb-6 gap-2">
         
-        <button @click="activeTab = 'PREVENTIVI'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative flex items-center gap-2 whitespace-nowrap" :class="activeTab === 'PREVENTIVI' ? 'text-orange-600 border-b-4 border-orange-400' : 'text-gray-400 hover:text-gray-600'">
+        <button @click="activeTab = 'PREVENTIVI'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative flex items-center gap-2 whitespace-nowrap" :class="activeTab === 'PREVENTIVI' ? 'text-gray-600 border-b-4 border-yellow-400' : 'text-gray-400 hover:text-gray-600'">
           <DocumentTextIcon class="h-4 w-4" />
           PREVENTIVI
           <span v-if="preventiviInCorso.length" class="ml-2 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[10px]">{{ preventiviInCorso.length }}</span>
         </button>
         
-        <button @click="activeTab = 'ORDINI'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative flex items-center gap-2 whitespace-nowrap" :class="activeTab === 'ORDINI' ? 'text-blue-600 border-b-4 border-blue-400' : 'text-gray-400 hover:text-gray-600'">
+        <button @click="activeTab = 'ORDINI'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative flex items-center gap-2 whitespace-nowrap" :class="activeTab === 'ORDINI' ? 'text-gray-600 border-b-4 border-yellow-400' : 'text-gray-400 hover:text-gray-600'">
           <ShoppingCartIcon class="h-4 w-4" />
           ORDINI
           <span v-if="ordiniConfermati.length" class="ml-2 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[10px]">{{ ordiniConfermati.length }}</span>
         </button>
         
-        <button @click="activeTab = 'PRODUZIONE'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative flex items-center gap-2 whitespace-nowrap" :class="activeTab === 'PRODUZIONE' ? 'text-emerald-600 border-b-4 border-emerald-400' : 'text-gray-400 hover:text-gray-600'">
+        <button @click="activeTab = 'PRODUZIONE'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative flex items-center gap-2 whitespace-nowrap" :class="activeTab === 'PRODUZIONE' ? 'text-gray-600 border-b-4 border-yellow-400' : 'text-gray-400 hover:text-gray-600'">
           <CogIcon class="h-4 w-4" />
           PRODUZIONE
           <span v-if="ordiniInProduzione.length" class="ml-2 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[10px]">{{ ordiniInProduzione.length }}</span>
         </button>
 
-        <button @click="activeTab = 'SPEDIZIONI'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative flex items-center gap-2 whitespace-nowrap" :class="activeTab === 'SPEDIZIONI' ? 'text-yellow-600 border-b-4 border-yellow-400' : 'text-gray-400 hover:text-gray-600'">
+        <button @click="activeTab = 'SPEDIZIONI'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative flex items-center gap-2 whitespace-nowrap" :class="activeTab === 'SPEDIZIONI' ? 'text-gray-600 border-b-4 border-yellow-400' : 'text-gray-400 hover:text-gray-600'">
           <TruckIcon class="h-4 w-4" />
           SPEDIZIONI
           <span v-if="ordiniSpediti.length" class="ml-2 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[10px]">{{ ordiniSpediti.length }}</span>
         </button>
 
-        <button @click="activeTab = 'ARCHIVIO'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative flex items-center gap-2 whitespace-nowrap" :class="activeTab === 'ARCHIVIO' ? 'text-stone-600 border-b-4 border-stone-400' : 'text-gray-400 hover:text-gray-600'">
+        <button @click="activeTab = 'ARCHIVIO'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative flex items-center gap-2 whitespace-nowrap" :class="activeTab === 'ARCHIVIO' ? 'text-stone-600 border-b-4 border-yellow-400' : 'text-gray-400 hover:text-gray-600'">
           <ArchiveBoxIcon class="h-4 w-4" />
           ARCHIVIO
           <span v-if="archivioPreventivi.length" class="ml-2 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[10px]">{{ archivioPreventivi.length }}</span>
@@ -333,8 +333,8 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
             <p class="text-gray-500 mb-4">Non hai preventivi aperti al momento.</p>
             <button @click="vaiAlBuilder()" class="text-blue-600 font-bold underline">Inizia ora</button>
           </div>
-          <div v-for="p in preventiviInCorso" :key="p.id" class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-all flex flex-col md:flex-row justify-between items-center gap-4">
-            <div class="flex items-center gap-4 w-full md:w-auto">
+          <div v-for="p in preventiviInCorso" :key="p.id" 
+          class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all flex flex-col md:flex-row justify-between items-center gap-4 cursor-pointer">            <div class="flex items-center gap-4 w-full md:w-auto">
               <div class="h-14 w-14 rounded-full flex items-center justify-center shrink-0" :class="getStatusStyling(p.stato).iconBg">
                 <component :is="getStatusStyling(p.stato).icon" class="w-8 h-8" />
               </div>
@@ -385,7 +385,8 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
           <div v-if="ordiniConfermati.length === 0" class="text-center py-20 bg-white rounded-xl border border-dashed border-gray-300">
             <p class="text-gray-500">Nessun ordine in attesa.</p>
           </div>
-          <div v-for="p in ordiniConfermati" :key="p.id" class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-all flex flex-col md:flex-row justify-between items-center gap-4">
+          <div v-for="p in ordiniConfermati" :key="p.id" 
+          class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all flex flex-col md:flex-row justify-between items-center gap-4 cursor-pointer">
             <div class="flex items-center gap-4 w-full md:w-auto">
               <div class="h-14 w-14 rounded-full flex items-center justify-center shrink-0" :class="getStatusStyling(p.stato).iconBg">
                 <component :is="getStatusStyling(p.stato).icon" class="w-8 h-8" />
@@ -443,7 +444,8 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
           <div v-if="ordiniInProduzione.length === 0" class="text-center py-20 bg-white rounded-xl border border-dashed border-gray-300">
             <p class="text-gray-500">Nessun ordine in produzione.</p>
           </div>
-          <div v-else v-for="p in ordiniInProduzione" :key="p.id" class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-all flex flex-col md:flex-row justify-between items-center gap-4">
+          <div v-else v-for="p in ordiniInProduzione" :key="p.id" 
+          class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all flex flex-col md:flex-row justify-between items-center gap-4 cursor-pointer">
             <div class="flex items-center gap-4 w-full md:w-auto">
               <div class="h-14 w-14 rounded-full flex items-center justify-center shrink-0" :class="getStatusStyling(p.stato).iconBg">
                 <component :is="getStatusStyling(p.stato).icon" class="w-8 h-8" />
@@ -478,7 +480,8 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
           <div v-if="ordiniSpediti.length === 0" class="text-center py-20 bg-white rounded-xl border border-dashed border-gray-300">
             <p class="text-gray-500">Nessuna spedizione pronta.</p>
           </div>
-          <div v-else v-for="p in ordiniSpediti" :key="p.id" class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-all flex flex-col md:flex-row justify-between items-center gap-4">
+          <div v-else v-for="p in ordiniSpediti" :key="p.id" 
+          class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all flex flex-col md:flex-row justify-between items-center gap-4 cursor-pointer">
             <div class="flex items-center gap-4 w-full md:w-auto">
               <div class="h-14 w-14 rounded-full flex items-center justify-center shrink-0" :class="getStatusStyling(p.stato).iconBg">
                 <component :is="getStatusStyling(p.stato).icon" class="w-8 h-8" />
@@ -513,7 +516,7 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
           <div v-if="archivioPreventivi.length === 0" class="text-center py-20 bg-white rounded-xl border border-dashed border-gray-300">
             <p class="text-gray-500">Nessun elemento archiviato.</p>
           </div>
-          <div v-else v-for="p in archivioPreventivi" :key="p.id" class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 hover:shadow-md transition-all flex flex-col md:flex-row justify-between items-center gap-4 opacity-75 hover:opacity-100">
+          <div v-else v-for="p in archivioPreventivi" :key="p.id" class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all flex flex-col md:flex-row justify-between items-center gap-4 cursor-pointer">
             <div class="flex items-center gap-4 w-full md:w-auto">
               <div class="h-14 w-14 rounded-full flex items-center justify-center shrink-0" :class="getStatusStyling(p.stato).iconBg">
                 <component :is="getStatusStyling(p.stato).icon" class="w-8 h-8" />

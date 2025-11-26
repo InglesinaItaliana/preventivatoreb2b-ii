@@ -498,43 +498,40 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50/90 pb-20 font-sans">
+  <div class="min-h-screen bg-gray-50/90 font-sans">
 
-    <header class="bg-white shadow-sm p-4 sticky top-0 z-30 border-b border-gray-200">
-      <div class="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-        <div class="flex items-center gap-1">
-          <button @click="vaiDashboard" class="text-gray-400 hover:text-gray-700 transition-colors p-2 rounded-full hover:bg-gray-100" title="Torna alla Dashboard">
-            <ChevronLeftIcon class="h-5 w-5 text-yellow-500" />         
+    <main class="max-w-5xl mx-auto p-4 flex flex-col gap-6 mt-4">
+      <div class="flex flex-col md:flex-row justify-between items-end mb-8 gap-4">
+      <div class="flex items-center gap-4">
+        <button @click="vaiDashboard" class="text-gray-400 hover:text-gray-700 transition-colors p-2 rounded-full hover:bg-gray-100 self-center" title="Torna alla Dashboard">
+          <ChevronLeftIcon class="h-8 w-8 text-yellow-500" />         
         </button>
 
-          <div class="pl-3 border-l border-gray-300">
-            <div class="font-bold text-xl font-heading leading-none text-gray-800">Creazione PREVENTIVI e ORDINI</div>
-            <div class="text-xs text-gray-500 font-medium uppercase tracking-wide mt-0.5">{{ nomeCliente }}</div>
+        <div>
+          <p class="text-lg font-medium text-gray-800 leading-none">P.O.P.S. Commesse</p>
+          <h1 class="text-4xl font-bold font-heading text-gray-900">{{ nomeCliente }}</h1>
+          <br>
+          
+          <div class="flex items-center gap-3">
+            <button 
+              v-if="!isAdmin"
+              @click="nuovaCommessa" 
+              class="bg-yellow-400 hover:bg-yellow-300 text-black px-6 py-3 rounded-lg font-bold shadow-md flex items-center gap-2 transition-transform active:scale-95">
+              <PlusCircleIcon class="h-7 w-7 text-black" />
+              NUOVO
+            </button>
+            
+            <button 
+              v-if="!isAdmin" 
+              @click="mostraStorico = true" 
+              class="bg-stone-100 hover:bg-stone-50 text-black px-6 py-3 rounded-lg font-bold shadow-md flex items-center gap-2 transition-transform active:scale-95">
+              <MagnifyingGlassCircleIcon class="h-7 w-7 text-black" />
+              STORICO
+            </button>
           </div>
         </div>
-
-        <div class="flex items-center gap-3">
-          
-          <button 
-            v-if="!isAdmin"
-            @click="nuovaCommessa" 
-            class="bg-yellow-200 hover:bg-yellow-300 text-yellow-600 px-6 py-3 rounded-lg font-bold shadow-md flex items-center gap-2 transition-transform active:scale-95">
-            <PlusCircleIcon class="h-7 w-7 text-yellow-600" />
-            NUOVO
-          </button>
-          
-          <button 
-            v-if="!isAdmin" 
-            @click="mostraStorico = true" 
-            class="bg-stone-100 hover:bg-stone-50 text-black px-6 py-3 rounded-lg font-bold shadow-md flex items-center gap-2 transition-transform active:scale-95">
-            <MagnifyingGlassCircleIcon class="h-7 w-7 text-black" />
-            STORICO
-          </button>
-        </div>
       </div>
-    </header>
-
-    <main class="max-w-7xl mx-auto p-4 flex flex-col gap-6 mt-4">
+    </div>
       <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
         <h2 class="font-bold text-lg font-heading border-b pb-2 mb-4 flex items-center gap-2 text-gray-800">
           Dati Commessa
