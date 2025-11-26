@@ -1,10 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
-import { jsPDF } from "jspdf";
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage } from '../firebase';
 import { 
-  CheckCircleIcon, DocumentTextIcon, CloudArrowUpIcon, CogIcon, ClipboardDocumentIcon, ClipboardDocumentCheckIcon 
+  CheckCircleIcon, DocumentTextIcon, CloudArrowUpIcon, CogIcon, ClipboardDocumentIcon, ClipboardDocumentCheckIcon, EyeIcon 
 } from '@heroicons/vue/24/solid';
 
 const props = defineProps<{
@@ -14,8 +13,10 @@ const props = defineProps<{
   clientName: string;
 }>();
 
-const emit = defineEmits(['close', 'confirmFast', 'confirmSign', 'confirmProduction']);
+// AGGIUNTO 'error' AGLI EMITS
+const emit = defineEmits(['close', 'confirmFast', 'confirmSign', 'confirmProduction', 'error']);
 
+// ... (Variabili di stato invariate: legalCheck1, etc.) ...
 // STATO INTERNO
 const legalCheck1 = ref(false);
 const legalCheck2 = ref(false);
@@ -43,42 +44,20 @@ const handleFastConfirm = async () => {
   isConfirming.value = false;
 };
 
-const downloadPdf = () => {
-  const doc = new jsPDF();
-  const p = props.order;
-  const tot = p.totaleScontato || p.totaleImponibile || p.totale || 0;
-
-  doc.setFontSize(20); doc.text("CONTRATTO DI FORNITURA", 20, 20);
-  doc.setFontSize(12); doc.text(`Rif: ${p.codice || '-'}`, 20, 30);
-  doc.text(`Cliente: ${props.clientName}`, 20, 40);
-  doc.text(`Commessa: ${p.commessa || '-'}`, 20, 50);
-
-  doc.line(20, 60, 190, 60);
-  let y = 70;
-  
-  const items = p.elementi || [];
-  items.slice(0, 15).forEach((el: any) => {
-    const desc = el.descrizioneCompleta || 'Articolo';
-    const dims = el.base_mm ? `(${el.base_mm}x${el.altezza_mm})` : '';
-    doc.text(`- ${el.quantita}x ${desc} ${dims}`, 20, y);
-    y += 8;
-  });
-
-  doc.setFontSize(14);
-  doc.text(`TOTALE: ${Number(tot).toFixed(2)} €`, 140, y + 10);
-
-  doc.setFontSize(10);
-  doc.text("Firma per accettazione:", 20, 250);
-  doc.line(20, 265, 100, 265);
-
-  doc.save(`Contratto_${p.codice || 'ordine'}.pdf`);
+// --- FUNZIONE MODIFICATA (NIENTE PIÙ ALERT) ---
+const openDocument = () => {
+  if (props.order?.fic_order_url) {
+    window.open(props.order.fic_order_url, '_blank');
+  } else {
+    // Invece di alert(), emettiamo l'errore al genitore
+    emit('error', 'Il documento non è ancora pronto o non è stato generato. Attendi qualche secondo e riprova.');
+  }
 };
 
 const handleUpload = async (event: Event) => {
   const target = event.target as HTMLInputElement;
   const files = target.files;
   
-  // FIX: TypeScript Check strict 
   if (!files || files.length === 0) return;
   const file = files[0];
   if (!file) return; 
@@ -91,7 +70,7 @@ const handleUpload = async (event: Event) => {
     uploadedUrl.value = await getDownloadURL(fileRef);
   } catch (e) {
     console.error(e);
-    alert("Errore caricamento file.");
+    emit('error', "Errore durante il caricamento del file.")
   } finally {
     isUploading.value = false;
   }
@@ -130,6 +109,7 @@ const handleProductionConfirm = () => emit('confirmProduction');
 
 <template>
   <div v-if="show" class="fixed inset-0 z-[999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+    
     <div v-if="mode === 'FAST'" class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 animate-in fade-in zoom-in duration-200">
       <div class="flex items-center gap-3 mb-4 text-blue-600">
         <CheckCircleIcon class="w-8 h-8" />
@@ -137,8 +117,15 @@ const handleProductionConfirm = () => emit('confirmProduction');
       </div>
       
       <div class="bg-blue-50 p-4 rounded-lg text-sm text-blue-800 mb-4 border border-blue-100">
-        <p>Ordine: <strong>{{ order?.codice }}</strong></p>
-        <p class="font-bold mt-1 text-lg">Totale: {{ (order?.totaleScontato || order?.totaleImponibile || 0).toFixed(2) }} €</p>
+        <div class="flex justify-between items-start">
+          <div>
+            <p>Ordine: <strong>{{ order?.codice }}</strong></p>
+            <p class="font-bold mt-1 text-lg">Totale: {{ (order?.totaleScontato || order?.totaleImponibile || 0).toFixed(2) }} €</p>
+          </div>
+          <button @click="openDocument" class="text-blue-600 hover:text-blue-800 flex items-center gap-1 text-xs font-bold border border-blue-200 bg-white px-2 py-1 rounded shadow-sm hover:bg-blue-50 transition-colors">
+            <EyeIcon class="w-3 h-3"/> VEDI DOC
+          </button>
+        </div>
       </div>
 
       <div class="space-y-4">
@@ -147,7 +134,7 @@ const handleProductionConfirm = () => emit('confirmProduction');
             <input type="checkbox" v-model="legalCheck1" class="peer h-5 w-5 cursor-pointer appearance-none rounded border border-gray-300 shadow-sm checked:border-blue-600 checked:bg-blue-600 hover:border-blue-400 focus:ring-blue-200">
             <svg class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-3.5 h-3.5 text-white opacity-0 peer-checked:opacity-100 pointer-events-none" viewBox="0 0 14 14" fill="none"><path d="M3 8L6 11L11 3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </div>
-          <span class="text-sm text-gray-700 group-hover:text-black transition-colors">Dichiaro di accettare l'ordine esattamente come descritto nel riepilogo.</span>
+          <span class="text-sm text-gray-700 group-hover:text-black transition-colors">Dichiaro di accettare l'ordine esattamente come descritto nel documento allegato.</span>
         </label>
         
         <label class="flex items-start gap-3 cursor-pointer group select-none">
@@ -179,13 +166,15 @@ const handleProductionConfirm = () => emit('confirmProduction');
       </div>
       <div class="p-6 space-y-6">
         <div class="bg-blue-50 border border-blue-100 p-4 rounded-lg text-sm text-blue-800">
-          Per procedere è necessario firmare il contratto.
+          Per procedere è necessario scaricare, firmare e ricaricare il contratto.
         </div>
 
         <div class="flex items-center gap-4 border p-3 rounded-lg hover:bg-gray-50 transition-colors">
           <div class="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center font-bold text-gray-600">1</div>
-          <div class="flex-1"><p class="text-sm font-bold text-gray-700">Scarica il Modulo PDF</p></div>
-          <button @click="downloadPdf" class="text-blue-600 font-bold text-sm underline hover:text-blue-800">Scarica</button>
+          <div class="flex-1"><p class="text-sm font-bold text-gray-700">Visualizza/Scarica Contratto</p></div>
+          <button @click="openDocument" class="text-blue-600 font-bold text-sm underline hover:text-blue-800 flex items-center gap-1">
+            <EyeIcon class="w-4 h-4"/> Apri
+          </button>
         </div>
 
         <div class="flex items-start gap-4">
@@ -225,6 +214,7 @@ const handleProductionConfirm = () => emit('confirmProduction');
         </button>
       </div>
     </div>
+
     <div v-if="mode === 'PRODUCTION'" class="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col animate-in fade-in zoom-in duration-200">
       <div class="bg-amber-100 p-5 text-amber-900 flex justify-between items-center shrink-0 rounded-t-xl">
         <h2 class="font-bold text-2xl flex items-center gap-2"><CogIcon class="w-10 h-10"/> Composizione Telai</h2>

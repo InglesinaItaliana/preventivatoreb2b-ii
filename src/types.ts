@@ -124,10 +124,10 @@ export const STATUS_DETAILS: Record<StatoPreventivo, { label: string, badge: str
   },
   'WAITING_FAST': { 
     label: 'ORDINI IN ATTESA FIRMA DEL CLIENTE', 
-    badge: 'bg-cyan-100 text-cyan-500 border-cyan-200', 
-    iconBg: 'bg-cyan-100 text-cyan-500', 
-    darkBadge: 'bg-cyan-500 text-cyan-100',
-    hoverBadge: 'hover:bg-cyan-200'
+    badge: 'bg-stone-200 text-stone-500 border-stone-200', 
+    iconBg: 'bg-stone-200 text-stone-500', 
+    darkBadge: 'bg-stone-500 text-stone-100',
+    hoverBadge: 'hover:bg-stone-200'
   },
   'WAITING_SIGN': { 
     label: 'ORDINI IN ATTESA FIRMA DEL CLIENTE', 

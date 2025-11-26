@@ -380,7 +380,7 @@ onUnmounted(() => {
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-emerald-100 cursor-pointer">
+        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-yellow-100 cursor-pointer">
           <div class="h-14 w-14 rounded-full flex items-center justify-center bg-yellow-100">
             <CurrencyEuroIcon class="h-8 w-8 text-yellow-600" />
           </div>
@@ -407,9 +407,9 @@ onUnmounted(() => {
             <div class="text-2xl font-bold text-gray-900">{{ globalStats.richieste_ord }}</div>
           </div>
         </div>
-        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-yellow-100 cursor-pointer">
+        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-emerald-100 cursor-pointer">
           <div class="h-14 w-14 rounded-full flex items-center justify-center bg-emerald-100">
-            <ChevronDoubleRightIcon class="h-8 w-8 text-emerald-800" />
+            <ChevronDoubleRightIcon class="h-8 w-8 text-emerald-500" />
           </div>
           <div>
             <div class="text-xs font-bold text-gray-400 uppercase">Da mettere in produzione</div>

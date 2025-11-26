@@ -14,11 +14,11 @@ import OrderModals from '../components/OrderModals.vue';
 import { STATUS_DETAILS } from '../types';
 import {
   RectangleStackIcon,
-  PlusIcon,
   PlusCircleIcon,
   ChevronLeftIcon,
   InformationCircleIcon, 
   MagnifyingGlassCircleIcon,
+  ShoppingCartIcon,
 } from '@heroicons/vue/24/solid'
 
 const toastMessage = ref('');
@@ -283,7 +283,7 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
       codice,
       cliente: nomeCliente.value,
       clienteEmail: clienteEmail.value,
-      commessa: riferimentoCommessa.value,
+      commessa: riferimentoCommessa.value.toUpperCase(),
       totaleImponibile: totaleImponibile.value,
       scontoPercentuale: scontoApplicato.value,
       totaleScontato: totaleFinale.value,
@@ -345,6 +345,35 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
 
   } catch (e) { alert("Errore salvataggio."); console.error(e); }
   finally { isSaving.value = false; }
+};
+
+const eliminaPreventivo = async () => {
+  if (!currentDocId.value) {
+    alert("Nessun preventivo selezionato da annullare.");
+    return;
+  }
+  if (!confirm("Sei sicuro di voler ELIMINARE questo preventivo?")) {
+    return;
+  }
+  try {
+    // Aggiorna lo stato su Firestore a REJECTED
+    await updateDoc(doc(db, 'preventivi', currentDocId.value), {
+      stato: 'REJECTED',
+      dataModifica: serverTimestamp(),
+    });
+    
+    // Aggiorna lo stato locale
+    statoCorrente.value = 'REJECTED';
+    showCustomToast("❌ Preventivo annullato e archiviato.");
+
+    // Reindirizza l'utente alla dashboard appropriata dopo l'annullamento
+    if (isAdmin.value) router.push('/admin');
+    else router.push('/dashboard');
+
+  } catch (e) {
+    console.error("Errore annullamento:", e);
+    alert("Errore durante l'annullamento del preventivo.");
+  }
 };
 
 const sbloccaPerModifica = () => {
@@ -459,7 +488,12 @@ onMounted(() => {
     }
   });
 
-  if(route.query.codice) { codiceRicerca.value = route.query.codice as string; setTimeout(caricaPreventivo, 1000); }
+  // CORREZIONE QUI SOTTO:
+  if(route.query.codice) { 
+    isSaving.value = true; // <--- QUESTO NASCONDE I PULSANTI SUBITO
+    codiceRicerca.value = route.query.codice as string; 
+    setTimeout(caricaPreventivo, 1000); 
+  }
 });
 </script>
 
@@ -484,8 +518,8 @@ onMounted(() => {
           <button 
             v-if="!isAdmin"
             @click="nuovaCommessa" 
-            class="bg-yellow-400 hover:bg-yellow-300 text-black px-6 py-3 rounded-lg font-bold shadow-md flex items-center gap-2 transition-transform active:scale-95">
-            <PlusCircleIcon class="h-7 w-7 text-black" />
+            class="bg-yellow-200 hover:bg-yellow-300 text-yellow-600 px-6 py-3 rounded-lg font-bold shadow-md flex items-center gap-2 transition-transform active:scale-95">
+            <PlusCircleIcon class="h-7 w-7 text-yellow-600" />
             NUOVO
           </button>
           
@@ -626,8 +660,8 @@ onMounted(() => {
             </label>
           </div>
 
-          <button @click="aggiungi" :disabled="!pannello.base || !pannello.altezza || !finituraGriglia || isLocked" class="w-full bg-yellow-400 hover:bg-yellow-500 text-black font-bold py-3 rounded-lg shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 transition-all flex justify-center items-center gap-2">
-            <PlusIcon class="h-5 w-5 text-black" />         
+          <button @click="aggiungi" :disabled="!pannello.base || !pannello.altezza || !finituraGriglia || isLocked" class="w-full bg-yellow-200 hover:bg-yellow-300 text-yellow-600 font-bold py-3 rounded-lg shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 transition-all flex justify-center items-center gap-2">
+            <PlusCircleIcon class="h-7 w-7 text-yellow-600" />         
             AGGIUNGI
           </button>
       </div>
@@ -635,7 +669,16 @@ onMounted(() => {
     </div>
       <div class="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col min-h-[600px] overflow-hidden">
 
-        <div class="p-6 bg-gray-900 text-white flex justify-between items-center">
+        <div v-if="isSaving" class="p-6 bg-gray-900 text-white flex justify-center items-center h-[120px]">
+          <span class="text-sm font-medium text-gray-400">Caricamento stato preventivo...</span>
+          <svg class="animate-spin h-5 w-5 text-yellow-400 ml-3" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+          </svg>
+        </div>
+
+        <div v-else class="p-6 bg-gray-900 text-white flex justify-between items-center">
+          
           <div class="space-y-1">
             <div class="text-xs text-gray-400 uppercase tracking-widest font-bold">Totale Ordine</div>
             <div class="flex items-baseline gap-3">
@@ -655,17 +698,16 @@ onMounted(() => {
 
           <div class="flex gap-3">
             <template v-if="isAdmin">
-              <div v-if="statoCorrente === 'ORDER_REQ'" class="flex flex-col items-end gap-1">
-                <span class="text-[10px] text-gray-400 uppercase font-bold">CONFERMA ORDINE COME:</span>
+              <div v-if="statoCorrente === 'ORDER_REQ'" class="flex items-center gap-6">
+                <span class="text-xl text-gray-400 uppercase font-bold">RICHIEDI CONFERMA D'ORDINE</span>
                 <div class="flex gap-2">
-                  <button @click="salvaPreventivo('ADMIN_VELOCE')" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded font-bold text-xs">VELOCE</button>
-                  <button @click="salvaPreventivo('ADMIN_FIRMA')" class="bg-yellow-600 hover:bg-yellow-500 text-black px-4 py-2 rounded font-bold text-xs">FIRMA</button>
+                  <button @click="salvaPreventivo('ADMIN_VELOCE')" class="bg-yellow-400 hover:bg-yellow-300 text-yellow-900 flex items-center px-12 py-3 rounded font-bold text-xl">VELOCE</button>
+                  <button @click="salvaPreventivo('ADMIN_FIRMA')" class="bg-blue-600 hover:bg-blue-500 text-blue-100 flex items-center px-12 py-3 rounded font-bold text-xl">FIRMA</button>
                 </div>
               </div>
               
               <div v-else-if="statoCorrente === 'PENDING_VAL' || statoCorrente === 'DRAFT'" class="flex gap-2">
-                <button @click="salvaPreventivo('ADMIN_RIFIUTA')" class="text-red-400 hover:text-red-300 font-bold px-4 text-sm">RIFIUTA</button>
-                <button @click="salvaPreventivo('ADMIN_VALIDA')" class="bg-green-600 hover:bg-green-500 text-white px-8 py-3 rounded-lg font-bold shadow-lg flex items-center gap-2">
+                <button @click="salvaPreventivo('ADMIN_VALIDA')" class="bg-yellow-400 hover:bg-yellow-300 text-yellow-900 flex items-center px-12 py-3 rounded font-bold text-xl">
                   VALIDA E INVIA
                 </button>
               </div>
@@ -682,8 +724,14 @@ onMounted(() => {
 
             <template v-else>
               <template v-if="statoCorrente === 'DRAFT'">
-                <button @click="salvaPreventivo()" class="text-gray-400 hover:text-white font-bold text-sm">SALVA PREVENTIVO</button>
-                <button v-if="isStandard" @click="salvaPreventivo('ORDINA')" class="bg-green-600 hover:bg-green-500 text-white px-6 py-3 rounded-lg font-bold shadow-lg">
+                <button @click="eliminaPreventivo()" class="bg-red-200 flex items-center gap-2 hover:bg-red-300 text-red-600 px-4 py-3 rounded-lg font-bold shadow-lg">
+                  ELIMINA
+                </button>
+                <button @click="salvaPreventivo()" class="bg-green-200 flex items-center gap-2 hover:bg-green-300 text-green-600 px-4 py-3 rounded-lg font-bold shadow-lg">
+                  SALVA
+                </button>
+                <button v-if="isStandard" @click="salvaPreventivo('ORDINA')" class="bg-yellow-400 flex items-center gap-2 hover:bg-yellow-300 text-yellow-900 px-12 py-3 rounded-lg font-bold shadow-lg">
+                  <ShoppingCartIcon class="h-7 w-7 text-yellow-900" />
                   ORDINA
                 </button>
                 <div v-else class="flex flex-col items-end">
@@ -697,7 +745,7 @@ onMounted(() => {
               <div v-else-if="statoCorrente === 'PENDING_VAL'" class="text-right">
                 <span class="text-yellow-500 font-bold text-2xl flex items-center gap-2">
                   <svg class="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                  ATTESA VALIDAZIONE DA INGLESINA ITALIANA
+                  IN ATTESA DI VALIDAZIONE DA INGLESINA ITALIANA
                 </span>
               </div>
 
@@ -709,16 +757,25 @@ onMounted(() => {
               </div>
 
               <template v-else-if="['WAITING_FAST', 'WAITING_SIGN'].includes(statoCorrente)">
-                <button @click="apriModaleAzione()" class="bg-blue-600 hover:bg-blue-500 text-white px-6 py-3 rounded-lg font-bold shadow-lg animate-pulse flex items-center gap-2">
+                <button @click="apriModaleAzione()" class="bg-blue-600 hover:bg-blue-500 text-white px-12 py-3 rounded-lg font-bold shadow-lg animate-pulse flex items-center gap-2">
+                  <ShoppingCartIcon class="h-7 w-7" />
                   {{ statoCorrente === 'WAITING_FAST' ? 'ACCETTA ORDINE' : 'FIRMA ORDINE' }}
                 </button>
               </template>
+
+              <div v-else-if="statoCorrente === 'REJECTED'" class="text-right px-4">
+                <span class="text-red-500 font-bold text-2xl flex items-center gap-2">
+                  <InformationCircleIcon class="h-6 w-6" />
+                  PREVENTIVO ANNULLATO E ARCHIVIATO
+                </span>
+              </div>
 
               <div v-else class="text-right px-4">
                 <span class="text-yellow-500 font-bold text-2xl flex items-center gap-2">
                   <svg class="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
                   ORDINE IN LAVORAZIONE DA INGLESINA ITALIANA
-                </span>              </div>
+                </span>
+              </div>
             </template>
           </div>
         </div>
