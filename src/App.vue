@@ -9,7 +9,7 @@ import { RouterView } from 'vue-router'
       <img 
         src="/logo.svg" 
         alt="Sfondo Watermark" 
-        class="w-[100%] md:w-[80%] object-contain opacity-99" 
+        class="w-[100%] md:w-[80%] object-contain opacity-40" 
       />
     </div>
 
