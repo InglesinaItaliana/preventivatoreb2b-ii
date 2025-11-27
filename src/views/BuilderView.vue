@@ -498,41 +498,46 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50/90 font-sans">
-
-    <main class="max-w-5xl mx-auto p-4 flex flex-col gap-6 mt-4">
-      <div class="flex flex-col md:flex-row justify-between items-end mb-8 gap-4">
-      <div class="flex items-center gap-4">
-        <button @click="vaiDashboard" class="text-gray-400 hover:text-gray-700 transition-colors p-2 rounded-full hover:bg-gray-100 self-center" title="Torna alla Dashboard">
+  <div class="min-h-screen bg-gray-50/90 p-6 font-sans text-gray-700">
+      <main class="max-w-5xl mx-auto flex flex-col gap-6">
+        <div class="relative flex flex-col md:flex-row justify-between items-end mb-8 gap-4">
+        
+        <button 
+          @click="vaiDashboard" 
+          class="md:absolute md:-left-14 md:top-1.5 text-gray-400 hover:text-gray-700 transition-colors p-2 rounded-full hover:bg-gray-100 mb-4 md:mb-0" 
+          title="Torna alla Dashboard"
+        >
           <ChevronLeftIcon class="h-8 w-8 text-yellow-500" />         
         </button>
 
-        <div>
-          <p class="text-lg font-medium text-gray-800 leading-none">P.O.P.S. Commesse</p>
-          <h1 class="text-4xl font-bold font-heading text-gray-900">{{ nomeCliente }}</h1>
-          <br>
-          
-          <div class="flex items-center gap-3">
-            <button 
-              v-if="!isAdmin"
-              @click="nuovaCommessa" 
-              class="bg-yellow-400 hover:bg-yellow-300 text-black px-6 py-3 rounded-lg font-bold shadow-md flex items-center gap-2 transition-transform active:scale-95">
-              <PlusCircleIcon class="h-7 w-7 text-black" />
-              NUOVO
-            </button>
+        <div class="flex items-center gap-4">
+          <div>
+            <p class="text-lg font-medium text-gray-800 leading-none">{{ nomeCliente }}</p>
+            <h1 class="text-5xl font-bold font-heading text-gray-900">P.O.P.S. Commesse</h1>
+            <br>
             
-            <button 
-              v-if="!isAdmin" 
-              @click="mostraStorico = true" 
-              class="bg-stone-100 hover:bg-stone-50 text-black px-6 py-3 rounded-lg font-bold shadow-md flex items-center gap-2 transition-transform active:scale-95">
-              <MagnifyingGlassCircleIcon class="h-7 w-7 text-black" />
-              STORICO
-            </button>
+            <div class="flex items-center gap-3">
+              <button 
+                v-if="!isAdmin"
+                @click="nuovaCommessa" 
+                class="bg-yellow-400 hover:bg-yellow-300 text-black px-6 py-3 rounded-lg font-bold shadow-md flex items-center gap-2 transition-transform active:scale-95">
+                <PlusCircleIcon class="h-7 w-7 text-black" />
+                NUOVO
+              </button>
+              
+              <button 
+                v-if="!isAdmin" 
+                @click="mostraStorico = true" 
+                class="bg-stone-100 hover:bg-stone-50 text-black px-6 py-3 rounded-lg font-bold shadow-md flex items-center gap-2 transition-transform active:scale-95">
+                <MagnifyingGlassCircleIcon class="h-7 w-7 text-black" />
+                STORICO
+              </button>
+            </div>
           </div>
         </div>
       </div>
-    </div>
-      <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+      
+      <div class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all p-5">
         <h2 class="font-bold text-lg font-heading border-b pb-2 mb-4 flex items-center gap-2 text-gray-800">
           Dati Commessa
         </h2>
@@ -585,7 +590,7 @@ onMounted(() => {
       </div>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
     
-      <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-4 h-full">
+      <div class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all p-5 space-y-4 h-full">
         <h2 class="font-bold text-lg border-b pb-2 font-heading text-gray-800">1. Griglia</h2>
         <div v-if="catalog.loading" class="text-center p-4 text-sm text-gray-400">Caricamento...</div>
         <div v-else>
@@ -598,7 +603,7 @@ onMounted(() => {
         </div>
       </div>
 
-      <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-4 h-full">
+      <div class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all p-5 space-y-4 h-full">
         <div class="flex justify-between items-center border-b pb-2">
             <h2 class="font-bold text-lg font-heading text-gray-800">2. Canalino</h2>
             <label v-if="categoriaGriglia === 'DUPLEX'" class="flex items-center gap-2 text-[10px] font-bold text-yellow-600 cursor-pointer bg-yellow-50 px-2 py-1 rounded hover:bg-yellow-100 uppercase">
@@ -614,7 +619,7 @@ onMounted(() => {
           </div>
       </div>
 
-      <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5 space-y-4 h-full" :class="{'opacity-50': !finituraGriglia}">
+      <div class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all p-5 space-y-4 h-full" :class="{'opacity-50': !finituraGriglia}">
         <h2 class="font-bold text-lg border-b pb-2 font-heading text-gray-800">3. Telaio</h2>
           <div class="grid grid-cols-2 gap-4">
             <div><label class="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Base (mm)</label><input v-model.number="pannello.base" :disabled="isLocked" type="number" class="border p-2 rounded w-full text-sm focus:ring-2 focus:ring-yellow-400 outline-none disabled:bg-gray-100"></div>
@@ -664,9 +669,8 @@ onMounted(() => {
       </div>
 
     </div>
-      <div class="lg:col-span-2 bg-white rounded-xl shadow-sm border border-gray-100 flex flex-col min-h-[600px] overflow-hidden">
-
-        <div v-if="isSaving" class="p-6 bg-gray-900 text-white flex justify-center items-center h-[120px]">
+    <div class="lg:col-span-2 bg-white/50 backdrop-blur-sm backdrop-saturate-150 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all flex flex-col min-h-[600px] overflow-hidden">
+      <div v-if="isSaving" class="p-6 bg-gray-900/80 backdrop-blur-md text-white flex justify-center items-center h-[120px]">
           <span class="text-sm font-medium text-gray-400">Caricamento stato preventivo...</span>
           <svg class="animate-spin h-5 w-5 text-yellow-400 ml-3" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -674,7 +678,7 @@ onMounted(() => {
           </svg>
         </div>
 
-        <div v-else class="p-6 bg-gray-900 text-white flex justify-between items-center">
+        <div v-else class="p-6 bg-gray-900/80 backdrop-blur-md backdrop-saturate-150 text-white flex justify-between items-center border-b border-white/10">
           
           <div class="space-y-1">
             <div class="text-xs text-gray-400 uppercase tracking-widest font-bold">Totale Ordine</div>
@@ -777,15 +781,14 @@ onMounted(() => {
           </div>
         </div>
 
-        <div class="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+        <div class="p-5 border-b border-gray-200/60 flex justify-between items-center bg-gray-50/60 backdrop-blur-sm">
           <h2 class="font-bold text-lg font-heading text-gray-800">Dettaglio Elementi</h2>
           <span class="bg-white border border-gray-200 text-gray-600 px-3 py-1 rounded-full text-xs font-bold">{{ preventivo.length }} Articoli</span>
         </div>
 
         <div class="flex-1 overflow-auto p-0">
           <table class="w-full text-left text-sm" v-if="preventivo.length">
-            <thead class="bg-gray-50 text-gray-500 uppercase text-[10px] font-bold tracking-wider sticky top-0 border-b border-gray-100">
-              <tr>
+            <thead class="bg-gray-50/50 backdrop-blur-sm text-gray-500 uppercase text-[10px] font-bold tracking-wider sticky top-0 border-b border-gray-200/60 z-10">              <tr>
                 <th class="p-3 pl-5">Articolo</th>
                 <th class="p-3 text-center">Q.tà</th>
                 <th class="p-3">Misure</th>

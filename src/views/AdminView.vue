@@ -13,7 +13,6 @@ import {
   ChevronDoubleRightIcon,
   DocumentTextIcon,
   EyeIcon,
-  ArrowPathIcon,
   XCircleIcon,
   CogIcon,
   CurrencyEuroIcon,
@@ -37,8 +36,8 @@ const selectedClientName = ref('');
 // MAPPA ICONE LOCALE
 const iconMap: Record<string, any> = {
   'DRAFT': PencilIcon,
-  'PENDING_VAL': PencilIcon,
-  'QUOTE_READY': PencilIcon,
+  'PENDING_VAL': DocumentTextIcon,
+  'QUOTE_READY': DocumentTextIcon,
   'ORDER_REQ': ShoppingCartIcon,
   'WAITING_FAST': ShoppingCartIcon,
   'WAITING_SIGN': ShoppingCartIcon,
@@ -289,10 +288,10 @@ const getActionData = (p: any) => {
   const st = p.stato;
   
   if (st === 'PENDING_VAL') 
-    return { text: 'QUOTA E ACCETTA', class: 'text-orange-500 bg-orange-100 border-orange-200 hover:bg-orange-100 animate-pulse', action: () => apriEditor(p.codice), icon: PencilIcon };
+    return { text: 'QUOTA E ACCETTA', class: 'text-orange-500 bg-orange-100 border-orange-200 hover:bg-orange-100 animate-pulse', action: () => apriEditor(p.codice), icon: DocumentTextIcon };
   
   if (st === 'ORDER_REQ') 
-    return { text: 'CONTROLLA E ACCETTA', class: 'text-cyan-600 bg-cyan-50 border-cyan-200 hover:bg-cyan-100 animate-pulse', action: () => apriEditor(p.codice), icon: PencilIcon };
+    return { text: 'CONTROLLA E ACCETTA', class: 'text-cyan-600 bg-cyan-50 border-cyan-200 hover:bg-cyan-100 animate-pulse', action: () => apriEditor(p.codice), icon: DocumentTextIcon };
 
   if (st === 'SIGNED')
     return { text: 'AVVIA PRODUZIONE', class: 'text-emerald-500 border-emerald-200 bg-emerald-100  hover:bg-emerald-200', action: () => confermaProduzione(p), icon: CogIcon };
@@ -361,16 +360,12 @@ onUnmounted(() => {
       <div class="flex justify-between items-center mb-8">
         <div class="flex items-center gap-4">
           <div>
-            <p class="text-lg font-medium text-gray-800 leading-none">Dashboard POP</p>
-            <h1 class="text-4xl font-bold font-heading text-gray-900">Inglesina Italiana</h1>
+            <p class="text-lg font-medium text-gray-800 leading-none">Inglesina Italiana Srl</p>
+            <h1 class="text-5xl font-bold font-heading text-gray-900">P.O.P.S. Dashboard</h1>
           </div>
         </div>
         <div class="flex items-center gap-3"><br>
           <span class="text-xs text-gray-400 animate-pulse hidden md:block">Live Sync</span>
-          <button @click="caricaTutti" class="flex items-center gap-2 bg-white border border-gray-200 px-4 py-2 rounded-lg hover:bg-stone-100 text-sm font-bold text-gray-700 transition-all shadow-sm hover:border-gray-300">
-            <ArrowPathIcon class="h-4 w-4" />
-            Aggiorna
-          </button>
           <select v-model="filtroPeriodo" class="bg-white border border-gray-200 text-sm font-bold text-gray-700 rounded-lg px-3 py-2 outline-none hover:bg-stone-100 focus:border-yellow-400 cursor-pointer shadow-sm">
             <option value="TUTTO">Tutto</option>
             <option value="CORRENTE">Mese Corrente</option>
@@ -391,7 +386,7 @@ onUnmounted(() => {
         </div>
         <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-orange-100 cursor-pointer">
           <div class="h-14 w-14 rounded-full flex items-center justify-center bg-orange-100">
-            <PencilIcon class="h-8 w-8 text-orange-500" />
+            <DocumentTextIcon class="h-8 w-8 text-orange-500" />
           </div>
           <div>
             <div class="text-xs font-bold text-gray-400 uppercase">Preventivi da quotare</div>
@@ -422,7 +417,7 @@ onUnmounted(() => {
         
         <div class="flex overflow-x-auto">
           <button @click="activeCategory = 'PREVENTIVI'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative whitespace-nowrap flex items-center gap-2" :class="activeCategory === 'PREVENTIVI' ? 'text-gray-900 border-b-4 border-orange-400' : 'text-gray-400 hover:text-gray-600'">
-            <PencilIcon class="h-4 w-4" />
+            <DocumentTextIcon class="h-4 w-4" />
             PREVENTIVI
             <span v-if="categoryCounts.PREVENTIVI" class="ml-2 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[10px] border">{{ categoryCounts.PREVENTIVI }}</span>
           </button>

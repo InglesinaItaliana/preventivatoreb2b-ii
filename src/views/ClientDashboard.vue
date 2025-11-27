@@ -274,14 +274,14 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50/90 p-6 font-sans text-gray-700">
+  <div class="min-h-screen bg-gray-50/90 p-6 font-sans">
     <div class="max-w-5xl mx-auto">
 
       <div class="flex flex-col md:flex-row justify-between items-end mb-8 gap-4">
         <div class="flex items-center gap-4">
           <div>
-            <p class="text-lg font-medium text-gray-800 leading-none">P.O.P.S. Dashboard</p>
-            <h1 class="text-4xl font-bold font-heading text-gray-900">{{ clientName }}</h1><br>
+            <p class="text-lg font-medium text-gray-800 leading-none">{{ clientName }}</p>
+            <h1 class="text-5xl font-bold font-heading text-gray-900">P.O.P.S. Dashboard</h1><br>
             <button @click="vaiAlBuilder()" class="bg-yellow-400 hover:bg-yellow-300 text-black px-6 py-3 rounded-lg font-bold shadow-md flex items-center gap-2 transition-transform active:scale-95">
             <PlusCircleIcon class="h-7 w-7 text-black" />
             NUOVO
@@ -334,7 +334,8 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
             <button @click="vaiAlBuilder()" class="text-blue-600 font-bold underline">Inizia ora</button>
           </div>
           <div v-for="p in preventiviInCorso" :key="p.id" 
-          class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all flex flex-col md:flex-row justify-between items-center gap-4 cursor-pointer">            <div class="flex items-center gap-4 w-full md:w-auto">
+          class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all flex flex-col md:flex-row justify-between items-center gap-4 cursor-pointer">            
+          <div class="flex items-center gap-4 w-full md:w-auto">
               <div class="h-14 w-14 rounded-full flex items-center justify-center shrink-0" :class="getStatusStyling(p.stato).iconBg">
                 <component :is="getStatusStyling(p.stato).icon" class="w-8 h-8" />
               </div>
@@ -388,9 +389,14 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
           <div v-for="p in ordiniConfermati" :key="p.id" 
           class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all flex flex-col md:flex-row justify-between items-center gap-4 cursor-pointer">
             <div class="flex items-center gap-4 w-full md:w-auto">
-              <div class="h-14 w-14 rounded-full flex items-center justify-center shrink-0" :class="getStatusStyling(p.stato).iconBg">
-                <component :is="getStatusStyling(p.stato).icon" class="w-8 h-8" />
-              </div>
+              <div class="h-14 w-14 rounded-full flex items-center justify-center shrink-0 
+            bg-opacity-70 backdrop-blur 
+            border-2 border-white/20 
+            shadow-[inset_0_0_15px_rgba(255,255,255,0.1)] 
+            ring-1 ring-black/5" 
+     :class="getStatusStyling(p.stato).iconBg">
+  <component :is="getStatusStyling(p.stato).icon" class="w-8 h-8 drop-shadow-sm" />
+</div>
               <div class="flex flex-col items-start">
                 <h3 class="font-bold text-xl text-gray-900 leading-tight">{{ p.commessa || 'Senza Nome' }}</h3>
                 <div class="mt-2 flex flex-col items-start gap-2">
@@ -447,9 +453,14 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
           <div v-else v-for="p in ordiniInProduzione" :key="p.id" 
           class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all flex flex-col md:flex-row justify-between items-center gap-4 cursor-pointer">
             <div class="flex items-center gap-4 w-full md:w-auto">
-              <div class="h-14 w-14 rounded-full flex items-center justify-center shrink-0" :class="getStatusStyling(p.stato).iconBg">
-                <component :is="getStatusStyling(p.stato).icon" class="w-8 h-8" />
-              </div>
+              <div class="h-14 w-14 rounded-full flex items-center justify-center shrink-0 
+            bg-opacity-70 backdrop-blur 
+            border-2 border-white/20 
+            shadow-[inset_0_0_15px_rgba(255,255,255,0.1)] 
+            ring-1 ring-black/5" 
+     :class="getStatusStyling(p.stato).iconBg">
+  <component :is="getStatusStyling(p.stato).icon" class="w-8 h-8 drop-shadow-sm" />
+</div>
               <div class="flex flex-col items-start">
                 <h3 class="font-bold text-xl text-gray-900 leading-tight">{{ p.commessa || 'Senza Nome' }}</h3>
                 <div class="mt-2 flex flex-col items-start gap-2">
@@ -483,9 +494,14 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
           <div v-else v-for="p in ordiniSpediti" :key="p.id" 
           class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all flex flex-col md:flex-row justify-between items-center gap-4 cursor-pointer">
             <div class="flex items-center gap-4 w-full md:w-auto">
-              <div class="h-14 w-14 rounded-full flex items-center justify-center shrink-0" :class="getStatusStyling(p.stato).iconBg">
-                <component :is="getStatusStyling(p.stato).icon" class="w-8 h-8" />
-              </div>
+              <div class="h-14 w-14 rounded-full flex items-center justify-center shrink-0 
+            bg-opacity-70 backdrop-blur 
+            border-2 border-white/20 
+            shadow-[inset_0_0_15px_rgba(255,255,255,0.1)] 
+            ring-1 ring-black/5" 
+     :class="getStatusStyling(p.stato).iconBg">
+  <component :is="getStatusStyling(p.stato).icon" class="w-8 h-8 drop-shadow-sm" />
+</div>
               <div class="flex flex-col items-start">
                 <h3 class="font-bold text-xl text-gray-900 leading-tight">{{ p.commessa || 'Senza Nome' }}</h3>
                 <div class="mt-2 flex flex-col items-start gap-2">
@@ -518,9 +534,14 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
           </div>
           <div v-else v-for="p in archivioPreventivi" :key="p.id" class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all flex flex-col md:flex-row justify-between items-center gap-4 cursor-pointer">
             <div class="flex items-center gap-4 w-full md:w-auto">
-              <div class="h-14 w-14 rounded-full flex items-center justify-center shrink-0" :class="getStatusStyling(p.stato).iconBg">
-                <component :is="getStatusStyling(p.stato).icon" class="w-8 h-8" />
-              </div>
+              <div class="h-14 w-14 rounded-full flex items-center justify-center shrink-0 
+            bg-opacity-70 backdrop-blur 
+            border-2 border-white/20 
+            shadow-[inset_0_0_15px_rgba(255,255,255,0.1)] 
+            ring-1 ring-black/5" 
+     :class="getStatusStyling(p.stato).iconBg">
+  <component :is="getStatusStyling(p.stato).icon" class="w-8 h-8 drop-shadow-sm" />
+</div>
               <div class="flex flex-col items-start">
                 <h3 class="font-bold text-xl text-gray-900 leading-tight text-gray-400">{{ p.commessa || 'Senza Nome' }}</h3>
                 <div class="mt-2 flex flex-col items-start gap-2">
