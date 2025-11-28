@@ -41,7 +41,8 @@ export interface RigaPreventivo {
   descrizioneCompleta: string;
   infoCanalino?: string;
   rawCanalino?: any;
-  
+  fuseruolo?: number;
+
   prezzo_unitario: number;
   prezzo_totale: number;
   

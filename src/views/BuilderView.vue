@@ -66,6 +66,7 @@ const tipoCanalino = ref('');
 const dimensioneCanalino = ref('');
 const finituraCanalino = ref('');
 const copiaDuplex = ref(false);
+const fuseruolo = ref<number | ''>(''); // <--- NUOVA REF
 
 const adminExtraDesc = ref('Supplemento');
 const adminExtraPrice = ref(0);
@@ -135,6 +136,12 @@ const aggiungi = () => {
     prezzo_unitario_griglia: pGriglia, prezzo_unitario_canalino: pCanalino
   });
 
+  let descStart = categoriaGriglia.value;
+  if (categoriaGriglia.value === 'DUPLEX' && fuseruolo.value) {
+    descStart += ` ${fuseruolo.value}`;
+  }
+  const descrizioneCompleta = `${descStart} ${tipoGriglia.value} ${dimensioneGriglia.value} - ${finituraGriglia.value}`;
+
   preventivo.value.push({
     id: Date.now().toString(),
     categoria: categoriaGriglia.value, modello: tipoGriglia.value as any, dimensione: dimensioneGriglia.value, finitura: finituraGriglia.value,
@@ -143,7 +150,8 @@ const aggiungi = () => {
     infoCanalino: `Canalino: ${tipoCanalino.value} ${dimensioneCanalino.value} ${finituraCanalino.value}`,
     prezzo_unitario: result.prezzo_unitario, prezzo_totale: result.prezzo_totale,
     nonEquidistanti: opzioniTelaio.nonEquidistanti, curva: opzioniTelaio.curva, tacca: opzioniTelaio.tacca,
-    rawCanalino: { tipo: tipoCanalino.value, dim: dimensioneCanalino.value, fin: finituraCanalino.value }
+    rawCanalino: { tipo: tipoCanalino.value, dim: dimensioneCanalino.value, fin: finituraCanalino.value },
+    fuseruolo: fuseruolo.value ? Number(fuseruolo.value) : undefined
   });
   Object.assign(pannello, { base: 0, altezza: 0, righe: 0, colonne: 0, qty: 1 });
   Object.assign(opzioniTelaio, { nonEquidistanti: false, curva: false, tacca: false });
@@ -445,6 +453,7 @@ const modificaRiga = async (index: number) => {
   
   // FIX: Cast/Default values for refs (TS2322)
   categoriaGriglia.value = r?.categoria as Categoria || 'INGLESINA'; await nextTick();
+  fuseruolo.value = r?.fuseruolo || ''; await nextTick();
   tipoGriglia.value = r?.modello || ''; await nextTick();
   dimensioneGriglia.value = r?.dimensione || ''; await nextTick();
   finituraGriglia.value = r?.finitura || '';
@@ -495,6 +504,7 @@ onMounted(() => {
     setTimeout(caricaPreventivo, 1000); 
   }
 });
+
 </script>
 
 <template>
@@ -600,6 +610,10 @@ onMounted(() => {
             <select v-model="tipoGriglia" :disabled="!tipiGrigliaDisp.length || isLocked" class="w-full p-2 border rounded mt-4 bg-white text-sm disabled:opacity-60"><option value="" disabled>Seleziona Tipo</option><option v-for="m in tipiGrigliaDisp" :key="m" :value="m">{{ m }}</option></select>
             <select v-if="tipoGriglia" v-model="dimensioneGriglia" :disabled="!dimensioniGrigliaDisp.length || isLocked" class="w-full p-2 border rounded mt-4 bg-white text-sm disabled:opacity-60"><option value="" disabled>Seleziona Dimensione</option><option v-for="d in dimensioniGrigliaDisp" :key="d" :value="d">{{ d }}</option></select>
             <select v-if="dimensioneGriglia" v-model="finituraGriglia" :disabled="!finitureGrigliaDisp.length || isLocked" class="w-full p-2 border rounded mt-4 bg-white text-sm disabled:opacity-60"><option value="" disabled>Seleziona Finitura</option><option v-for="f in finitureGrigliaDisp" :key="f" :value="f">{{ f }}</option></select>
+            <div v-if="categoriaGriglia === 'DUPLEX'" class="mt-4 animate-slide-in">
+              <label class="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Fuseruolo</label>
+              <input v-model="fuseruolo" :disabled="isLocked" type="number" class="w-full p-2 border border-gray-300 rounded-md bg-white text-sm focus:ring-2 focus:ring-yellow-400 outline-none disabled:opacity-60" placeholder="Es. 20">
+            </div>
         </div>
       </div>
 
@@ -619,7 +633,7 @@ onMounted(() => {
           </div>
       </div>
 
-      <div class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all p-5 space-y-4 h-full" :class="{'opacity-50': !finituraGriglia}">
+      <div class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all p-5 space-y-4 h-full">
         <h2 class="font-bold text-lg border-b pb-2 font-heading text-gray-800">3. Telaio</h2>
           <div class="grid grid-cols-2 gap-4">
             <div><label class="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Base (mm)</label><input v-model.number="pannello.base" :disabled="isLocked" type="number" class="border p-2 rounded w-full text-sm focus:ring-2 focus:ring-yellow-400 outline-none disabled:bg-gray-100"></div>
@@ -662,7 +676,16 @@ onMounted(() => {
             </label>
           </div>
 
-          <button @click="aggiungi" :disabled="!pannello.base || !pannello.altezza || !finituraGriglia || isLocked" class="w-full bg-yellow-200 hover:bg-yellow-300 text-yellow-600 font-bold py-3 rounded-lg shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 transition-all flex justify-center items-center gap-2">
+          <button 
+            @click="aggiungi" 
+            :disabled="
+              !pannello.base || 
+              !pannello.altezza || 
+              !finituraGriglia || 
+              isLocked || 
+              (categoriaGriglia === 'DUPLEX' && (!fuseruolo || Number(fuseruolo) <= 0))
+            "
+            class="w-full bg-yellow-200 hover:bg-yellow-300 text-yellow-600 font-bold py-3 rounded-lg shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 transition-all flex justify-center items-center gap-2">
             <PlusCircleIcon class="h-7 w-7 text-yellow-600" />         
             AGGIUNGI
           </button>
