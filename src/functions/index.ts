@@ -237,7 +237,8 @@ exports.creaDdtCumulativo = functions
     .https.onCall(async (data, _context) => {
         
         const { orderIds, date, colli, weight } = data;
-        
+        console.log("🚀 Inizio creaDdtCumulativo per ordini:", orderIds); // LOG 1
+
         if (!orderIds || orderIds.length === 0) {
             return { success: false, message: "Nessun ordine selezionato." };
         }
@@ -246,66 +247,67 @@ exports.creaDdtCumulativo = functions
             const db = admin.firestore();
             const accessToken = await getValidFicToken(); 
             
-            // 1. Recupera ordini da Firestore per ottenere gli ID di Fatture in Cloud
+            // 1. Recupera ID FiC da Firestore
             const orderSnapshots = await Promise.all(
                 orderIds.map((id: string) => db.collection('preventivi').doc(id).get())
             );
 
-            // Filtra e mappa per ottenere solo gli ID esterni (fic_order_id)
             const ficIdsToJoin: number[] = [];
-            
             for (const snap of orderSnapshots) {
                 const d = snap.data();
                 if (d && d.fic_order_id) {
                     ficIdsToJoin.push(d.fic_order_id);
                 }
             }
+            console.log("🔗 ID FiC trovati da unire:", ficIdsToJoin); // LOG 2
 
             if (ficIdsToJoin.length === 0) {
-                 return { success: false, message: "Nessun ordine selezionato ha un ID Fatture in Cloud valido." };
+                 return { success: false, message: "Nessun ID FiC valido trovato." };
             }
 
-            // 2. CHIAMATA ALL'ENDPOINT JOIN (La magia avviene qui)
-            // Chiediamo a FiC di unire questi documenti in un DDT (delivery_note)
+            // 2. CHIAMATA JOIN
             const joinUrl = `${FIC_API_URL}/c/${COMPANY_ID}/issued_documents/join`;
-            
+            console.log("📞 Chiamo JOIN su:", joinUrl);
+
             const joinResponse: any = await axios.get(joinUrl, {
                 headers: { Authorization: `Bearer ${accessToken}` },
                 params: {
-                    ids: ficIdsToJoin.join(','), // es: "12345,67890"
-                    type: 'delivery_note'
+                    ids: ficIdsToJoin.join(','),
+                    type: 'delivery_note' // Chiediamo esplicitamente un template DDT
                 }
             });
 
-            // Questo è il documento "pre-assemblato" da FiC
             let documentData = joinResponse.data.data;
+            console.log("📦 Dati ricevuti da JOIN (Anteprima):", JSON.stringify(documentData).substring(0, 200) + "..."); // LOG 3
 
-            // 3. SOVRASCRIVIAMO I DATI DI TRASPORTO E INTESTAZIONE
-            // Ora inseriamo i dati che l'utente ha scelto nella modale
+            // 3. PREPARAZIONE PAYLOAD
+            // Pulizia e forzatura dati
+            delete documentData.id; // Rimuoviamo ID vecchio
             
-            documentData.date = date; // La data scelta dall'utente
+            // FORZATURA TIPO: Fondamentale!
+            documentData.type = "delivery_note"; 
+            
+            documentData.date = date;
             documentData.visible_subject = `DDT Cumulativo (${ficIdsToJoin.length} Ordini)`;
             
-            // CAMPI SPECIFICI DDT (Mappatura corretta per il POST v2)
-            // Anche se l'API Join restituisce dn_ai_..., quando crei un DDT principale 
-            // i campi vanno messi alla radice del data object.
-            
-            documentData.transport_causal = "VENDITA"; // Causale fissa
-            documentData.transport_type = "MITTENTE";  // Trasporto a cura di
-            documentData.packages_number = parseInt(colli); // Numero colli
+            // Dati trasporto (Campi diretti alla radice per API v2 creazione)
+            documentData.transport_causal = "VENDITA";
+            documentData.transport_type = "MITTENTE";
+            documentData.packages_number = parseInt(colli);
             
             if (weight && Number(weight) > 0) {
                 documentData.weight = Number(weight);
             }
 
-            // Rimuoviamo l'ID se presente, perché stiamo creando un NUOVO documento
-            delete documentData.id; 
+            console.log("📤 Payload finale inviato a CREATE:", JSON.stringify(documentData, null, 2)); // LOG 4
 
-            // 4. CREAZIONE EFFETTIVA (POST)
+            // 4. CREAZIONE (POST)
             const createUrl = `${FIC_API_URL}/c/${COMPANY_ID}/issued_documents`;
             const createRes: any = await axios.post(createUrl, { data: documentData }, {
                 headers: { Authorization: `Bearer ${accessToken}` }
             });
+
+            console.log("✅ RISPOSTA CREATE:", createRes.data); // LOG 5
 
             // 5. Aggiornamento Firestore
             const batch = db.batch();
@@ -314,7 +316,7 @@ exports.creaDdtCumulativo = functions
                 batch.update(ref, { 
                     fic_ddt_id: createRes.data.data.id,
                     fic_ddt_url: createRes.data.data.url,
-                    stato: 'READY' // O 'SHIPPED' a tua scelta
+                    stato: 'READY' 
                 });
             });
             await batch.commit();
@@ -322,7 +324,10 @@ exports.creaDdtCumulativo = functions
             return { success: true, fic_id: createRes.data.data.id };
 
         } catch (error: any) {
-            console.error("❌ Errore API FiC:", JSON.stringify(error.response?.data || error.message, null, 2));
+            console.error("❌ ERRORE CRITICO:", error);
+            if (error.response) {
+                console.error("🔍 Dettaglio Risposta Errore:", JSON.stringify(error.response.data, null, 2));
+            }
 
             const dettagliErrore = error.response?.data?.error?.validation_errors 
                 ? JSON.stringify(error.response.data.error.validation_errors)
