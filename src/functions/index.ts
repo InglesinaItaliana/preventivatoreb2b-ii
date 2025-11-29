@@ -234,7 +234,7 @@ exports.generaOrdineFIC = functions
 // --- FUNZIONE CREAZIONE DDT CUMULATIVO (HTTP Callable) ---
 exports.creaDdtCumulativo = functions
     .region('europe-west1')
-    .https.onCall(async (data, context) => {
+    .https.onCall(async (data, _context) => {
         
         const { orderIds, date, colli, weight } = data;
         
