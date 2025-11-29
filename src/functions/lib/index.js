@@ -245,20 +245,17 @@ exports.creaDdtCumulativo = functions
     try {
         const db = admin.firestore();
         const accessToken = await getValidFicToken();
-        // 2. Recupera ordini
         const orderSnapshots = await Promise.all(orderIds.map((id) => db.collection('preventivi').doc(id).get()));
         const ordiniFirestore = orderSnapshots.map(s => s.data()).filter(d => d);
         if (ordiniFirestore.length === 0) {
             return { success: false, message: "Ordini non trovati nel DB." };
         }
-        // 3. Dati Cliente (dal primo ordine)
         const primoOrdine = ordiniFirestore[0];
         const userDoc = await db.collection('users').doc(primoOrdine.clienteUID).get();
         const userData = userDoc.data();
         const pivaCliente = userData === null || userData === void 0 ? void 0 : userData.piva;
         if (!pivaCliente)
             return { success: false, message: "P.IVA Cliente mancante." };
-        // Ricerca ID Cliente FiC
         const searchRes = await axios_1.default.get(`${FIC_API_URL}/c/${COMPANY_ID}/entities/clients`, {
             headers: { Authorization: `Bearer ${accessToken}` },
             params: { "q": `vat_number = '${pivaCliente}'` }
@@ -272,7 +269,6 @@ exports.creaDdtCumulativo = functions
         else {
             return { success: false, message: "Cliente non trovato su FiC." };
         }
-        // 4. Costruzione Lista Articoli (SENZA RIGHE A QUANTITA ZERO)
         let itemsListMerged = [];
         ordiniFirestore.forEach((ordine) => {
             const elementi = ordine.elementi || [];
@@ -280,13 +276,13 @@ exports.creaDdtCumulativo = functions
                 itemsListMerged.push({
                     name: el.descrizioneCompleta || "Articolo",
                     description: `Rif: ${ordine.commessa || ordine.codice} - Dim: ${el.base_mm}x${el.altezza_mm} mm${el.infoCanalino ? ` - ${el.infoCanalino}` : ''}`,
-                    qty: el.quantita || 1, // Assicuriamoci che sia almeno 1
+                    qty: el.quantita || 1,
                     net_price: el.prezzo_unitario || 0,
                     vat: { id: VAT_ID, value: VAT_VALUE }
                 });
             });
         });
-        // 5. Payload DDT
+        // 5. Payload DDT - CORRETTO
         const ddtPayload = {
             data: {
                 type: "delivery_note",
@@ -294,18 +290,21 @@ exports.creaDdtCumulativo = functions
                     id: ficClientId,
                     name: ficClientName
                 },
-                date: date, // YYYY-MM-DD
+                date: date,
                 visible_subject: `DDT Cumulativo - ${ordiniFirestore.length} Ordini`,
                 items_list: itemsListMerged,
                 delivery_note: {
-                    colli: parseInt(colli), // Forza intero
+                    // ERA 'colli', ORA È 'packages_number' (Nome corretto API FiC)
+                    packages_number: parseInt(colli),
                     transport_causal: "VENDITA",
-                    transport_type: "MITTENTE",
-                    // weight deve essere number o null, non undefined o stringa vuota
-                    weight: (weight && Number(weight) > 0) ? Number(weight) : null
+                    transport_type: "MITTENTE"
                 }
             }
         };
+        // Aggiungiamo il peso solo se presente, altrimenti non mettiamo il campo
+        if (weight && Number(weight) > 0) {
+            ddtPayload.data.delivery_note.weight = Number(weight);
+        }
         // 6. Invio a FiC
         const ddtRes = await axios_1.default.post(`${FIC_API_URL}/c/${COMPANY_ID}/issued_documents`, ddtPayload, {
             headers: { Authorization: `Bearer ${accessToken}` }
@@ -317,15 +316,15 @@ exports.creaDdtCumulativo = functions
             batch.update(ref, {
                 fic_ddt_id: ddtRes.data.data.id,
                 fic_ddt_url: ddtRes.data.data.url,
-                stato: 'READY' // Lasciamo READY o mettiamo 'SHIPPED'?
+                stato: 'READY'
             });
         });
         await batch.commit();
         return { success: true, fic_id: ddtRes.data.data.id };
     }
     catch (error) {
-        console.error("❌ Errore API FiC:", (_a = error.response) === null || _a === void 0 ? void 0 : _a.data); // Log nel server
-        // Restituisci l'errore dettagliato al frontend per capire cosa non va
+        // Logghiamo l'errore completo formattato (così vediamo l'Array dell'errore se capita ancora)
+        console.error("❌ Errore API FiC:", JSON.stringify(((_a = error.response) === null || _a === void 0 ? void 0 : _a.data) || error.message, null, 2));
         const dettagliErrore = ((_d = (_c = (_b = error.response) === null || _b === void 0 ? void 0 : _b.data) === null || _c === void 0 ? void 0 : _c.error) === null || _d === void 0 ? void 0 : _d.validation_errors)
             ? JSON.stringify(error.response.data.error.validation_errors)
             : (((_g = (_f = (_e = error.response) === null || _e === void 0 ? void 0 : _e.data) === null || _f === void 0 ? void 0 : _f.error) === null || _g === void 0 ? void 0 : _g.message) || error.message);
