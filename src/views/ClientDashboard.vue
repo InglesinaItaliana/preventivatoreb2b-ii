@@ -6,7 +6,7 @@ import { useRouter } from 'vue-router';
 import { onAuthStateChanged } from 'firebase/auth';
 import { 
   DocumentTextIcon, 
-  CheckCircleIcon, 
+  CheckCircleIcon,
   XCircleIcon, 
   CogIcon, 
   PlusCircleIcon, 
@@ -260,6 +260,25 @@ const getStatusLabel = (stato: string) => {
   return map[stato] || stato;
 };
 
+// --- FUNZIONE PER FORMATTARE LA DATA (YYYY-MM-DD -> DD-MMM) ---
+const formatDateShort = (dateString: string) => {
+  if (!dateString) return '-';
+  
+  // Parso la stringa YYYY-MM-DD in un oggetto Data
+  // Aggiungo 'T00:00:00' per evitare problemi di fuso orario che potrebbero 
+  // far tornare indietro la data al giorno precedente
+  const date = new Date(dateString + 'T00:00:00');
+  
+  if (isNaN(date.getTime())) return dateString; // Fallback se non valida
+
+  // Formatto nel formato italiano DD-MMM, rimuovo i punti e metto in maiuscolo.
+  // Es: 10/ott. -> 10 OTT
+  return date.toLocaleDateString('it-IT', {
+    day: '2-digit',
+    month: 'short',
+  }).toUpperCase().replace(/\./g, ''); 
+};
+
 onMounted(() => {
   onAuthStateChanged(auth, (user) => {
     if (user && user.email) {
@@ -399,6 +418,9 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
 </div>
               <div class="flex flex-col items-start">
                 <h3 class="font-bold text-xl text-gray-900 leading-tight">{{ p.commessa || 'Senza Nome' }}</h3>
+                <div v-if="p.dataConsegnaPrevista" class="mt-2 flex items-center gap-1.5 px-3 py-1 bg-blue-50 border border-blue-100 rounded shadow-sm">
+                    <TruckIcon class="h-4 w-4 text-blue-600" /> <span class="text-xs font-bold text-blue-600 uppercase">Prevista: {{ formatDateShort(p.dataConsegnaPrevista) }}</span>
+                </div>
                 <div class="mt-2 flex flex-col items-start gap-2">
                   <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase border" 
                         :class="getStatusStyling(p.stato).badge">
@@ -454,15 +476,16 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
           class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all flex flex-col md:flex-row justify-between items-center gap-4 cursor-pointer">
             <div class="flex items-center gap-4 w-full md:w-auto">
               <div class="h-14 w-14 rounded-full flex items-center justify-center shrink-0 
-            bg-opacity-70 backdrop-blur 
-            border-2 border-white/20 
-            shadow-[inset_0_0_15px_rgba(255,255,255,0.1)] 
-            ring-1 ring-black/5" 
-     :class="getStatusStyling(p.stato).iconBg">
-  <component :is="getStatusStyling(p.stato).icon" class="w-8 h-8 drop-shadow-sm" />
-</div>
+                          bg-opacity-70 backdrop-blur 
+                          border-2 border-white/20 
+                          shadow-[inset_0_0_15px_rgba(255,255,255,0.1)] 
+                          ring-1 ring-black/5" 
+                  :class="getStatusStyling(p.stato).iconBg">
+                <component :is="getStatusStyling(p.stato).icon" class="w-8 h-8 drop-shadow-sm" />
+              </div>    
               <div class="flex flex-col items-start">
                 <h3 class="font-bold text-xl text-gray-900 leading-tight">{{ p.commessa || 'Senza Nome' }}</h3>
+                
                 <div class="mt-2 flex flex-col items-start gap-2">
                   <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase border" 
                         :class="getStatusStyling(p.stato).badge">
@@ -476,6 +499,9 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
                   </div>
                 </div>
               </div>
+            </div>
+            <div v-if="p.dataConsegnaPrevista" class="mt-2 flex items-center gap-1.5 px-3 py-1 bg-emerald-50 border border-emerald-100 rounded shadow-sm">
+              <TruckIcon class="h-4 w-4 text-emerald-600" /> <span class="text-xs font-bold text-emerald-600 uppercase">Prevista: {{ formatDateShort(p.dataConsegnaPrevista) }}</span>
             </div>
             <div class="flex items-center gap-6 w-full md:w-auto justify-between md:justify-end">
               <div class="text-right">
@@ -517,6 +543,12 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
                   </div>
                 </div>
               </div>
+            </div>
+            <div v-if="p.dataConsegnaPrevista" class="mt-2 flex items-center gap-1.5 px-3 py-1 bg-yellow-50 border border-yellow-100 rounded shadow-sm">
+              <TruckIcon class="h-4 w-4 text-yellow-600" /> <span class="text-xs font-bold text-yellow-600 uppercase">Prevista: {{ formatDateShort(p.dataConsegnaPrevista) }}</span>
+            </div>
+            
+            <div class="mt-2 flex flex-col items-start gap-2">
             </div>
             <div class="flex items-center gap-6 w-full md:w-auto justify-between md:justify-end">
               <div class="text-right">

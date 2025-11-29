@@ -6,10 +6,14 @@ import { useRouter } from 'vue-router';
 // IMPORT CONFIGURAZIONE CONDIVISA (Modifica richiesta)
 import { STATUS_DETAILS } from '../types';
 import OrderModals from '../components/OrderModals.vue';
+import { httpsCallable } from 'firebase/functions'; // Importa functions
+import { functions } from '../firebase'; // Assicurati di esportare 'functions' dal tuo firebase.ts
+import DdtModal from '../components/DdtModal.vue'; // Importa il nuovo componente
 
 // IMPORT ICONE HEROICONS
 import {
   PencilIcon,
+  CheckCircleIcon,
   ChevronDoubleRightIcon,
   DocumentTextIcon,
   EyeIcon,
@@ -32,6 +36,7 @@ const showModals = ref(false);
 const modalMode = ref<'FAST' | 'SIGN' | 'PRODUCTION'>('PRODUCTION');
 const selectedOrder = ref<any>(null);
 const selectedClientName = ref('');
+const showDdtModal = ref(false);
 
 // MAPPA ICONE LOCALE
 const iconMap: Record<string, any> = {
@@ -79,6 +84,42 @@ const categoryCounts = computed(() => {
   });
   return counts;
 });
+
+// Funzione chiamata dal click su "CREA DDT" nella Sticky Bar
+const avviaCreazioneDdt = () => {
+    showDdtModal.value = true;
+};
+
+// Funzione chiamata dalla conferma della Modale
+const handleCreaDdt = async (datiDdt: any) => {
+    try {
+        const createDdtFn = httpsCallable(functions, 'creaDdtCumulativo');
+        
+        // Prepariamo i dati: ci servono gli ID di firestore degli ordini selezionati
+        const orderIds = ordiniInSpedizione.value.map(o => o.id);
+        
+        const response: any = await createDdtFn({
+            orderIds: orderIds,
+            date: datiDdt.date,
+            colli: datiDdt.colli,
+            weight: datiDdt.weight
+        });
+
+        if (response.data.success) {
+            alert(`✅ DDT Creato con successo! ID: ${response.data.fic_id}`);
+            annullaSpedizione(); // Pulisce la selezione
+            showDdtModal.value = false;
+            // Qui potresti ricaricare i dati o aggiornare lo stato locale
+        } else {
+            throw new Error(response.data.message || 'Errore sconosciuto');
+        }
+
+    } catch (e: any) {
+        console.error(e);
+        alert(`❌ Errore creazione DDT: ${e.message}`);
+        showDdtModal.value = false; // Chiudiamo comunque per evitare blocchi, o gestisci il loading dentro la modale
+    }
+};
 
 const preventiviFiltrati = computed(() => {
   const now = new Date();
@@ -341,6 +382,81 @@ const raggruppaPreventiviClientePerStato = (preventivi: any[]) => {
     .map(st => ({ stato: st, lista: gruppi[st] }));
 };
 
+const formatDateShort = (dateString: string) => {
+  if (!dateString) return '';
+  const date = new Date(dateString + 'T00:00:00');
+  if (isNaN(date.getTime())) return dateString;
+  return date.toLocaleDateString('it-IT', {
+    day: '2-digit',
+    month: 'short',
+  }).toUpperCase().replace(/\./g, ''); 
+};
+
+// --- LOGICA SPEDIZIONE / DDT ---
+const spedizioneAttivaCliente = ref<string | null>(null); // Email del cliente selezionato
+const ordiniInSpedizione = ref<any[]>([]); // Lista degli oggetti ordine selezionati
+
+// 1. Definiamo PRIMA la funzione di annullamento
+const annullaSpedizione = () => {
+  spedizioneAttivaCliente.value = null;
+  ordiniInSpedizione.value = [];
+};
+
+// 2. Helper per lo stile UI (Disabled/Dimmed)
+const isOrderDimmed = (p: any) => {
+  // Se non c'è nessuna spedizione attiva, nessuno è dimmed
+  if (!spedizioneAttivaCliente.value) return false;
+  // Se l'ordine non è READY, non ci interessa (o possiamo lasciarlo normale)
+  if (p.stato !== 'READY') return true; 
+  // Se l'ordine non è del cliente attivo, è dimmed
+  return p.clienteEmail !== spedizioneAttivaCliente.value;
+};
+
+// 3. Helper per vedere se è selezionato
+const isOrderSelected = (p: any) => {
+  return spedizioneAttivaCliente.value === p.clienteEmail 
+      && p.stato === 'READY' 
+      && ordiniInSpedizione.value.some(o => o.id === p.id);
+};
+
+// 4. Funzione toggle intelligente (Ora può chiamare annullaSpedizione perché è già definita sopra)
+const toggleSpedizione = (preventivo: any) => {
+  // Ignora se non è pronto
+  if (preventivo.stato !== 'READY') return;
+
+  // CASO 1: Nessuna spedizione attiva -> Attivo questo cliente e seleziono TUTTI i suoi ordini READY
+  if (!spedizioneAttivaCliente.value) {
+    spedizioneAttivaCliente.value = preventivo.clienteEmail;
+    // Riempie l'array con TUTTI gli ordini pronti di questo cliente
+    ordiniInSpedizione.value = listaPreventivi.value.filter(p => 
+      p.clienteEmail === preventivo.clienteEmail && p.stato === 'READY'
+    );
+    return;
+  }
+
+  // CASO 2: Clicco su un ordine di un ALTRO cliente -> Errore o Ignora
+  if (spedizioneAttivaCliente.value !== preventivo.clienteEmail) {
+    alert("Puoi creare un DDT solo per un cliente alla volta. Termina o annulla la selezione corrente.");
+    return;
+  }
+
+  // CASO 3: Clicco su un ordine del cliente GIÀ attivo -> TOGGLE (Aggiungi/Rimuovi singolo)
+  const index = ordiniInSpedizione.value.findIndex(o => o.id === preventivo.id);
+
+  if (index !== -1) {
+    // A) È già selezionato -> LO RIMUOVO
+    ordiniInSpedizione.value.splice(index, 1);
+    
+    // Se non ci sono più ordini selezionati, annullo la modalità spedizione
+    if (ordiniInSpedizione.value.length === 0) {
+      annullaSpedizione();
+    }
+  } else {
+    // B) Non è selezionato (ma è del cliente attivo) -> LO AGGIUNGO
+    ordiniInSpedizione.value.push(preventivo);
+  }
+};
+
 onMounted(() => {
   caricaAnagrafica();
   caricaTutti();
@@ -510,9 +626,23 @@ onUnmounted(() => {
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-50 text-sm">
-                  <tr v-for="p in statoGruppo.lista" :key="p.id" class="odd:bg-gray-50 hover:bg-yellow-50 transition-colors">
+                  <tr v-for="p in statoGruppo.lista" :key="p.id" 
+                        class="transition-colors border-b border-gray-50 last:border-0 relative"
+                        :class="[
+                          isOrderDimmed(p) ? 'opacity-30 grayscale pointer-events-none bg-gray-50' : 'hover:bg-yellow-50',
+                          isOrderSelected(p) ? 'bg-blue-50/80' : 'odd:bg-gray-50'
+                        ]"
+                    >                    
                     <td class="px-4 py-3">
+                      <div v-if="p.stato === 'READY'" @click.stop="toggleSpedizione(p)" class="cursor-pointer">
+                                <CheckCircleIcon v-if="isOrderSelected(p)" class="h-6 w-6 text-blue-600" />
+                                <div v-else class="h-5 w-5 rounded-full border-2 border-gray-300 hover:border-blue-400"></div>
+                            </div>
                       <div class="text-xs text-gray-500 mt-1">DATA: {{ formatDate(p.dataCreazione?.seconds) }} • COMMESSA: {{ p.commessa || 'Nessun Rif.' }}</div>
+                      <div v-if="p.dataConsegnaPrevista" class="flex items-center gap-1 mt-1 text-yellow-500 font-bold text-[10px] uppercase">
+                          <TruckIcon class="h-3 w-3" />
+                          <span>Consegna: {{ formatDateShort(p.dataConsegnaPrevista) }}</span>
+                      </div>
                       <div v-if="p.sommarioPreventivo">
                         <div v-for="(item, idx) in p.sommarioPreventivo" :key="idx" class="text text-gray-600 font-medium">
                           <span class="font-bold">{{ item.quantitaTotale }} x</span> {{ item.descrizione }} 
@@ -567,8 +697,29 @@ onUnmounted(() => {
           </div>
 
           <div v-if="statiEspansi.includes(gruppo.stato)" class="border-t border-gray-100 bg-gray-50 p-4 grid gap-3 animate-fade-in">
-            <div v-for="p in gruppo.lista" :key="p.id" class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-all flex flex-col md:flex-row justify-between items-center gap-4">
+<div v-for="p in gruppo.lista" :key="p.id" 
+     class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 transition-all relative group"
+     :class="[
+        isOrderDimmed(p) ? 'opacity-40 grayscale pointer-events-none' : 'hover:shadow-md',
+        isOrderSelected(p) ? 'ring-2 ring-blue-500 bg-blue-50/30' : ''
+     ]">
 
+    <div v-if="p.stato === 'READY'" 
+         @click.stop="toggleSpedizione(p)"
+         class="absolute -top-2 -right-2 z-20 cursor-pointer transition-transform hover:scale-110">
+      
+      <CheckCircleIcon v-if="isOrderSelected(p)" class="h-8 w-8 text-blue-600 bg-white rounded-full shadow-md" />
+      
+      <div v-else class="h-8 w-8 rounded-full border border-gray-300 bg-white text-gray-400 flex items-center justify-center shadow-sm hover:border-blue-400 hover:text-blue-500">
+        <TruckIcon class="h-4 w-4" />
+      </div>
+    </div>
+    <div class="flex flex-col md:flex-row justify-between items-center gap-4">
+       <div class="flex items-center gap-4 w-full md:w-auto">
+          </div>
+       <div class="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end">
+          </div>
+    </div>
               <div class="flex items-center gap-4 w-full md:w-auto">
                 <div class="h-10 w-10 rounded-full flex items-center justify-center" :class="getStatusStyling(p.stato).iconBg">
                   <component :is="getStatusStyling(p.stato).icon" class="h-6 w-6" />
@@ -578,6 +729,10 @@ onUnmounted(() => {
                     <h3 class="font-bold text-gray-900">{{ p.cliente }}</h3>
                     <p class="text-xs text-gray-500">• {{ formatDate(p.dataCreazione?.seconds) }}</p>
                     <span class="text-xs text-gray-500">• Rif. {{ p.commessa || 'Senza Nome' }}</span>
+                  </div>
+                  <div v-if="p.dataConsegnaPrevista" class="mt-1 flex items-center gap-1 px-2 py-0.5 bg-yellow-100 border border-yellow-200 rounded text-yellow-800 w-fit">
+                      <TruckIcon class="h-3 w-3" />
+                      <span class="text-[10px] font-bold uppercase">{{ formatDateShort(p.dataConsegnaPrevista) }}</span>
                   </div>
                   <div v-if="p.sommarioPreventivo" class="flex flex-col gap-1 mt-2 items-start">
                     <span v-for="(item, idx) in p.sommarioPreventivo" :key="idx" 
@@ -608,6 +763,12 @@ onUnmounted(() => {
 
     </div>
   </div>
+  <DdtModal 
+    :show="showDdtModal"
+    :orders="ordiniInSpedizione"
+    @close="showDdtModal = false"
+    @confirm="handleCreaDdt"
+  />
   <OrderModals 
       :show="showModals"
       :mode="modalMode"
@@ -616,9 +777,53 @@ onUnmounted(() => {
       @close="showModals = false"
       @confirmProduction="onConfirmProduction"
     />
+    <div v-if="spedizioneAttivaCliente" class="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 animate-bounce-in w-[95%] md:w-auto max-w-[95vw]">
+      <div class="bg-gray-900/95 backdrop-blur text-white px-4 py-3 md:px-6 md:py-4 rounded-2xl shadow-2xl flex flex-col md:flex-row items-center gap-3 md:gap-8 border border-gray-700/50 ring-1 ring-white/10 overflow-hidden">
+        
+        <div class="flex items-center gap-3 w-full md:w-auto overflow-hidden">
+          <div class="bg-blue-600 p-2 rounded-xl shadow-lg shadow-blue-900/20 shrink-0">
+            <TruckIcon class="h-5 w-5 md:h-6 md:w-6 text-white" />
+          </div>
+          <div class="min-w-0"> <div class="text-[10px] text-blue-300 font-bold uppercase tracking-wider">Spedizione per</div>
+            <div class="font-bold text-base md:text-lg leading-none truncate max-w-[150px] md:max-w-[200px]">
+              {{ anagraficaClienti[spedizioneAttivaCliente] || spedizioneAttivaCliente }}
+            </div>
+          </div>
+        </div>
+
+        <div class="hidden md:block h-8 w-px bg-gray-700 shrink-0"></div>
+
+        <div class="flex items-center gap-3 shrink-0">
+           <span class="text-3xl font-heading font-bold text-white">{{ ordiniInSpedizione.length }}</span>
+           <div class="flex flex-col leading-none">
+             <span class="text-xs font-bold text-gray-400 uppercase">Ordini</span>
+             <span class="text-xs text-gray-500">Pronti</span>
+           </div>
+        </div>
+
+        <div class="flex gap-2 w-full md:w-auto mt-1 md:mt-0">
+          <button @click="annullaSpedizione" class="flex-1 md:flex-none px-4 py-2 md:px-6 md:py-3 rounded-xl text-xs font-bold text-gray-300 hover:bg-gray-800 transition-colors border border-gray-700 whitespace-nowrap">
+            ANNULLA
+          </button>
+          
+          <button @click="avviaCreazioneDdt" class="flex-1 md:flex-none bg-blue-600 hover:bg-blue-500 text-white px-5 py-2 md:px-6 md:py-3 rounded-xl font-bold text-sm shadow-xl shadow-blue-900/40 transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-2 whitespace-nowrap">
+            <span>CREA DDT</span>
+            <ChevronDoubleRightIcon class="w-4 h-4" />
+          </button>
+        </div>
+
+      </div>
+    </div>
 </template>
 
 <style scoped>
 .animate-fade-in { animation: fadeIn 0.2s ease-out; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+.animate-bounce-in {
+  animation: bounceIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+@keyframes bounceIn {
+  0% { opacity: 0; transform: translate(-50%, 100%); }
+  100% { opacity: 1; transform: translate(-50%, 0); }
+}
 </style>

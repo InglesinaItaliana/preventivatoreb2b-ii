@@ -19,11 +19,12 @@ import {
   InformationCircleIcon, 
   MagnifyingGlassCircleIcon,
   ShoppingCartIcon,
+  CalendarIcon,
 } from '@heroicons/vue/24/solid'
 
 const toastMessage = ref('');
 const showToast = ref(false);
-
+const dataConsegnaPrevista = ref('');
 const showCustomToast = (message: string) => {
   toastMessage.value = message;
   showToast.value = true;
@@ -294,7 +295,13 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
         });
       }
     });
-
+    if (isAdmin.value && (azione === 'ADMIN_VELOCE' || azione === 'ADMIN_FIRMA')) {
+    if (!dataConsegnaPrevista.value) {
+      alert("⚠️ Attenzione: Devi inserire una DATA DI CONSEGNA PREVISTA per confermare l'ordine.");
+      isSaving.value = false;
+      return;
+    }
+    }
     // 1. DEFINIZIONE DATI (SENZA UID!)
     const docData: any = {
       codice,
@@ -310,7 +317,8 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
       sommarioPreventivo: sommario, 
       dataModifica: serverTimestamp(),
       dataScadenza: new Date(Date.now() + 30*24*60*60*1000),
-      elementi: preventivo.value.map(r => ({ ...r }))
+      elementi: preventivo.value.map(r => ({ ...r })),
+      dataConsegnaPrevista: dataConsegnaPrevista.value || null
       };
 
     // 2. LOGICA UID / CREAZIONE
@@ -429,6 +437,7 @@ const caricaPreventivo = async () => {
     noteCliente.value = d.noteCliente || '';
     scontoApplicato.value = d.scontoPercentuale || 0;
     listaAllegati.value = d.allegati || [];
+    dataConsegnaPrevista.value = d.dataConsegnaPrevista || ''; // Recupera dal DB o stringa vuota
 
     preventivo.value = d.elementi.map((el: any) => ({
       ...el,
@@ -745,12 +754,30 @@ onMounted(() => {
 
           <div class="flex gap-3">
             <template v-if="isAdmin">
-              <div v-if="statoCorrente === 'ORDER_REQ'" class="flex items-center gap-6">
-                <span class="text-xl text-gray-400 uppercase font-bold">RICHIEDI CONFERMA D'ORDINE</span>
-                <div class="flex gap-2">
-                  <button @click="salvaPreventivo('ADMIN_VELOCE')" class="bg-yellow-400 hover:bg-yellow-300 text-yellow-900 flex items-center px-12 py-3 rounded font-bold text-xl">VELOCE</button>
-                  <button @click="salvaPreventivo('ADMIN_FIRMA')" class="bg-blue-600 hover:bg-blue-500 text-blue-100 flex items-center px-12 py-3 rounded font-bold text-xl">FIRMA</button>
+              <div v-if="statoCorrente === 'ORDER_REQ'" class="flex flex-col md:flex-row items-end md:items-center gap-6">
+    
+                <span class="text-xl text-gray-400 uppercase font-bold hidden xl:block">RICHIEDI CONFERMA D'ORDINE</span>
+                
+                <div class="flex flex-col gap-1">
+                  <label class="text-[10px] uppercase font-bold text-yellow-500 flex items-center gap-1">
+                    <CalendarIcon class="h-3 w-3" /> Data Consegna Prevista
+                  </label>
+                  <input 
+                    type="date" 
+                    v-model="dataConsegnaPrevista"
+                    class="bg-gray-800 text-white border border-gray-600 rounded px-3 py-2 text-sm font-bold focus:border-yellow-400 outline-none"
+                  >
                 </div>
+
+                <div class="flex gap-2">
+                  <button @click="salvaPreventivo('ADMIN_VELOCE')" class="bg-yellow-400 hover:bg-yellow-300 text-yellow-900 flex items-center px-6 py-3 rounded font-bold text-lg shadow-lg shadow-yellow-400/20">
+                    VELOCE
+                  </button>
+                  <button @click="salvaPreventivo('ADMIN_FIRMA')" class="bg-blue-600 hover:bg-blue-500 text-blue-100 flex items-center px-6 py-3 rounded font-bold text-lg shadow-lg shadow-blue-600/20">
+                    FIRMA
+                  </button>
+                </div>
+                
               </div>
               
               <div v-else-if="statoCorrente === 'PENDING_VAL' || statoCorrente === 'DRAFT'" class="flex gap-2">
