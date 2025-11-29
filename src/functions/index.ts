@@ -235,7 +235,6 @@ exports.generaOrdineFIC = functions
 exports.creaDdtCumulativo = functions
     .region('europe-west1')
     .https.onCall(async (data, context) => {
-        // 1. Verifica Autenticazione (Opzionale ma consigliato: if (!context.auth) ...)
         
         const { orderIds, date, colli, weight } = data;
         
@@ -245,11 +244,9 @@ exports.creaDdtCumulativo = functions
 
         try {
             const db = admin.firestore();
-            const accessToken = await getValidFicToken(); // Riutilizza la tua funzione helper esistente
+            const accessToken = await getValidFicToken(); 
             
-            // 2. Recupera tutti i documenti ordine da Firestore
-            // Nota: Firestore 'in' query supporta max 10/30 items. Se ne selezioni troppi potrebbe servire un loop.
-            // Per semplicità qui facciamo get paralleli.
+            // 2. Recupera ordini
             const orderSnapshots = await Promise.all(
                 orderIds.map((id: string) => db.collection('preventivi').doc(id).get())
             );
@@ -260,24 +257,15 @@ exports.creaDdtCumulativo = functions
                  return { success: false, message: "Ordini non trovati nel DB." };
             }
 
-            // 3. Prepara i dati per il DDT
-            // Usiamo il PRIMO ordine per determinare il cliente (Entity)
+            // 3. Dati Cliente (dal primo ordine)
             const primoOrdine = ordiniFirestore[0];
-            
-            // Cerchiamo l'ID cliente FiC. Se abbiamo salvato fic_client_id nell'ordine usiamo quello,
-            // altrimenti dobbiamo rifare la ricerca tramite P.IVA (come in generaOrdine).
-            // ASSUNZIONE: Quando crei l'ordine in generaOrdineFIC, è meglio salvare anche 'fic_client_id' su firestore.
-            // Se non ce l'hai, dobbiamo fare una chiamata extra a FiC qui.
-            // Per ora usiamo la logica di ricerca rapida basata sulla P.IVA dell'utente associato.
-            
-            // Recupero dati utente per avere la P.IVA
             const userDoc = await db.collection('users').doc(primoOrdine.clienteUID).get();
             const userData = userDoc.data();
             const pivaCliente = userData?.piva;
 
             if (!pivaCliente) return { success: false, message: "P.IVA Cliente mancante." };
 
-            // Cerco ID Cliente su FiC (Lookup rapido)
+            // Ricerca ID Cliente FiC
             const searchRes: any = await axios.get(`${FIC_API_URL}/c/${COMPANY_ID}/entities/clients`, {
                 headers: { Authorization: `Bearer ${accessToken}` },
                 params: { "q": `vat_number = '${pivaCliente}'` }
@@ -293,27 +281,17 @@ exports.creaDdtCumulativo = functions
                  return { success: false, message: "Cliente non trovato su FiC." };
             }
 
-            // 4. Costruzione Lista Articoli (MERGE)
+            // 4. Costruzione Lista Articoli (SENZA RIGHE A QUANTITA ZERO)
             let itemsListMerged: any[] = [];
 
             ordiniFirestore.forEach((ordine: any) => {
-                // Aggiunge una riga descrittiva (Opzionale, ma utile per capire da che ordine arrivano)
-                itemsListMerged.push({
-                    name: `Rif. Ordine ${ordine.commessa || ordine.codice}`,
-                    qty: 0, net_price: 0, vat: { id: VAT_ID, value: VAT_VALUE }, // Riga solo testo
-                    stock: false // Non movimenta magazzino questa riga
-                });
-
-                // Aggiunge gli articoli veri
                 const elementi = ordine.elementi || [];
                 elementi.forEach((el: any) => {
                     itemsListMerged.push({
                         name: el.descrizioneCompleta || "Articolo",
-                        description: `Dim: ${el.base_mm}x${el.altezza_mm} mm${el.infoCanalino ? ` - ${el.infoCanalino}` : ''}`,
-                        qty: el.quantita || 1,
-                        // net_price: 0,  <-- RIMOSSO (Era questo il duplicato)
-                        // gross_price: 0, <-- Opzionale, se usi net_price + vat, FiC calcola il lordo
-                        net_price: el.prezzo_unitario || 0, // Manteniamo solo questo che prende il prezzo reale
+                        description: `Rif: ${ordine.commessa || ordine.codice} - Dim: ${el.base_mm}x${el.altezza_mm} mm${el.infoCanalino ? ` - ${el.infoCanalino}` : ''}`,
+                        qty: el.quantita || 1, // Assicuriamoci che sia almeno 1
+                        net_price: el.prezzo_unitario || 0,
                         vat: { id: VAT_ID, value: VAT_VALUE }
                     });
                 });
@@ -322,20 +300,20 @@ exports.creaDdtCumulativo = functions
             // 5. Payload DDT
             const ddtPayload = {
                 data: {
-                    type: "delivery_note", // DDT
+                    type: "delivery_note",
                     entity: {
                         id: ficClientId,
                         name: ficClientName
                     },
-                    date: date, // Data selezionata nella modale
-                    // number: omesso -> auto-increment
+                    date: date, // YYYY-MM-DD
                     visible_subject: `DDT Cumulativo - ${ordiniFirestore.length} Ordini`,
                     items_list: itemsListMerged,
                     delivery_note: {
-                        colli: colli,
+                        colli: parseInt(colli), // Forza intero
                         transport_causal: "VENDITA",
                         transport_type: "MITTENTE",
-                        weight: weight > 0 ? weight : undefined
+                        // weight deve essere number o null, non undefined o stringa vuota
+                        weight: (weight && Number(weight) > 0) ? Number(weight) : null
                     }
                 }
             };
@@ -345,16 +323,14 @@ exports.creaDdtCumulativo = functions
                 headers: { Authorization: `Bearer ${accessToken}` }
             });
 
-            // 7. Aggiornamento Firestore (Opzionale: segna ordini come 'SPEDITI' o salva ref DDT)
-            // Possiamo aggiornare tutti gli ordini con il riferimento al DDT creato
+            // 7. Aggiornamento Firestore
             const batch = db.batch();
             orderIds.forEach((id: string) => {
                 const ref = db.collection('preventivi').doc(id);
-                // Non cambiamo stato qui, o forse sì? Per ora salviamo solo il riferimento
                 batch.update(ref, { 
                     fic_ddt_id: ddtRes.data.data.id,
                     fic_ddt_url: ddtRes.data.data.url,
-                    stato: 'SHIPPED' // Se vuoi cambiarlo automaticamente
+                    stato: 'READY' // Lasciamo READY o mettiamo 'SHIPPED'?
                 });
             });
             await batch.commit();
@@ -362,10 +338,16 @@ exports.creaDdtCumulativo = functions
             return { success: true, fic_id: ddtRes.data.data.id };
 
         } catch (error: any) {
-            console.error("Errore creaDdtCumulativo:", error);
+            console.error("❌ Errore API FiC:", error.response?.data); // Log nel server
+            
+            // Restituisci l'errore dettagliato al frontend per capire cosa non va
+            const dettagliErrore = error.response?.data?.error?.validation_errors 
+                ? JSON.stringify(error.response.data.error.validation_errors)
+                : (error.response?.data?.error?.message || error.message);
+
             return { 
                 success: false, 
-                message: error.response?.data?.error?.message || error.message 
+                message: "Errore FiC: " + dettagliErrore 
             };
         }
     });
