@@ -140,13 +140,12 @@ const aggiungi = () => {
   if (categoriaGriglia.value === 'DUPLEX' && fuseruolo.value) {
     descStart += ` ${fuseruolo.value}`;
   }
-  const descrizioneCompleta = `${descStart} ${tipoGriglia.value} ${dimensioneGriglia.value} - ${finituraGriglia.value}`;
 
   preventivo.value.push({
     id: Date.now().toString(),
     categoria: categoriaGriglia.value, modello: tipoGriglia.value as any, dimensione: dimensioneGriglia.value, finitura: finituraGriglia.value,
     base_mm: pannello.base, altezza_mm: pannello.altezza, righe: pannello.righe || 0, colonne: pannello.colonne || 0, quantita: pannello.qty,
-    descrizioneCompleta: `${categoriaGriglia.value} ${tipoGriglia.value} ${dimensioneGriglia.value} - ${finituraGriglia.value}`,
+    descrizioneCompleta: `${categoriaGriglia.value} ${fuseruolo.value} ${tipoGriglia.value} ${dimensioneGriglia.value} - ${finituraGriglia.value}`,
     infoCanalino: `Canalino: ${tipoCanalino.value} ${dimensioneCanalino.value} ${finituraCanalino.value}`,
     prezzo_unitario: result.prezzo_unitario, prezzo_totale: result.prezzo_totale,
     nonEquidistanti: opzioniTelaio.nonEquidistanti, curva: opzioniTelaio.curva, tacca: opzioniTelaio.tacca,
