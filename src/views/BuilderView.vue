@@ -247,6 +247,10 @@ const onConfirmSign = async (url: string) => {
 
 const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADMIN_VALIDA' | 'ADMIN_RIFIUTA' | 'ADMIN_VELOCE' | 'ADMIN_FIRMA' | 'FORCE_EDIT') => {
   if (preventivo.value.length === 0) return alert("Preventivo vuoto.");
+  if (!riferimentoCommessa.value.trim()) {
+    alert("Il campo 'Riferimento Cantiere' è obbligatorio per salvare o ordinare.");
+    return;
+  }
   isSaving.value = true;
 
   try {
@@ -554,7 +558,7 @@ onMounted(() => {
       </div>
       
       <div 
-        class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all p-5"
+        class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all p-5 card-dati-commessa"
         ref="riferimentoCommessaInput"
         >
         <h2 class="font-bold text-lg font-heading border-b pb-2 mb-4 flex items-center gap-2 text-gray-800">
@@ -566,7 +570,7 @@ onMounted(() => {
         <div class="flex flex-col lg:flex-row gap-4 items-start">
           <div class="flex-1 w-full flex flex-col justify-between">
               <div>
-                  <label class="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Riferimento Cantiere</label>
+                  <label class="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Riferimento Cantiere <span class="text-red-500">*</span></label>
                   <input 
                     v-model="riferimentoCommessa" 
                     :disabled="isLocked" 
@@ -626,11 +630,10 @@ onMounted(() => {
       </div>
       <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
     
-      <div class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all p-5 space-y-4 h-full">
+      <div class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all p-5 h-full">
         <h2 class="font-bold text-lg border-b pb-2 font-heading text-gray-800">1. Griglia</h2>
         <div v-if="catalog.loading" class="text-center p-4 text-sm text-gray-400">Caricamento...</div>
         <div v-else>
-            
             <select v-model="tipoGriglia" :disabled="!tipiGrigliaDisp.length || isLocked" class="w-full p-2 border rounded mt-4 bg-white text-sm disabled:opacity-60"><option value="" disabled>Seleziona Tipo</option><option v-for="m in tipiGrigliaDisp" :key="m" :value="m">{{ m }}</option></select>
             <select v-if="tipoGriglia" v-model="dimensioneGriglia" :disabled="!dimensioniGrigliaDisp.length || isLocked" class="w-full p-2 border rounded mt-4 bg-white text-sm disabled:opacity-60"><option value="" disabled>Seleziona Dimensione</option><option v-for="d in dimensioniGrigliaDisp" :key="d" :value="d">{{ d }}</option></select>
             <select v-if="dimensioneGriglia" v-model="finituraGriglia" :disabled="!finitureGrigliaDisp.length || isLocked" class="w-full p-2 border rounded mt-4 bg-white text-sm disabled:opacity-60"><option value="" disabled>Seleziona Finitura</option><option v-for="f in finitureGrigliaDisp" :key="f" :value="f">{{ f }}</option></select>
@@ -644,8 +647,8 @@ onMounted(() => {
       <div class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all p-5 space-y-4 h-full">
         <div class="flex justify-between items-center border-b pb-2">
             <h2 class="font-bold text-lg font-heading text-gray-800">2. Canalino</h2>
-            <label v-if="categoriaGriglia === 'DUPLEX'" class="flex items-center gap-2 text-[10px] font-bold text-yellow-600 cursor-pointer bg-yellow-50 px-2 py-1 rounded hover:bg-yellow-100 uppercase">
-              <input type="checkbox" v-model="copiaDuplex" :disabled="isLocked" class="rounded border-yellow-300 text-yellow-600 focus:ring-yellow-500">
+            <label v-if="categoriaGriglia === 'DUPLEX'" class="flex items-center gap-2 text-[10px] font-bold text-yellow-400 cursor-pointer px-2 py-1 rounded uppercase">
+              <input type="checkbox" v-model="copiaDuplex" :disabled="isLocked" class="rounded border-yellow-300 text-yellow-400">
               Copia
             </label>
         </div>
@@ -660,22 +663,19 @@ onMounted(() => {
       <div class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all p-5 space-y-4 h-full">
         <h2 class="font-bold text-lg border-b pb-2 font-heading text-gray-800">3. Telaio</h2>
           <div class="grid grid-cols-2 gap-4">
-            <div><label class="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Base (mm)</label><input v-model.number="pannello.base" :disabled="isLocked" type="number" class="border p-2 rounded w-full text-sm focus:ring-2 focus:ring-yellow-400 outline-none disabled:bg-gray-100"></div>
-            <div><label class="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Altezza (mm)</label><input v-model.number="pannello.altezza" :disabled="isLocked" type="number" class="border p-2 rounded w-full text-sm focus:ring-2 focus:ring-yellow-400 outline-none disabled:bg-gray-100"></div>
+            <div><input v-model.number="pannello.base" :disabled="isLocked" type="number" class="border p-2 rounded w-full text-center text-sm focus:ring-2 focus:ring-yellow-400 outline-none disabled:bg-gray-100" placeholder="Base (mm)"></div>
+            <div><input v-model.number="pannello.altezza" :disabled="isLocked" type="number" class="border p-2 rounded w-full text-center text-sm focus:ring-2 focus:ring-yellow-400 outline-none disabled:bg-gray-100" placeholder="Altezza (mm)"></div>
           </div>
 
           <div class="grid grid-cols-3 gap-2">
             <div>
-              <label class="text-[10px] font-bold text-gray-400 uppercase mb-1 block text-center">Verticali</label>
-              <input v-model.number="pannello.righe" :disabled="isLocked" type="number" class="border p-2 rounded w-full text-center text-sm disabled:bg-gray-100" placeholder="0">
+              <input v-model.number="pannello.righe" :disabled="isLocked" type="number" class="border p-2 rounded w-full text-center text-sm disabled:bg-gray-100" placeholder="Vert">
             </div>
             <div>
-              <label class="text-[10px] font-bold text-gray-400 uppercase mb-1 block text-center">Orizz.</label>
-              <input v-model.number="pannello.colonne" :disabled="isLocked" type="number" class="border p-2 rounded w-full text-center text-sm disabled:bg-gray-100" placeholder="0">
+              <input v-model.number="pannello.colonne" :disabled="isLocked" type="number" class="border p-2 rounded w-full text-center text-sm disabled:bg-gray-100" placeholder="Oriz">
             </div>
             <div>
-              <label class="text-[10px] font-bold text-gray-400 uppercase mb-1 block text-center">Q.tà</label>
-              <input v-model.number="pannello.qty" :disabled="isLocked" type="number" class="border p-2 rounded w-full text-center font-bold bg-yellow-50 text-sm disabled:bg-gray-100">
+              <input v-model.number="pannello.qty" :disabled="isLocked" type="number" class="border p-2 rounded w-full text-center text-sm disabled:bg-gray-100" placeholder="Q.tà">
             </div>
           </div>
 
@@ -960,4 +960,8 @@ onMounted(() => {
 <style scoped>
 .animate-slide-in { animation: slideIn 0.3s ease-out; }
 @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+.card-dati-commessa {
+  /* Imposta un margine di 24px sopra l'elemento quando viene portato in vista */
+  scroll-margin-top: 24px; 
+}
 </style>
