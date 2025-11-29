@@ -73,8 +73,7 @@ const tipoCanalino = ref('');
 const dimensioneCanalino = ref('');
 const finituraCanalino = ref('');
 const copiaDuplex = ref(false);
-const fuseruolo = ref<number | ''>(''); // <--- NUOVA REF
-
+const fuseruolo = ref<number | '' | null>('');
 const adminExtraDesc = ref('Supplemento');
 const adminExtraPrice = ref(0);
 
@@ -157,7 +156,7 @@ const aggiungi = () => {
     prezzo_unitario: result.prezzo_unitario, prezzo_totale: result.prezzo_totale,
     nonEquidistanti: opzioniTelaio.nonEquidistanti, curva: opzioniTelaio.curva, tacca: opzioniTelaio.tacca,
     rawCanalino: { tipo: tipoCanalino.value, dim: dimensioneCanalino.value, fin: finituraCanalino.value },
-    fuseruolo: fuseruolo.value ? Number(fuseruolo.value) : undefined
+    fuseruolo: fuseruolo.value ? Number(fuseruolo.value) : null
   });
   Object.assign(pannello, { base: 0, altezza: 0, righe: 0, colonne: 0, qty: 1 });
   Object.assign(opzioniTelaio, { nonEquidistanti: false, curva: false, tacca: false });
@@ -491,7 +490,7 @@ const modificaRiga = async (index: number) => {
 
 const eliminaRiga = (i:number) => { if(!isLocked.value) preventivo.value.splice(i,1); };
 const aggiungiExtraAdmin = () => {
-  preventivo.value.push({ id: Date.now().toString(), categoria: 'EXTRA', modello: 'MANUALE' as any, dimensione:'-', finitura:'-', descrizioneCompleta:`[ADMIN] ${adminExtraDesc.value}`, infoCanalino:'', base_mm:0, altezza_mm:0, righe:0, colonne:0, quantita:1, prezzo_unitario:adminExtraPrice.value, prezzo_totale:adminExtraPrice.value, curva:false, tacca:false });
+  preventivo.value.push({ id: Date.now().toString(), categoria: 'EXTRA', modello: 'MANUALE' as any, dimensione:'-', finitura:'-', descrizioneCompleta:`${adminExtraDesc.value}`, infoCanalino:'', base_mm:0, altezza_mm:0, righe:0, colonne:0, quantita:1, prezzo_unitario:adminExtraPrice.value, prezzo_totale:adminExtraPrice.value, curva:false, tacca:false });
   adminExtraPrice.value=0;
 };
 

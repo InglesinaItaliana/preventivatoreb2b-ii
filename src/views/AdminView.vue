@@ -510,15 +510,15 @@ onUnmounted(() => {
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-gray-50 text-sm">
-                  <tr v-for="p in statoGruppo.lista" :key="p.id" class="hover:bg-gray-50 transition-colors">
+                  <tr v-for="p in statoGruppo.lista" :key="p.id" class="odd:bg-gray-50 hover:bg-yellow-50 transition-colors">
                     <td class="px-4 py-3">
+                      <div class="text-xs text-gray-500 mt-1">DATA: {{ formatDate(p.dataCreazione?.seconds) }} • COMMESSA: {{ p.commessa || 'Nessun Rif.' }}</div>
                       <div v-if="p.sommarioPreventivo">
                         <div v-for="(item, idx) in p.sommarioPreventivo" :key="idx" class="text text-gray-600 font-medium">
                           <span class="font-bold">{{ item.quantitaTotale }} x</span> {{ item.descrizione }} 
                           <span v-if="item.canalino" class="text-gray-400 italic"> • {{ item.canalino }}</span>
                         </div>
                       </div>
-                      <div class="text-xs text-gray-400 mt-1">DATA: {{ formatDate(p.dataCreazione?.seconds) }} • COMMESSA: {{ p.commessa || 'Nessun Rif.' }}</div>
                     </td>
                     <td class="align-middle px-4 py-3 text-right">
                       <div class="flex justify-end items-center gap-2 w-64">
@@ -579,8 +579,9 @@ onUnmounted(() => {
                     <p class="text-xs text-gray-500">• {{ formatDate(p.dataCreazione?.seconds) }}</p>
                     <span class="text-xs text-gray-500">• Rif. {{ p.commessa || 'Senza Nome' }}</span>
                   </div>
-                  <div v-if="p.sommarioPreventivo" class="mt-2 flex flex-wrap gap-2">
-                    <span v-for="(item, idx) in p.sommarioPreventivo" :key="idx" class="text-[10px] bg-gray-50 px-2 py-1 rounded border text-gray-600">
+                  <div v-if="p.sommarioPreventivo" class="flex flex-col gap-1 mt-2 items-start">
+                    <span v-for="(item, idx) in p.sommarioPreventivo" :key="idx" 
+                          class="text-[10px] bg-gray-50 px-2 py-1 rounded border text-gray-600">
                       <strong>{{ item.quantitaTotale }}x</strong> {{ item.descrizione }}
                     </span>
                   </div>

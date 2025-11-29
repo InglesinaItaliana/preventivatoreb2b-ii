@@ -509,7 +509,7 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
                         :class="getStatusStyling(p.stato).badge">
                     {{ getStatusLabel(p.stato) }}
                   </span>
-                  <div v-if="p.sommarioPreventivo" class="flex flex-col gap-2">
+                  <div v-if="p.sommarioPreventivo" class="flex flex-col gap-1">
                     <span v-for="(item, idx) in p.sommarioPreventivo" :key="idx" 
                           class="text-[10px] bg-gray-50 px-2 py-1 rounded border text-gray-600">
                       <strong>{{ item.quantitaTotale }}x</strong> {{ item.descrizione }}
