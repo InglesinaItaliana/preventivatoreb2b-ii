@@ -193,21 +193,21 @@ const sortByOrder = (list: any[], order: string[]) => {
   });
 };
 
-// 1. PREVENTIVI (Rimossi REJECTED)
+// 1. PREVENTIVI (MODIFICATO: DRAFT -> QUOTE_READY -> PENDING_VAL)
 const preventiviInCorso = computed(() => {
-  const customOrder = ['DRAFT', 'PENDING_VAL', 'QUOTE_READY']; 
+  const customOrder = ['DRAFT', 'QUOTE_READY', 'PENDING_VAL']; 
   const filtered = listaMieiPreventivi.value.filter(p => customOrder.includes(p.stato || 'DRAFT'));
   return sortByOrder([...filtered], customOrder);
 });
 
-// 2. ORDINI
+// 2. ORDINI (MODIFICATO: WAITING_FAST/SIGN -> ORDER_REQ)
 const ordiniConfermati = computed(() => {
-  const customOrder = ['ORDER_REQ', 'WAITING_FAST', 'WAITING_SIGN'];
+  const customOrder = ['WAITING_FAST', 'WAITING_SIGN', 'ORDER_REQ'];
   const filtered = listaMieiPreventivi.value.filter(p => customOrder.includes(p.stato));
   return sortByOrder([...filtered], customOrder);
 });
 
-// 3. PRODUZIONE (Rimossi READY)
+// 3. PRODUZIONE (MODIFICATO: SIGNED -> IN_PRODUZIONE)
 const ordiniInProduzione = computed(() => {
   const customOrder = ['SIGNED', 'IN_PRODUZIONE'];
   const filtered = listaMieiPreventivi.value.filter(p => customOrder.includes(p.stato));

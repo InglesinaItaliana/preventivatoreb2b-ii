@@ -57,7 +57,14 @@ const storicoPreventivi = ref<any[]>([]);
 const mostraStorico = ref(false);
 const codiceRicerca = ref('');
 const isSaving = ref(false);
+const riferimentoCommessaInput = ref<HTMLInputElement | null>(null);
 
+const scrollToTopOnFocus = () => {
+  if (riferimentoCommessaInput.value) {
+    // Scorri l'elemento all'inizio della viewport (in alto) in modo fluido
+    riferimentoCommessaInput.value.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+};
 const categoriaGriglia = ref<Categoria>('INGLESINA');
 const tipoGriglia = ref('');
 const dimensioneGriglia = ref('');
@@ -508,7 +515,7 @@ onMounted(() => {
 
 <template>
   <div class="min-h-screen bg-gray-50/90 p-6 font-sans text-gray-700">
-      <main class="max-w-5xl mx-auto flex flex-col gap-6">
+      <main class="max-w-5xl mx-auto flex flex-col gap-2">
         <div class="relative flex flex-col md:flex-row justify-between items-end mb-8 gap-4">
         
         <button 
@@ -546,16 +553,29 @@ onMounted(() => {
         </div>
       </div>
       
-      <div class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all p-5">
+      <div 
+        class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all p-5"
+        ref="riferimentoCommessaInput"
+        >
         <h2 class="font-bold text-lg font-heading border-b pb-2 mb-4 flex items-center gap-2 text-gray-800">
           Dati Commessa
         </h2>
-
+          <div class="flex bg-gray-100 p-1 rounded-lg mb-4">
+            <button v-for="c in categorieGrigliaDisp" :key="c" @click="categoriaGriglia = c as Categoria" :disabled="isLocked" :class="categoriaGriglia === c ? 'bg-yellow-400 shadow text-black' : 'text-gray-00'" class="flex-1 py-2 text-xs font-bold rounded-md transition-all uppercase disabled:opacity-50">{{ c }}</button>
+          </div>
         <div class="flex flex-col lg:flex-row gap-4 items-start">
           <div class="flex-1 w-full flex flex-col justify-between">
               <div>
                   <label class="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Riferimento Cantiere</label>
-                  <input v-model="riferimentoCommessa" :disabled="isLocked" type="text" class="w-full p-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-yellow-400 focus:border-transparent outline-none transition-all" placeholder="Es. Rossi Cucina">
+                  <input 
+                    v-model="riferimentoCommessa" 
+                    :disabled="isLocked" 
+                    type="text" 
+                    class="w-full p-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-yellow-400 focus:border-transparent outline-none transition-all" 
+                    placeholder="Es. Rossi Cucina"
+                    ref="riferimentoCommessaInput"
+                    @focus="scrollToTopOnFocus"
+                  >              
               </div>
               <div></div>
           </div>
@@ -563,9 +583,16 @@ onMounted(() => {
           <div class="flex-1 w-full flex flex-col justify-between">
             <div>
                 <label class="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Note Tecniche</label>
-                <textarea v-model="noteCliente" :disabled="isLocked" rows="1" class="w-full p-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-yellow-400 focus:border-transparent outline-none transition-all resize-none" placeholder="Es. Consegna tassativa..."></textarea>
+                <textarea 
+                    v-model="noteCliente" 
+                    :disabled="isLocked" 
+                    rows="1" 
+                    class="w-full p-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-yellow-400 focus:border-transparent outline-none transition-all resize-none" 
+                    placeholder="Es. Consegna tassativa..."
+                    @focus="scrollToTopOnFocus"
+                    >
+                </textarea>            
             </div>
-            
             <div v-if="noteCliente" class="flex items-center gap-1 mt-1 text-yellow-500 text-xs font-bold animate-pulse">
                 <InformationCircleIcon class="h-5 w-5 text-yellow-500" />         
                 La presenza di una nota richiede una validazione
@@ -603,9 +630,7 @@ onMounted(() => {
         <h2 class="font-bold text-lg border-b pb-2 font-heading text-gray-800">1. Griglia</h2>
         <div v-if="catalog.loading" class="text-center p-4 text-sm text-gray-400">Caricamento...</div>
         <div v-else>
-            <div class="flex bg-gray-50 p-1 rounded-lg">
-              <button v-for="c in categorieGrigliaDisp" :key="c" @click="categoriaGriglia = c as Categoria" :disabled="isLocked" :class="categoriaGriglia === c ? 'bg-white shadow text-black' : 'text-gray-500'" class="flex-1 py-2 text-xs font-bold rounded-md transition-all uppercase disabled:opacity-50">{{ c }}</button>
-            </div>
+            
             <select v-model="tipoGriglia" :disabled="!tipiGrigliaDisp.length || isLocked" class="w-full p-2 border rounded mt-4 bg-white text-sm disabled:opacity-60"><option value="" disabled>Seleziona Tipo</option><option v-for="m in tipiGrigliaDisp" :key="m" :value="m">{{ m }}</option></select>
             <select v-if="tipoGriglia" v-model="dimensioneGriglia" :disabled="!dimensioniGrigliaDisp.length || isLocked" class="w-full p-2 border rounded mt-4 bg-white text-sm disabled:opacity-60"><option value="" disabled>Seleziona Dimensione</option><option v-for="d in dimensioniGrigliaDisp" :key="d" :value="d">{{ d }}</option></select>
             <select v-if="dimensioneGriglia" v-model="finituraGriglia" :disabled="!finitureGrigliaDisp.length || isLocked" class="w-full p-2 border rounded mt-4 bg-white text-sm disabled:opacity-60"><option value="" disabled>Seleziona Finitura</option><option v-for="f in finitureGrigliaDisp" :key="f" :value="f">{{ f }}</option></select>
