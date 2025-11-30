@@ -233,90 +233,115 @@ exports.generaOrdineFIC = functions
     }
     return null;
 });
+
 // --- FUNZIONE CREAZIONE DDT CUMULATIVO (HTTP Callable) ---
 exports.creaDdtCumulativo = functions
     .region('europe-west1')
     .https.onCall(async (data, _context) => {
-    var _a, _b, _c, _d, _e, _f;
-    const { orderIds, date, colli, weight } = data;
-    console.log("🚀 Inizio creaDdtCumulativo per ordini:", orderIds); // LOG 1
-    if (!orderIds || orderIds.length === 0) {
-        return { success: false, message: "Nessun ordine selezionato." };
-    }
-    try {
-        const db = admin.firestore();
-        const accessToken = await getValidFicToken();
-        // 1. Recupera ID FiC da Firestore
-        const orderSnapshots = await Promise.all(orderIds.map((id) => db.collection('preventivi').doc(id).get()));
-        const ficIdsToJoin = [];
-        for (const snap of orderSnapshots) {
-            const d = snap.data();
-            if (d && d.fic_order_id) {
-                ficIdsToJoin.push(d.fic_order_id);
+        
+        const { orderIds, date, colli, weight } = data;
+        
+        if (!orderIds || orderIds.length === 0) {
+            return { success: false, message: "Nessun ordine selezionato." };
+        }
+
+        try {
+            const db = admin.firestore();
+            const accessToken = await getValidFicToken(); 
+            
+            // 1. Recupera ordini
+            const orderSnapshots = await Promise.all(
+                orderIds.map((id: string) => db.collection('preventivi').doc(id).get())
+            );
+
+            const ficIdsToJoin: number[] = [];
+            for (const snap of orderSnapshots) {
+                const d = snap.data();
+                if (d && d.fic_order_id) {
+                    ficIdsToJoin.push(d.fic_order_id);
+                }
             }
-        }
-        console.log("🔗 ID FiC trovati da unire:", ficIdsToJoin); // LOG 2
-        if (ficIdsToJoin.length === 0) {
-            return { success: false, message: "Nessun ID FiC valido trovato." };
-        }
-        // 2. CHIAMATA JOIN
-        const joinUrl = `${FIC_API_URL}/c/${COMPANY_ID}/issued_documents/join`;
-        console.log("📞 Chiamo JOIN su:", joinUrl);
-        const joinResponse = await axios_1.default.get(joinUrl, {
-            headers: { Authorization: `Bearer ${accessToken}` },
-            params: {
-                ids: ficIdsToJoin.join(','),
-                type: 'delivery_note' // Chiediamo esplicitamente un template DDT
+
+            if (ficIdsToJoin.length === 0) {
+                 return { success: false, message: "Nessun ID FiC valido trovato." };
             }
-        });
-        let documentData = joinResponse.data.data;
-        console.log("📦 Dati ricevuti da JOIN (Anteprima):", JSON.stringify(documentData).substring(0, 200) + "..."); // LOG 3
-        // 3. PREPARAZIONE PAYLOAD
-        // Pulizia e forzatura dati
-        delete documentData.id; // Rimuoviamo ID vecchio
-        // FORZATURA TIPO: Fondamentale!
-        documentData.type = "delivery_note";
-        documentData.date = date;
-        documentData.visible_subject = `DDT Cumulativo (${ficIdsToJoin.length} Ordini)`;
-        // Dati trasporto (Campi diretti alla radice per API v2 creazione)
-        documentData.transport_causal = "VENDITA";
-        documentData.transport_type = "MITTENTE";
-        documentData.packages_number = parseInt(colli);
-        if (weight && Number(weight) > 0) {
-            documentData.weight = Number(weight);
-        }
-        console.log("📤 Payload finale inviato a CREATE:", JSON.stringify(documentData, null, 2)); // LOG 4
-        // 4. CREAZIONE (POST)
-        const createUrl = `${FIC_API_URL}/c/${COMPANY_ID}/issued_documents`;
-        const createRes = await axios_1.default.post(createUrl, { data: documentData }, {
-            headers: { Authorization: `Bearer ${accessToken}` }
-        });
-        console.log("✅ RISPOSTA CREATE:", createRes.data); // LOG 5
-        // 5. Aggiornamento Firestore
-        const batch = db.batch();
-        orderIds.forEach((id) => {
-            const ref = db.collection('preventivi').doc(id);
-            batch.update(ref, {
-                fic_ddt_id: createRes.data.data.id,
-                fic_ddt_url: createRes.data.data.url,
-                stato: 'READY'
+
+            // 2. CHIAMATA JOIN
+            const joinUrl = `${FIC_API_URL}/c/${COMPANY_ID}/issued_documents/join`;
+            
+            const joinResponse: any = await axios.get(joinUrl, {
+                headers: { Authorization: `Bearer ${accessToken}` },
+                params: {
+                    ids: ficIdsToJoin.join(','),
+                    type: 'delivery_note'
+                }
             });
-        });
-        await batch.commit();
-        return { success: true, fic_id: createRes.data.data.id };
-    }
-    catch (error) {
-        console.error("❌ ERRORE CRITICO:", error);
-        if (error.response) {
-            console.error("🔍 Dettaglio Risposta Errore:", JSON.stringify(error.response.data, null, 2));
+
+            const joinedData = joinResponse.data.data;
+
+            // 3. COSTRUZIONE PAYLOAD CON CHIAVI SPECIFICHE (dn_ai_)
+            // Usiamo le chiavi dn_ai_ (Delivery Note Attached Info) che spesso FiC usa 
+            // internamente per mappare i dati di trasporto nei DDT creati via API.
+            
+            const finalDocData: any = {
+                type: 'delivery_note',
+                entity: joinedData.entity,
+                date: date,
+                // visible_subject: RIMOSSO COME RICHIESTO
+                currency: joinedData.currency,
+                language: joinedData.language,
+                items_list: joinedData.items_list,
+                payments_list: joinedData.payments_list,
+                
+                // --- DATI TRASPORTO (Mappatura dn_ai_) ---
+                dn_ai_packages_number: colli.toString(), // Convertiamo in stringa per sicurezza
+                dn_ai_causal: "VENDITA",
+                dn_ai_transporter: "MITTENTE", // Nota: Questo campo di solito è il "Vettore"
+                
+                // Mappiamo anche i campi standard per sicurezza (ridondanza non guasta)
+                c_driver_and_contents: {
+                     packages_number: parseInt(colli),
+                     transport_causal: "VENDITA"
+                }
+            };
+
+            if (weight && Number(weight) > 0) {
+                finalDocData.dn_ai_weight = weight.toString();
+            }
+            
+            // Note: Se c'erano note nel join, le manteniamo
+            if (joinedData.notes) finalDocData.notes = joinedData.notes;
+
+            // 4. CREAZIONE (POST)
+            const createUrl = `${FIC_API_URL}/c/${COMPANY_ID}/issued_documents`;
+            const createRes: any = await axios.post(createUrl, { data: finalDocData }, {
+                headers: { Authorization: `Bearer ${accessToken}` }
+            });
+
+            // 5. Aggiornamento Firestore
+            const batch = db.batch();
+            orderIds.forEach((id: string) => {
+                const ref = db.collection('preventivi').doc(id);
+                batch.update(ref, { 
+                    fic_ddt_id: createRes.data.data.id,
+                    fic_ddt_url: createRes.data.data.url,
+                    stato: 'READY' 
+                });
+            });
+            await batch.commit();
+
+            return { success: true, fic_id: createRes.data.data.id };
+
+        } catch (error: any) {
+            console.error("❌ Errore API FiC:", JSON.stringify(error.response?.data || error.message, null, 2));
+
+            const dettagliErrore = error.response?.data?.error?.validation_errors 
+                ? JSON.stringify(error.response.data.error.validation_errors)
+                : (error.response?.data?.error?.message || error.message);
+
+            return { 
+                success: false, 
+                message: "Errore FiC: " + dettagliErrore 
+            };
         }
-        const dettagliErrore = ((_c = (_b = (_a = error.response) === null || _a === void 0 ? void 0 : _a.data) === null || _b === void 0 ? void 0 : _b.error) === null || _c === void 0 ? void 0 : _c.validation_errors)
-            ? JSON.stringify(error.response.data.error.validation_errors)
-            : (((_f = (_e = (_d = error.response) === null || _d === void 0 ? void 0 : _d.data) === null || _e === void 0 ? void 0 : _e.error) === null || _f === void 0 ? void 0 : _f.message) || error.message);
-        return {
-            success: false,
-            message: "Errore FiC: " + dettagliErrore
-        };
-    }
-});
-//# sourceMappingURL=index.js.map
+    });
