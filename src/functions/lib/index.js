@@ -233,7 +233,6 @@ exports.generaOrdineFIC = functions
     }
     return null;
 });
-
 // --- FUNZIONE CREAZIONE DDT CUMULATIVO (HTTP Callable) ---
 exports.creaDdtCumulativo = functions
     .region('europe-west1')
@@ -287,7 +286,7 @@ exports.creaDdtCumulativo = functions
                 type: 'delivery_note',
                 entity: joinedData.entity,
                 date: date,
-                // visible_subject: RIMOSSO COME RICHIESTO
+                visible_subject: `DDT Cumulativo (${ficIdsToJoin.length} Ordini)`,
                 currency: joinedData.currency,
                 language: joinedData.language,
                 items_list: joinedData.items_list,
