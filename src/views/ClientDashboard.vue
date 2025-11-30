@@ -9,6 +9,7 @@ import {
   CheckCircleIcon,
   XCircleIcon, 
   CogIcon, 
+  CubeIcon,
   PlusCircleIcon, 
   ExclamationTriangleIcon,
   ShoppingCartIcon, // NUOVA
@@ -216,7 +217,7 @@ const ordiniInProduzione = computed(() => {
 
 // 4. SPEDIZIONI (Solo READY)
 const ordiniSpediti = computed(() => {
-  const customOrder = ['READY'];
+  const customOrder = ['READY', 'DELIVERY'];
   const filtered = listaMieiPreventivi.value.filter(p => customOrder.includes(p.stato));
   return sortByOrder([...filtered], customOrder);
 });
@@ -244,7 +245,8 @@ const getStatusStyling = (stato: string) => {
     'WAITING_SIGN': { badge: 'bg-blue-50 text-blue-600 border-blue-100', icon: ShoppingCartIcon, iconBg: 'bg-blue-100 text-blue-600' },
     'SIGNED': { badge: 'bg-stone-200 text-stone-600 border-stone-200', icon: CogIcon, iconBg: 'bg-stone-200 text-stone-600' },
     'IN_PRODUZIONE': { badge: 'bg-emerald-100 text-emerald-800 border-emerald-200', icon: CogIcon, iconBg: 'bg-emerald-100 text-emerald-700' },
-    'READY': { badge: 'bg-stone-200 text-stone-600 border-stone-200', icon: TruckIcon, iconBg: 'bg-stone-200 text-stone-600' },
+    'READY': { badge: 'bg-stone-200 text-stone-600 border-stone-200', icon: CubeIcon, iconBg: 'bg-stone-200 text-stone-600' },
+    'DELIVERY': { badge: 'bg-yellow-100 text-yellow-800 border-yellow-200', icon: TruckIcon, iconBg: 'bg-yellow-200 text-yellow-800' },
     'REJECTED': { badge: 'bg-red-100 text-red-700 border-red-200', icon: XCircleIcon, iconBg: 'bg-red-100 text-red-600' },
   };
   return styles[stato] || styles['DRAFT'];
@@ -255,7 +257,7 @@ const getStatusLabel = (stato: string) => {
     'DRAFT': 'BOZZA', 'PENDING_VAL': 'PREVENTIVO IN ATTESA QUOTAZIONE', 'QUOTE_READY': 'PREVENTIVO VALIDATO',
     'ORDER_REQ': 'ORDINE IN ATTESA DI ACCETTAZIONE', 
     'WAITING_FAST': 'ORDINE DA ACCETTARE', 'WAITING_SIGN': 'ORDINE DA FIRMARE',
-    'SIGNED': 'ORDINE PRESO IN CARICO', 'IN_PRODUZIONE': 'ORDINE IN CODA DI PRODUZIONE', 'READY': 'ORDINE PRONTO', 'REJECTED': 'ANNULLATO'
+    'SIGNED': 'ORDINE PRESO IN CARICO', 'IN_PRODUZIONE': 'ORDINE IN CODA DI PRODUZIONE', 'READY': 'ORDINE PRONTO', 'DELIVERY': 'SPEDIZIONE PROGRAMMATA', 'REJECTED': 'ANNULLATO'
   };
   return map[stato] || stato;
 };

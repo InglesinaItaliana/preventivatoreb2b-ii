@@ -49,6 +49,7 @@ const iconMap: Record<string, any> = {
   'SIGNED': ChevronDoubleRightIcon, //ChevronDoubleRightIcon,
   'IN_PRODUZIONE': CogIcon,
   'READY': CubeIcon,
+  'DELIVERY': TruckIcon,
   'REJECTED': XCircleIcon
 };
 
@@ -79,11 +80,29 @@ const categoryCounts = computed(() => {
     if (['PENDING_VAL', 'QUOTE_READY'].includes(st)) counts.PREVENTIVI++;
     else if (['ORDER_REQ', 'WAITING_FAST', 'WAITING_SIGN'].includes(st)) counts.ORDINI++;
     else if (['SIGNED', 'IN_PRODUZIONE'].includes(st)) counts.PRODUZIONE++;
-    else if (['READY'].includes(st)) counts.SPEDIZIONI++;
+    else if (['READY', 'DELIVERY'].includes(st)) counts.SPEDIZIONI++;
     else if (['REJECTED'].includes(st)) counts.ARCHIVIO++;
   });
   return counts;
 });
+
+// Funzione per salvare il numero di colli su Firestore
+const saveColli = async (orderId: string, colli: number) => {
+    // Assicurati che il valore sia un numero intero positivo, default 1
+    const colliValue = Math.max(1, Math.round(Number(colli))); 
+    
+    // Controlla per NaN (Not a Number)
+    if (isNaN(colliValue)) return;
+    
+    try {
+        const orderRef = doc(db, 'preventivi', orderId);
+        // Salva nel campo 'colli' del documento
+        await updateDoc(orderRef, { colli: colliValue }); 
+        console.log(`Colli aggiornati per l'ordine ${orderId}: ${colliValue}`);
+    } catch (error) {
+        console.error("Errore salvataggio colli:", error);
+    }
+};
 
 // Funzione chiamata dal click su "CREA DDT" nella Sticky Bar
 const avviaCreazioneDdt = () => {
@@ -147,8 +166,8 @@ const preventiviFiltrati = computed(() => {
     // Produzione: include SIGNED e IN_PRODUZIONE (via READY)
     if (activeCategory.value === 'PRODUZIONE') return ['SIGNED', 'IN_PRODUZIONE'].includes(st);
 
-    // Spedizioni: solo READY
-    if (activeCategory.value === 'SPEDIZIONI') return ['READY'].includes(st);
+    // Spedizioni: solo READY e DELIVERY
+    if (activeCategory.value === 'SPEDIZIONI') return ['READY', 'DELIVERY'].includes(st);
 
     // Archivio: REJECTED (Draft nascosti)
     if (activeCategory.value === 'ARCHIVIO') return ['REJECTED'].includes(st);
@@ -209,10 +228,38 @@ const onConfirmProduction = async () => {
   } catch (e) { console.error(e); alert("Errore aggiornamento stato."); }
 };
 
+// Variabile per tracciare l'ID dell'ordine che sta chiedendo conferma "Sì/No"
+const idOrdineInConferma = ref<string | null>(null);
+
+// MODIFICATA: Rimuovi l'alert confirm() da qui, ora la conferma è nella UI
 const ordinePronto = async (preventivo: any) => {
-  if(!confirm("Confermi che la merce è PRONTA per il ritiro/spedizione?")) return;
-  await updateDoc(doc(db, 'preventivi', preventivo.id), { stato: 'READY' });
-  preventivo.stato = 'READY';
+  // if(!confirm(...)) return; <--- RIMOSSO
+  try {
+      await updateDoc(doc(db, 'preventivi', preventivo.id), { stato: 'READY' });
+      // Aggiorniamo localmente per reattività immediata
+      const index = listaPreventivi.value.findIndex(x => x.id === preventivo.id);
+      if (index !== -1) listaPreventivi.value[index].stato = 'READY';
+  } catch (e) {
+      console.error(e);
+      alert("Errore aggiornamento");
+  }
+};
+
+// NUOVA: Gestisce il click sul pulsante principale
+const handleClickAzione = (p: any) => {
+  // Se è l'azione "ORDINE PRONTO" (stato IN_PRODUZIONE), attiva la modalità conferma
+  if (p.stato === 'IN_PRODUZIONE') {
+    idOrdineInConferma.value = p.id;
+  } else {
+    // Per tutti gli altri stati (es. Apri, Vedi DDT) esegue subito l'azione
+    getActionData(p).action();
+  }
+};
+
+// NUOVA: Conferma effettiva (Click su "Sì")
+const confermaOrdinePronto = async (p: any) => {
+  await ordinePronto(p);
+  idOrdineInConferma.value = null; // Reset
 };
 
 // --- HIGHLIGHTS ---
@@ -286,7 +333,7 @@ const clientiRaggruppati = computed(() => {
 });
 
 // --- RAGGRUPPAMENTO PER STATO ---
-const ordineStati = ['PENDING_VAL', 'QUOTE_READY', 'ORDER_REQ', 'WAITING_SIGN', 'SIGNED', 'IN_PRODUZIONE', 'READY', 'DRAFT', 'REJECTED'];
+const ordineStati = ['PENDING_VAL', 'QUOTE_READY', 'ORDER_REQ', 'WAITING_SIGN', 'SIGNED', 'IN_PRODUZIONE', 'READY', 'DELIVERY', 'DRAFT', 'REJECTED'];
 
 const preventiviPerStato = computed(() => {
   const gruppi: Record<string, any[]> = {};
@@ -346,6 +393,14 @@ const getActionData = (p: any) => {
   if (st === 'READY')
     return { text: 'APRI', class: 'border border-gray-300 text-gray-600 px-4 py-2 rounded-lg font-bold text-xs hover:bg-gray-50', action: () => apriEditor(p.codice), icon: EyeIcon };
 
+    if (st === 'DELIVERY')
+    return { 
+      text: 'VEDI DDT', 
+      class: 'text-indigo-600 bg-indigo-50 border-indigo-200 hover:bg-indigo-100', 
+      // Apre il PDF del DDT se disponibile, altrimenti apre l'editor
+      action: () => p.fic_ddt_url ? window.open(p.fic_ddt_url, '_blank') : apriEditor(p.codice), 
+      icon: DocumentTextIcon 
+    };
   return { text: 'APRI', class: 'text-gray-500 border-gray-200', action: () => apriEditor(p.codice), icon: DocumentTextIcon };
 };
 
@@ -685,7 +740,7 @@ onUnmounted(() => {
                     :class="getStatusStyling(gruppo.stato).badge.split(' ')[1]" 
                 />
 
-              <span class="font-bold font-heading text-l uppercase" :class="getStatusStyling(gruppo.stato).badge.split(' ')[1]">
+              <span class="text-xl font-bold font-heading text-l uppercase" :class="getStatusStyling(gruppo.stato).badge.split(' ')[1]">
                 {{ getStatusLabel(gruppo.stato) }}
               </span>
               
@@ -697,7 +752,7 @@ onUnmounted(() => {
           </div>
 
           <div v-if="statiEspansi.includes(gruppo.stato)" class="border-t border-gray-100 bg-gray-50 p-4 grid gap-3 animate-fade-in">
-<div v-for="p in gruppo.lista" :key="p.id" 
+            <div v-for="p in gruppo.lista" :key="p.id" 
      class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 transition-all relative group"
      :class="[
         isOrderDimmed(p) ? 'opacity-40 grayscale pointer-events-none' : 'hover:shadow-md',
@@ -707,57 +762,126 @@ onUnmounted(() => {
     <div v-if="p.stato === 'READY'" 
          @click.stop="toggleSpedizione(p)"
          class="absolute -top-2 -right-2 z-20 cursor-pointer transition-transform hover:scale-110">
-      
       <CheckCircleIcon v-if="isOrderSelected(p)" class="h-8 w-8 text-blue-600 bg-white rounded-full shadow-md" />
-      
       <div v-else class="h-8 w-8 rounded-full border border-gray-300 bg-white text-gray-400 flex items-center justify-center shadow-sm hover:border-blue-400 hover:text-blue-500">
         <TruckIcon class="h-4 w-4" />
       </div>
     </div>
-    <div class="flex flex-col md:flex-row justify-between items-center gap-4">
-       <div class="flex items-center gap-4 w-full md:w-auto">
-          </div>
-       <div class="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end">
-          </div>
-    </div>
-              <div class="flex items-center gap-4 w-full md:w-auto">
-                <div class="h-10 w-10 rounded-full flex items-center justify-center" :class="getStatusStyling(p.stato).iconBg">
-                  <component :is="getStatusStyling(p.stato).icon" class="h-6 w-6" />
-                </div>
-                <div>
-                  <div class="flex items-center gap-2">
-                    <h3 class="font-bold text-gray-900">{{ p.cliente }}</h3>
-                    <p class="text-xs text-gray-500">• {{ formatDate(p.dataCreazione?.seconds) }}</p>
-                    <span class="text-xs text-gray-500">• Rif. {{ p.commessa || 'Senza Nome' }}</span>
-                  </div>
-                  <div v-if="p.dataConsegnaPrevista" class="mt-1 flex items-center gap-1 px-2 py-0.5 bg-yellow-100 border border-yellow-200 rounded text-yellow-800 w-fit">
-                      <TruckIcon class="h-3 w-3" />
-                      <span class="text-[10px] font-bold uppercase">{{ formatDateShort(p.dataConsegnaPrevista) }}</span>
-                  </div>
-                  <div v-if="p.sommarioPreventivo" class="flex flex-col gap-1 mt-2 items-start">
-                    <span v-for="(item, idx) in p.sommarioPreventivo" :key="idx" 
-                          class="text-[10px] bg-gray-50 px-2 py-1 rounded border text-gray-600">
-                      <strong>{{ item.quantitaTotale }}x</strong> {{ item.descrizione }}
-                    </span>
-                  </div>
-                </div>
-              </div>
 
-              <div class="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end">
-                <div class="text-right">
-                  <div class="font-bold text-gray-900">{{ (p.totaleScontato || p.totale || 0).toFixed(2) }} €</div>
-                </div>
-                <button
-                  @click.stop="getActionData(p).action()"
-                  class="text-xs font-bold px-3 py-2 rounded border transition-all shadow-sm hover:shadow whitespace-nowrap flex items-center gap-2"
-                  :class="getActionData(p).class"
-                >
-                  <component :is="getActionData(p).icon" class="h-4 w-4" />
-                  <span>{{ getActionData(p).text }}</span>
-                </button>
-              </div>
+    <div class="flex flex-col md:flex-row justify-between items-center gap-4">
+       
+       <div class="flex items-center gap-4 w-full md:w-auto">
+          <div class="h-10 w-10 rounded-full flex items-center justify-center" :class="getStatusStyling(p.stato).iconBg">
+            <component :is="getStatusStyling(p.stato).icon" class="h-6 w-6" />
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h3 class="text-xl font-bold text-gray-900">{{ p.cliente }}</h3>
+              <p class="text-xs text-gray-500">• {{ formatDate(p.dataCreazione?.seconds) }}</p>
+              <span class="text-xs text-gray-500">• Rif. {{ p.commessa || 'Senza Nome' }}</span>
+            </div>
+            
+            <div v-if="p.dataConsegnaPrevista" class="mt-1 flex items-center gap-1 px-2 py-0.5 bg-yellow-100 border border-yellow-200 rounded text-yellow-800 w-fit">
+                <TruckIcon class="h-3 w-3" />
+                <span class="text-[10px] font-bold uppercase">{{ formatDateShort(p.dataConsegnaPrevista) }}</span>
+            </div>
+
+            <div v-if="p.sommarioPreventivo" class="flex flex-col gap-1 mt-2 items-start">
+              <span v-for="(item, idx) in p.sommarioPreventivo" :key="idx" 
+                    class="text-[10px] bg-gray-50 px-2 py-1 rounded border text-gray-600">
+                <strong>{{ item.quantitaTotale }}x</strong> {{ item.descrizione }}
+              </span>
             </div>
           </div>
+       </div>
+
+       <div class="flex flex-col items-end gap-2 w-full md:w-auto justify-center">
+                  
+                  <div class="flex items-center gap-4">
+                       <div class="text-right">
+                         <div class="text-xl font-bold font-heading text-gray-900">{{ (p.totaleScontato || p.totale || 0).toFixed(2) }} €</div>
+                       </div>
+                       
+                       <button @click.stop="apriEditor(p.codice)" 
+                               class="border border-gray-300 text-gray-600 px-3 py-2 rounded p-1.5 font-bold text-xs hover:bg-gray-50 h-[34px] whitespace-nowrap shrink-0"
+                               title="Apri l'editor per visualizzare i dettagli">
+                           APRI
+                       </button>
+                  </div>
+
+                  <div class="flex items-end gap-2">
+                      
+                    <div v-if="p.stato === 'IN_PRODUZIONE'" class="flex flex-col items-start justify-end" @click.stop>
+                      <label class="text-[9px] font-bold text-gray-400 uppercase mb-0.5 leading-none">Colli</label>
+     
+                    <div class="flex items-center bg-gray-50 rounded border border-gray-300 h-[34px] overflow-hidden shadow-sm">
+                        
+                        <button 
+                            @click="() => { if((p.colli || 1) > 1) { p.colli = (p.colli || 1) - 1; saveColli(p.id, p.colli); } }"
+                            class="w-8 h-full flex items-center justify-center text-gray-500 hover:text-red-500 transition-colors active:bg-gray-200"
+                            title="Diminuisci"
+                        >
+                            <span class="text-lg font-bold leading-none mb-0.5">−</span>
+                        </button>
+
+                        <input
+                            type="number"
+                            :value="p.colli || 1"
+                            @input="event => p.colli = Number((event.target as HTMLInputElement).value)" 
+                            @blur="event => saveColli(p.id, Number((event.target as HTMLInputElement).value))" 
+                            @keyup.enter="event => saveColli(p.id, Number((event.target as HTMLInputElement).value))" 
+                            class="w-10 text-center bg-transparent text-sm font-bold text-gray-900 border-gray-50 appearance-none"
+                        />
+
+                        <button 
+                            @click="() => { p.colli = (p.colli || 1) + 1; saveColli(p.id, p.colli); }"
+                            class="w-8 h-full flex items-center justify-center text-gray-500 hover:text-emerald-600 transition-colors active:bg-gray-200 "
+                            title="Aumenta"
+                        >
+                            <span class="text-lg font-bold leading-none mb-0.5">+</span>
+                        </button>
+
+                    </div>
+                    </div>
+
+                    <div class="h-[34px] flex items-center">
+    
+                      <div v-if="idOrdineInConferma === p.id" class="flex gap-1 h-full animate-fade-in">
+                          <button 
+                              @click.stop="confermaOrdinePronto(p)"
+                              class="bg-emerald-100 hover:bg-emerald-200 text-emerald-600 border border-emerald-200 font-bold text-[10px] px-12 rounded shadow-sm transition-colors h-full flex items-center"
+                              title="Conferma"
+                          >
+                              SÌ
+                          </button>
+                          <button 
+                              @click.stop="idOrdineInConferma = null"
+                              class="bg-red-100 hover:bg-red-200 text-red-600 border border-red-200 font-bold text-[10px] px-12 rounded shadow-sm transition-colors h-full flex items-center"
+                              title="Annulla"
+                          >
+                              NO
+                          </button>
+                      </div>
+
+                      <button
+                        v-else
+                        @click.stop="handleClickAzione(p)"
+                        class="text-xs font-bold px-12 py-2 rounded border transition-all shadow-sm hover:shadow whitespace-nowrap flex items-center gap-2 h-full"
+                        :class="getActionData(p).class"
+                        :disabled="p.stato === 'IN_PRODUZIONE' && !p.colli" 
+                      >
+                        <component :is="getActionData(p).icon" class="h-4 w-4" />
+                        <span>{{ getActionData(p).text }}</span>
+                      </button>
+
+                  </div>
+                  </div>
+
+              </div>
+
+    </div> </div>
+  </div>
+
         </div>
       </div>
 

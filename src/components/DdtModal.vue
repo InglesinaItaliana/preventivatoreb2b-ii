@@ -16,15 +16,20 @@ const pesoKg = ref(0);
 const loading = ref(false);
 
 // Calcola i valori di default quando si apre la modale o cambiano gli ordini
-watch(() => props.orders, (newOrders) => {
+watch(() => props.orders, (newOrders: any[]) => {
   if (newOrders.length > 0) {
     // 1. Data: Prendi la data prevista del PRIMO ordine, o oggi
     dataDdt.value = newOrders[0].dataConsegnaPrevista || new Date().toISOString().split('T')[0];
     
-    // 2. Colli: Default 1 collo per ordine (somma)
-    numeroColli.value = newOrders.length;
+    // 2. Colli: SOMMA i colli di ogni ordine (se un ordine non ha 'colli', conta come 1)
+    const totaleColli = newOrders.reduce((somma: number, ordine: any) => {
+        const colliOrdine = ordine.colli ? Number(ordine.colli) : 1;
+        return somma + colliOrdine;
+    }, 0);
+
+    numeroColli.value = totaleColli;
   }
-}, { immediate: true });
+}, { immediate: true, deep: true }); // <--- AGGIUNTO deep: true
 
 const confirm = () => {
   if (numeroColli.value < 1) return alert("Inserire almeno 1 collo");

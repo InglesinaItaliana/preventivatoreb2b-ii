@@ -12,6 +12,7 @@ export type StatoPreventivo =
   | 'SIGNED'            // Ordine - Firmato
   | 'IN_PRODUZIONE'     // Produzione - In Produzione
   | 'READY'             // Produzione - Ordine Pronto - NUOVO
+  | 'DELIVERY'          // Spedizione - Spedizione programmata
   | 'REJECTED';         // Rifiutato
 
 export interface Allegato {
@@ -153,6 +154,13 @@ export const STATUS_DETAILS: Record<StatoPreventivo, { label: string, badge: str
   },
   'READY': { 
     label: 'ORDINI PRONTI', 
+    badge: 'bg-amber-100 text-amber-800 border-amber-200', 
+    iconBg: 'bg-amber-100 text-amber-800', 
+    darkBadge: 'bg-amber-800 text-amber-100',
+    hoverBadge: 'hover:bg-amber-200'
+  },
+  'DELIVERY': { 
+    label: 'SPEDIZIONE PROGRAMMATA', 
     badge: 'bg-amber-100 text-amber-800 border-amber-200', 
     iconBg: 'bg-amber-100 text-amber-800', 
     darkBadge: 'bg-amber-800 text-amber-100',
