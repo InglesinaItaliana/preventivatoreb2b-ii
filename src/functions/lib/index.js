@@ -283,6 +283,7 @@ exports.creaDdtCumulativo = functions
             dn_ai_packages_number: colli.toString(), // Convertiamo in stringa per sicurezza
             dn_ai_causal: "VENDITA",
             dn_ai_transporter: "MITTENTE", // Nota: Questo campo di solito è il "Vettore"
+            dataConsegnaPrevista: date,
             // Mappiamo anche i campi standard per sicurezza (ridondanza non guasta)
             c_driver_and_contents: {
                 packages_number: parseInt(colli),
@@ -307,7 +308,7 @@ exports.creaDdtCumulativo = functions
             batch.update(ref, {
                 fic_ddt_id: createRes.data.data.id,
                 fic_ddt_url: createRes.data.data.url,
-                stato: 'READY'
+                stato: 'DELIVERY'
             });
         });
         await batch.commit();

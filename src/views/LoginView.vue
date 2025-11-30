@@ -25,19 +25,26 @@ const handleLogin = async () => {
     const userCredential = await signInWithEmailAndPassword(auth, username.value, password.value);
     const user = userCredential.user;
 
-    // 2. Controllo Ruolo
-    // SE ADMIN -> Vai diretto
+    // 2. Controllo Ruoli Speciali
+    
+    // ADMIN -> Vai diretto alla Dashboard Admin
     if (user.email === 'info@inglesinaitaliana.it') {
       router.push('/admin');
       return;
     }
 
-    // SE CLIENTE -> Controlla se ha completato il profilo (Onboarding)
+    // PRODUZIONE -> Vai diretto alla Dashboard Produzione
+    if (user.email === 'lavorazioni.inglesinaitaliana@gmail.com') {
+      router.push('/production');
+      return;
+    }
+
+    // 3. Controllo Cliente Standard
     // Cerchiamo se esiste un documento nella collezione 'users' con il suo ID
     const userDoc = await getDoc(doc(db, 'users', user.uid));
 
     if (userDoc.exists()) {
-      // Profilo Esiste -> Salviamo info locali e andiamo alla Dashboard
+      // Profilo Esiste -> Salviamo info locali e andiamo alla Dashboard Cliente
       const userData = userDoc.data();
       // Salviamo il nome azienda per visualizzarlo nell'header
       localStorage.setItem('clientName', userData.ragioneSociale || user.email);
@@ -51,6 +58,7 @@ const handleLogin = async () => {
 
   } catch (error: any) {
     console.error("Errore Login:", error);
+    // Gestione Errori Firebase
     if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
         errorMsg.value = "Email o password non validi.";
     } else if (error.code === 'auth/too-many-requests') {
