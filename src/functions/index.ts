@@ -276,29 +276,38 @@ exports.creaDdtCumulativo = functions
 
             const joinedData = joinResponse.data.data;
 
-            // 3. COSTRUZIONE PAYLOAD PULITO (WHITELIST APPROACH)
-            // Invece di cancellare, copiamo solo ciò che serve. Questo evita errori di "residui".
+            // 3. COSTRUZIONE PAYLOAD CON CHIAVI SPECIFICHE (dn_ai_)
+            // Usiamo le chiavi dn_ai_ (Delivery Note Attached Info) che spesso FiC usa 
+            // internamente per mappare i dati di trasporto nei DDT creati via API.
             
             const finalDocData: any = {
                 type: 'delivery_note',
-                entity: joinedData.entity, // Cliente
+                entity: joinedData.entity,
                 date: date,
                 visible_subject: `DDT Cumulativo (${ficIdsToJoin.length} Ordini)`,
                 currency: joinedData.currency,
                 language: joinedData.language,
-                items_list: joinedData.items_list, // Articoli uniti
-                payments_list: joinedData.payments_list, // Pagamenti uniti
+                items_list: joinedData.items_list,
+                payments_list: joinedData.payments_list,
                 
-                // Dati Trasporto
-                transport_causal: "VENDITA",
-                transport_type: "MITTENTE",
-                packages_number: parseInt(colli),
+                // --- DATI TRASPORTO (Mappatura dn_ai_) ---
+                dn_ai_packages_number: colli.toString(), // Convertiamo in stringa per sicurezza
+                dn_ai_causal: "VENDITA",
+                dn_ai_transporter: "MITTENTE", // Nota: Questo campo di solito è il "Vettore"
+                
+                // Mappiamo anche i campi standard per sicurezza (ridondanza non guasta)
+                c_driver_and_contents: {
+                     packages_number: parseInt(colli),
+                     transport_causal: "VENDITA"
+                }
             };
 
-            // Campi opzionali sicuri
-            if (weight && Number(weight) > 0) finalDocData.weight = Number(weight);
+            if (weight && Number(weight) > 0) {
+                finalDocData.dn_ai_weight = weight.toString();
+            }
+            
+            // Note: Se c'erano note nel join, le manteniamo
             if (joinedData.notes) finalDocData.notes = joinedData.notes;
-            if (joinedData.payment_method) finalDocData.payment_method = joinedData.payment_method;
 
             // 4. CREAZIONE (POST)
             const createUrl = `${FIC_API_URL}/c/${COMPANY_ID}/issued_documents`;
