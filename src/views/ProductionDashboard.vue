@@ -405,8 +405,6 @@ onUnmounted(() => { if (unsubscribe) unsubscribe(); });
                              <div>
                                 <div class="flex items-center gap-2">
                                     <h3 class="text-xl font-bold text-gray-900">{{ p.cliente }}</h3>
-                                    <p class="text-xs text-gray-500">• {{ formatDate(p.dataCreazione?.seconds) }}</p>
-                                    <span class="text-xs text-gray-500">• Rif. {{ p.commessa || 'Senza Nome' }}</span>
                                 </div>
                                 <div v-if="p.dataConsegnaPrevista" class="mt-1 flex items-center gap-1 px-2 py-0.5 bg-yellow-100 border border-yellow-200 rounded text-yellow-800 w-fit">
                                     <TruckIcon class="h-3 w-3" />
