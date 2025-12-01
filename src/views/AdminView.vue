@@ -177,8 +177,8 @@ const preventiviFiltrati = computed(() => {
 });
 
 const clientiEspansi = ref<string[]>([]);
-const statiEspansi = ref<string[]>(['PENDING_VAL', 'ORDER_REQ', 'WAITING_SIGN', 'SIGNED', 'IN_PRODUZIONE']);
-let unsubscribe: null | (() => void) = null;
+  const statiEspansi = ref<string[]>([]);
+  let unsubscribe: null | (() => void) = null;
 
 // --- 1. CARICAMENTO ANAGRAFICA ---
 const caricaAnagrafica = async () => {
@@ -193,15 +193,50 @@ const caricaAnagrafica = async () => {
   } catch (e) { console.error("Errore anagrafica", e); }
 };
 
-// --- 2. CARICAMENTO PREVENTIVI (REAL TIME) ---
+// --- 2. CARICAMENTO PREVENTIVI (REAL TIME OTTIMIZZATO) ---
 const caricaTutti = () => {
   if (unsubscribe) unsubscribe();
 
   const q = query(collection(db, 'preventivi'), orderBy('dataCreazione', 'desc'), limit(300));
   
   unsubscribe = onSnapshot(q, (snapshot) => {
-    listaPreventivi.value = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-    loading.value = false;
+    // 1. Primo caricamento: carichiamo tutto in massa per velocità
+    if (loading.value) {
+      listaPreventivi.value = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      loading.value = false;
+      return;
+    }
+
+    // 2. Aggiornamenti successivi: modifichiamo SOLO ciò che è cambiato
+    snapshot.docChanges().forEach((change) => {
+      const docData = { id: change.doc.id, ...change.doc.data() };
+      
+      // Cerchiamo se l'elemento esiste già nella nostra lista locale
+      const index = listaPreventivi.value.findIndex(p => p.id === change.doc.id);
+
+      if (change.type === "added") {
+        // Se è nuovo, lo aggiungiamo (rispettando l'ordine se possibile, o in cima)
+        if (index === -1) {
+            // newIndex ci dice dove Firestore lo posizionerebbe in base all'ordinamento
+            listaPreventivi.value.splice(change.newIndex, 0, docData);
+        }
+      }
+      
+      if (change.type === "modified") {
+        if (index !== -1) {
+          // TRUCCO PER NON PERDERE IL FOCUS:
+          // Invece di sostituire l'oggetto (che distrugge l'input), aggiorniamo le sue proprietà
+          Object.assign(listaPreventivi.value[index], docData);
+        }
+      }
+      
+      if (change.type === "removed") {
+        if (index !== -1) {
+          listaPreventivi.value.splice(index, 1);
+        }
+      }
+    });
+
   }, (error) => {
     console.error("Errore real-time:", error);
     loading.value = false;

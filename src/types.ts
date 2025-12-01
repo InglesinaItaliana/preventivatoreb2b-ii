@@ -13,7 +13,19 @@ export type StatoPreventivo =
   | 'IN_PRODUZIONE'     // Produzione - In Produzione
   | 'READY'             // Produzione - Ordine Pronto - NUOVO
   | 'DELIVERY'          // Spedizione - Spedizione programmata
+  | 'DELIVERED'         // Consegna - Consegnato (Stato Finale)
   | 'REJECTED';         // Rifiutato
+
+  // Aggiungi interfaccia per la Sessione di Consegna
+export interface DeliverySession {
+  id: string;
+  driverUid: string;
+  driverName: string;
+  startTime: any; // Timestamp
+  endTime: any | null; // Timestamp
+  status: 'OPEN' | 'CLOSED';
+  deliveredOrderIds: string[]; // Array di ID ordini consegnati in questo viaggio
+}
 
 export interface Allegato {
   nome: string;
@@ -165,6 +177,13 @@ export const STATUS_DETAILS: Record<StatoPreventivo, { label: string, badge: str
     iconBg: 'bg-amber-100 text-amber-800', 
     darkBadge: 'bg-amber-800 text-amber-100',
     hoverBadge: 'hover:bg-amber-200'
+  },
+  'DELIVERED': { 
+    label: 'CONSEGNATO', 
+    badge: 'bg-green-100 text-green-800 border-green-200', 
+    iconBg: 'bg-green-100 text-green-800', 
+    darkBadge: 'bg-green-800 text-green-100',
+    hoverBadge: 'hover:bg-green-200'
   },
   'REJECTED': { 
     label: 'ANNULLATI', 
