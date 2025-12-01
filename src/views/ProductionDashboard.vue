@@ -60,12 +60,13 @@ const saveColli = async (orderId: string, colli: number) => {
     } catch (error) { console.error("Errore salvataggio colli:", error); }
 };
 
-// Filtro principale: Mostra SOLO 'SIGNED' e 'IN_PRODUZIONE'
+// Filtro principale: Mostra SOLO 'SIGNED' e 'IN_PRODUZIONE' + ORDINAMENTO DATA CONSEGNA
 const preventiviFiltrati = computed(() => {
   const now = new Date();
   
-  return listaPreventivi.value.filter(p => {
-    // 1. Filtro Data
+  // 1. PRIMA FILTRIAMO
+  const listaFiltrata = listaPreventivi.value.filter(p => {
+    // 1. Filtro Data (Logica esistente)
     if (filtroPeriodo.value !== 'TUTTO' && p.dataCreazione?.seconds) {
       const d = new Date(p.dataCreazione.seconds * 1000);
       if (filtroPeriodo.value === 'CORRENTE' && (d.getMonth() !== now.getMonth() || d.getFullYear() !== now.getFullYear())) return false;
@@ -77,13 +78,30 @@ const preventiviFiltrati = computed(() => {
 
     // 2. Filtro Categoria FORZATO SU PRODUZIONE
     const st = p.stato;
-    // La produzione vede ciò che deve iniziare (SIGNED) e ciò che sta lavorando (IN_PRODUZIONE)
-    return ['SIGNED', 'IN_PRODUZIONE'].includes(st);
+    return ['IN_PRODUZIONE'].includes(st);
+  });
+
+  // 2. POI ORDINIAMO (Data Consegna CRESCENTE: Prima quelli in scadenza)
+  return listaFiltrata.sort((a, b) => {
+    // Convertiamo la data stringa 'YYYY-MM-DD' in timestamp numerico
+    // Se la data manca, usiamo Infinity per metterla in fondo alla lista
+    const dateA = a.dataConsegnaPrevista ? new Date(a.dataConsegnaPrevista).getTime() : Infinity;
+    const dateB = b.dataConsegnaPrevista ? new Date(b.dataConsegnaPrevista).getTime() : Infinity;
+
+    // Ordine crescente (dal più piccolo/vecchio al più grande/futuro)
+    if (dateA !== dateB) {
+        return dateA - dateB;
+    }
+
+    // Se le date di consegna sono uguali (o mancano entrambe), 
+    // manteniamo l'ordinamento secondario per Data di Creazione (dal più recente)
+    // così gli ordini nuovi sono in alto tra quelli senza data
+    return (b.dataCreazione?.seconds || 0) - (a.dataCreazione?.seconds || 0);
   });
 });
 
 const clientiEspansi = ref<string[]>([]);
-const statiEspansi = ref<string[]>(['SIGNED', 'IN_PRODUZIONE']);
+const statiEspansi = ref<string[]>(['IN_PRODUZIONE']);
 let unsubscribe: null | (() => void) = null;
 
 // --- 1. CARICAMENTO ANAGRAFICA ---
@@ -275,7 +293,7 @@ onUnmounted(() => { if (unsubscribe) unsubscribe(); });
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-2 gap-4 mb-8">
-        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-emerald-50">
+        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-emerald-100">
           <div class="h-14 w-14 rounded-full flex items-center justify-center bg-emerald-100">
             <ChevronDoubleRightIcon class="h-8 w-8 text-emerald-500" />
           </div>
@@ -284,14 +302,14 @@ onUnmounted(() => { if (unsubscribe) unsubscribe(); });
             <div class="text-2xl font-bold text-gray-900">{{ productionStats.da_avviare }}</div>
           </div>
         </div>
-        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-yellow-50">
-          <div class="h-14 w-14 rounded-full flex items-center justify-center bg-yellow-100">
-            <CogIcon class="h-8 w-8 text-yellow-600 animate-spin-slow" />
-          </div>
-          <div>
-            <div class="text-xs font-bold text-gray-400 uppercase">In Lavorazione</div>
-            <div class="text-2xl font-bold text-gray-900">{{ productionStats.in_lavorazione }}</div>
-          </div>
+        <div class="group bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-yellow-100">
+            <div class="h-14 w-14 rounded-full flex items-center justify-center bg-yellow-100">
+                <CogIcon class="h-8 w-8 text-yellow-600 spin-on-hover" /> 
+            </div>
+            <div>
+                <div class="text-xs font-bold text-gray-400 uppercase">In Lavorazione</div>
+                <div class="text-2xl font-bold text-gray-900">{{ productionStats.in_lavorazione }}</div>
+            </div>
         </div>
       </div>
 
@@ -410,7 +428,7 @@ onUnmounted(() => { if (unsubscribe) unsubscribe(); });
 
                              <div class="flex items-end gap-2">
                                 <div v-if="p.stato === 'IN_PRODUZIONE'" class="flex flex-col items-start justify-end" @click.stop>
-                                    <label class="text-[9px] font-bold text-gray-400 uppercase mb-0.5 leading-none">Colli Finali</label>
+                                    <label class="text-[9px] font-bold text-gray-400 uppercase mb-0.5 leading-none">N° Colli</label>
                                     <div class="flex items-center bg-gray-50 rounded border border-gray-300 h-[34px] overflow-hidden shadow-sm">
                                         <button @click="() => { if((p.colli || 1) > 1) { p.colli = (p.colli || 1) - 1; saveColli(p.id, p.colli); } }" class="w-8 h-full flex items-center justify-center text-gray-500 hover:text-red-500 active:bg-gray-200">−</button>
                                         <input type="number" :value="p.colli || 1" @input="event => p.colli = Number((event.target as HTMLInputElement).value)" @blur="event => saveColli(p.id, Number((event.target as HTMLInputElement).value))" class="w-10 text-center bg-transparent text-sm font-bold text-gray-900 border-gray-50 appearance-none"/>
@@ -450,8 +468,17 @@ onUnmounted(() => { if (unsubscribe) unsubscribe(); });
 </template>
 
 <style scoped>
-.animate-spin-slow { animation: spin 3s linear infinite; }
-@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+/* 1. Definisci i keyframes della rotazione */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* 2. La regola Magica: 
+   Seleziona .spin-on-hover SOLO quando il genitore .group è in stato :hover */
+.group:hover .spin-on-hover {
+  animation: spin 3s linear infinite;
+}
 .animate-fade-in { animation: fadeIn 0.2s ease-out; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
 </style>

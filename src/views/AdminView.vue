@@ -54,7 +54,7 @@ const iconMap: Record<string, any> = {
 };
 
 // STATO UI
-const activeView = ref<'CLIENTI' | 'COMMESSE'>('CLIENTI');
+const activeView = ref<'CLIENTI' | 'COMMESSE'>('COMMESSE');
 // Aggiornato tipo per includere le nuove viste
 const activeCategory = ref<'PREVENTIVI' | 'ORDINI' | 'PRODUZIONE' | 'SPEDIZIONI' | 'ARCHIVIO'>('ORDINI');
 const filtroPeriodo = ref<'TUTTO' | 'CORRENTE' | 'SCORSO'>('CORRENTE');
@@ -78,7 +78,7 @@ const categoryCounts = computed(() => {
     
     // LOGICA AGGIORNATA PER CONTEGGI
     if (['PENDING_VAL', 'QUOTE_READY'].includes(st)) counts.PREVENTIVI++;
-    else if (['ORDER_REQ', 'WAITING_FAST', 'WAITING_SIGN'].includes(st)) counts.ORDINI++;
+    else if (['ORDER_REQ', 'WAITING_SIGN'].includes(st)) counts.ORDINI++;
     else if (['SIGNED', 'IN_PRODUZIONE'].includes(st)) counts.PRODUZIONE++;
     else if (['READY', 'DELIVERY'].includes(st)) counts.SPEDIZIONI++;
     else if (['REJECTED'].includes(st)) counts.ARCHIVIO++;
@@ -161,7 +161,7 @@ const preventiviFiltrati = computed(() => {
     if (activeCategory.value === 'PREVENTIVI') return ['PENDING_VAL', 'QUOTE_READY'].includes(st);
     
     // Ordini: via SIGNED (spostato in produzione)
-    if (activeCategory.value === 'ORDINI') return ['ORDER_REQ', 'WAITING_FAST', 'WAITING_SIGN'].includes(st);
+    if (activeCategory.value === 'ORDINI') return ['ORDER_REQ', 'WAITING_SIGN'].includes(st);
     
     // Produzione: include SIGNED e IN_PRODUZIONE (via READY)
     if (activeCategory.value === 'PRODUZIONE') return ['SIGNED', 'IN_PRODUZIONE'].includes(st);
@@ -384,7 +384,7 @@ const getActionData = (p: any) => {
   if (st === 'SIGNED')
     return { text: 'AVVIA PRODUZIONE', class: 'text-emerald-500 border-emerald-200 bg-emerald-100  hover:bg-emerald-200', action: () => confermaProduzione(p), icon: CogIcon };
     
-  if (st === 'WAITING_SIGN' || st === 'WAITING_FAST')
+  if (st === 'WAITING_SIGN')
     return { text: 'APRI', class: 'border border-gray-300 text-gray-600 px-4 py-2 rounded-lg font-bold text-xs hover:bg-gray-50', action: () => apriEditor(p.codice), icon: EyeIcon };
 
   if (st === 'IN_PRODUZIONE')

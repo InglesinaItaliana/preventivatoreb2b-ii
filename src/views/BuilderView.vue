@@ -19,7 +19,6 @@ import {
   InformationCircleIcon, 
   MagnifyingGlassCircleIcon,
   ShoppingCartIcon,
-  CalendarIcon,
 } from '@heroicons/vue/24/solid'
 
 const toastMessage = ref('');
@@ -34,6 +33,7 @@ const showCustomToast = (message: string) => {
   }, 3000); 
 };
 
+const dateErrorAnim = ref(false);
 const route = useRoute();
 const router = useRouter();
 const catalog = useCatalogStore();
@@ -245,7 +245,7 @@ const onConfirmSign = async (url: string) => {
   } catch(e) { console.error(e); alert("Errore conferma."); }
 };
 
-const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADMIN_VALIDA' | 'ADMIN_RIFIUTA' | 'ADMIN_VELOCE' | 'ADMIN_FIRMA' | 'FORCE_EDIT') => {
+const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADMIN_VALIDA' | 'ADMIN_RIFIUTA' | 'ADMIN_FIRMA' | 'FORCE_EDIT') => {
   if (preventivo.value.length === 0) return alert("Preventivo vuoto.");
   if (!riferimentoCommessa.value.trim()) {
     alert("Il campo 'Riferimento Cantiere' è obbligatorio per salvare o ordinare.");
@@ -275,7 +275,6 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
     if (isAdmin.value && azione) {
       if (azione === 'ADMIN_VALIDA') nuovoStato = 'QUOTE_READY';
       if (azione === 'ADMIN_RIFIUTA') nuovoStato = 'REJECTED';
-      if (azione === 'ADMIN_VELOCE') nuovoStato = 'WAITING_FAST';
       if (azione === 'ADMIN_FIRMA') nuovoStato = 'WAITING_SIGN';
     }
 
@@ -295,13 +294,20 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
         });
       }
     });
-    if (isAdmin.value && (azione === 'ADMIN_VELOCE' || azione === 'ADMIN_FIRMA')) {
+    
+    if (isAdmin.value && (azione === 'ADMIN_FIRMA')) {
     if (!dataConsegnaPrevista.value) {
-      alert("⚠️ Attenzione: Devi inserire una DATA DI CONSEGNA PREVISTA per confermare l'ordine.");
+      // INVECE DI ALERT, ATTIVIAMO L'ANIMAZIONE
+      dateErrorAnim.value = true;
+      setTimeout(() => {
+        dateErrorAnim.value = false;
+      }, 1500); // Dura 1.5 secondi
+      
       isSaving.value = false;
       return;
     }
-    }
+  }
+
     // 1. DEFINIZIONE DATI (SENZA UID!)
     const docData: any = {
       codice,
@@ -760,19 +766,21 @@ onMounted(() => {
                 
                 <div class="flex flex-col gap-1">
                   <label class="text-[10px] uppercase font-bold text-yellow-500 flex items-center gap-1">
-                    <CalendarIcon class="h-3 w-3" /> Data Consegna Prevista
+                    <CalendarIcon class="h-3 w-3 text-white" /> Data Consegna Prevista
                   </label>
+                  
                   <input 
                     type="date" 
                     v-model="dataConsegnaPrevista"
-                    class="bg-gray-800 text-white border border-gray-600 rounded px-3 py-2 text-sm font-bold focus:border-yellow-400 outline-none"
+                    class="bg-gray-800 text-white border border-gray-600 rounded px-3 py-2 text-sm font-bold outline-none native-date-icon-fix transition-all duration-300" 
+                    :class="{ 
+                      'focus:border-yellow-400': !dateErrorAnim, 
+                      'ring-4 ring-red-500 bg-red-900/50 border-red-500 animate-pulse': dateErrorAnim 
+                    }"
                   >
                 </div>
 
                 <div class="flex gap-2">
-                  <button @click="salvaPreventivo('ADMIN_VELOCE')" class="bg-yellow-400 hover:bg-yellow-300 text-yellow-900 flex items-center px-6 py-3 rounded font-bold text-lg shadow-lg shadow-yellow-400/20">
-                    VELOCE
-                  </button>
                   <button @click="salvaPreventivo('ADMIN_FIRMA')" class="bg-blue-600 hover:bg-blue-500 text-blue-100 flex items-center px-6 py-3 rounded font-bold text-lg shadow-lg shadow-blue-600/20">
                     FIRMA
                   </button>
@@ -984,6 +992,14 @@ onMounted(() => {
 </template>
 
 <style scoped>
+/* Stili per l'icona del calendario nativa (Chrome, Edge, Safari) */
+.native-date-icon-fix::-webkit-calendar-picker-indicator {
+    /* Rende l'icona completamente bianca (invertendo i colori e aumentando la luminosità) */
+    filter: invert(1); 
+    /* Forse la risoluzione su Firefox è sufficiente solo con la proprietà color: */
+    color: white; 
+    cursor: pointer;
+}
 .animate-slide-in { animation: slideIn 0.3s ease-out; }
 @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
 .card-dati-commessa {

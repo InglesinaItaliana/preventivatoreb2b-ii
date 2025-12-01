@@ -101,11 +101,7 @@ const avviaAscoltoDati = (email: string) => {
 const gestisciAzioneOrdine = (p: any) => {
   selectedOrder.value = p;
   
-  if (p.stato === 'WAITING_FAST') {
-    modalMode.value = 'FAST';
-    showModals.value = true;
-  } 
-  else if (p.stato === 'WAITING_SIGN') {
+  if (p.stato === 'WAITING_SIGN') {
     modalMode.value = 'SIGN';
     showModals.value = true;
   }
@@ -203,7 +199,7 @@ const preventiviInCorso = computed(() => {
 
 // 2. ORDINI (MODIFICATO: WAITING_FAST/SIGN -> ORDER_REQ)
 const ordiniConfermati = computed(() => {
-  const customOrder = ['WAITING_FAST', 'WAITING_SIGN', 'ORDER_REQ'];
+  const customOrder = ['WAITING_SIGN', 'ORDER_REQ'];
   const filtered = listaMieiPreventivi.value.filter(p => customOrder.includes(p.stato));
   return sortByOrder([...filtered], customOrder);
 });
@@ -238,15 +234,15 @@ const vaiAlBuilder = (codice?: string) => {
 const getStatusStyling = (stato: string) => {
   const styles: Record<string, any> = {
     'DRAFT': { badge: 'bg-orange-100 text-orange-500 border-orange-200', icon: DocumentTextIcon, iconBg: 'bg-orange-100 text-orange-500' },
-    'PENDING_VAL': { badge: 'bg-stone-200 text-stone-700 border-stone-200', icon: DocumentTextIcon, iconBg: 'bg-stone-200 text-stone-600' },
+    'PENDING_VAL': { badge: 'bg-stone-200 text-stone-700 border-stone-300', icon: DocumentTextIcon, iconBg: 'bg-stone-200 text-stone-600' },
     'QUOTE_READY': { badge: 'bg-green-100 text-green-600 border-green-200', icon: DocumentTextIcon, iconBg: 'bg-green-100 text-green-600' },
-    'ORDER_REQ': { badge: 'bg-stone-200 text-stone-700 border-stone-200', icon: ShoppingCartIcon, iconBg: 'bg-stone-200 text-stone-600' },
+    'ORDER_REQ': { badge: 'bg-stone-200 text-stone-700 border-stone-300', icon: ShoppingCartIcon, iconBg: 'bg-stone-200 text-stone-600' },
     'WAITING_FAST': { badge: 'bg-blue-50 text-blue-600 border-blue-100', icon: ShoppingCartIcon, iconBg: 'bg-blue-100 text-blue-600' },
     'WAITING_SIGN': { badge: 'bg-blue-50 text-blue-600 border-blue-100', icon: ShoppingCartIcon, iconBg: 'bg-blue-100 text-blue-600' },
-    'SIGNED': { badge: 'bg-stone-200 text-stone-600 border-stone-200', icon: CogIcon, iconBg: 'bg-stone-200 text-stone-600' },
-    'IN_PRODUZIONE': { badge: 'bg-emerald-100 text-emerald-800 border-emerald-200', icon: CogIcon, iconBg: 'bg-emerald-100 text-emerald-700' },
-    'READY': { badge: 'bg-stone-200 text-stone-600 border-stone-200', icon: CubeIcon, iconBg: 'bg-stone-200 text-stone-600' },
-    'DELIVERY': { badge: 'bg-yellow-100 text-yellow-800 border-yellow-200', icon: TruckIcon, iconBg: 'bg-yellow-200 text-yellow-800' },
+    'SIGNED': { badge: 'bg-stone-200 text-stone-600 border-stone-300', icon: CogIcon, iconBg: 'bg-stone-200 text-stone-600' },
+    'IN_PRODUZIONE': { badge: 'bg-emerald-100 text-emerald-800 border-emerald-200', icon: CogIcon, iconBg: 'bg-emerald-100 text-emerald-800' },
+    'READY': { badge: 'bg-stone-200 text-stone-600 border-stone-300', icon: CubeIcon, iconBg: 'bg-stone-200 text-stone-600' },
+    'DELIVERY': { badge: 'bg-emerald-100 text-emerald-800 border-emerald-200', icon: CubeIcon, iconBg: 'bg-emerald-200 text-emerald-800' },
     'REJECTED': { badge: 'bg-red-100 text-red-700 border-red-200', icon: XCircleIcon, iconBg: 'bg-red-100 text-red-600' },
   };
   return styles[stato] || styles['DRAFT'];
@@ -380,8 +376,8 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
             <div class="flex flex-col items-end gap-3 w-full md:w-auto">
               <div class="flex items-center gap-6 justify-between w-full md:w-auto">
                 <div class="text-right">
-                  <div class="text-xl font-bold font-heading text-gray-900">{{ (p.totaleScontato || p.totaleImponibile || 0).toFixed(2) }} €</div>
-                  <div class="text-xs text-gray-400">Importo netto</div>
+                  <div class="text-xl font-bold font-heading text-gray-600">{{ (p.totaleScontato || p.totaleImponibile || 0).toFixed(2) }} €</div>
+                  <div class="text-xs text-gray-600">Importo netto</div>
                 </div>
 
                 <div class="flex gap-2">
@@ -420,8 +416,8 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
 </div>
               <div class="flex flex-col items-start">
                 <h3 class="font-bold text-xl text-gray-900 leading-tight">{{ p.commessa || 'Senza Nome' }}</h3>
-                <div v-if="p.dataConsegnaPrevista" class="mt-2 flex items-center gap-1.5 px-3 py-1 bg-blue-50 border border-blue-100 rounded shadow-sm">
-                    <TruckIcon class="h-4 w-4 text-blue-600" /> <span class="text-xs font-bold text-blue-600 uppercase">Prevista: {{ formatDateShort(p.dataConsegnaPrevista) }}</span>
+                <div v-if="p.dataConsegnaPrevista" class="mt-2 flex items-center gap-1.5 px-3 py-1 bg-emerald-100 border border-emerald-200 rounded shadow-sm">
+                    <TruckIcon class="h-4 w-4 text-emerald-700" /> <span class="text-xs font-bold text-emerald-700 uppercase">Prevista il {{ formatDateShort(p.dataConsegnaPrevista) }}</span>
                 </div>
                 <div class="mt-2 flex flex-col items-start gap-2">
                   <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase border" 
@@ -441,27 +437,16 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
             <div class="flex flex-col items-end gap-3 w-full md:w-auto">
               <div class="flex items-center gap-6 justify-between w-full md:w-auto">
                 <div class="text-right">
-                  <div class="text-xl font-bold font-heading text-green-900">{{ (p.totaleScontato || p.totaleImponibile || 0).toFixed(2) }} €</div>
-                  <div class="text-xs text-green-600">Importo netto</div>
+                  <div class="text-xl font-bold font-heading text-gray-600">{{ (p.totaleScontato || p.totaleImponibile || 0).toFixed(2) }} €</div>
+                  <div class="text-xs text-gray-600">Importo netto</div>
                 </div>
                 <button @click="vaiAlBuilder(p.codice)" class="border border-gray-300 text-gray-600 px-4 py-2 rounded-lg font-bold text-xs hover:bg-gray-50 h-full">
                   APRI
                 </button>
               </div>
-
               <button
-                v-if="p.stato === 'WAITING_FAST'"
                 @click="gestisciAzioneOrdine(p)"
-                class="w-full text-white bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg font-bold text-xs shadow-sm flex justify-center items-center gap-2 animate-pulse transition-transform active:scale-95"
-              >
-                <CheckCircleIcon class="h-5 w-5" />
-                ACCETTA ORDINE
-              </button>
-
-              <button
-                v-else-if="p.stato === 'WAITING_SIGN'"
-                @click="gestisciAzioneOrdine(p)"
-                class="w-full text-white bg-blue-600 hover:bg-blue-700 px-4 py-2 rounded-lg font-bold text-xs shadow-sm flex justify-center items-center gap-2 animate-pulse transition-transform active:scale-95"
+                class="w-full text-white bg-blue-600 hover:bg-blue-700 px-12 py-2 rounded-lg font-bold text-xs shadow-sm flex justify-center items-center gap-2 animate-pulse transition-transform active:scale-95"
               >
                 <CheckCircleIcon class="h-5 w-5" />
                 FIRMA ORDINE
@@ -487,7 +472,9 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
               </div>    
               <div class="flex flex-col items-start">
                 <h3 class="font-bold text-xl text-gray-900 leading-tight">{{ p.commessa || 'Senza Nome' }}</h3>
-                
+                <div v-if="p.dataConsegnaPrevista" class="mt-2 flex items-center gap-1.5 px-3 py-1 bg-emerald-100 border border-emerald-200 rounded shadow-sm">
+                    <TruckIcon class="h-4 w-4 text-emerald-700" /> <span class="text-xs font-bold text-emerald-700 uppercase">Prevista il {{ formatDateShort(p.dataConsegnaPrevista) }}</span>
+                </div>
                 <div class="mt-2 flex flex-col items-start gap-2">
                   <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase border" 
                         :class="getStatusStyling(p.stato).badge">
@@ -502,13 +489,10 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
                 </div>
               </div>
             </div>
-            <div v-if="p.dataConsegnaPrevista" class="mt-2 flex items-center gap-1.5 px-3 py-1 bg-emerald-50 border border-emerald-100 rounded shadow-sm">
-              <TruckIcon class="h-4 w-4 text-emerald-600" /> <span class="text-xs font-bold text-emerald-600 uppercase">Prevista: {{ formatDateShort(p.dataConsegnaPrevista) }}</span>
-            </div>
             <div class="flex items-center gap-6 w-full md:w-auto justify-between md:justify-end">
               <div class="text-right">
-                <div class="text-xl font-bold font-heading text-green-900">{{ (p.totaleScontato || p.totaleImponibile || 0).toFixed(2) }} €</div>
-                <div class="text-xs text-green-600">Importo netto</div>
+                <div class="text-xl font-bold font-heading text-gray-600">{{ (p.totaleScontato || p.totaleImponibile || 0).toFixed(2) }} €</div>
+                <div class="text-xs text-gray-600">Importo netto</div>
               </div>
               <button @click="vaiAlBuilder(p.codice)" class="border border-gray-300 text-gray-600 px-4 py-2 rounded-lg font-bold text-xs hover:bg-gray-50">APRI</button>
             </div>
@@ -532,6 +516,9 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
 </div>
               <div class="flex flex-col items-start">
                 <h3 class="font-bold text-xl text-gray-900 leading-tight">{{ p.commessa || 'Senza Nome' }}</h3>
+                <div v-if="p.dataConsegnaPrevista" class="mt-2 flex items-center gap-1.5 px-3 py-1 bg-emerald-100 border border-emerald-200 rounded shadow-sm">
+                    <TruckIcon class="h-4 w-4 text-emerald-700" /> <span class="text-xs font-bold text-emerald-700 uppercase">Prevista il {{ formatDateShort(p.dataConsegnaPrevista) }}</span>
+                </div>
                 <div class="mt-2 flex flex-col items-start gap-2">
                   <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase border" 
                         :class="getStatusStyling(p.stato).badge">
@@ -546,16 +533,12 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
                 </div>
               </div>
             </div>
-            <div v-if="p.dataConsegnaPrevista" class="mt-2 flex items-center gap-1.5 px-3 py-1 bg-yellow-50 border border-yellow-100 rounded shadow-sm">
-              <TruckIcon class="h-4 w-4 text-yellow-600" /> <span class="text-xs font-bold text-yellow-600 uppercase">Prevista: {{ formatDateShort(p.dataConsegnaPrevista) }}</span>
-            </div>
-            
             <div class="mt-2 flex flex-col items-start gap-2">
             </div>
             <div class="flex items-center gap-6 w-full md:w-auto justify-between md:justify-end">
               <div class="text-right">
-                <div class="text-xl font-bold font-heading text-green-900">{{ (p.totaleScontato || p.totaleImponibile || 0).toFixed(2) }} €</div>
-                <div class="text-xs text-green-600">Importo netto</div>
+                <div class="text-xl font-bold font-heading text-gray-600">{{ (p.totaleScontato || p.totaleImponibile || 0).toFixed(2) }} €</div>
+                <div class="text-xs text-gray-600">Importo netto</div>
               </div>
               <button @click="vaiAlBuilder(p.codice)" class="border border-gray-300 text-gray-600 px-4 py-2 rounded-lg font-bold text-xs hover:bg-gray-50">APRI</button>
             </div>
@@ -594,8 +577,8 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
             </div>
             <div class="flex items-center gap-6 w-full md:w-auto justify-between md:justify-end">
               <div class="text-right">
-                <div class="text-xl font-bold font-heading text-gray-500">{{ (p.totaleScontato || p.totaleImponibile || 0).toFixed(2) }} €</div>
-                <div class="text-xs text-gray-400">Importo netto</div>
+                <div class="text-xl font-bold font-heading text-gray-600">{{ (p.totaleScontato || p.totaleImponibile || 0).toFixed(2) }} €</div>
+                <div class="text-xs text-gray-600">Importo netto</div>
               </div>
               <button @click="vaiAlBuilder(p.codice)" class="border border-gray-300 text-gray-600 px-4 py-2 rounded-lg font-bold text-xs hover:bg-gray-50">APRI</button>
             </div>
@@ -628,7 +611,7 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
 
         <p class="text-gray-700 mb-6">
           Stai per confermare il preventivo <span class="font-bold">{{ selectedOrder?.commessa || selectedOrder?.codice }}</span> e inviarlo come ordine.        <br>
-          Importo Netto: <span class="font-bold text-green-600">{{ (selectedOrder?.totaleScontato || selectedOrder?.totaleImponibile || 0).toFixed(2) }} €</span>
+          Importo Netto: <span class="font-bold text-stone-600">{{ (selectedOrder?.totaleScontato || selectedOrder?.totaleImponibile || 0).toFixed(2) }} €</span>
         </p>
 
         <div class="flex justify-end gap-3 pt-2">

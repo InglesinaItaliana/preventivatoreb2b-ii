@@ -13,10 +13,8 @@ const props = defineProps<{
   clientName: string;
 }>();
 
-// AGGIUNTO 'error' AGLI EMITS
 const emit = defineEmits(['close', 'confirmFast', 'confirmSign', 'confirmProduction', 'error']);
 
-// ... (Variabili di stato invariate: legalCheck1, etc.) ...
 // STATO INTERNO
 const legalCheck1 = ref(false);
 const legalCheck2 = ref(false);
@@ -44,14 +42,18 @@ const handleFastConfirm = async () => {
   isConfirming.value = false;
 };
 
-// --- FUNZIONE MODIFICATA (NIENTE PIÙ ALERT) ---
 const openDocument = () => {
   if (props.order?.fic_order_url) {
     window.open(props.order.fic_order_url, '_blank');
   } else {
-    // Invece di alert(), emettiamo l'errore al genitore
     emit('error', 'Il documento non è ancora pronto o non è stato generato. Attendi qualche secondo e riprova.');
   }
+};
+
+const openConditions = () => {
+    // Placeholder per il file condizioni
+    // window.open('LINK_CONDIZIONI', '_blank');
+    emit('error', 'File condizioni non ancora disponibile');
 };
 
 const handleUpload = async (event: Event) => {
@@ -164,51 +166,82 @@ const handleProductionConfirm = () => emit('confirmProduction');
         <h2 class="font-bold text-lg flex items-center gap-2"><DocumentTextIcon class="w-6 h-6"/> Firma Contratto</h2>
         <button @click="close" class="text-white hover:text-blue-200">✕</button>
       </div>
-      <div class="p-6 space-y-6">
-        <div class="bg-blue-50 border border-blue-100 p-4 rounded-lg text-sm text-blue-800">
+      
+      <div class="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+        
+        <div class="bg-blue-50 border border-blue-100 p-4 rounded-xl text-sm text-blue-800">
           Per procedere è necessario scaricare, firmare e ricaricare il contratto.
         </div>
 
-        <div class="flex items-center gap-4 border p-3 rounded-lg hover:bg-gray-50 transition-colors">
-          <div class="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center font-bold text-gray-600">1</div>
-          <div class="flex-1"><p class="text-sm font-bold text-gray-700">Visualizza/Scarica Contratto</p></div>
-          <button @click="openDocument" class="text-blue-600 font-bold text-sm underline hover:text-blue-800 flex items-center gap-1">
-            <EyeIcon class="w-4 h-4"/> Apri
+        <div class="border border-gray-200 rounded-xl p-4 flex items-center gap-4 bg-white shadow-sm hover:border-blue-300 transition-colors">
+          <div class="h-8 w-8 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center font-bold text-gray-500 shrink-0">1</div>
+          <div class="flex-1 font-bold text-gray-700 text-sm">Scarica Contratto</div>
+          <button @click="openDocument" class="bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-2">
+            <EyeIcon class="w-4 h-4"/> APRI FILE
           </button>
         </div>
 
-        <div class="flex items-start gap-4">
-          <div class="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center font-bold text-gray-600">2</div>
-          <div class="flex-1">
-            <p class="text-sm font-bold mb-2 text-gray-700">Carica il file firmato</p>
-            <div class="relative border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:bg-blue-50 hover:border-blue-300 transition-colors cursor-pointer">
-              <input type="file" @change="handleUpload" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer">
+        <div class="border border-gray-200 rounded-xl p-4 flex items-start gap-4 bg-white shadow-sm hover:border-blue-300 transition-colors">
+          <div class="h-8 w-8 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center font-bold text-gray-500 shrink-0">2</div>
+          <div class="flex-1 w-full">
+            <p class="text-sm font-bold text-gray-700 mb-2">Carica file firmato</p>
+            <div class="relative border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:bg-blue-50 hover:border-blue-400 transition-colors cursor-pointer group">
+              <input type="file" @change="handleUpload" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
               
               <div v-if="isUploading" class="flex flex-col items-center text-blue-500">
                 <span class="animate-spin text-2xl">⌛</span>
-                <span class="text-xs font-bold mt-2">Caricamento in corso...</span>
+                <span class="text-xs font-bold mt-2">Caricamento...</span>
               </div>
               
               <div v-else-if="uploadedUrl" class="flex flex-col items-center text-green-600 animate-bounce">
-                <CheckCircleIcon class="w-10 h-10"/>
-                <span class="font-bold mt-1">File Caricato con Successo!</span>
-                <span class="text-xs text-gray-400 mt-1">Clicca per cambiarlo</span>
+                <CheckCircleIcon class="w-8 h-8"/>
+                <span class="font-bold mt-1 text-sm">Caricato!</span>
+                <span class="text-[10px] text-gray-400">Clicca per cambiare</span>
               </div>
               
-              <div v-else class="flex flex-col items-center text-gray-400">
-                <CloudArrowUpIcon class="w-10 h-10 mb-2"/>
-                <span class="text-sm font-bold">Clicca qui per caricare</span>
-                <span class="text-xs">PDF o Immagine (Max 10MB)</span>
+              <div v-else class="flex flex-col items-center text-gray-400 group-hover:text-blue-500 transition-colors">
+                <CloudArrowUpIcon class="w-8 h-8 mb-1"/>
+                <span class="text-xs font-bold">Clicca per caricare</span>
+                <span class="text-[10px]">PDF/IMG (Max 10MB)</span>
               </div>
             </div>
           </div>
         </div>
 
+        <div class="border border-gray-200 rounded-xl p-4 flex items-start gap-4 bg-white shadow-sm hover:border-blue-300 transition-colors">
+            <div class="h-8 w-8 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center font-bold text-gray-500 shrink-0">3</div>
+            <div class="flex-1 space-y-3 w-full">
+                
+                <label class="flex items-start gap-3 cursor-pointer group select-none">
+                    <div class="relative flex items-center mt-0.5">
+                    <input type="checkbox" v-model="legalCheck1" class="peer h-4 w-4 cursor-pointer appearance-none rounded border border-gray-300 shadow-sm checked:border-blue-600 checked:bg-blue-600 hover:border-blue-400 focus:ring-blue-200">
+                    <svg class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 text-white opacity-0 peer-checked:opacity-100 pointer-events-none" viewBox="0 0 14 14" fill="none"><path d="M3 8L6 11L11 3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    </div>
+                    <span class="text-xs text-gray-700 group-hover:text-black transition-colors font-medium leading-tight">Accetto l'ordine come descritto nel documento.</span>
+                </label>
+                
+                <div class="flex items-start justify-between gap-2">
+                    <label class="flex items-start gap-3 cursor-pointer group select-none">
+                        <div class="relative flex items-center mt-0.5">
+                        <input type="checkbox" v-model="legalCheck2" class="peer h-4 w-4 cursor-pointer appearance-none rounded border border-gray-300 shadow-sm checked:border-blue-600 checked:bg-blue-600 hover:border-blue-400 focus:ring-blue-200">
+                        <svg class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 text-white opacity-0 peer-checked:opacity-100 pointer-events-none" viewBox="0 0 14 14" fill="none"><path d="M3 8L6 11L11 3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        </div>
+                        <span class="text-xs text-gray-700 group-hover:text-black transition-colors font-medium leading-tight">Accetto Condizioni di Vendita.</span>
+                    </label>
+                    
+                    <button @click="openConditions" class="bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-2 whitespace-nowrap">
+                        <EyeIcon class="w-4 h-4"/> VEDI FILE
+                    </button>
+                </div>
+
+            </div>
+        </div>
+
         <button
           @click="handleSignConfirm"
-          :disabled="!uploadedUrl"
+          :disabled="!uploadedUrl || !legalCheck1 || !legalCheck2"
           class="w-full py-3 rounded-lg font-bold shadow-md transition-all flex justify-center items-center gap-2 mt-2"
-          :class="uploadedUrl ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-gray-200 text-gray-400 cursor-not-allowed'"
+          :class="(uploadedUrl && legalCheck1 && legalCheck2) ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-gray-200 text-gray-400 cursor-not-allowed'"
         >
           INVIA ORDINE FIRMATO
         </button>
