@@ -254,7 +254,7 @@ exports.generaOrdineFIC = functions
 exports.creaDdtCumulativo = functions
     .region('europe-west1')
     .https.onCall(async (data, _context) => {
-    var _a, _b, _c, _d, _e, _f, _g;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j;
     const { orderIds, date, colli, weight } = data;
     if (!orderIds || orderIds.length === 0) {
         return { success: false, message: "Nessun ordine selezionato." };
@@ -262,9 +262,8 @@ exports.creaDdtCumulativo = functions
     try {
         const db = admin.firestore();
         const accessToken = await getValidFicToken();
-        // 1. Recupera i documenti da Firestore per ottenere gli ID di Fatture in Cloud
+        // 1. Recupera i documenti da Firestore
         const orderSnapshots = await Promise.all(orderIds.map((id) => db.collection('preventivi').doc(id).get()));
-        // Controllo preliminare validità
         const ordersData = [];
         for (const snap of orderSnapshots) {
             const d = snap.data();
@@ -273,7 +272,7 @@ exports.creaDdtCumulativo = functions
             }
         }
         if (ordersData.length === 0) {
-            return { success: false, message: "Nessun ID FiC valido trovato negli ordini selezionati." };
+            return { success: false, message: "Nessun ID FiC valido trovato." };
         }
         // =========================================================
         // CASO A: SINGOLO ORDINE -> MODIFICA ESISTENTE (PUT)
@@ -282,29 +281,32 @@ exports.creaDdtCumulativo = functions
             const order = ordersData[0];
             const ficId = order.ficId;
             console.log(`[FIC] Conversione Ordine Singolo in DDT. ID: ${ficId}`);
-            // 1. RECUPERIAMO IL PROSSIMO NUMERO DDT DISPONIBILE
-            // È necessario perché nella PUT, FiC non lo calcola da solo per i campi dn_
+            // --- RECUPERO PROSSIMO NUMERO DDT ---
+            // Endpoint doc: https://developers.fattureincloud.it/api-reference#get-issued-document-info
             const infoUrl = `${FIC_API_URL}/c/${COMPANY_ID}/issued_documents/info`;
+            console.log("[FIC] Richiedo next_number per delivery_note...");
             const infoRes = await axios_1.default.get(infoUrl, {
                 headers: { Authorization: `Bearer ${accessToken}` },
                 params: { type: 'delivery_note' }
             });
-            const nextDnNumber = infoRes.data.data.next_number;
-            console.log(`[FIC] Prossimo numero DDT disponibile: ${nextDnNumber}`);
+            // LOG DI DEBUG FONDAMENTALE
+            console.log(`[FIC] Risposta Info:`, JSON.stringify(infoRes.data));
+            const nextDnNumber = (_b = (_a = infoRes.data) === null || _a === void 0 ? void 0 : _a.data) === null || _b === void 0 ? void 0 : _b.next_number;
+            if (nextDnNumber === undefined || nextDnNumber === null) {
+                throw new Error("Impossibile recuperare il prossimo numero DDT da Fatture in Cloud.");
+            }
+            console.log(`[FIC] Numero assegnato: ${nextDnNumber} (Tipo: ${typeof nextDnNumber})`);
             const modifyUrl = `${FIC_API_URL}/c/${COMPANY_ID}/issued_documents/${ficId}`;
             // Prepariamo il payload per la PUT
             const modifyPayload = {
                 data: {
-                    // Flag che indica che il documento ha DDT allegato
                     delivery_note: true,
-                    // 🔥 CAMPO MANCANTE AGGIUNTO QUI:
-                    dn_number: nextDnNumber,
-                    // Campi specifici richiesti
+                    // 🔥 FORZIAMO IL TIPO NUMBER
+                    dn_number: Number(nextDnNumber),
                     dn_date: date,
                     dn_ai_packages_number: colli.toString(),
                     dn_ai_causal: "VENDITA",
                     dn_ai_transporter: "MITTENTE",
-                    // Mappiamo anche i campi standard 'driver_and_contents' per sicurezza UI
                     c_driver_and_contents: {
                         packages_number: parseInt(colli),
                         transport_causal: "VENDITA"
@@ -330,13 +332,12 @@ exports.creaDdtCumulativo = functions
             return { success: true, fic_id: updatedDoc.id };
         }
         // =========================================================
-        // CASO B: ORDINI MULTIPLI -> UNIONE IN NUOVO DDT (JOIN + POST)
+        // CASO B: ORDINI MULTIPLI (JOIN) - RIMASTO INVARIATO
         // =========================================================
         else {
             console.log(`[FIC] Creazione DDT Cumulativo per ${ordersData.length} ordini.`);
             const ficIdsToJoin = ordersData.map(o => o.ficId);
             const joinUrl = `${FIC_API_URL}/c/${COMPANY_ID}/issued_documents/join`;
-            // 1. Chiamata JOIN per ottenere i dati uniti
             const joinResponse = await axios_1.default.get(joinUrl, {
                 headers: { Authorization: `Bearer ${accessToken}` },
                 params: {
@@ -345,7 +346,6 @@ exports.creaDdtCumulativo = functions
                 }
             });
             const joinedData = joinResponse.data.data;
-            // 2. Costruzione Payload Nuovo Documento
             const finalDocData = {
                 type: 'delivery_note',
                 entity: joinedData.entity,
@@ -355,11 +355,9 @@ exports.creaDdtCumulativo = functions
                 language: joinedData.language,
                 items_list: joinedData.items_list,
                 payments_list: joinedData.payments_list,
-                // Dati Trasporto (Mappatura dn_ai_)
                 dn_ai_packages_number: colli.toString(),
                 dn_ai_causal: "VENDITA",
                 dn_ai_transporter: "MITTENTE",
-                // Campi standard
                 c_driver_and_contents: {
                     packages_number: parseInt(colli),
                     transport_causal: "VENDITA"
@@ -370,13 +368,11 @@ exports.creaDdtCumulativo = functions
             }
             if (joinedData.notes)
                 finalDocData.notes = joinedData.notes;
-            // 3. Creazione (POST)
             const createUrl = `${FIC_API_URL}/c/${COMPANY_ID}/issued_documents`;
             const createRes = await axios_1.default.post(createUrl, { data: finalDocData }, {
                 headers: { Authorization: `Bearer ${accessToken}` }
             });
             const newDdt = createRes.data.data;
-            // 4. Aggiornamento massivo su Firestore
             const batch = db.batch();
             ordersData.forEach(o => {
                 const ref = db.collection('preventivi').doc(o.firestoreId);
@@ -384,7 +380,6 @@ exports.creaDdtCumulativo = functions
                     fic_ddt_id: newDdt.id,
                     fic_ddt_url: newDdt.url,
                     stato: 'DELIVERY',
-                    // Aggiorniamo la data consegna prevista su tutti gli ordini alla data del DDT
                     dataConsegnaPrevista: date
                 });
             });
@@ -393,10 +388,10 @@ exports.creaDdtCumulativo = functions
         }
     }
     catch (error) {
-        console.error("❌ Errore API FiC:", JSON.stringify(((_a = error.response) === null || _a === void 0 ? void 0 : _a.data) || error.message, null, 2));
-        const dettagliErrore = ((_d = (_c = (_b = error.response) === null || _b === void 0 ? void 0 : _b.data) === null || _c === void 0 ? void 0 : _c.error) === null || _d === void 0 ? void 0 : _d.validation_errors)
+        console.error("❌ Errore API FiC:", JSON.stringify(((_c = error.response) === null || _c === void 0 ? void 0 : _c.data) || error.message, null, 2));
+        const dettagliErrore = ((_f = (_e = (_d = error.response) === null || _d === void 0 ? void 0 : _d.data) === null || _e === void 0 ? void 0 : _e.error) === null || _f === void 0 ? void 0 : _f.validation_errors)
             ? JSON.stringify(error.response.data.error.validation_errors)
-            : (((_g = (_f = (_e = error.response) === null || _e === void 0 ? void 0 : _e.data) === null || _f === void 0 ? void 0 : _f.error) === null || _g === void 0 ? void 0 : _g.message) || error.message);
+            : (((_j = (_h = (_g = error.response) === null || _g === void 0 ? void 0 : _g.data) === null || _h === void 0 ? void 0 : _h.error) === null || _j === void 0 ? void 0 : _j.message) || error.message);
         return {
             success: false,
             message: "Errore FiC: " + dettagliErrore
