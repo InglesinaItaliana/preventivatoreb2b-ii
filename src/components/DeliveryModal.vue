@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue';
+import { ref, watch } from 'vue'; // Rimosso onMounted
 import { XMarkIcon, CheckCircleIcon, TrashIcon } from '@heroicons/vue/24/solid';
 
 const props = defineProps<{
@@ -14,11 +14,12 @@ const isDrawing = ref(false);
 const hasSignature = ref(false);
 const ctx = ref<CanvasRenderingContext2D | null>(null);
 
-// Inizializza Canvas
+// Gestisce l'inizializzazione del Canvas
 const initCanvas = () => {
   if (!canvasRef.value) return;
   const canvas = canvasRef.value;
-  // Adatta alla larghezza del contenitore
+  
+  // Adatta alla larghezza del contenitore (necessario per il corretto mapping delle coordinate)
   canvas.width = canvas.offsetWidth;
   canvas.height = canvas.offsetHeight;
   
@@ -32,14 +33,32 @@ const initCanvas = () => {
 
 watch(() => props.show, (val) => {
   if (val) {
-    // Aspetta che il DOM sia renderizzato
+    // Aspetta che il DOM sia renderizzato prima di inizializzare
     setTimeout(initCanvas, 100);
     hasSignature.value = false;
   }
 });
 
+// NUOVA FUNZIONE HELPER: Estrae le coordinate in modo sicuro
+const getEventCoords = (e: MouseEvent | TouchEvent) => {
+  // Verifica se l'evento ha la lista dei tocchi
+  if ('touches' in e) {
+    const touch = e.touches[0]; // Estraiamo il primo tocco
+    
+    // Controllo di sicurezza: se touch esiste, ritorniamo le coordinate
+    if (touch) {
+      return { clientX: touch.clientX, clientY: touch.clientY };
+    }
+  } else if (e instanceof MouseEvent) {
+    // Ritorna le coordinate del mouse
+    return { clientX: e.clientX, clientY: e.clientY };
+  }
+  return null;
+};
+
 // Gestione Mouse/Touch
 const startDrawing = (e: MouseEvent | TouchEvent) => {
+  if (!getEventCoords(e)) return;
   isDrawing.value = true;
   draw(e);
 };
@@ -52,19 +71,12 @@ const stopDrawing = () => {
 const draw = (e: MouseEvent | TouchEvent) => {
   if (!isDrawing.value || !ctx.value || !canvasRef.value) return;
 
+  const coords = getEventCoords(e);
+  if (!coords) return;
+  
   const rect = canvasRef.value.getBoundingClientRect();
-  let clientX, clientY;
-
-  if (window.TouchEvent && e instanceof TouchEvent) {
-    clientX = e.touches[0].clientX;
-    clientY = e.touches[0].clientY;
-  } else {
-    clientX = (e as MouseEvent).clientX;
-    clientY = (e as MouseEvent).clientY;
-  }
-
-  const x = clientX - rect.left;
-  const y = clientY - rect.top;
+  const x = coords.clientX - rect.left;
+  const y = coords.clientY - rect.top;
 
   ctx.value.lineTo(x, y);
   ctx.value.stroke();

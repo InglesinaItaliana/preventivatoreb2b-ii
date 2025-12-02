@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'; // Rimosso 'computed'
+import { ref, watch, computed } from 'vue';
 import { Dialog, DialogPanel, DialogTitle, TransitionChild, TransitionRoot } from '@headlessui/vue';
 import { TruckIcon } from '@heroicons/vue/24/solid';
 
@@ -15,13 +15,24 @@ const numeroColli = ref(1);
 const pesoKg = ref(0); 
 const loading = ref(false);
 
-// Calcola i valori di default quando si apre la modale o cambiano gli ordini
+const isSingleOrder = computed(() => props.orders.length === 1);
+
+const modalTitle = computed(() => {
+    return isSingleOrder.value ? 'Generazione DDT da Ordine' : 'Generazione DDT Cumulativo';
+});
+
+const modalDescription = computed(() => {
+    if (isSingleOrder.value) {
+        const orderId = props.orders[0]?.codice || 'selezionato';
+        return `Stai per convertire l'ordine <strong>${orderId}</strong> in un DDT. Verifica e completa i dati di trasporto.`;
+    }
+    return `Stai per creare un unico DDT per <strong>${props.orders.length} ordini</strong>. Verifica i dati di trasporto qui sotto.`;
+});
+
 watch(() => props.orders, (newOrders: any[]) => {
   if (newOrders.length > 0) {
-    // 1. Data: Prendi la data prevista del PRIMO ordine, o oggi
     dataDdt.value = newOrders[0].dataConsegnaPrevista || new Date().toISOString().split('T')[0];
     
-    // 2. Colli: SOMMA i colli di ogni ordine (se un ordine non ha 'colli', conta come 1)
     const totaleColli = newOrders.reduce((somma: number, ordine: any) => {
         const colliOrdine = ordine.colli ? Number(ordine.colli) : 1;
         return somma + colliOrdine;
@@ -29,7 +40,7 @@ watch(() => props.orders, (newOrders: any[]) => {
 
     numeroColli.value = totaleColli;
   }
-}, { immediate: true, deep: true }); // <--- AGGIUNTO deep: true
+}, { immediate: true, deep: true });
 
 const confirm = () => {
   if (numeroColli.value < 1) return alert("Inserire almeno 1 collo");
@@ -62,13 +73,10 @@ const confirm = () => {
                 </div>
                 <div class="mt-3 text-center sm:ml-4 sm:mt-0 sm:text-left w-full">
                   <DialogTitle as="h3" class="text-base font-semibold leading-6 text-gray-900">
-                    Generazione DDT Cumulativo
+                    {{ modalTitle }}
                   </DialogTitle>
                   <div class="mt-2">
-                    <p class="text-sm text-gray-500">
-                      Stai per creare un unico DDT per <strong>{{ orders.length }} ordini</strong>.
-                      Verifica i dati di trasporto qui sotto.
-                    </p>
+                    <p class="text-sm text-gray-500" v-html="modalDescription"></p>
 
                     <div class="mt-4 grid grid-cols-1 gap-y-4 gap-x-4 sm:grid-cols-2">
                         <div class="col-span-2 sm:col-span-1">

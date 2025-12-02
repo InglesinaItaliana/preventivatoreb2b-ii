@@ -571,6 +571,10 @@ onUnmounted(() => {
           </div>
         </div>
         <div class="flex items-center gap-3"><br>
+          <router-link to="/delivery" class="flex items-center gap-2 px-4 py-2 text-white bg-blue-600 rounded-lg hover:bg-blue-700">
+              <TruckIcon class="w-5 h-5" />
+              <span>Dashboard Consegne</span>
+          </router-link>
           <span class="text-xs text-gray-400 animate-pulse hidden md:block">Live Sync</span>
           <select v-model="filtroPeriodo" class="bg-white border border-gray-200 text-sm font-bold text-gray-700 rounded-lg px-3 py-2 outline-none hover:bg-stone-100 focus:border-yellow-400 cursor-pointer shadow-sm">
             <option value="TUTTO">Tutto</option>

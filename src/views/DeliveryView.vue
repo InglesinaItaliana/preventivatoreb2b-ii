@@ -8,8 +8,7 @@ import { ref as storageRef, uploadString, getDownloadURL } from 'firebase/storag
 import { db, storage } from '../firebase';
 import DeliveryModal from '../components/DeliveryModal.vue';
 import { 
-  TruckIcon, PlayIcon, StopIcon, MapPinIcon, 
-  ClockIcon, CalendarIcon, ChevronRightIcon 
+  TruckIcon, PlayIcon, StopIcon, MapPinIcon, CalendarIcon, ChevronRightIcon 
 } from '@heroicons/vue/24/solid';
 
 // STATO
@@ -59,16 +58,22 @@ const checkActiveSession = async () => {
   );
   
   const snap = await getDocs(q);
+  
+  // VERIFICA AGGIORNATA PER COMPILATORE STRETTO
   if (!snap.empty) {
-    const docData = snap.docs[0];
-    currentSession.value = { id: docData.id, ...docData.data() };
+    const doc = snap.docs[0]; 
     
-    // Se la data è un timestamp firestore, convertila
-    if (currentSession.value.startTime?.seconds) {
-        currentSession.value.startTime = new Date(currentSession.value.startTime.seconds * 1000);
+    // Controllo esplicito su 'doc' (soddisfa il compilatore TS)
+    if (doc) {
+      currentSession.value = { id: doc.id, ...doc.data() };
+      
+      // Se la data è un timestamp firestore, convertila
+      if (currentSession.value.startTime?.seconds) {
+          currentSession.value.startTime = new Date(currentSession.value.startTime.seconds * 1000);
+      }
+      
+      startLocalTimer();
     }
-
-    startLocalTimer();
   } else {
     currentSession.value = null;
     timerString.value = '00:00:00';
