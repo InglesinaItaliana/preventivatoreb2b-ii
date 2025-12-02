@@ -130,21 +130,19 @@ exports.generaOrdineFIC = functions
             console.log(`[FIC] Cerco cliente con P.IVA: ${pivaCliente}...`);
             
             let ficId = null;
-            let clientData = null;
-
-            // Chiamata API per cercare il cliente
+            
+            // A. Ricerca esistente
             const searchRes: any = await axios.get(`${FIC_API_URL}/c/${COMPANY_ID}/entities/clients`, {
-                headers: { Authorization: `Bearer ${accessToken}` }, // Usa il token dinamico
+                headers: { Authorization: `Bearer ${accessToken}` }, 
                 params: { "q": `vat_number = '${pivaCliente}'` }
             });
 
             if (searchRes.data.data && searchRes.data.data.length > 0) {
-                // TROVATO! Prendiamo il primo risultato
-                clientData = searchRes.data.data[0];
-                ficId = clientData.id;
-                console.log(`[FIC] Cliente TROVATO. ID: ${ficId} (${clientData.name})`);
+                // TROVATO!
+                ficId = searchRes.data.data[0].id;
+                console.log(`[FIC] Cliente TROVATO. ID: ${ficId}`);
             } else {
-                // NON TROVATO -> LO CREIAMO
+                // B. NON TROVATO -> CREAZIONE
                 console.log("[FIC] Cliente non trovato. Creazione in corso...");
                 const createRes: any = await axios.post(`${FIC_API_URL}/c/${COMPANY_ID}/entities/clients`, {
                     data: {
@@ -155,23 +153,32 @@ exports.generaOrdineFIC = functions
                     }
                 }, { headers: { Authorization: `Bearer ${accessToken}` } });
                 
-                clientData = createRes.data.data; 
-                ficId = clientData.id;
+                ficId = createRes.data.data.id;
                 console.log(`[FIC] Nuovo Cliente creato. ID: ${ficId}`);
             }
 
-            // 4. ESTRAZIONE DATI PAGAMENTO
-            const defaultPaymentMethodId = clientData.default_payment_method?.id || null;
-            const defaultPaymentTerms = clientData.default_payment_terms || 0;
-            const defaultPaymentType = clientData.default_payment_terms_type || 'standard';
+            // 4. 🔥 RECUPERO DETTAGLI COMPLETI CLIENTE (GET Client)
+            // Utilizziamo l'ID ottenuto per fare una chiamata GET specifica e ottenere indirizzi, codice fiscale, etc.
+            console.log(`[FIC] Recupero dettagli completi cliente ID: ${ficId}...`);
+            const clientDetailRes: any = await axios.get(`${FIC_API_URL}/c/${COMPANY_ID}/entities/clients/${ficId}`, {
+                headers: { Authorization: `Bearer ${accessToken}` },
+                params: { fieldset: 'detailed' } // 'detailed' per avere indirizzi e dati extra
+            });
 
-            // 5. CALCOLI ECONOMICI
+            const detailedClient = clientDetailRes.data.data;
+            
+            // 5. ESTRAZIONE DATI PAGAMENTO (Dai dettagli completi)
+            const defaultPaymentMethodId = detailedClient.default_payment_method?.id || null;
+            const defaultPaymentTerms = detailedClient.default_payment_terms || 0;
+            const defaultPaymentType = detailedClient.default_payment_terms_type || 'standard';
+
+            // 6. CALCOLI ECONOMICI
             const dataScadenza = calcolaScadenza(defaultPaymentTerms, defaultPaymentType);
             const dataOrdine = newData.dataConsegnaPrevista || new Date().toISOString().split('T')[0];
             const importoNetto = newData.totaleScontato || newData.totaleImponibile || 0;
             const importoLordo = parseFloat((importoNetto * (1 + (VAT_VALUE / 100))).toFixed(2));
 
-            // 6. PREPARAZIONE RIGHE ORDINE
+            // 7. PREPARAZIONE RIGHE ORDINE
             const itemsList = (newData.elementi || []).map((item: any) => {
                 const desc = `Dim: ${item.base_mm}x${item.altezza_mm} mm${item.infoCanalino ? ` - ${item.infoCanalino}` : ''}`;
                 return {
@@ -183,13 +190,21 @@ exports.generaOrdineFIC = functions
                 };
             });
 
-            // 7. CREAZIONE ORDINE
+            // 8. CREAZIONE ORDINE
             const orderPayload: any = {
                 data: {
                     type: "order",
+                    // 🔥 Mappatura Completa Entity
                     entity: {
                         id: ficId, 
-                        name: clientData.name 
+                        name: detailedClient.name,
+                        vat_number: detailedClient.vat_number || null,
+                        tax_code: detailedClient.tax_code || null,
+                        address_street: detailedClient.address_street || null,
+                        address_postal_code: detailedClient.address_postal_code || null,
+                        address_city: detailedClient.address_city || null,
+                        address_province: detailedClient.address_province || null,
+                        country: detailedClient.country || "Italia"
                     },
                     date: dataOrdine,
                     visible_subject: newData.commessa || `Rif: ${newData.codice}`,
@@ -200,7 +215,11 @@ exports.generaOrdineFIC = functions
                             due_date: dataScadenza, 
                             status: "not_paid"
                         }
-                    ]
+                    ],
+                    // 🔥 Flag Richiesti
+                    stock: false,
+                    show_payments: false,
+                    show_payment_method: false
                 }
             };
 
@@ -209,7 +228,7 @@ exports.generaOrdineFIC = functions
                 orderPayload.data.payments_list[0].payment_method = { id: defaultPaymentMethodId };
             }
 
-            // 8. INVIO A FATTURE IN CLOUD (Usa token dinamico)
+            // 9. INVIO A FATTURE IN CLOUD
             const orderRes: any = await axios.post(`${FIC_API_URL}/c/${COMPANY_ID}/issued_documents`, orderPayload, {
                 headers: { Authorization: `Bearer ${accessToken}` }
             });
@@ -231,7 +250,7 @@ exports.generaOrdineFIC = functions
         return null;
     });
 
-// --- FUNZIONE CREAZIONE DDT CUMULATIVO (HTTP Callable) ---
+// --- FUNZIONE CREAZIONE DDT (Singolo o Cumulativo) ---
 exports.creaDdtCumulativo = functions
     .region('europe-west1')
     .https.onCall(async (data, _context) => {
@@ -246,89 +265,165 @@ exports.creaDdtCumulativo = functions
             const db = admin.firestore();
             const accessToken = await getValidFicToken(); 
             
-            // 1. Recupera ordini
+            // 1. Recupera i documenti da Firestore per ottenere gli ID di Fatture in Cloud
             const orderSnapshots = await Promise.all(
                 orderIds.map((id: string) => db.collection('preventivi').doc(id).get())
             );
 
-            const ficIdsToJoin: number[] = [];
+            // Controllo preliminare validità
+            const ordersData: any[] = [];
             for (const snap of orderSnapshots) {
                 const d = snap.data();
                 if (d && d.fic_order_id) {
-                    ficIdsToJoin.push(d.fic_order_id);
+                    ordersData.push({ firestoreId: snap.id, ficId: d.fic_order_id, data: d });
                 }
             }
 
-            if (ficIdsToJoin.length === 0) {
-                 return { success: false, message: "Nessun ID FiC valido trovato." };
+            if (ordersData.length === 0) {
+                 return { success: false, message: "Nessun ID FiC valido trovato negli ordini selezionati." };
             }
 
-            // 2. CHIAMATA JOIN
-            const joinUrl = `${FIC_API_URL}/c/${COMPANY_ID}/issued_documents/join`;
-            
-            const joinResponse: any = await axios.get(joinUrl, {
-                headers: { Authorization: `Bearer ${accessToken}` },
-                params: {
-                    ids: ficIdsToJoin.join(','),
-                    type: 'delivery_note'
-                }
-            });
+            // =========================================================
+            // CASO A: SINGOLO ORDINE -> MODIFICA ESISTENTE (PUT)
+            // =========================================================
+            if (ordersData.length === 1) {
+                const order = ordersData[0];
+                const ficId = order.ficId;
 
-            const joinedData = joinResponse.data.data;
+                console.log(`[FIC] Conversione Ordine Singolo in DDT. ID: ${ficId}`);
 
-            // 3. COSTRUZIONE PAYLOAD CON CHIAVI SPECIFICHE (dn_ai_)
-            // Usiamo le chiavi dn_ai_ (Delivery Note Attached Info) che spesso FiC usa 
-            // internamente per mappare i dati di trasporto nei DDT creati via API.
-            
-            const finalDocData: any = {
-                type: 'delivery_note',
-                entity: joinedData.entity,
-                date: date,
-                visible_subject: `DDT Cumulativo (${ficIdsToJoin.length} Ordini)`,
-                currency: joinedData.currency,
-                language: joinedData.language,
-                items_list: joinedData.items_list,
-                payments_list: joinedData.payments_list,
-                
-                // --- DATI TRASPORTO (Mappatura dn_ai_) ---
-                dn_ai_packages_number: colli.toString(), // Convertiamo in stringa per sicurezza
-                dn_ai_causal: "VENDITA",
-                dn_ai_transporter: "MITTENTE", // Nota: Questo campo di solito è il "Vettore"
-                dataConsegnaPrevista: date,
-                
-                // Mappiamo anche i campi standard per sicurezza (ridondanza non guasta)
-                c_driver_and_contents: {
-                     packages_number: parseInt(colli),
-                     transport_causal: "VENDITA"
-                }
-            };
-
-            if (weight && Number(weight) > 0) {
-                finalDocData.dn_ai_weight = weight.toString();
-            }
-            
-            // Note: Se c'erano note nel join, le manteniamo
-            if (joinedData.notes) finalDocData.notes = joinedData.notes;
-
-            // 4. CREAZIONE (POST)
-            const createUrl = `${FIC_API_URL}/c/${COMPANY_ID}/issued_documents`;
-            const createRes: any = await axios.post(createUrl, { data: finalDocData }, {
-                headers: { Authorization: `Bearer ${accessToken}` }
-            });
-
-            // 5. Aggiornamento Firestore
-            const batch = db.batch();
-            orderIds.forEach((id: string) => {
-                const ref = db.collection('preventivi').doc(id);
-                batch.update(ref, { 
-                    fic_ddt_id: createRes.data.data.id,
-                    fic_ddt_url: createRes.data.data.url,
-                    stato: 'DELIVERY' 
+                // 1. RECUPERIAMO IL PROSSIMO NUMERO DDT DISPONIBILE
+                // È necessario perché nella PUT, FiC non lo calcola da solo per i campi dn_
+                const infoUrl = `${FIC_API_URL}/c/${COMPANY_ID}/issued_documents/info`;
+                const infoRes: any = await axios.get(infoUrl, {
+                    headers: { Authorization: `Bearer ${accessToken}` },
+                    params: { type: 'delivery_note' }
                 });
-            });
-            await batch.commit();
+                
+                const nextDnNumber = infoRes.data.data.next_number;
+                console.log(`[FIC] Prossimo numero DDT disponibile: ${nextDnNumber}`);
 
-            return { success: true, fic_id: createRes.data.data.id };
+                const modifyUrl = `${FIC_API_URL}/c/${COMPANY_ID}/issued_documents/${ficId}`;
+
+                // Prepariamo il payload per la PUT
+                const modifyPayload: any = {
+                    data: {
+                        // Flag che indica che il documento ha DDT allegato
+                        delivery_note: true,
+                        
+                        // 🔥 CAMPO MANCANTE AGGIUNTO QUI:
+                        dn_number: nextDnNumber, 
+                        
+                        // Campi specifici richiesti
+                        dn_date: date,
+                        dn_ai_packages_number: colli.toString(),
+                        dn_ai_causal: "VENDITA",
+                        dn_ai_transporter: "MITTENTE",
+                        
+                        // Mappiamo anche i campi standard 'driver_and_contents' per sicurezza UI
+                        c_driver_and_contents: {
+                             packages_number: parseInt(colli),
+                             transport_causal: "VENDITA"
+                        }
+                    }
+                };
+
+                if (weight && Number(weight) > 0) {
+                    modifyPayload.data.dn_ai_weight = weight.toString();
+                }
+
+                // Eseguiamo la PUT
+                const modifyRes: any = await axios.put(modifyUrl, modifyPayload, {
+                    headers: { Authorization: `Bearer ${accessToken}` }
+                });
+
+                const updatedDoc = modifyRes.data.data;
+
+                // Aggiorniamo Firestore
+                await db.collection('preventivi').doc(order.firestoreId).update({
+                    fic_ddt_id: updatedDoc.id,       
+                    fic_ddt_url: updatedDoc.url,     
+                    stato: 'DELIVERY',
+                    colli: parseInt(colli),
+                    dataConsegnaPrevista: date
+                });
+
+                return { success: true, fic_id: updatedDoc.id };
+            }
+
+            // =========================================================
+            // CASO B: ORDINI MULTIPLI -> UNIONE IN NUOVO DDT (JOIN + POST)
+            // =========================================================
+            else {
+                console.log(`[FIC] Creazione DDT Cumulativo per ${ordersData.length} ordini.`);
+                
+                const ficIdsToJoin = ordersData.map(o => o.ficId);
+                const joinUrl = `${FIC_API_URL}/c/${COMPANY_ID}/issued_documents/join`;
+                
+                // 1. Chiamata JOIN per ottenere i dati uniti
+                const joinResponse: any = await axios.get(joinUrl, {
+                    headers: { Authorization: `Bearer ${accessToken}` },
+                    params: {
+                        ids: ficIdsToJoin.join(','),
+                        type: 'delivery_note'
+                    }
+                });
+
+                const joinedData = joinResponse.data.data;
+
+                // 2. Costruzione Payload Nuovo Documento
+                const finalDocData: any = {
+                    type: 'delivery_note',
+                    entity: joinedData.entity,
+                    date: date,
+                    visible_subject: `DDT Cumulativo (${ficIdsToJoin.length} Ordini)`,
+                    currency: joinedData.currency,
+                    language: joinedData.language,
+                    items_list: joinedData.items_list,
+                    payments_list: joinedData.payments_list,
+                    
+                    // Dati Trasporto (Mappatura dn_ai_)
+                    dn_ai_packages_number: colli.toString(),
+                    dn_ai_causal: "VENDITA",
+                    dn_ai_transporter: "MITTENTE",
+                    
+                    // Campi standard
+                    c_driver_and_contents: {
+                         packages_number: parseInt(colli),
+                         transport_causal: "VENDITA"
+                    }
+                };
+
+                if (weight && Number(weight) > 0) {
+                    finalDocData.dn_ai_weight = weight.toString();
+                }
+                
+                if (joinedData.notes) finalDocData.notes = joinedData.notes;
+
+                // 3. Creazione (POST)
+                const createUrl = `${FIC_API_URL}/c/${COMPANY_ID}/issued_documents`;
+                const createRes: any = await axios.post(createUrl, { data: finalDocData }, {
+                    headers: { Authorization: `Bearer ${accessToken}` }
+                });
+
+                const newDdt = createRes.data.data;
+
+                // 4. Aggiornamento massivo su Firestore
+                const batch = db.batch();
+                ordersData.forEach(o => {
+                    const ref = db.collection('preventivi').doc(o.firestoreId);
+                    batch.update(ref, { 
+                        fic_ddt_id: newDdt.id,
+                        fic_ddt_url: newDdt.url,
+                        stato: 'DELIVERY',
+                        // Aggiorniamo la data consegna prevista su tutti gli ordini alla data del DDT
+                        dataConsegnaPrevista: date 
+                    });
+                });
+                await batch.commit();
+
+                return { success: true, fic_id: newDdt.id };
+            }
 
         } catch (error: any) {
             console.error("❌ Errore API FiC:", JSON.stringify(error.response?.data || error.message, null, 2));
