@@ -265,12 +265,11 @@ exports.creaDdtCumulativo = functions
             const db = admin.firestore();
             const accessToken = await getValidFicToken(); 
             
-            // 1. Recupera i documenti da Firestore per ottenere gli ID di Fatture in Cloud
+            // 1. Recupera i documenti da Firestore
             const orderSnapshots = await Promise.all(
                 orderIds.map((id: string) => db.collection('preventivi').doc(id).get())
             );
 
-            // Controllo preliminare validità
             const ordersData: any[] = [];
             for (const snap of orderSnapshots) {
                 const d = snap.data();
@@ -280,7 +279,7 @@ exports.creaDdtCumulativo = functions
             }
 
             if (ordersData.length === 0) {
-                 return { success: false, message: "Nessun ID FiC valido trovato negli ordini selezionati." };
+                 return { success: false, message: "Nessun ID FiC valido trovato." };
             }
 
             // =========================================================
@@ -292,35 +291,42 @@ exports.creaDdtCumulativo = functions
 
                 console.log(`[FIC] Conversione Ordine Singolo in DDT. ID: ${ficId}`);
 
-                // 1. RECUPERIAMO IL PROSSIMO NUMERO DDT DISPONIBILE
-                // È necessario perché nella PUT, FiC non lo calcola da solo per i campi dn_
+                // --- RECUPERO PROSSIMO NUMERO DDT ---
+                // Endpoint doc: https://developers.fattureincloud.it/api-reference#get-issued-document-info
                 const infoUrl = `${FIC_API_URL}/c/${COMPANY_ID}/issued_documents/info`;
+                
+                console.log("[FIC] Richiedo next_number per delivery_note...");
                 const infoRes: any = await axios.get(infoUrl, {
                     headers: { Authorization: `Bearer ${accessToken}` },
                     params: { type: 'delivery_note' }
                 });
-                
-                const nextDnNumber = infoRes.data.data.next_number;
-                console.log(`[FIC] Prossimo numero DDT disponibile: ${nextDnNumber}`);
+
+                // LOG DI DEBUG FONDAMENTALE
+                console.log(`[FIC] Risposta Info:`, JSON.stringify(infoRes.data));
+
+                const nextDnNumber = infoRes.data?.data?.next_number;
+
+                if (nextDnNumber === undefined || nextDnNumber === null) {
+                    throw new Error("Impossibile recuperare il prossimo numero DDT da Fatture in Cloud.");
+                }
+
+                console.log(`[FIC] Numero assegnato: ${nextDnNumber} (Tipo: ${typeof nextDnNumber})`);
 
                 const modifyUrl = `${FIC_API_URL}/c/${COMPANY_ID}/issued_documents/${ficId}`;
 
                 // Prepariamo il payload per la PUT
                 const modifyPayload: any = {
                     data: {
-                        // Flag che indica che il documento ha DDT allegato
                         delivery_note: true,
                         
-                        // 🔥 CAMPO MANCANTE AGGIUNTO QUI:
-                        dn_number: nextDnNumber, 
+                        // 🔥 FORZIAMO IL TIPO NUMBER
+                        dn_number: Number(nextDnNumber), 
                         
-                        // Campi specifici richiesti
                         dn_date: date,
                         dn_ai_packages_number: colli.toString(),
                         dn_ai_causal: "VENDITA",
                         dn_ai_transporter: "MITTENTE",
                         
-                        // Mappiamo anche i campi standard 'driver_and_contents' per sicurezza UI
                         c_driver_and_contents: {
                              packages_number: parseInt(colli),
                              transport_causal: "VENDITA"
@@ -352,7 +358,7 @@ exports.creaDdtCumulativo = functions
             }
 
             // =========================================================
-            // CASO B: ORDINI MULTIPLI -> UNIONE IN NUOVO DDT (JOIN + POST)
+            // CASO B: ORDINI MULTIPLI (JOIN) - RIMASTO INVARIATO
             // =========================================================
             else {
                 console.log(`[FIC] Creazione DDT Cumulativo per ${ordersData.length} ordini.`);
@@ -360,7 +366,6 @@ exports.creaDdtCumulativo = functions
                 const ficIdsToJoin = ordersData.map(o => o.ficId);
                 const joinUrl = `${FIC_API_URL}/c/${COMPANY_ID}/issued_documents/join`;
                 
-                // 1. Chiamata JOIN per ottenere i dati uniti
                 const joinResponse: any = await axios.get(joinUrl, {
                     headers: { Authorization: `Bearer ${accessToken}` },
                     params: {
@@ -371,7 +376,6 @@ exports.creaDdtCumulativo = functions
 
                 const joinedData = joinResponse.data.data;
 
-                // 2. Costruzione Payload Nuovo Documento
                 const finalDocData: any = {
                     type: 'delivery_note',
                     entity: joinedData.entity,
@@ -382,12 +386,10 @@ exports.creaDdtCumulativo = functions
                     items_list: joinedData.items_list,
                     payments_list: joinedData.payments_list,
                     
-                    // Dati Trasporto (Mappatura dn_ai_)
                     dn_ai_packages_number: colli.toString(),
                     dn_ai_causal: "VENDITA",
                     dn_ai_transporter: "MITTENTE",
                     
-                    // Campi standard
                     c_driver_and_contents: {
                          packages_number: parseInt(colli),
                          transport_causal: "VENDITA"
@@ -400,7 +402,6 @@ exports.creaDdtCumulativo = functions
                 
                 if (joinedData.notes) finalDocData.notes = joinedData.notes;
 
-                // 3. Creazione (POST)
                 const createUrl = `${FIC_API_URL}/c/${COMPANY_ID}/issued_documents`;
                 const createRes: any = await axios.post(createUrl, { data: finalDocData }, {
                     headers: { Authorization: `Bearer ${accessToken}` }
@@ -408,7 +409,6 @@ exports.creaDdtCumulativo = functions
 
                 const newDdt = createRes.data.data;
 
-                // 4. Aggiornamento massivo su Firestore
                 const batch = db.batch();
                 ordersData.forEach(o => {
                     const ref = db.collection('preventivi').doc(o.firestoreId);
@@ -416,7 +416,6 @@ exports.creaDdtCumulativo = functions
                         fic_ddt_id: newDdt.id,
                         fic_ddt_url: newDdt.url,
                         stato: 'DELIVERY',
-                        // Aggiorniamo la data consegna prevista su tutti gli ordini alla data del DDT
                         dataConsegnaPrevista: date 
                     });
                 });

@@ -282,13 +282,23 @@ exports.creaDdtCumulativo = functions
             const order = ordersData[0];
             const ficId = order.ficId;
             console.log(`[FIC] Conversione Ordine Singolo in DDT. ID: ${ficId}`);
+            // 1. RECUPERIAMO IL PROSSIMO NUMERO DDT DISPONIBILE
+            // È necessario perché nella PUT, FiC non lo calcola da solo per i campi dn_
+            const infoUrl = `${FIC_API_URL}/c/${COMPANY_ID}/issued_documents/info`;
+            const infoRes = await axios_1.default.get(infoUrl, {
+                headers: { Authorization: `Bearer ${accessToken}` },
+                params: { type: 'delivery_note' }
+            });
+            const nextDnNumber = infoRes.data.data.next_number;
+            console.log(`[FIC] Prossimo numero DDT disponibile: ${nextDnNumber}`);
             const modifyUrl = `${FIC_API_URL}/c/${COMPANY_ID}/issued_documents/${ficId}`;
             // Prepariamo il payload per la PUT
-            // Stiamo "trasformando" l'ordine attivando i campi del DDT
             const modifyPayload = {
                 data: {
-                    // Flag che indica che il documento funge da DDT o ha DDT allegato
+                    // Flag che indica che il documento ha DDT allegato
                     delivery_note: true,
+                    // 🔥 CAMPO MANCANTE AGGIUNTO QUI:
+                    dn_number: nextDnNumber,
                     // Campi specifici richiesti
                     dn_date: date,
                     dn_ai_packages_number: colli.toString(),
@@ -310,12 +320,10 @@ exports.creaDdtCumulativo = functions
             });
             const updatedDoc = modifyRes.data.data;
             // Aggiorniamo Firestore
-            // Nota: In questo caso il DDT è l'ordine stesso modificato
             await db.collection('preventivi').doc(order.firestoreId).update({
-                fic_ddt_id: updatedDoc.id, // Stesso ID dell'ordine
-                fic_ddt_url: updatedDoc.url, // URL aggiornato
+                fic_ddt_id: updatedDoc.id,
+                fic_ddt_url: updatedDoc.url,
                 stato: 'DELIVERY',
-                // Salviamo anche i dati di trasporto locali per riferimento
                 colli: parseInt(colli),
                 dataConsegnaPrevista: date
             });
