@@ -283,18 +283,20 @@ exports.creaDdtCumulativo = functions
             }
 
             // =========================================================
-            // CALCOLO STRINGA COMMESSE (PER OGGETTO E RIGA DESCRITTIVA)
+            // CALCOLO OGGETTO (COMMESSE)
             // =========================================================
+            // Estraiamo tutte le commesse (o codici se commessa manca)
             const listCommesse = ordersData.map(o => 
                 (o.data.commessa && o.data.commessa.trim() !== "") 
                 ? o.data.commessa 
                 : o.data.codice
             );
             
+            // Rimuoviamo duplicati (es. 2 ordini della stessa commessa) e uniamo con " - "
             const uniqueCommesse = [...new Set(listCommesse)];
-            const stringaCommesse = uniqueCommesse.join(' - '); // Es: "Cantiere Rossi - Cantiere Bianchi"
+            const visibleSubject = uniqueCommesse.join(' - ');
 
-            console.log(`[FIC] Creazione DDT per: ${stringaCommesse}`);
+            console.log(`[FIC] Creazione DDT per ${ordersData.length} ordini. Oggetto: ${visibleSubject}`);
             
             const ficIdsToJoin = ordersData.map(o => o.ficId);
             const joinUrl = `${FIC_API_URL}/c/${COMPANY_ID}/issued_documents/join`;
@@ -310,9 +312,12 @@ exports.creaDdtCumulativo = functions
 
             const joinedData = joinResponse.data.data;
 
-            // 3. RECUPERO DETTAGLI CLIENTE (Identico a prima)
+            // 3. RECUPERO DETTAGLI COMPLETI CLIENTE
+            // Il join ci dà l'ID dell'entità, ma non sempre tutti i dettagli dell'indirizzo.
+            // Li recuperiamo esplicitamente per popolare il DDT come facciamo per gli ordini.
             let detailedClient = null;
             if (joinedData.entity && joinedData.entity.id) {
+                console.log(`[FIC] Recupero dettagli completi cliente ID: ${joinedData.entity.id}...`);
                 try {
                     const clientDetailRes: any = await axios.get(`${FIC_API_URL}/c/${COMPANY_ID}/entities/clients/${joinedData.entity.id}`, {
                         headers: { Authorization: `Bearer ${accessToken}` },
@@ -320,10 +325,11 @@ exports.creaDdtCumulativo = functions
                     });
                     detailedClient = clientDetailRes.data.data;
                 } catch (err) {
-                    console.warn("[FIC] Impossibile recuperare dettagli cliente, userò dati base.");
+                    console.warn("[FIC] Impossibile recuperare dettagli cliente, userò dati base del join.");
                 }
             }
 
+            // Se il recupero fallisce, usiamo l'entity del join come fallback
             const entityData = detailedClient ? {
                 id: detailedClient.id,
                 name: detailedClient.name,
@@ -337,39 +343,25 @@ exports.creaDdtCumulativo = functions
             } : joinedData.entity;
 
 
-            // 4. PREPARAZIONE LISTA ARTICOLI CON RIGA COMMESSA INIZIALE
-            // Creiamo una riga puramente descrittiva da mettere in cima
-            const rigaDescrittivaCommessa = {
-                name: "Riferimento Commessa/e:",
-                description: stringaCommesse,
-                qty: 0,
-                net_price: 0,
-                vat: { id: VAT_ID || 0, value: VAT_VALUE || 22 } // Usa i valori globali o 0
-            };
-
-            // Inseriamo la riga descrittiva PRIMA degli articoli ottenuti dal Join
-            const itemsListFinal = [rigaDescrittivaCommessa, ...joinedData.items_list];
-
-
-            // 5. COSTRUZIONE PAYLOAD FINALE
+            // 4. COSTRUZIONE PAYLOAD
             const finalDocData: any = {
                 type: 'delivery_note',
+                // Usiamo i dati cliente completi
                 entity: entityData,
                 date: date,
-                
-                // A) OGGETTO DEL DOCUMENTO (Visibile in alto nel PDF)
-                visible_subject: stringaCommesse, 
-                
+                // Usiamo l'oggetto calcolato (Lista commesse)
+                visible_subject: visibleSubject,
                 currency: joinedData.currency,
                 language: joinedData.language,
-                
-                // B) LISTA ARTICOLI (Con riga descrittiva in cima)
-                items_list: itemsListFinal, 
-                
+                items_list: joinedData.items_list, 
                 payments_list: joinedData.payments_list,
+                
+                // Dati Trasporto
                 dn_ai_packages_number: colli.toString(),
                 dn_ai_causal: "VENDITA",
                 dn_ai_transporter: "MITTENTE",
+                
+                // Mappatura standard
                 c_driver_and_contents: {
                         packages_number: parseInt(colli),
                         transport_causal: "VENDITA"
@@ -382,16 +374,16 @@ exports.creaDdtCumulativo = functions
             
             if (joinedData.notes) finalDocData.notes = joinedData.notes;
 
-            // 6. CREAZIONE (POST)
+            // 5. CREAZIONE (POST)
             const createUrl = `${FIC_API_URL}/c/${COMPANY_ID}/issued_documents`;
             const createRes: any = await axios.post(createUrl, { data: finalDocData }, {
                 headers: { Authorization: `Bearer ${accessToken}` }
             });
 
             const newDdt = createRes.data.data;
-            console.log(`[FIC] DDT Creato: ID ${newDdt.id}`);
+            console.log(`[FIC] DDT Creato: ID ${newDdt.id}, Numero ${newDdt.number}`);
 
-            // 7. AGGIORNAMENTO FIRESTORE
+            // 6. AGGIORNAMENTO FIRESTORE
             const batch = db.batch();
             ordersData.forEach(o => {
                 const ref = db.collection('preventivi').doc(o.firestoreId);
@@ -417,5 +409,122 @@ exports.creaDdtCumulativo = functions
                 success: false, 
                 message: "Errore FiC: " + dettagliErrore 
             };
+        }
+    });
+
+// --- FUNZIONE SEGNALAZIONE BUG NOTION ---
+exports.submitBugToNotion = functions
+    .region('europe-west1')
+    .https.onCall(async (data, context) => {
+        // 1. Verifica Autenticazione
+        if (!context.auth) {
+            throw new functions.https.HttpsError('unauthenticated', 'Devi essere loggato per segnalare un bug.');
+        }
+
+        const { title, description, category, pageUrl, technicalContext, userEmail } = data;
+        
+        try {
+            // 2. RECUPERA LE CHIAVI DAL DATABASE FIRESTORE
+            const db = admin.firestore();
+            const configDoc = await db.collection('config').doc('notion').get();
+            
+            if (!configDoc.exists) {
+                console.error("Configurazione Notion mancante nel DB (config/notion).");
+                throw new functions.https.HttpsError('internal', 'Errore configurazione server.');
+            }
+
+            const configData = configDoc.data();
+            const NOTION_API_KEY = configData?.NOTION_API_KEY; 
+            const NOTION_DB_ID = configData?.NOTION_DB_ID;
+
+            if (!NOTION_API_KEY || !NOTION_DB_ID) {
+                console.error("Chiavi Notion mancanti nel documento config/notion.");
+                throw new functions.https.HttpsError('internal', 'Errore configurazione chiavi.');
+            }
+
+            // 3. Invia a Notion
+            // FIX: Aggiunta Icona e Data Segnalazione
+            const response: any = await axios.post('https://api.notion.com/v1/pages', {
+                parent: { database_id: NOTION_DB_ID },
+                // NUOVO: Icona della pagina Notion
+                icon: {
+                    type: "emoji",
+                    emoji: "🐞"
+                },
+                properties: {
+                    "Titolo Bug": {
+                        title: [
+                            { text: { content: title } }
+                        ]
+                    },
+                    "Status": {
+                        status: { name: "Da Analizzare" }
+                    },
+                    "Categoria": {
+                        select: { name: category || "Altro" }
+                    },
+                    "Pagina/URL": {
+                        url: pageUrl
+                    },
+                    "Segnalato Da": {
+                        rich_text: [
+                            { text: { content: userEmail || "anonimo" } }
+                        ]
+                    },
+                    // NUOVO: Data Segnalazione (assicurati che la colonna in Notion si chiami esattamente così)
+                    "Data Segnalazione": {
+                        date: { start: new Date().toISOString() }
+                    },
+                    "Contesto Tecnico": {
+                        rich_text: [
+                            { text: { content: JSON.stringify(technicalContext, null, 2).substring(0, 2000) } }
+                        ]
+                    },
+                    "Priorità": {
+                        select: { name: "Media" }
+                    }
+                },
+                children: [
+                    {
+                        object: "block",
+                        type: "heading_2",
+                        heading_2: {
+                            rich_text: [{ text: { content: "Descrizione Problema" } }]
+                        }
+                    },
+                    {
+                        object: "block",
+                        type: "paragraph",
+                        paragraph: {
+                            rich_text: [{ text: { content: description } }]
+                        }
+                    }
+                ]
+            }, {
+                headers: {
+                    'Authorization': `Bearer ${NOTION_API_KEY}`,
+                    'Notion-Version': '2022-06-28',
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            return { success: true, notionUrl: response.data?.url };
+
+        } catch (error: any) {
+            const err = error as any;
+            let errorMsg = "Errore sconosciuto";
+
+            if (err.response && err.response.data) {
+                try {
+                    errorMsg = JSON.stringify(err.response.data);
+                } catch {
+                    errorMsg = "Errore non serializzabile";
+                }
+            } else if (err.message) {
+                errorMsg = err.message;
+            }
+
+            console.error("Errore Notion:", errorMsg);
+            throw new functions.https.HttpsError('internal', 'Errore durante l\'invio a Notion.');
         }
     });

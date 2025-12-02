@@ -231,6 +231,11 @@ const vaiAlBuilder = (codice?: string) => {
   router.push(route);
 };
 
+// Helper per aprire link esterni (risolve errore TS su window)
+const apriDdt = (url: string) => {
+  window.open(url, '_blank');
+};
+
 const getStatusStyling = (stato: string) => {
   const styles: Record<string, any> = {
     'DRAFT': { badge: 'bg-orange-100 text-orange-500 border-orange-200', icon: DocumentTextIcon, iconBg: 'bg-orange-100 text-orange-500' },
@@ -535,12 +540,28 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
             </div>
             <div class="mt-2 flex flex-col items-start gap-2">
             </div>
-            <div class="flex items-center gap-6 w-full md:w-auto justify-between md:justify-end">
-              <div class="text-right">
-                <div class="text-xl font-bold font-heading text-gray-600">{{ (p.totaleScontato || p.totaleImponibile || 0).toFixed(2) }} €</div>
-                <div class="text-xs text-gray-600">Importo netto</div>
+            <div class="flex flex-col items-end gap-2 w-full md:w-auto justify-center">
+              
+              <div class="flex items-center gap-4">
+                <div class="text-right">
+                  <div class="text-xl font-bold font-heading text-gray-600">{{ (p.totaleScontato || p.totaleImponibile || 0).toFixed(2) }} €</div>
+                  <div class="text-xs text-gray-600">Importo netto</div>
+                </div>
+                <button @click="vaiAlBuilder(p.codice)" 
+                        class="border border-gray-300 text-gray-600 px-3 py-2 rounded font-bold text-xs hover:bg-gray-50 h-[34px] whitespace-nowrap shrink-0">
+                  APRI
+                </button>
               </div>
-              <button @click="vaiAlBuilder(p.codice)" class="border border-gray-300 text-gray-600 px-4 py-2 rounded-lg font-bold text-xs hover:bg-gray-50">APRI</button>
+
+              <button 
+                  v-if="p.stato === 'DELIVERY' && p.fic_ddt_url"
+                  @click="apriDdt(p.fic_ddt_url)"
+                  class="bg-emerald-100 text-emerald-700 border border-emerald-200 hover:bg-emerald-200 px-12 py-2 rounded font-bold text-xs flex items-center justify-center gap-2 h-[34px] transition-colors shadow-sm w-full md:w-auto"
+              >
+                  <DocumentTextIcon class="h-4 w-4" />
+                  VEDI DDT
+              </button>
+
             </div>
           </div>
         </div>

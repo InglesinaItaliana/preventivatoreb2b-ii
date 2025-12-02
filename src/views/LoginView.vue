@@ -78,8 +78,8 @@ const handleLogin = async () => {
     <div class="hidden lg:flex w-5/12 bg-slate-900 relative flex-col justify-between p-12 text-white z-10">
       
       <div class="absolute inset-0 z-0 opacity-30">
-        <div class="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-yellow-500/20 rounded-full blur-3xl animate-blob"></div>
-        <div class="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-blue-500/10 rounded-full blur-3xl animate-blob animation-delay-2000"></div>
+        <div class="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-yellow-500/50 rounded-full blur-3xl animate-blob"></div>
+        <div class="absolute bottom-[-10%] right-[-10%] w-[500px] h-[500px] bg-blue-500/20 rounded-full blur-3xl animate-blob animation-delay-2000"></div>
       </div>
 
       <div class="relative z-10">
@@ -192,13 +192,18 @@ const handleLogin = async () => {
 </template>
 
 <style scoped>
-.animate-blob { animation: blob 10s infinite; }
-.animate-fade-in-up { animation: fadeInUp 0.6s ease-out; }
-@keyframes blob { 
-    0% { transform: translate(0px, 0px) scale(1); } 
-    33% { transform: translate(30px, -30px) scale(1.1); } 
-    66% { transform: translate(-20px, 20px) scale(0.9); } 
-    100% { transform: translate(0px, 0px) scale(1); } 
+.animate-fade-in-up { 
+  animation: fadeInUp 0.6s ease-out; 
 }
-@keyframes fadeInUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+@keyframes fadeInUp { 
+  from { 
+    opacity: 0; 
+    transform: translateY(20px); 
+  } 
+  to { 
+    opacity: 1; 
+    transform: translateY(0); 
+  } 
+}
 </style>

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { RouterView } from 'vue-router'
+import GlobalBugReporter from './components/GlobalBugReporter.vue'; // <--- Importa
 </script>
 
 <template>
@@ -17,14 +18,12 @@ import { RouterView } from 'vue-router'
       <RouterView />
     </div>
 
+    <GlobalBugReporter />
+
   </div>
 </template>
 
 <style>
-/* FONDAMENTALE:
-   Impostiamo lo sfondo dell'applicazione come trasparente.
-   Se non lo fai, il bianco di default coprirà l'immagine di sfondo.
-*/
 html, body, #app {
   background-color: transparent;
   margin: 0;
