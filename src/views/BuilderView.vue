@@ -19,6 +19,8 @@ import {
   InformationCircleIcon, 
   MagnifyingGlassCircleIcon,
   ShoppingCartIcon,
+  CheckBadgeIcon,
+  UserIcon,
 } from '@heroicons/vue/24/solid'
 
 const toastMessage = ref('');
@@ -58,7 +60,60 @@ const storicoPreventivi = ref<any[]>([]);
 const mostraStorico = ref(false);
 const codiceRicerca = ref('');
 const isSaving = ref(false);
+const isDataLoaded = ref(!route.query.codice);
 const riferimentoCommessaInput = ref<HTMLInputElement | null>(null);
+
+// --- NUOVA LOGICA: CREAZIONE ORDINE ADMIN ---
+const clienteUID = ref(''); // ID del cliente selezionato
+const searchClientQuery = ref('');
+const suggestedClients = ref<any[]>([]);
+const isSearchingClient = ref(false);
+
+// Determina se siamo in modalità "Nuovo Ordine Admin"
+const isNewAdminOrder = computed(() => route.query?.admin === 'true' && route.query?.new === 'true');
+
+// Funzione di ricerca clienti (Autocompletamento)
+// --- MODIFICA QUESTA PARTE NELLO SCRIPT ---
+
+const allClients = ref<any[]>([]); // Cache locale clienti
+
+const searchClients = async () => {
+  const term = searchClientQuery.value.toLowerCase();
+  if (term.length < 2) {
+    suggestedClients.value = [];
+    return;
+  }
+  
+  // 1. Carica tutti i clienti una volta sola se la lista è vuota
+  if (allClients.value.length === 0) {
+      isSearchingClient.value = true;
+      try {
+        const snap = await getDocs(collection(db, 'users'));
+        allClients.value = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      } catch (e) {
+        console.error(e);
+      } finally {
+        isSearchingClient.value = false;
+      }
+  }
+
+  // 2. Filtra localmente (case-insensitive e "contiene")
+  suggestedClients.value = allClients.value.filter(c => {
+      const rs = (c.ragioneSociale || '').toLowerCase();
+      const em = (c.email || '').toLowerCase();
+      return rs.includes(term) || em.includes(term);
+  }).slice(0, 10); // Mostra max 10 risultati
+};
+
+// Selezione del cliente dal menu a tendina
+const selectClient = (client: any) => {
+  nomeCliente.value = client.ragioneSociale || client.email;
+  clienteEmail.value = client.email;
+  clienteUID.value = client.uid || client.id; // Salviamo l'UID
+  searchClientQuery.value = client.ragioneSociale; 
+  suggestedClients.value = []; 
+};
+// ---------------------------------------------
 
 const scrollToTopOnFocus = () => {
   if (riferimentoCommessaInput.value) {
@@ -101,6 +156,14 @@ const isLocked = computed(() => {
     return ['WAITING_FAST', 'WAITING_SIGN', 'SIGNED', 'IN_PRODUZIONE', 'READY', 'REJECTED'].includes(statoCorrente.value);
   }
   return statoCorrente.value !== 'DRAFT';
+});
+
+const showConfigurationPanels = computed(() => {
+  // Se stiamo ancora caricando i dati iniziali, nascondi tutto per evitare il "flash"
+  if (!isDataLoaded.value) return false;
+  
+  const hiddenStatuses = ['ORDER_REQ', 'WAITING_FAST', 'WAITING_SIGN', 'SIGNED', 'IN_PRODUZIONE', 'READY', 'DELIVERY', 'DELIVERED', 'REJECTED'];
+  return !hiddenStatuses.includes(statoCorrente.value);
 });
 
 watch(categoriaGriglia, () => { tipoGriglia.value = ''; dimensioneGriglia.value = ''; finituraGriglia.value = ''; });
@@ -245,70 +308,46 @@ const onConfirmSign = async (url: string) => {
   } catch(e) { console.error(e); alert("Errore conferma."); }
 };
 
-const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADMIN_VALIDA' | 'ADMIN_RIFIUTA' | 'ADMIN_FIRMA' | 'FORCE_EDIT') => {
+// SOSTITUISCI LA FUNZIONE salvaPreventivo CON QUESTA:
+const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADMIN_VALIDA' | 'ADMIN_RIFIUTA' | 'ADMIN_FIRMA' | 'FORCE_EDIT' | 'CREA_PREVENTIVO_ADMIN' | 'CREA_ORDINE_ADMIN') => {
   if (preventivo.value.length === 0) return alert("Preventivo vuoto.");
-  if (!riferimentoCommessa.value.trim()) {
-    alert("Il campo 'Riferimento Cantiere' è obbligatorio per salvare o ordinare.");
-    return;
-  }
+  if (!riferimentoCommessa.value.trim()) return alert("Il campo 'Riferimento Cantiere' è obbligatorio.");
+  
+  // Validazione specifica per Admin
+  if (isNewAdminOrder.value && !clienteUID.value) return alert("Seleziona un cliente prima di salvare.");
+
   isSaving.value = true;
 
   try {
     const codice = codiceRicerca.value || `${new Date().getFullYear()}-${Math.random().toString(36).substr(2, 6).toUpperCase()}`;
     let nuovoStato: StatoPreventivo = statoCorrente.value;
 
+    // Logica Stati
     if (!isAdmin.value) {
-      if (!azione) {
-        if (statoCorrente.value === 'DRAFT') nuovoStato = 'DRAFT';
-      }
-      else if (azione === 'RICHIEDI_VALIDAZIONE') {
-        nuovoStato = 'PENDING_VAL';
-      }
-      else if (azione === 'ORDINA') {
-        nuovoStato = 'ORDER_REQ';
-      }
-      else if (azione === 'FORCE_EDIT') {
-        nuovoStato = 'PENDING_VAL';
-      }
+      if (!azione && statoCorrente.value === 'DRAFT') nuovoStato = 'DRAFT';
+      else if (azione === 'RICHIEDI_VALIDAZIONE') nuovoStato = 'PENDING_VAL';
+      else if (azione === 'ORDINA') nuovoStato = 'ORDER_REQ';
+      else if (azione === 'FORCE_EDIT') nuovoStato = 'PENDING_VAL';
     }
 
     if (isAdmin.value && azione) {
       if (azione === 'ADMIN_VALIDA') nuovoStato = 'QUOTE_READY';
       if (azione === 'ADMIN_RIFIUTA') nuovoStato = 'REJECTED';
       if (azione === 'ADMIN_FIRMA') nuovoStato = 'WAITING_SIGN';
+      // NUOVI STATI PER CREAZIONE DIRETTA
+      if (azione === 'CREA_PREVENTIVO_ADMIN') nuovoStato = 'QUOTE_READY';
+      if (azione === 'CREA_ORDINE_ADMIN') nuovoStato = 'WAITING_SIGN';
     }
 
-    // *** CALCOLO SOMMARIO PER RAGGRUPPAMENTO ***
+    // Calcolo Sommario
     const sommario: RiepilogoRiga[] = [];
     preventivo.value.forEach(r => {
       const key = r.descrizioneCompleta + '|' + (r.infoCanalino || '');
       const existing = sommario.find(s => (s.descrizione + '|' + s.canalino) === key);
-      if (existing) {
-        existing.quantitaTotale += r.quantita;
-      } else {
-        sommario.push({
-          descrizione: r.descrizioneCompleta,
-          // FIX: type mismatch (TS2322)
-          canalino: r.infoCanalino || '',
-          quantitaTotale: r.quantita
-        });
-      }
+      if (existing) existing.quantitaTotale += r.quantita;
+      else sommario.push({ descrizione: r.descrizioneCompleta, canalino: r.infoCanalino || '', quantitaTotale: r.quantita });
     });
-    
-    if (isAdmin.value && (azione === 'ADMIN_FIRMA')) {
-    if (!dataConsegnaPrevista.value) {
-      // INVECE DI ALERT, ATTIVIAMO L'ANIMAZIONE
-      dateErrorAnim.value = true;
-      setTimeout(() => {
-        dateErrorAnim.value = false;
-      }, 1500); // Dura 1.5 secondi
-      
-      isSaving.value = false;
-      return;
-    }
-  }
 
-    // 1. DEFINIZIONE DATI (SENZA UID!)
     const docData: any = {
       codice,
       cliente: nomeCliente.value,
@@ -325,34 +364,25 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
       dataScadenza: new Date(Date.now() + 30*24*60*60*1000),
       elementi: preventivo.value.map(r => ({ ...r })),
       dataConsegnaPrevista: dataConsegnaPrevista.value || null
-      };
+    };
 
-    // 2. LOGICA UID / CREAZIONE
-    // Se è un NUOVO preventivo (non ha ID) E NON lo sta creando l'admin (lo crea il cliente)
-    if (!currentDocId.value && !isAdmin.value) {
-      docData.dataCreazione = serverTimestamp();
-      
-      // Assegna la proprietà solo se è il cliente a crearlo
-      const user = auth.currentUser;
-      if (user) {
-          docData.uid = user.uid;
-          docData.clienteUID = user.uid;
-          // Se è un nuovo preventivo, l'email è quella dell'utente corrente
-          docData.clienteEmail = user.email; 
-      }
-    } 
-    
-    // Se è l'ADMIN a creare un NUOVO preventivo (opzionale, ma utile per chiarezza)
-    if (!currentDocId.value && isAdmin.value) {
+    // LOGICA ASSEGNAZIONE CLIENTE (UID)
+    if (!currentDocId.value) {
         docData.dataCreazione = serverTimestamp();
-        // L'admin crea per conto terzi? O per se stesso?
-        // Di solito si lascia null o si mette un flag 'creatoDaAdmin'
-        docData.uid = null; // Nessun proprietario "cliente" specifico ancora
-        docData.clienteUID = null;
-    }
-
-    // Se siamo in fase di MODIFICA (fatta dall'Admin), questi campi NON vengono toccati
-    // e rimangono quelli originali del database.
+        if (isNewAdminOrder.value) {
+            // Se Admin crea per un cliente
+            docData.uid = clienteUID.value;
+            docData.clienteUID = clienteUID.value;
+        } else {
+            // Se Cliente crea per sé
+            const user = auth.currentUser;
+            if (user) {
+                docData.uid = user.uid;
+                docData.clienteUID = user.uid;
+                docData.clienteEmail = user.email; 
+            }
+        }
+    } 
 
     if (currentDocId.value) {
       await setDoc(doc(db, 'preventivi', currentDocId.value), docData, { merge: true });
@@ -363,13 +393,7 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
     }
 
     statoCorrente.value = nuovoStato;
-
-    let msg = "✅ Salvato.";
-    if (nuovoStato === 'PENDING_VAL') msg = "⚠️ Inviato per validazione.";
-    if (nuovoStato === 'ORDER_REQ') msg = "🚀 Ordine richiesto. In attesa di conferma.";
-    if (nuovoStato === 'QUOTE_READY') msg = "✅ Preventivo Validato.";
-
-    showCustomToast(msg);
+    showCustomToast(`✅ Salvato in stato: ${nuovoStato}`);
 
     if (isAdmin.value) router.push('/admin');
     else caricaListaStorico();
@@ -377,6 +401,33 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
   } catch (e) { alert("Errore salvataggio."); console.error(e); }
   finally { isSaving.value = false; }
 };
+
+// SOSTITUISCI onMounted CON QUESTO:
+onMounted(() => {
+  catalog.fetchCatalog();
+  
+  // Se NON è un nuovo ordine admin, carica il nome cliente dalla memoria
+  if (!isNewAdminOrder.value) {
+      const storedName = localStorage.getItem('clientName');
+      if (storedName) nomeCliente.value = storedName;
+  } else {
+      nomeCliente.value = ''; // Pulisce il nome per permettere la ricerca
+  }
+
+  onAuthStateChanged(auth, (user) => {
+    if (user) {
+      // Se non è admin creation mode, l'email è quella dell'utente corrente
+      if(!isNewAdminOrder.value) clienteEmail.value = user.email || '';
+      caricaListaStorico();
+    }
+  });
+
+  if(route.query.codice) { 
+    isSaving.value = true;
+    codiceRicerca.value = route.query.codice as string; 
+    setTimeout(caricaPreventivo, 1000); 
+  }
+});
 
 const eliminaPreventivo = async () => {
   if (!currentDocId.value) {
@@ -452,7 +503,13 @@ const caricaPreventivo = async () => {
       righe: Number(el.righe) || 0,
       colonne: Number(el.colonne) || 0
     }));
-  } catch(e) { console.error(e); alert("Errore ricerca"); } finally { isSaving.value = false; }
+  } catch(e) { 
+    console.error(e); 
+    alert("Errore ricerca"); 
+  } finally { 
+    isSaving.value = false;
+    isDataLoaded.value = true; // <--- NUOVO: Sblocca la visualizzazione dei pannelli (se lo stato lo permette)
+  }
 };
 
 const caricaListaStorico = async () => {
@@ -509,26 +566,6 @@ const aggiungiExtraAdmin = () => {
   adminExtraPrice.value=0;
 };
 
-onMounted(() => {
-  catalog.fetchCatalog();
-  const storedName = localStorage.getItem('clientName');
-  if (storedName) nomeCliente.value = storedName;
-
-  onAuthStateChanged(auth, (user) => {
-    if (user) {
-      clienteEmail.value = user.email || '';
-      caricaListaStorico();
-    }
-  });
-
-  // CORREZIONE QUI SOTTO:
-  if(route.query.codice) { 
-    isSaving.value = true; // <--- QUESTO NASCONDE I PULSANTI SUBITO
-    codiceRicerca.value = route.query.codice as string; 
-    setTimeout(caricaPreventivo, 1000); 
-  }
-});
-
 </script>
 
 <template>
@@ -544,29 +581,53 @@ onMounted(() => {
           <ChevronLeftIcon class="h-8 w-8 text-yellow-500" />         
         </button>
 
-        <div class="flex items-center gap-4">
-          <div>
-            <p class="text-lg font-medium text-gray-800 leading-none">{{ nomeCliente }}</p>
-            <h1 class="text-5xl font-bold font-heading text-gray-900">P.O.P.S. Commesse</h1>
-            <br>
+        <div class="flex items-center gap-4 w-full">
+          <div class="w-full">
             
-            <div class="flex items-center gap-3">
-              <button 
-                v-if="!isAdmin"
-                @click="nuovaCommessa" 
-                class="bg-yellow-400 hover:bg-yellow-300 text-black px-6 py-3 rounded-lg font-bold shadow-md flex items-center gap-2 transition-transform active:scale-95">
-                <PlusCircleIcon class="h-7 w-7 text-black" />
-                NUOVO
+            <div v-if="isNewAdminOrder && !currentDocId" class="mb-4 relative z-50">
+                <label class="text-xs font-bold text-gray-500 uppercase mb-1 flex items-center gap-1">
+                    <UserIcon class="h-4 w-4"/> Seleziona Cliente
+                </label>
+                <div class="relative">
+                    <input 
+                        v-model="searchClientQuery" 
+                        @input="searchClients"
+                        type="text" 
+                        class="w-full md:w-96 p-3 border-2 border-yellow-400 rounded-lg text-lg font-bold text-gray-800 placeholder-gray-300 focus:outline-none focus:ring-4 focus:ring-yellow-100"
+                        placeholder="Cerca Ragione Sociale..."
+                        :disabled="!!clienteUID" 
+                    >
+                    <button v-if="clienteUID" @click="() => { clienteUID=''; searchClientQuery=''; nomeCliente=''; }" class="absolute right-3 top-3 text-gray-400 hover:text-red-500">✕</button>
+                </div>
+                
+                <div v-if="suggestedClients.length > 0" class="absolute top-full left-0 w-full md:w-96 bg-white shadow-xl rounded-lg border border-gray-100 mt-1 overflow-hidden">
+                    <div 
+                        v-for="client in suggestedClients" 
+                        :key="client.id" 
+                        @click="selectClient(client)"
+                        class="p-3 hover:bg-yellow-50 cursor-pointer border-b last:border-0 border-gray-50 transition-colors"
+                    >
+                        <div class="font-bold text-gray-800">{{ client.ragioneSociale }}</div>
+                        <div class="text-xs text-gray-400">{{ client.email }}</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div v-else>
+                <p class="text-lg font-medium text-gray-800 leading-none">{{ nomeCliente }}</p>
+            </div>
+
+            <h1 class="text-5xl font-bold font-heading text-gray-900">P.O.P.S. Commesse</h1>
+            
+            <div v-if="!isNewAdminOrder" class="flex items-center gap-3 mt-4">
+              <button v-if="!isAdmin" @click="nuovaCommessa" class="bg-yellow-400 hover:bg-yellow-300 text-black px-6 py-3 rounded-lg font-bold shadow-md flex items-center gap-2 transition-transform active:scale-95">
+                <PlusCircleIcon class="h-7 w-7 text-black" /> NUOVO
               </button>
-              
-              <button 
-                v-if="!isAdmin" 
-                @click="mostraStorico = true" 
-                class="bg-stone-100 hover:bg-stone-50 text-black px-6 py-3 rounded-lg font-bold shadow-md flex items-center gap-2 transition-transform active:scale-95">
-                <MagnifyingGlassCircleIcon class="h-7 w-7 text-black" />
-                STORICO
+              <button v-if="!isAdmin" @click="mostraStorico = true" class="bg-stone-100 hover:bg-stone-50 text-black px-6 py-3 rounded-lg font-bold shadow-md flex items-center gap-2 transition-transform active:scale-95">
+                <MagnifyingGlassCircleIcon class="h-7 w-7 text-black" /> STORICO
               </button>
             </div>
+
           </div>
         </div>
       </div>
@@ -642,7 +703,7 @@ onMounted(() => {
           </div>
         </div>
       </div>
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div v-if="showConfigurationPanels" class="grid grid-cols-1 md:grid-cols-3 gap-6">
     
       <div class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all p-5 h-full">
         <h2 class="font-bold text-lg border-b pb-2 font-heading text-gray-800">1. Griglia</h2>
@@ -759,104 +820,78 @@ onMounted(() => {
           </div>
 
           <div class="flex gap-3">
-            <template v-if="isAdmin">
-              <div v-if="statoCorrente === 'ORDER_REQ'" class="flex flex-col md:flex-row items-end md:items-center gap-6">
-    
+            
+            <template v-if="isNewAdminOrder && !currentDocId">
+                <div class="flex flex-col gap-2 w-full">
+                    <button @click="salvaPreventivo('CREA_PREVENTIVO_ADMIN')" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-3 rounded-lg font-bold shadow-lg flex items-center justify-center gap-2 w-full">
+                        <DocumentTextIcon class="h-6 w-6"/> CREA PREVENTIVO
+                    </button>
+                    
+                    <hr class="border-gray-600/20 my-1">
+                    
+                    <button @click="salvaPreventivo('CREA_ORDINE_ADMIN')" class="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-3 rounded-lg font-bold shadow-lg flex items-center justify-center gap-2 w-full">
+                        <CheckBadgeIcon class="h-6 w-6"/> CREA ORDINE
+                    </button>
+                </div>
+            </template>
+
+            <template v-else-if="isAdmin">
+              
+               <div v-if="statoCorrente === 'ORDER_REQ'" class="flex flex-col md:flex-row items-end md:items-center gap-6">
                 <span class="text-xl text-gray-400 uppercase font-bold hidden xl:block">RICHIEDI CONFERMA D'ORDINE</span>
-                
                 <div class="flex flex-col gap-1">
                   <label class="text-[10px] uppercase font-bold text-yellow-500 flex items-center gap-1">
                     <CalendarIcon class="h-3 w-3 text-white" /> Data Consegna Prevista
                   </label>
-                  
-                  <input 
-                    type="date" 
-                    v-model="dataConsegnaPrevista"
-                    class="bg-gray-800 text-white border border-gray-600 rounded px-3 py-2 text-sm font-bold outline-none native-date-icon-fix transition-all duration-300" 
-                    :class="{ 
-                      'focus:border-yellow-400': !dateErrorAnim, 
-                      'ring-4 ring-red-500 bg-red-900/50 border-red-500 animate-pulse': dateErrorAnim 
-                    }"
-                  >
+                  <input type="date" v-model="dataConsegnaPrevista" class="bg-gray-800 text-white border border-gray-600 rounded px-3 py-2 text-sm font-bold outline-none native-date-icon-fix transition-all duration-300" :class="{'focus:border-yellow-400': !dateErrorAnim, 'ring-4 ring-red-500 bg-red-900/50 border-red-500 animate-pulse': dateErrorAnim }">
                 </div>
-
                 <div class="flex gap-2">
-                  <button @click="salvaPreventivo('ADMIN_FIRMA')" class="bg-blue-600 hover:bg-blue-500 text-blue-100 flex items-center px-6 py-3 rounded font-bold text-lg shadow-lg shadow-blue-600/20">
-                    FIRMA
-                  </button>
+                  <button @click="salvaPreventivo('ADMIN_FIRMA')" class="bg-blue-600 hover:bg-blue-500 text-blue-100 flex items-center px-6 py-3 rounded font-bold text-lg shadow-lg shadow-blue-600/20">FIRMA</button>
                 </div>
-                
               </div>
               
               <div v-else-if="statoCorrente === 'PENDING_VAL' || statoCorrente === 'DRAFT'" class="flex gap-2">
-                <button @click="salvaPreventivo('ADMIN_VALIDA')" class="bg-yellow-400 hover:bg-yellow-300 text-yellow-900 flex items-center px-12 py-3 rounded font-bold text-xl">
-                  VALIDA E INVIA
-                </button>
+                <button @click="salvaPreventivo('ADMIN_VALIDA')" class="bg-yellow-400 hover:bg-yellow-300 text-yellow-900 flex items-center px-12 py-3 rounded font-bold text-xl">VALIDA E INVIA</button>
               </div>
 
               <div v-else>
-                <button v-if="!isLocked" @click="salvaPreventivo()" class="bg-gray-800 text-white px-6 py-2 rounded-lg font-bold hover:bg-black">
-                  💾 SALVA MODIFICHE
-                </button>
-                <span v-else class="text-gray-400 font-bold text-sm border border-gray-300 px-3 py-1 rounded bg-gray-50">
-                  🔒 SOLA LETTURA
-                </span>
+                <button v-if="!isLocked" @click="salvaPreventivo()" class="bg-gray-800 text-white px-6 py-2 rounded-lg font-bold hover:bg-black">💾 SALVA MODIFICHE</button>
+                <span v-else class="text-gray-400 font-bold text-sm border border-gray-300 px-3 py-1 rounded bg-gray-50">🔒 SOLA LETTURA</span>
               </div>
             </template>
 
             <template v-else>
-              <template v-if="statoCorrente === 'DRAFT'">
-                <button @click="eliminaPreventivo()" class="bg-red-200 flex items-center gap-2 hover:bg-red-300 text-red-600 px-4 py-3 rounded-lg font-bold shadow-lg">
-                  ELIMINA
-                </button>
-                <button @click="salvaPreventivo()" class="bg-green-200 flex items-center gap-2 hover:bg-green-300 text-green-600 px-4 py-3 rounded-lg font-bold shadow-lg">
-                  SALVA
-                </button>
-                <button v-if="isStandard" @click="salvaPreventivo('ORDINA')" class="bg-yellow-400 flex items-center gap-2 hover:bg-yellow-300 text-yellow-900 px-12 py-3 rounded-lg font-bold shadow-lg">
-                  <ShoppingCartIcon class="h-7 w-7 text-yellow-900" />
-                  ORDINA
-                </button>
+               <template v-if="statoCorrente === 'DRAFT'">
+                <button @click="eliminaPreventivo()" class="bg-red-200 flex items-center gap-2 hover:bg-red-300 text-red-600 px-4 py-3 rounded-lg font-bold shadow-lg">ELIMINA</button>
+                <button @click="salvaPreventivo()" class="bg-green-200 flex items-center gap-2 hover:bg-green-300 text-green-600 px-4 py-3 rounded-lg font-bold shadow-lg">SALVA</button>
+                <button v-if="isStandard" @click="salvaPreventivo('ORDINA')" class="bg-yellow-400 flex items-center gap-2 hover:bg-yellow-300 text-yellow-900 px-12 py-3 rounded-lg font-bold shadow-lg"><ShoppingCartIcon class="h-7 w-7 text-yellow-900" /> ORDINA</button>
                 <div v-else class="flex flex-col items-end">
-                  <button @click="salvaPreventivo('RICHIEDI_VALIDAZIONE')" class="bg-yellow-400 hover:bg-yellow-500 text-black px-6 py-3 rounded-lg font-bold shadow-lg">
-                    INVIA PER VALIDAZIONE
-                  </button>
+                  <button @click="salvaPreventivo('RICHIEDI_VALIDAZIONE')" class="bg-yellow-400 hover:bg-yellow-500 text-black px-6 py-3 rounded-lg font-bold shadow-lg">INVIA PER VALIDAZIONE</button>
                   <span class="text-[10px] text-gray-400 mt-1">Richiesta verifica tecnica</span>
                 </div>
               </template>
 
               <div v-else-if="statoCorrente === 'PENDING_VAL'" class="text-right">
-                <span class="text-yellow-500 font-bold text-2xl flex items-center gap-2">
-                  <svg class="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                  IN ATTESA DI VALIDAZIONE DA INGLESINA ITALIANA
-                </span>
+                <span class="text-yellow-500 font-bold text-2xl flex items-center gap-2">IN ATTESA DI VALIDAZIONE</span>
               </div>
 
               <div v-else-if="statoCorrente === 'QUOTE_READY'" class="flex gap-3">
                 <button @click="sbloccaPerModifica()" class="bg-gray-700 text-white px-4 py-3 rounded-lg font-bold hover:bg-gray-600 text-sm">MODIFICA</button>
-                <button @click="salvaPreventivo('ORDINA')" class="bg-yellow-400 hover:bg-yellow-300 text-yellow-50 px-6 py-3 rounded-lg font-bold shadow-lg animate-pulse">
-                  CONFERMA ORDINE
-                </button>
+                <button @click="salvaPreventivo('ORDINA')" class="bg-yellow-400 hover:bg-yellow-300 text-yellow-50 px-6 py-3 rounded-lg font-bold shadow-lg animate-pulse">CONFERMA ORDINE</button>
               </div>
 
               <template v-else-if="['WAITING_FAST', 'WAITING_SIGN'].includes(statoCorrente)">
                 <button @click="apriModaleAzione()" class="bg-blue-600 hover:bg-blue-500 text-white px-12 py-3 rounded-lg font-bold shadow-lg animate-pulse flex items-center gap-2">
-                  <ShoppingCartIcon class="h-7 w-7" />
-                  {{ statoCorrente === 'WAITING_FAST' ? 'ACCETTA ORDINE' : 'FIRMA ORDINE' }}
+                  <ShoppingCartIcon class="h-7 w-7" /> {{ statoCorrente === 'WAITING_FAST' ? 'ACCETTA ORDINE' : 'FIRMA ORDINE' }}
                 </button>
               </template>
 
               <div v-else-if="statoCorrente === 'REJECTED'" class="text-right px-4">
-                <span class="text-red-500 font-bold text-2xl flex items-center gap-2">
-                  <InformationCircleIcon class="h-6 w-6" />
-                  PREVENTIVO ANNULLATO E ARCHIVIATO
-                </span>
+                <span class="text-red-500 font-bold text-2xl flex items-center gap-2"><InformationCircleIcon class="h-6 w-6" /> ANNULLATO</span>
               </div>
 
               <div v-else class="text-right px-4">
-                <span class="text-yellow-500 font-bold text-2xl flex items-center gap-2">
-                  <svg class="animate-spin h-4 w-4" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                  ORDINE IN LAVORAZIONE DA INGLESINA ITALIANA
-                </span>
+                <span class="text-yellow-500 font-bold text-2xl flex items-center gap-2">ORDINE IN LAVORAZIONE</span>
               </div>
             </template>
           </div>

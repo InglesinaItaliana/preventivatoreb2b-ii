@@ -7,7 +7,7 @@ export type StatoPreventivo =
   | 'PENDING_VAL'       // Preventivo - In attesa di validazione (Tecnica)
   | 'QUOTE_READY'       // Preventivo - Pronto/Validato (Prezzo visibile)
   | 'ORDER_REQ'         // Ordine - Ordine Richiesto (Check Admin)
-  | 'WAITING_FAST'      // Ordine - Attesa Accettazione Veloce (Checkbox) - NUOVO
+  | 'WAITING_FAST'      // Ordine - Attesa Accettazione Veloce (Checkbox) - RIMOSSO
   | 'WAITING_SIGN'      // Ordine - Attesa Firma (Upload)
   | 'SIGNED'            // Ordine - Firmato
   | 'IN_PRODUZIONE'     // Produzione - In Produzione

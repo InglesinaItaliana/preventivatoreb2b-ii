@@ -13,6 +13,7 @@ import {
   CalculatorIcon,
   ChartBarIcon,
   TruckIcon,
+  UserPlusIcon,
   CogIcon
 } from '@heroicons/vue/24/solid';
 
@@ -22,13 +23,15 @@ const isSending = ref(false);
 const route = useRoute();
 const router = useRouter();
 
-// Stato Reattivo per l'utente
+// Stato Reattivo
 const currentUserEmail = ref<string | null>(null);
+const isAuthReady = ref(false); // <--- NUOVO: Blocca il rendering finché non sappiamo chi sei
 
 // Ascolta i cambiamenti di stato dell'autenticazione
 onMounted(() => {
   onAuthStateChanged(auth, (user) => {
     currentUserEmail.value = user?.email || null;
+    isAuthReady.value = true; // <--- ORA possiamo mostrare il componente corretto
   });
 });
 
@@ -38,9 +41,10 @@ const isAdmin = computed(() => currentUserEmail.value === 'info@inglesinaitalian
 // Navigazione Menu Admin
 const adminLinks = [
   { label: 'Admin Dashboard', route: '/admin', icon: ChartBarIcon },
+  { label: 'Crea per Cliente', route: '/preventivatore?admin=true&new=true', icon: UserPlusIcon }, // <--- NUOVA VOCE
   { label: 'Calcoli Lavorazioni', route: '/calcoli', icon: CalculatorIcon }, 
   { label: 'Produzione', route: '/production', icon: CogIcon },
-  { label: 'Logistica', route: '/delivery', icon: TruckIcon },
+  { label: 'Spedizioni', route: '/delivery', icon: TruckIcon },
 ];
 
 const form = reactive({
@@ -108,8 +112,7 @@ const submitBug = async () => {
 </script>
 
 <template>
-  <div class="fixed bottom-6 right-6 z-[9999] flex flex-col items-end gap-3">
-    
+    <div v-if="isAuthReady" class="fixed bottom-6 right-6 z-[9999] flex flex-col items-end gap-3 animate-fade-in">    
     <Transition
       enter-active-class="transition-all duration-300 cubic-bezier(0.175, 0.885, 0.32, 1.275)"
       enter-from-class="opacity-0 scale-90 translate-y-4"
@@ -152,7 +155,7 @@ const submitBug = async () => {
 
     <button 
       @click="toggleMenu"
-      class="h-16 w-16 bg-yellow-400 hover:bg-yellow-500 text-white rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 flex items-center justify-center relative overflow-hidden group active:scale-95"
+      class="h-16 w-16 bg-yellow-400 hover:bg-yellow-300 text-black rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 flex items-center justify-center relative overflow-hidden group active:scale-95"
       :class="isMenuOpen ? 'rotate-90 rounded-[1.5rem]' : 'rounded-2xl'"
     >
       <WrenchScrewdriverIcon 
@@ -232,6 +235,14 @@ const submitBug = async () => {
 </template>
 
 <style scoped>
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
 /* Transizioni Vue per il pannello laterale */
 .slide-enter-active,
 .slide-leave-active {

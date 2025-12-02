@@ -450,11 +450,12 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
                 </button>
               </div>
               <button
+                v-if="['WAITING_SIGN', 'WAITING_FAST'].includes(p.stato)"
                 @click="gestisciAzioneOrdine(p)"
                 class="w-full text-white bg-blue-600 hover:bg-blue-700 px-12 py-2 rounded-lg font-bold text-xs shadow-sm flex justify-center items-center gap-2 animate-pulse transition-transform active:scale-95"
               >
                 <CheckCircleIcon class="h-5 w-5" />
-                FIRMA ORDINE
+                {{ p.stato === 'WAITING_FAST' ? 'ACCETTA ORDINE' : 'FIRMA ORDINE' }}
               </button>
             </div>
           </div>
