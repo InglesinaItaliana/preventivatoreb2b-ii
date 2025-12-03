@@ -34,7 +34,7 @@ const showCustomToast = (message: string) => {
     toastMessage.value = '';
   }, 3000); 
 };
-
+const soloCanalino = ref(false);
 const adminExtraQty = ref(1); // Nuova variabile per la quantità extra
 
 // Computata per estrarre la lista degli extra dal catalogo
@@ -236,37 +236,89 @@ watch(dimensioniGrigliaDisp, (v) => { if (v.length === 1) dimensioneGriglia.valu
 watch(finitureGrigliaDisp, (v) => { if (v.length === 1) finituraGriglia.value = v[0] as string; });
 watch(tipiCanalinoDisp, (v) => { if (v.length === 1 && !copiaDuplex.value) tipoCanalino.value = v[0] as string; });
 
-const aggiungi = () => {
-  if (!tipoGriglia.value || !dimensioneGriglia.value || !finituraGriglia.value || !pannello.base || !pannello.altezza) return;
+// Computed per gestire l'attivazione del pulsante AGGIUNGI
+const canAdd = computed(() => {
+  // 1. Controlli base sempre obbligatori
+  if (!pannello.base || !pannello.altezza || isLocked.value) return false;
 
-  const pGriglia = catalog.listino[categoriaGriglia.value]?.[tipoGriglia.value]?.[dimensioneGriglia.value]?.[finituraGriglia.value]?.prezzo || 0;
-  const pCanalino = catalog.listino.CANALINO?.[tipoCanalino.value]?.[dimensioneCanalino.value]?.[finituraCanalino.value]?.prezzo || 0;
+  // 2. Caso "Solo Canalino": controlliamo solo i dati del canalino
+  if (soloCanalino.value) {
+     return !!(tipoCanalino.value && dimensioneCanalino.value && finituraCanalino.value);
+  }
+
+  // 3. Caso Standard (Con Griglia)
+  const grigliaOk = tipoGriglia.value && dimensioneGriglia.value && finituraGriglia.value;
+  const duplexOk = categoriaGriglia.value !== 'DUPLEX' || (fuseruolo.value && Number(fuseruolo.value) > 0);
+  
+  return !!(grigliaOk && duplexOk);
+});
+
+const aggiungi = () => {
+  // Validazione condizionale: Se è solo canalino, non controlliamo la griglia
+  const gridValid = soloCanalino.value || (tipoGriglia.value && dimensioneGriglia.value && finituraGriglia.value);
+  const canalinoValid = tipoCanalino.value && dimensioneCanalino.value && finituraCanalino.value;
+  const sizesValid = pannello.base && pannello.altezza;
+
+  if (!gridValid || !canalinoValid || !sizesValid) return;
+
+  const grigliaObj = catalog.listino[categoriaGriglia.value]?.[tipoGriglia.value]?.[dimensioneGriglia.value]?.[finituraGriglia.value];
+  const pGriglia = grigliaObj?.prezzo || 0;
+  
+  const canalinoObj = catalog.listino.CANALINO?.[tipoCanalino.value]?.[dimensioneCanalino.value]?.[finituraCanalino.value];
+  const pCanalino = canalinoObj?.prezzo || 0;
+  const codCanalino = canalinoObj?.cod || '';
 
   const result = calculatePrice({
-    base_mm: pannello.base, altezza_mm: pannello.altezza, qty: pannello.qty,
-    num_orizzontali: pannello.colonne || 0, num_verticali: pannello.righe || 0,
+    base_mm: pannello.base, 
+    altezza_mm: pannello.altezza, 
+    qty: pannello.qty,
+    num_orizzontali: pannello.colonne || 0, 
+    num_verticali: pannello.righe || 0,
     tipo_canalino: tipoCanalino.value,
-    prezzo_unitario_griglia: pGriglia, prezzo_unitario_canalino: pCanalino
+    
+    // Parametri nuovi
+    codice_canalino: codCanalino,
+    isSoloCanalino: soloCanalino.value,
+    
+    prezzo_unitario_griglia: pGriglia, 
+    prezzo_unitario_canalino: pCanalino
   });
 
-  let descStart = categoriaGriglia.value;
-  if (categoriaGriglia.value === 'DUPLEX' && fuseruolo.value) {
+  let descStart = soloCanalino.value ? 'TELAIO' : categoriaGriglia.value;
+  if (!soloCanalino.value && categoriaGriglia.value === 'DUPLEX' && fuseruolo.value) {
     descStart += ` ${fuseruolo.value}`;
   }
 
   preventivo.value.push({
     id: Date.now().toString(),
-    categoria: categoriaGriglia.value, modello: tipoGriglia.value as any, dimensione: dimensioneGriglia.value, finitura: finituraGriglia.value,
-    base_mm: pannello.base, altezza_mm: pannello.altezza, righe: pannello.righe || 0, colonne: pannello.colonne || 0, quantita: pannello.qty,
-    descrizioneCompleta: `${categoriaGriglia.value} ${fuseruolo.value} ${tipoGriglia.value} ${dimensioneGriglia.value} - ${finituraGriglia.value}`,
+    // Se è solo canalino, forziamo la categoria a CANALINO o usiamo un placeholder
+    categoria: soloCanalino.value ? 'CANALINO' : categoriaGriglia.value,
+    modello: soloCanalino.value ? 'MANUALE' : tipoGriglia.value as any, 
+    dimensione: soloCanalino.value ? '-' : dimensioneGriglia.value, 
+    finitura: soloCanalino.value ? '-' : finituraGriglia.value,
+    base_mm: pannello.base, 
+    altezza_mm: pannello.altezza, 
+    righe: soloCanalino.value ? 0 : (pannello.righe || 0), 
+    colonne: soloCanalino.value ? 0 : (pannello.colonne || 0), 
+    quantita: pannello.qty,
+    
+    // Descrizione personalizzata per Solo Canalino
+    descrizioneCompleta: soloCanalino.value 
+        ? 'TELAIO (SOLO CANALINO)' 
+        : `${descStart} ${tipoGriglia.value} ${dimensioneGriglia.value} - ${finituraGriglia.value}`,
+        
     infoCanalino: `Canalino: ${tipoCanalino.value} ${dimensioneCanalino.value} ${finituraCanalino.value}`,
-    prezzo_unitario: result.prezzo_unitario, prezzo_totale: result.prezzo_totale,
-    nonEquidistanti: opzioniTelaio.nonEquidistanti, curva: opzioniTelaio.curva, tacca: opzioniTelaio.tacca,
+    prezzo_unitario: result.prezzo_unitario, 
+    prezzo_totale: result.prezzo_totale,
+    nonEquidistanti: opzioniTelaio.nonEquidistanti, 
+    curva: opzioniTelaio.curva, 
+    tacca: opzioniTelaio.tacca,
     rawCanalino: { tipo: tipoCanalino.value, dim: dimensioneCanalino.value, fin: finituraCanalino.value },
     fuseruolo: fuseruolo.value ? Number(fuseruolo.value) : null
   });
-  Object.assign(pannello, { base: 0, altezza: 0, righe: 0, colonne: 0, qty: 1 });
-  Object.assign(opzioniTelaio, { nonEquidistanti: false, curva: false, tacca: false });
+
+  // Reset (opzionale: se vuoi mantenere i valori non resettare tutto)
+  // Object.assign(pannello, { base: 0, altezza: 0, righe: 0, colonne: 0, qty: 1 });
 };
 
 const uploadFile = async (event: Event) => {
@@ -804,6 +856,12 @@ const aggiungiExtraAdmin = () => {
             <select v-model="tipoCanalino" :disabled="copiaDuplex || !tipiCanalinoDisp.length || isLocked" class="w-full p-2 border rounded bg-gray-50 text-sm disabled:opacity-60"><option value="" disabled>Seleziona Tipo</option><option v-for="t in tipiCanalinoDisp" :key="t" :value="t">{{ t }}</option></select>
             <select v-if="tipoCanalino" v-model="dimensioneCanalino" :disabled="copiaDuplex || !dimensioniCanalinoDisp.length || isLocked" class="w-full p-2 border rounded bg-gray-50 mt-4 text-sm disabled:opacity-60"><option value="" disabled>Seleziona Dimensione</option><option v-for="d in dimensioniCanalinoDisp" :key="d" :value="d">{{ d }}</option></select>
             <select v-if="dimensioneCanalino" v-model="finituraCanalino" :disabled="copiaDuplex || !finitureCanalinoDisp.length || isLocked" class="w-full p-2 border rounded bg-gray-50 mt-4 text-sm disabled:opacity-60"><option value="" disabled>Seleziona Finitura</option><option v-for="f in finitureCanalinoDisp" :key="f" :value="f">{{ f }}</option></select>
+            <div class="mt-4 pt-2 border-t border-gray-200">
+                <label class="flex items-center space-x-2 cursor-pointer">
+                    <input type="checkbox" v-model="soloCanalino" :disabled="isLocked" class="rounded text-yellow-500 focus:ring-yellow-500 h-4 w-4">
+                    <span class="text-xs font-bold text-gray-700 uppercase">Solo Canalino (No Griglia)</span>
+                </label>
+            </div>
           </div>
       </div>
 
@@ -849,13 +907,7 @@ const aggiungiExtraAdmin = () => {
 
           <button 
             @click="aggiungi" 
-            :disabled="
-              !pannello.base || 
-              !pannello.altezza || 
-              !finituraGriglia || 
-              isLocked || 
-              (categoriaGriglia === 'DUPLEX' && (!fuseruolo || Number(fuseruolo) <= 0))
-            "
+            :disabled="!canAdd"
             class="w-full bg-yellow-200 hover:bg-yellow-300 text-yellow-600 font-bold py-3 rounded-lg shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 transition-all flex justify-center items-center gap-2">
             <PlusCircleIcon class="h-7 w-7 text-yellow-600" />         
             AGGIUNGI
@@ -1012,7 +1064,7 @@ const aggiungiExtraAdmin = () => {
                 </td>
 
                 <td class="p-3 text-center text-xs text-gray-600">
-                  <span v-if="r.categoria !== 'EXTRA'">{{ r.righe }} x {{ r.colonne }}</span>
+                  <span v-if="r.categoria !== 'EXTRA' && r.categoria !== 'CANALINO'">{{ r.righe }} x {{ r.colonne }}</span>
                 </td>
 
                 <td class="p-3 text-center">
