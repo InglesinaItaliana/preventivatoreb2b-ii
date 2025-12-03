@@ -20,6 +20,7 @@ import {
   MagnifyingGlassCircleIcon,
   ShoppingCartIcon,
   DocumentTextIcon,
+  CalendarIcon,
 } from '@heroicons/vue/24/solid'
 
 const toastMessage = ref('');
@@ -32,6 +33,49 @@ const showCustomToast = (message: string) => {
     showToast.value = false;
     toastMessage.value = '';
   }, 3000); 
+};
+
+const adminExtraQty = ref(1); // Nuova variabile per la quantità extra
+
+// Computata per estrarre la lista degli extra dal catalogo
+const listaExtra = computed(() => {
+  const extraCat = catalog.listino['EXTRA'];
+  if (!extraCat) return [];
+  
+  // Mappiamo le chiavi (es. "Spedizione", "Adattamenti") in un array utilizzabile
+  return Object.keys(extraCat).map(nome => {
+    // Cerchiamo di scendere nell'albero per trovare il prezzo (assumiamo la prima variante disponibile, es. STD/STD)
+    // Struttura: EXTRA -> Nome -> Dimensione -> Finitura -> { prezzo, cod }
+    try {
+      const dims = Object.keys(extraCat[nome]);
+      const dimKey = dims[0];
+      // TypeScript Fix: Verifichiamo che la chiave esista (stringa valida) prima di usarla
+      if (!dimKey) throw new Error("No dimensions"); 
+
+      const fins = Object.keys(extraCat[nome][dimKey]);
+      const finKey = fins[0];
+      // TypeScript Fix: Verifichiamo che la chiave esista prima di usarla
+      if (!finKey) throw new Error("No finishes");
+
+      const dati = extraCat[nome][dimKey][finKey];
+      return { nome, prezzo: dati.prezzo, codice: dati.cod };
+    } catch (e) {
+      return { nome, prezzo: 0, codice: '' };
+    }
+  });
+});
+
+// Funzione per popolare i campi quando si seleziona dal menu
+const selezionaExtra = (event: Event) => {
+  const nomeSelezionato = (event.target as HTMLSelectElement).value;
+  if (!nomeSelezionato) return;
+
+  const item = listaExtra.value.find(x => x.nome === nomeSelezionato);
+  if (item) {
+    adminExtraDesc.value = item.nome;
+    adminExtraPrice.value = item.prezzo;
+    adminExtraQty.value = 1; // Reset quantità a 1
+  }
 };
 
 const dateErrorAnim = ref(false);
@@ -314,7 +358,9 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
   
   // Validazione specifica per Admin
   if (isNewAdminOrder.value && !clienteUID.value) return alert("Seleziona un cliente prima di salvare.");
-
+  if (azione === 'CREA_ORDINE_ADMIN' && !dataConsegnaPrevista.value) {
+      return alert("Attenzione: La Data Ordine è obbligatoria per procedere.");
+  }
   isSaving.value = true;
 
   try {
@@ -561,8 +607,36 @@ const modificaRiga = async (index: number) => {
 
 const eliminaRiga = (i:number) => { if(!isLocked.value) preventivo.value.splice(i,1); };
 const aggiungiExtraAdmin = () => {
-  preventivo.value.push({ id: Date.now().toString(), categoria: 'EXTRA', modello: 'MANUALE' as any, dimensione:'-', finitura:'-', descrizioneCompleta:`${adminExtraDesc.value}`, infoCanalino:'', base_mm:0, altezza_mm:0, righe:0, colonne:0, quantita:1, prezzo_unitario:adminExtraPrice.value, prezzo_totale:adminExtraPrice.value, curva:false, tacca:false });
-  adminExtraPrice.value=0;
+  // Calcoliamo il totale riga
+  const totaleRiga = adminExtraPrice.value * adminExtraQty.value;
+
+  preventivo.value.push({
+    id: Date.now().toString(),
+    categoria: 'EXTRA',
+    modello: 'MANUALE' as any,
+    dimensione: '-',
+    finitura: '-',
+    // Nella descrizione aggiungiamo info se la qta > 1 per chiarezza, o lasciamo pulito
+    descrizioneCompleta: adminExtraDesc.value, 
+    infoCanalino: '',
+    base_mm: 0,
+    altezza_mm: 0,
+    righe: 0,
+    colonne: 0,
+    // Usiamo la quantità specificata
+    quantita: adminExtraQty.value, 
+    // Prezzo unitario
+    prezzo_unitario: adminExtraPrice.value, 
+    // Prezzo totale riga
+    prezzo_totale: totaleRiga, 
+    curva: false,
+    tacca: false
+  });
+
+  // Reset dei campi
+  adminExtraDesc.value = 'Supplemento';
+  adminExtraPrice.value = 0;
+  adminExtraQty.value = 1;
 };
 
 </script>
@@ -820,16 +894,27 @@ const aggiungiExtraAdmin = () => {
           <div class="flex gap-3">
             
             <template v-if="isNewAdminOrder && !currentDocId">
-                <div class="flex flex-col gap-2 w-full">
-                    <button @click="salvaPreventivo('CREA_PREVENTIVO_ADMIN')" class="bg-orange-100 hover:bg-orange-200 text-orange-500 px-4 py-3 rounded-lg font-bold shadow-lg flex items-center justify-center gap-2 w-full">
-                        <DocumentTextIcon class="h-6 w-6"/> CREA PREVENTIVO
-                    </button>
-                    
-                    <hr class="border-gray-600/20 my-1">
-                    
-                    <button @click="salvaPreventivo('CREA_ORDINE_ADMIN')" class="bg-cyan-100 hover:bg-cyan-200 text-cyan-500 px-4 py-3 rounded-lg font-bold shadow-lg flex items-center justify-center gap-2 w-full">
-                        <ShoppingCartIcon class="h-6 w-6"/> CREA ORDINE
-                    </button>
+                <div class="flex items-end gap-2 w-full mb-4">
+                  
+                  <div class="w-40 shrink-0">
+                    <label class="text-[10px] uppercase font-bold text-gray-400 mb-1 flex items-center gap-1">
+                      <CalendarIcon class="h-3 w-3" /> Data Ordine
+                    </label>
+                    <input 
+                      type="date" 
+                      v-model="dataConsegnaPrevista" 
+                      class="w-full bg-white border border-gray-200 rounded-lg px-2 py-2.5 text-sm font-bold text-gray-800 outline-none focus:ring-2 focus:ring-yellow-400 h-[46px]"
+                    >
+                  </div>
+
+                  <button @click="salvaPreventivo('CREA_ORDINE_ADMIN')" class="flex-1 bg-cyan-100 hover:bg-cyan-200 text-cyan-600 border border-cyan-200 px-12 py-2.5 rounded-lg font-bold shadow-md flex items-center justify-center gap-2 h-[46px] transition-all">
+                      <ShoppingCartIcon class="h-5 w-5"/> ORDINE
+                  </button>
+
+                  <button @click="salvaPreventivo('CREA_PREVENTIVO_ADMIN')" class="flex-1 bg-orange-100 hover:bg-orange-200 text-orange-600 border border-orange-200 px-12 py-2.5 rounded-lg font-bold shadow-sm flex items-center justify-center gap-2 h-[46px] transition-all">
+                      <DocumentTextIcon class="h-5 w-5"/> PREVENTIVO
+                  </button>
+                  
                 </div>
             </template>
 
@@ -916,15 +1001,20 @@ const aggiungiExtraAdmin = () => {
               <tr v-for="(r, idx) in preventivo" :key="r.id" class="hover:bg-yellow-50/30 transition-colors group">
                 <td class="p-3 pl-5">
                   <div class="font-bold text-gray-900 text-sm">{{ r.descrizioneCompleta }}</div>
-                  <div class="text-[10px] text-gray-500 uppercase mt-0.5 flex items-center gap-1">
+                  <div v-if="r.categoria !== 'EXTRA'" class="text-[10px] text-gray-500 uppercase mt-0.5 flex items-center gap-1">
                     {{ r.infoCanalino || (r.rawCanalino ? `${r.rawCanalino.tipo} ${r.rawCanalino.fin}` : 'Senza Canalino') }}
                   </div>
                 </td>
                 <td class="p-3 text-center"><span class="bg-gray-100 text-gray-700 font-bold px-2 py-1 rounded text-xs">{{ r.quantita }}</span></td>
-                <td class="p-3 text-gray-600 text-xs">{{ r.base_mm }} x {{ r.altezza_mm }}</td>
-                <td class="p-3 text-center text-xs text-gray-600">
-                  {{ r.righe }} x {{ r.colonne }}
+                
+                <td class="p-3 text-gray-600 text-xs">
+                  <span v-if="r.categoria !== 'EXTRA'">{{ r.base_mm }} x {{ r.altezza_mm }}</span>
                 </td>
+
+                <td class="p-3 text-center text-xs text-gray-600">
+                  <span v-if="r.categoria !== 'EXTRA'">{{ r.righe }} x {{ r.colonne }}</span>
+                </td>
+
                 <td class="p-3 text-center">
                   <div class="flex justify-center gap-1 flex-wrap max-w-[100px] mx-auto">
                     <span v-if="r.nonEquidistanti" class="px-1.5 py-0.5 rounded bg-teal-100 text-teal-700 text-[9px] font-bold border border-teal-200">Non Eq.</span>
@@ -939,7 +1029,7 @@ const aggiungiExtraAdmin = () => {
 
                 <td class="p-3 text-right">
                   <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity" v-if="!isLocked">
-                    <button @click="modificaRiga(idx)" class="p-1.5 hover:bg-blue-50 text-blue-600 rounded transition-colors" title="Modifica"><svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></button>
+                    <button v-if="r.categoria !== 'EXTRA'" @click="modificaRiga(idx)" class="p-1.5 hover:bg-blue-50 text-blue-600 rounded transition-colors" title="Modifica"><svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" /></svg></button>
                     <button @click="eliminaRiga(idx)" class="p-1.5 hover:bg-red-50 text-red-600 rounded transition-colors" title="Elimina"><svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg></button>
                   </div>
                 </td>
@@ -953,7 +1043,8 @@ const aggiungiExtraAdmin = () => {
           </div>
         </div>
 
-        <div v-if="isAdmin" class="p-5 bg-slate-50 border-t border-gray-200 grid grid-cols-2 gap-6">
+        <div v-if="isAdmin" class="p-5 bg-slate-50 border-t border-gray-200 grid grid-cols-1 md:grid-cols-2 gap-6">
+          
           <div>
             <label class="text-xs font-bold text-gray-500 uppercase mb-1 block">Sconto Commerciale (%)</label>
             <div class="relative">
@@ -961,14 +1052,39 @@ const aggiungiExtraAdmin = () => {
               <span class="absolute right-3 top-2 text-gray-400 font-bold">%</span>
             </div>
           </div>
+
           <div>
-            <label class="text-xs font-bold text-gray-500 uppercase mb-1 block">Aggiungi Extra Manuale</label>
-            <div class="flex gap-2">
-              <input v-model="adminExtraDesc" type="text" class="flex-1 p-2 border border-gray-300 rounded-md text-sm outline-none">
-              <input v-model.number="adminExtraPrice" type="number" class="w-20 p-2 border border-gray-300 rounded-md text-sm text-right outline-none">
-              <button @click="aggiungiExtraAdmin" class="bg-gray-800 text-white w-8 rounded-md hover:bg-black shadow-sm flex items-center justify-center font-bold text-lg">+</button>
+            <label class="text-xs font-bold text-gray-500 uppercase mb-1 block">Aggiungi Extra / Lavorazione</label>
+            
+            <div class="mb-2">
+              <select @change="selezionaExtra" class="w-full p-2 border border-gray-300 rounded-md text-xs bg-white focus:ring-2 focus:ring-yellow-400 outline-none text-gray-600">
+                <option value="" selected>-- Seleziona da Listino (Opzionale) --</option>
+                <option v-for="item in listaExtra" :key="item.nome" :value="item.nome">
+                  {{ item.nome }} ({{ item.prezzo.toFixed(2) }} €)
+                </option>
+              </select>
+            </div>
+
+            <div class="flex gap-2 items-end">
+              <div class="flex-1">
+                <span class="text-[9px] font-bold text-gray-400 uppercase">Descrizione</span>
+                <input v-model="adminExtraDesc" type="text" class="w-full p-2 border border-gray-300 rounded-md text-sm outline-none" placeholder="Es. Trasporto">
+              </div>
+              
+              <div class="w-20">
+                <span class="text-[9px] font-bold text-gray-400 uppercase">Prezzo cad.</span>
+                <input v-model.number="adminExtraPrice" type="number" class="w-full p-2 border border-gray-300 rounded-md text-sm text-right outline-none">
+              </div>
+
+              <div class="w-16">
+                <span class="text-[9px] font-bold text-gray-400 uppercase">Q.tà</span>
+                <input v-model.number="adminExtraQty" type="number" min="1" class="w-full p-2 border border-gray-300 rounded-md text-sm text-center outline-none">
+              </div>
+
+              <button @click="aggiungiExtraAdmin" class="bg-gray-800 text-white h-[38px] w-10 rounded-md hover:bg-black shadow-sm flex items-center justify-center font-bold text-lg mb-[1px]">+</button>
             </div>
           </div>
+
         </div>
 
       </div>

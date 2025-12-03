@@ -111,17 +111,15 @@ exports.generaOrdineFIC = functions
     .region('europe-west1')
     .firestore
     .document('preventivi/{docId}')
-    .onUpdate(async (change, _context) => {
+    .onWrite(async (change, _context) => {
     var _a;
     const newData = change.after.data();
-    const oldData = change.before.data();
     if (!newData)
         return null;
     // 1. CONTROLLO TRIGGER (ORDER_REQ -> WAITING...)
     const statiAttivazione = ['WAITING_FAST', 'WAITING_SIGN'];
-    const eraRichiesto = (oldData === null || oldData === void 0 ? void 0 : oldData.stato) === 'ORDER_REQ';
     const eAttivato = statiAttivazione.includes(newData.stato);
-    if (!eraRichiesto || !eAttivato)
+    if (!eAttivato || newData.fic_order_id)
         return null;
     const clienteUID = newData.clienteUID;
     if (!clienteUID) {
@@ -193,6 +191,7 @@ exports.generaOrdineFIC = functions
                 description: desc,
                 qty: item.quantita || 1,
                 net_price: item.prezzo_unitario || 0,
+                category: item.categoria,
                 vat: { id: VAT_ID, value: VAT_VALUE }
             };
         });

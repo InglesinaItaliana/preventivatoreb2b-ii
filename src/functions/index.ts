@@ -87,21 +87,19 @@ exports.generaOrdineFIC = functions
     .region('europe-west1')
     .firestore
     .document('preventivi/{docId}')
-    .onUpdate(async (
+    .onWrite(async (
         change: functions.Change<admin.firestore.DocumentSnapshot>,
         _context: functions.EventContext
     ) => {
         const newData = change.after.data();
-        const oldData = change.before.data();
 
         if (!newData) return null;
 
         // 1. CONTROLLO TRIGGER (ORDER_REQ -> WAITING...)
         const statiAttivazione = ['WAITING_FAST', 'WAITING_SIGN'];
-        const eraRichiesto = oldData?.stato === 'ORDER_REQ';
         const eAttivato = statiAttivazione.includes(newData.stato);
 
-        if (!eraRichiesto || !eAttivato) return null;
+        if (!eAttivato || newData.fic_order_id) return null;
 
         const clienteUID = newData.clienteUID;
         if (!clienteUID) {
