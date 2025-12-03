@@ -401,6 +401,7 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
   finally { isSaving.value = false; }
 };
 
+// SOSTITUISCI onMounted CON QUESTO:
 onMounted(() => {
   catalog.fetchCatalog();
   
@@ -820,28 +821,15 @@ const aggiungiExtraAdmin = () => {
             
             <template v-if="isNewAdminOrder && !currentDocId">
                 <div class="flex flex-col gap-2 w-full">
-                    <button @click="salvaPreventivo('CREA_PREVENTIVO_ADMIN')" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-3 rounded-lg font-bold shadow-lg flex items-center justify-center gap-2 w-full">
+                    <button @click="salvaPreventivo('CREA_PREVENTIVO_ADMIN')" class="bg-orange-100 hover:bg-orange-200 text-orange-500 px-4 py-3 rounded-lg font-bold shadow-lg flex items-center justify-center gap-2 w-full">
                         <DocumentTextIcon class="h-6 w-6"/> CREA PREVENTIVO
                     </button>
-                    <div class="text-[10px] text-center text-gray-500 mb-2">Salva come validato (QUOTE_READY)</div>
                     
-                    <hr class="border-gray-300 my-2">
+                    <hr class="border-gray-600/20 my-1">
                     
-                    <div class="bg-emerald-50 p-2 rounded-lg border border-emerald-100">
-                        <label class="text-[10px] uppercase font-bold text-emerald-700 flex items-center gap-1 mb-1">
-                            <CalendarIcon class="h-3 w-3" /> Data Consegna Prevista
-                        </label>
-                        <input 
-                            type="date" 
-                            v-model="dataConsegnaPrevista"
-                            class="w-full bg-white border border-gray-300 rounded px-2 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-400"
-                        >
-                    </div>
-
-                    <button @click="salvaPreventivo('CREA_ORDINE_ADMIN')" class="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-3 rounded-lg font-bold shadow-lg flex items-center justify-center gap-2 w-full">
-                        <CheckBadgeIcon class="h-6 w-6"/> CREA ORDINE
+                    <button @click="salvaPreventivo('CREA_ORDINE_ADMIN')" class="bg-cyan-100 hover:bg-cyan-200 text-cyan-500 px-4 py-3 rounded-lg font-bold shadow-lg flex items-center justify-center gap-2 w-full">
+                        <ShoppingCartIcon class="h-6 w-6"/> CREA ORDINE
                     </button>
-                    <div class="text-[10px] text-center text-gray-500">Genera Doc. su FiC e richiedi firma</div>
                 </div>
             </template>
 
