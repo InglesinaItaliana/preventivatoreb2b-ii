@@ -431,7 +431,7 @@ const getActionData = (p: any) => {
     if (st === 'DELIVERY')
     return { 
       text: 'VEDI DDT', 
-      class: 'text-indigo-600 bg-indigo-50 border-indigo-200 hover:bg-indigo-100', 
+      class: 'text-emerald-600 bg-emerald-100 border-emerald-200 hover:bg-emerald-200', 
       // Apre il PDF del DDT se disponibile, altrimenti apre l'editor
       action: () => p.fic_ddt_url ? window.open(p.fic_ddt_url, '_blank') : apriEditor(p.codice), 
       icon: DocumentTextIcon 
@@ -622,17 +622,17 @@ onUnmounted(() => {
       <div class="flex flex-col md:flex-row border-b border-gray-200 mb-6 justify-between items-end gap-4">
         
         <div class="flex overflow-x-auto">
-          <button @click="activeCategory = 'PREVENTIVI'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative whitespace-nowrap flex items-center gap-2" :class="activeCategory === 'PREVENTIVI' ? 'text-gray-900 border-b-4 border-orange-400' : 'text-gray-400 hover:text-gray-600'">
+          <button @click="activeCategory = 'PREVENTIVI'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative whitespace-nowrap flex items-center gap-2" :class="activeCategory === 'PREVENTIVI' ? 'text-gray-900 border-b-4 border-yellow-400' : 'text-gray-400 hover:text-gray-600'">
             <DocumentTextIcon class="h-4 w-4" />
             PREVENTIVI
             <span v-if="categoryCounts.PREVENTIVI" class="ml-2 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[10px] border">{{ categoryCounts.PREVENTIVI }}</span>
           </button>
-          <button @click="activeCategory = 'ORDINI'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative whitespace-nowrap flex items-center gap-2" :class="activeCategory === 'ORDINI' ? 'text-gray-900 border-b-4 border-cyan-400' : 'text-gray-400 hover:text-gray-600'">
+          <button @click="activeCategory = 'ORDINI'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative whitespace-nowrap flex items-center gap-2" :class="activeCategory === 'ORDINI' ? 'text-gray-900 border-b-4 border-yellow-400' : 'text-gray-400 hover:text-gray-600'">
             <ShoppingCartIcon class="h-4 w-4" />
             ORDINI
             <span v-if="categoryCounts.ORDINI" class="ml-2 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[10px] border">{{ categoryCounts.ORDINI }}</span>
           </button>
-          <button @click="activeCategory = 'PRODUZIONE'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative whitespace-nowrap flex items-center gap-2" :class="activeCategory === 'PRODUZIONE' ? 'text-gray-900 border-b-4 border-emerald-400' : 'text-gray-400 hover:text-gray-600'">
+          <button @click="activeCategory = 'PRODUZIONE'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative whitespace-nowrap flex items-center gap-2" :class="activeCategory === 'PRODUZIONE' ? 'text-gray-900 border-b-4 border-yellow-400' : 'text-gray-400 hover:text-gray-600'">
             <CogIcon class="h-4 w-4" />
             PRODUZIONE
             <span v-if="categoryCounts.PRODUZIONE" class="ml-2 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[10px] border">{{ categoryCounts.PRODUZIONE }}</span>
@@ -642,7 +642,7 @@ onUnmounted(() => {
             SPEDIZIONI
             <span v-if="categoryCounts.SPEDIZIONI" class="ml-2 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[10px] border">{{ categoryCounts.SPEDIZIONI }}</span>
           </button>
-          <button @click="activeCategory = 'ARCHIVIO'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative whitespace-nowrap flex items-center gap-2" :class="activeCategory === 'ARCHIVIO' ? 'text-gray-900 border-b-4 border-stone-400' : 'text-gray-400 hover:text-gray-600'">
+          <button @click="activeCategory = 'ARCHIVIO'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative whitespace-nowrap flex items-center gap-2" :class="activeCategory === 'ARCHIVIO' ? 'text-gray-900 border-b-4 border-yellow-400' : 'text-gray-400 hover:text-gray-600'">
             <ArchiveBoxIcon class="h-4 w-4" />
             ARCHIVIO
             <span v-if="categoryCounts.ARCHIVIO" class="ml-2 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[10px] border">{{ categoryCounts.ARCHIVIO }}</span>
@@ -729,7 +729,7 @@ onUnmounted(() => {
                                 <div v-else class="h-5 w-5 rounded-full border-2 border-gray-300 hover:border-blue-400"></div>
                             </div>
                       <div class="text-xs text-gray-500 mt-1">DATA: {{ formatDate(p.dataCreazione?.seconds) }} • COMMESSA: {{ p.commessa || 'Nessun Rif.' }}</div>
-                      <div v-if="p.dataConsegnaPrevista" class="flex items-center gap-1 mt-1 text-yellow-500 font-bold text-[10px] uppercase">
+                      <div v-if="p.dataConsegnaPrevista" class="flex items-center gap-1 mt-1 text-emerald-600 font-bold text-[10px] uppercase">
                           <TruckIcon class="h-3 w-3" />
                           <span>Consegna: {{ formatDateShort(p.dataConsegnaPrevista) }}</span>
                       </div>
@@ -816,7 +816,7 @@ onUnmounted(() => {
               <span class="text-xs text-gray-500">• Rif. {{ p.commessa || 'Senza Nome' }}</span>
             </div>
             
-            <div v-if="p.dataConsegnaPrevista" class="mt-1 flex items-center gap-1 px-2 py-0.5 bg-yellow-100 border border-yellow-200 rounded text-yellow-800 w-fit">
+            <div v-if="p.dataConsegnaPrevista" class="mt-1 flex items-center gap-1 px-2 py-0.5 bg-emerald-100 border border-emerald-200 rounded text-emerald-800 w-fit">
                 <TruckIcon class="h-3 w-3" />
                 <span class="text-[10px] font-bold uppercase">{{ formatDateShort(p.dataConsegnaPrevista) }}</span>
             </div>

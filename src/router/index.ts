@@ -36,14 +36,19 @@ const router = createRouter({
       component: () => import('../views/ClientDashboard.vue')
     },
     {
-      path: '/lavorazioni',
-      name: 'lavorazioni',
+      path: '/calcoli',
+      name: 'calcoli',
       component: () => import('../views/CalcoliLavorazioni.vue')
     },
     {
       path: '/delivery',
       name: 'delivery',
       component: () => import('../views/DeliveryView.vue')
+    },
+    {
+      path: '/stack',
+      name: 'stack',
+      component: () => import('../components/StackVisualizer.vue')
     }
   ]
 });

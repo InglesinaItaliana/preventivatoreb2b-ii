@@ -186,6 +186,7 @@ exports.generaOrdineFIC = functions
                     description: desc,
                     qty: item.quantita || 1,
                     net_price: item.prezzo_unitario || 0,
+                    category: item.categoria,
                     vat: { id: VAT_ID, value: VAT_VALUE }
                 };
             });

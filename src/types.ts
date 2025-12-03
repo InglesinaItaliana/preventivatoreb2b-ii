@@ -152,31 +152,31 @@ export const STATUS_DETAILS: Record<StatoPreventivo, { label: string, badge: str
   },
   'SIGNED': { 
     label: 'ORDINI DA METTERE IN PRODUZIONE', 
-    badge: 'bg-emerald-100 text-emerald-600 border-emerald-200', 
-    iconBg: 'bg-emerald-100 text-emerald-600', 
-    darkBadge: 'bg-emerald-600 text-emerald-100',
-    hoverBadge: 'hover:bg-emerald-200'
+    badge: 'bg-amber-100 text-amber-800 border-amber-200', 
+    iconBg: 'bg-amber-100 text-amber-800', 
+    darkBadge: 'bg-amber-800 text-amber-100',
+    hoverBadge: 'hover:bg-amber-200'
   },
   'IN_PRODUZIONE': { 
     label: 'ORDINI IN PRODUZIONE', 
+    badge: 'bg-amber-100 text-amber-800 border-amber-200', 
+    iconBg: 'bg-amber-100 text-amber-800', 
+    darkBadge: 'bg-amber-800 text-amber-100',
+    hoverBadge: 'hover:bg-amber-200'
+  },
+  'READY': { 
+    label: 'ORDINI PRONTI', 
     badge: 'bg-emerald-100 text-emerald-600 border-emerald-200', 
     iconBg: 'bg-emerald-100 text-emerald-600', 
     darkBadge: 'bg-emerald-600 text-emerald-100',
     hoverBadge: 'hover:bg-emerald-200'
   },
-  'READY': { 
-    label: 'ORDINI PRONTI', 
-    badge: 'bg-amber-100 text-amber-800 border-amber-200', 
-    iconBg: 'bg-amber-100 text-amber-800', 
-    darkBadge: 'bg-amber-800 text-amber-100',
-    hoverBadge: 'hover:bg-amber-200'
-  },
   'DELIVERY': { 
     label: 'SPEDIZIONE PROGRAMMATA', 
-    badge: 'bg-amber-100 text-amber-800 border-amber-200', 
-    iconBg: 'bg-amber-100 text-amber-800', 
-    darkBadge: 'bg-amber-800 text-amber-100',
-    hoverBadge: 'hover:bg-amber-200'
+    badge: 'bg-emerald-100 text-emerald-600 border-emerald-200', 
+    iconBg: 'bg-emerald-100 text-emerald-600', 
+    darkBadge: 'bg-emerald-600 text-emerald-100',
+    hoverBadge: 'hover:bg-emerald-200'
   },
   'DELIVERED': { 
     label: 'CONSEGNATO', 

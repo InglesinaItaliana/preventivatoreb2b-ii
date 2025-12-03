@@ -14,6 +14,7 @@ import {
   ChartBarIcon,
   TruckIcon,
   UserPlusIcon,
+  CubeIcon,
   CogIcon
 } from '@heroicons/vue/24/solid';
 
@@ -45,6 +46,7 @@ const adminLinks = [
   { label: 'Calcoli Lavorazioni', route: '/calcoli', icon: CalculatorIcon }, 
   { label: 'Produzione', route: '/production', icon: CogIcon },
   { label: 'Spedizioni', route: '/delivery', icon: TruckIcon },
+  { label: 'Visualizzatore Stack', route: '/stack', icon: CubeIcon },
 ];
 
 const form = reactive({

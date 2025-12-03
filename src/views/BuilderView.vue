@@ -19,8 +19,7 @@ import {
   InformationCircleIcon, 
   MagnifyingGlassCircleIcon,
   ShoppingCartIcon,
-  CheckBadgeIcon,
-  UserIcon,
+  DocumentTextIcon,
 } from '@heroicons/vue/24/solid'
 
 const toastMessage = ref('');
@@ -402,7 +401,6 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
   finally { isSaving.value = false; }
 };
 
-// SOSTITUISCI onMounted CON QUESTO:
 onMounted(() => {
   catalog.fetchCatalog();
   
@@ -586,7 +584,6 @@ const aggiungiExtraAdmin = () => {
             
             <div v-if="isNewAdminOrder && !currentDocId" class="mb-4 relative z-50">
                 <label class="text-xs font-bold text-gray-500 uppercase mb-1 flex items-center gap-1">
-                    <UserIcon class="h-4 w-4"/> Seleziona Cliente
                 </label>
                 <div class="relative">
                     <input 
@@ -722,8 +719,8 @@ const aggiungiExtraAdmin = () => {
       <div class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all p-5 space-y-4 h-full">
         <div class="flex justify-between items-center border-b pb-2">
             <h2 class="font-bold text-lg font-heading text-gray-800">2. Canalino</h2>
-            <label v-if="categoriaGriglia === 'DUPLEX'" class="flex items-center gap-2 text-[10px] font-bold text-yellow-400 cursor-pointer px-2 py-1 rounded uppercase">
-              <input type="checkbox" v-model="copiaDuplex" :disabled="isLocked" class="rounded border-yellow-300 text-yellow-400">
+            <label v-if="categoriaGriglia === 'DUPLEX'" class="flex items-center gap-2 text-[10px] font-bold text-black cursor-pointer px-2 py-1 rounded uppercase">
+              <input type="checkbox" v-model="copiaDuplex" :disabled="isLocked" class="rounded border-black text-yellow-400">
               Copia
             </label>
         </div>
@@ -826,12 +823,25 @@ const aggiungiExtraAdmin = () => {
                     <button @click="salvaPreventivo('CREA_PREVENTIVO_ADMIN')" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-3 rounded-lg font-bold shadow-lg flex items-center justify-center gap-2 w-full">
                         <DocumentTextIcon class="h-6 w-6"/> CREA PREVENTIVO
                     </button>
+                    <div class="text-[10px] text-center text-gray-500 mb-2">Salva come validato (QUOTE_READY)</div>
                     
-                    <hr class="border-gray-600/20 my-1">
+                    <hr class="border-gray-300 my-2">
                     
+                    <div class="bg-emerald-50 p-2 rounded-lg border border-emerald-100">
+                        <label class="text-[10px] uppercase font-bold text-emerald-700 flex items-center gap-1 mb-1">
+                            <CalendarIcon class="h-3 w-3" /> Data Consegna Prevista
+                        </label>
+                        <input 
+                            type="date" 
+                            v-model="dataConsegnaPrevista"
+                            class="w-full bg-white border border-gray-300 rounded px-2 py-2 text-sm font-bold outline-none focus:ring-2 focus:ring-emerald-400"
+                        >
+                    </div>
+
                     <button @click="salvaPreventivo('CREA_ORDINE_ADMIN')" class="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-3 rounded-lg font-bold shadow-lg flex items-center justify-center gap-2 w-full">
                         <CheckBadgeIcon class="h-6 w-6"/> CREA ORDINE
                     </button>
+                    <div class="text-[10px] text-center text-gray-500">Genera Doc. su FiC e richiedi firma</div>
                 </div>
             </template>
 
