@@ -299,19 +299,23 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
   <div class="min-h-screen bg-gray-50/90 p-6 font-sans">
     <div class="max-w-5xl mx-auto">
 
-      <div class="flex flex-col md:flex-row justify-between items-end mb-8 gap-4">
+      <div class="flex flex-col md:flex-row justify-between items-start mb-8 gap-4">
         <div class="flex items-center gap-4">
           <div>
             <p class="text-lg font-medium text-gray-800 leading-none">{{ clientName }}</p>
-            <h1 class="text-5xl font-bold font-heading text-gray-900">P.O.P.S. Dashboard</h1><br>
-            <button @click="showArchive = true" class="bg-white hover:bg-gray-50 border border-gray-200 text-gray-600 px-4 py-3 rounded-lg font-bold shadow-sm flex items-center gap-2 transition-transform active:scale-95">
-                <ArchiveBoxIcon class="h-6 w-6 text-gray-400" /> ARCHIVIO
-            </button>
+            <h1 class="text-5xl font-bold font-heading text-gray-900 mb-4">P.O.P.S. Dashboard</h1>
             <button @click="vaiAlBuilder()" class="bg-yellow-400 hover:bg-yellow-300 text-black px-6 py-3 rounded-lg font-bold shadow-md flex items-center gap-2 transition-transform active:scale-95">
             <PlusCircleIcon class="h-7 w-7 text-black" />
             NUOVO
             </button>
           </div>
+          
+        </div>
+
+        <div class="flex items-center gap-3 mt-4 md:mt-0">
+          <button @click="showArchive = true" class="bg-white hover:bg-gray-50 border border-gray-200 text-gray-600 px-3 py-2 rounded-lg font-bold shadow-sm flex items-center gap-2 transition-transform active:scale-95 text-xs">
+              <ArchiveBoxIcon class="h-5 w-5 text-gray-400" /> ARCHIVIO
+          </button>
         </div>
       </div>
 
@@ -629,7 +633,7 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
       >
         Ho capito
       </button>
-      <ArchiveModal :show="showArchive" :clientEmail="currentUserEmail" @close="showArchive = false" />
     </div>
   </div>
+  <ArchiveModal :show="showArchive" :clientEmail="currentUserEmail" @close="showArchive = false" />
 </template>

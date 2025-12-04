@@ -21,6 +21,7 @@ import {
   ShoppingCartIcon,
   DocumentTextIcon,
   CalendarIcon,
+  TruckIcon,
 } from '@heroicons/vue/24/solid'
 
 const toastMessage = ref('');
@@ -1023,6 +1024,10 @@ const aggiungiExtraAdmin = () => {
 
               <div v-else-if="statoCorrente === 'REJECTED'" class="text-right px-4">
                 <span class="text-red-500 font-bold text-2xl flex items-center gap-2"><InformationCircleIcon class="h-6 w-6" /> ANNULLATO</span>
+              </div>
+
+              <div v-else-if="statoCorrente === 'DELIVERED'" class="text-right px-4">
+                <span class="text-emerald-500 font-bold text-2xl flex items-center gap-2"><TruckIcon class="h-6 w-6" /> ORDINE CONSEGNATO</span>
               </div>
 
               <div v-else class="text-right px-4">
