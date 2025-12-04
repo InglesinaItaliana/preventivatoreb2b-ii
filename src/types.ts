@@ -16,6 +16,15 @@ export type StatoPreventivo =
   | 'DELIVERED'         // Consegna - Consegnato (Stato Finale)
   | 'REJECTED';         // Rifiutato
 
+// --- COSTANTI PER QUERY FILTRATE ---
+export const ACTIVE_STATUSES = [
+  'DRAFT', 'PENDING_VAL', 'QUOTE_READY', 'ORDER_REQ',
+  'WAITING_FAST', 'WAITING_SIGN', 'SIGNED', 
+  'IN_PRODUZIONE', 'READY', 'DELIVERY'
+];
+
+export const ARCHIVE_STATUSES = ['DELIVERED', 'REJECTED'];
+
   // Aggiungi interfaccia per la Sessione di Consegna
 export interface DeliverySession {
   id: string;

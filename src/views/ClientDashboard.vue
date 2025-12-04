@@ -4,6 +4,8 @@ import { collection, query, where, updateDoc, doc, serverTimestamp, getDoc, onSn
 import { db, auth } from '../firebase';
 import { useRouter } from 'vue-router';
 import { onAuthStateChanged } from 'firebase/auth';
+import { ACTIVE_STATUSES } from '../types';
+import ArchiveModal from '../components/ArchiveModal.vue';
 import { 
   DocumentTextIcon, 
   CheckCircleIcon,
@@ -18,7 +20,7 @@ import {
 } from '@heroicons/vue/24/solid';
 // IMPORT NUOVO COMPONENTE
 import OrderModals from '../components/OrderModals.vue';
-
+const showArchive = ref(false); // Stato modale
 const router = useRouter();
 const listaMieiPreventivi = ref<any[]>([]);
 const loading = ref(true);
@@ -34,7 +36,7 @@ let ready1 = false;
 let ready2 = false;
 
 // AGGIORNATO TIPO ACTIVE TAB
-const activeTab = ref<'PREVENTIVI' | 'ORDINI' | 'PRODUZIONE' | 'SPEDIZIONI' | 'ARCHIVIO'>('PREVENTIVI');
+const activeTab = ref<'PREVENTIVI' | 'ORDINI' | 'PRODUZIONE' | 'SPEDIZIONI'>('PREVENTIVI');
 
 // --- NUOVE VARIABILI PER IL MODALE RISULTATO (SUCCESS/ERROR) ---
 const resultModal = ref({
@@ -83,16 +85,22 @@ const avviaAscoltoDati = (email: string) => {
   ready1 = false; ready2 = false;
 
   // Listener 1: Nuovi Preventivi (con campo clienteEmail)
-  const q1 = query(collection(db, 'preventivi'), where('clienteEmail', '==', email));
-  unsub1 = onSnapshot(q1, (snap) => {
+  const q1 = query(
+      collection(db, 'preventivi'), 
+      where('clienteEmail', '==', email),
+      where('stato', 'in', ACTIVE_STATUSES) // <--- FILTRO
+  );
+    unsub1 = onSnapshot(q1, (snap) => {
     docsNuovi = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     ready1 = true; aggiornaVista();
   }, () => { ready1 = true; aggiornaVista(); });
 
-  // Listener 2: Vecchi Preventivi (compatibilità)
+  // Listener 2: Vecchi Preventivi (compatibilità, opzionale applicare filtro anche qui se i vecchi hanno lo stato)
   const q2 = query(collection(db, 'preventivi'), where('cliente', '==', email));
   unsub2 = onSnapshot(q2, (snap) => {
     docsVecchi = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    // Filtriamo in memoria per i vecchi docs se non supportano la query composta
+    docsVecchi = docsVecchi.filter(d => ACTIVE_STATUSES.includes(d.stato));
     ready2 = true; aggiornaVista();
   }, () => { ready2 = true; aggiornaVista(); });
 };
@@ -218,14 +226,6 @@ const ordiniSpediti = computed(() => {
   return sortByOrder([...filtered], customOrder);
 });
 
-// 5. ARCHIVIO (Solo REJECTED)
-const archivioPreventivi = computed(() => {
-  const customOrder = ['REJECTED'];
-  const filtered = listaMieiPreventivi.value.filter(p => customOrder.includes(p.stato));
-  return sortByOrder([...filtered], customOrder);
-});
-
-
 const vaiAlBuilder = (codice?: string) => {
   const route = codice ? `/preventivatore?codice=${codice}` : '/preventivatore';
   router.push(route);
@@ -304,6 +304,10 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
           <div>
             <p class="text-lg font-medium text-gray-800 leading-none">{{ clientName }}</p>
             <h1 class="text-5xl font-bold font-heading text-gray-900">P.O.P.S. Dashboard</h1><br>
+            <button @click="showArchive = true" class="bg-white hover:bg-gray-50 border border-gray-200 text-gray-600 px-4 py-3 rounded-lg font-bold shadow-sm flex items-center gap-2 transition-transform active:scale-95">
+                <ArchiveBoxIcon class="h-6 w-6 text-gray-400" />
+                ARCHIVIO
+            </button>
             <button @click="vaiAlBuilder()" class="bg-yellow-400 hover:bg-yellow-300 text-black px-6 py-3 rounded-lg font-bold shadow-md flex items-center gap-2 transition-transform active:scale-95">
             <PlusCircleIcon class="h-7 w-7 text-black" />
             NUOVO
@@ -336,12 +340,6 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
           <TruckIcon class="h-4 w-4" />
           SPEDIZIONI
           <span v-if="ordiniSpediti.length" class="ml-2 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[10px]">{{ ordiniSpediti.length }}</span>
-        </button>
-
-        <button @click="activeTab = 'ARCHIVIO'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative flex items-center gap-2 whitespace-nowrap" :class="activeTab === 'ARCHIVIO' ? 'text-stone-600 border-b-4 border-yellow-400' : 'text-gray-400 hover:text-gray-600'">
-          <ArchiveBoxIcon class="h-4 w-4" />
-          ARCHIVIO
-          <span v-if="archivioPreventivi.length" class="ml-2 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[10px]">{{ archivioPreventivi.length }}</span>
         </button>
 
       </div>
@@ -567,46 +565,6 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
           </div>
         </div>
 
-        <div v-if="activeTab === 'ARCHIVIO'" class="grid gap-4">
-          <div v-if="archivioPreventivi.length === 0" class="text-center py-20 bg-white rounded-xl border border-dashed border-gray-300">
-            <p class="text-gray-500">Nessun elemento archiviato.</p>
-          </div>
-          <div v-else v-for="p in archivioPreventivi" :key="p.id" class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all flex flex-col md:flex-row justify-between items-center gap-4 cursor-pointer">
-            <div class="flex items-center gap-4 w-full md:w-auto">
-              <div class="h-14 w-14 rounded-full flex items-center justify-center shrink-0 
-            bg-opacity-70 backdrop-blur 
-            border-2 border-white/20 
-            shadow-[inset_0_0_15px_rgba(255,255,255,0.1)] 
-            ring-1 ring-black/5" 
-     :class="getStatusStyling(p.stato).iconBg">
-  <component :is="getStatusStyling(p.stato).icon" class="w-8 h-8 drop-shadow-sm" />
-</div>
-              <div class="flex flex-col items-start">
-                <h3 class="font-bold text-xl text-gray-900 leading-tight text-gray-400">{{ p.commessa || 'Senza Nome' }}</h3>
-                <div class="mt-2 flex flex-col items-start gap-2">
-                  <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase border" 
-                        :class="getStatusStyling(p.stato).badge">
-                    {{ getStatusLabel(p.stato) }}
-                  </span>
-                  <div v-if="p.sommarioPreventivo" class="flex flex-col gap-2">
-                    <span v-for="(item, idx) in p.sommarioPreventivo" :key="idx" 
-                          class="text-[10px] bg-gray-50 px-2 py-1 rounded border text-gray-600">
-                      <strong>{{ item.quantitaTotale }}x</strong> {{ item.descrizione }}
-                    </span>
-                  </div>
-                </div>
-              </div>
-            </div>
-            <div class="flex items-center gap-6 w-full md:w-auto justify-between md:justify-end">
-              <div class="text-right">
-                <div class="text-xl font-bold font-heading text-gray-600">{{ (p.totaleScontato || p.totaleImponibile || 0).toFixed(2) }} €</div>
-                <div class="text-xs text-gray-600">Importo netto</div>
-              </div>
-              <button @click="vaiAlBuilder(p.codice)" class="border border-gray-300 text-gray-600 px-4 py-2 rounded-lg font-bold text-xs hover:bg-gray-50">APRI</button>
-            </div>
-          </div>
-        </div>
-
       </div>
 
       <OrderModals 
@@ -672,6 +630,11 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
       >
         Ho capito
       </button>
+      <ArchiveModal 
+        :show="showArchive" 
+        :clientEmail="currentUserEmail" 
+        @close="showArchive = false" 
+      />
     </div>
   </div>
 </template>

@@ -1,14 +1,25 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue';
-import { collection, query, orderBy, getDocs, limit, updateDoc, doc, onSnapshot } from 'firebase/firestore';
+import { 
+  collection, 
+  query, 
+  orderBy, 
+  getDocs, 
+  limit, 
+  updateDoc, 
+  doc, 
+  onSnapshot, 
+  where // <--- AGGIUNGI QUESTO
+} from 'firebase/firestore';
 import { db } from '../firebase';
 import { useRouter } from 'vue-router';
 // IMPORT CONFIGURAZIONE CONDIVISA (Modifica richiesta)
-import { STATUS_DETAILS } from '../types';
 import OrderModals from '../components/OrderModals.vue';
 import { httpsCallable } from 'firebase/functions'; // Importa functions
 import { functions } from '../firebase'; // Assicurati di esportare 'functions' dal tuo firebase.ts
 import DdtModal from '../components/DdtModal.vue'; // Importa il nuovo componente
+import { STATUS_DETAILS, ACTIVE_STATUSES } from '../types';
+import ArchiveModal from '../components/ArchiveModal.vue'; // Importa Modale
 
 // IMPORT ICONE HEROICONS
 import {
@@ -56,12 +67,13 @@ const iconMap: Record<string, any> = {
 // STATO UI
 const activeView = ref<'CLIENTI' | 'COMMESSE'>('COMMESSE');
 // Aggiornato tipo per includere le nuove viste
-const activeCategory = ref<'PREVENTIVI' | 'ORDINI' | 'PRODUZIONE' | 'SPEDIZIONI' | 'ARCHIVIO'>('ORDINI');
+const activeCategory = ref<'PREVENTIVI' | 'ORDINI' | 'PRODUZIONE' | 'SPEDIZIONI'>('ORDINI');
 const filtroPeriodo = ref<'TUTTO' | 'CORRENTE' | 'SCORSO'>('CORRENTE');
+const showArchive = ref(false); // Stato per il modale archivio
 
 // Calcolo conteggi
 const categoryCounts = computed(() => {
-  const counts = { PREVENTIVI: 0, ORDINI: 0, PRODUZIONE: 0, SPEDIZIONI: 0, ARCHIVIO: 0 };
+  const counts = { PREVENTIVI: 0, ORDINI: 0, PRODUZIONE: 0, SPEDIZIONI: 0 };
   const now = new Date();
   
   listaPreventivi.value.forEach(p => {
@@ -81,7 +93,6 @@ const categoryCounts = computed(() => {
     else if (['ORDER_REQ', 'WAITING_SIGN'].includes(st)) counts.ORDINI++;
     else if (['SIGNED', 'IN_PRODUZIONE'].includes(st)) counts.PRODUZIONE++;
     else if (['READY', 'DELIVERY'].includes(st)) counts.SPEDIZIONI++;
-    else if (['REJECTED'].includes(st)) counts.ARCHIVIO++;
   });
   return counts;
 });
@@ -168,9 +179,6 @@ const preventiviFiltrati = computed(() => {
 
     // Spedizioni: solo READY e DELIVERY
     if (activeCategory.value === 'SPEDIZIONI') return ['READY', 'DELIVERY'].includes(st);
-
-    // Archivio: REJECTED (Draft nascosti)
-    if (activeCategory.value === 'ARCHIVIO') return ['REJECTED'].includes(st);
     
     return true;
   });
@@ -197,8 +205,13 @@ const caricaAnagrafica = async () => {
 const caricaTutti = () => {
   if (unsubscribe) unsubscribe();
 
-  const q = query(collection(db, 'preventivi'), orderBy('dataCreazione', 'desc'), limit(300));
-  
+  const q = query(
+    collection(db, 'preventivi'), 
+    where('stato', 'in', ACTIVE_STATUSES), // <--- FILTRO FONDAMENTALE
+    orderBy('dataCreazione', 'desc'), 
+    limit(300)
+  );
+
   unsubscribe = onSnapshot(q, (snapshot) => {
     // 1. Primo caricamento: carichiamo tutto in massa per velocità
     if (loading.value) {
@@ -642,13 +655,19 @@ onUnmounted(() => {
             SPEDIZIONI
             <span v-if="categoryCounts.SPEDIZIONI" class="ml-2 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[10px] border">{{ categoryCounts.SPEDIZIONI }}</span>
           </button>
-          <button @click="activeCategory = 'ARCHIVIO'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative whitespace-nowrap flex items-center gap-2" :class="activeCategory === 'ARCHIVIO' ? 'text-gray-900 border-b-4 border-yellow-400' : 'text-gray-400 hover:text-gray-600'">
-            <ArchiveBoxIcon class="h-4 w-4" />
-            ARCHIVIO
-            <span v-if="categoryCounts.ARCHIVIO" class="ml-2 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[10px] border">{{ categoryCounts.ARCHIVIO }}</span>
-          </button>
         </div>
+        <ArchiveModal :show="showArchive" :isAdmin="true" @close="showArchive = false" />
 
+        <button 
+          @click="showArchive = true"
+          class="fixed bottom-6 left-6 z-40 bg-gray-800 hover:bg-gray-700 text-white rounded-full p-4 shadow-2xl flex items-center justify-center transition-transform hover:scale-110 active:scale-95 group"
+          title="Apri Archivio"
+        >
+          <ArchiveBoxIcon class="h-7 w-7 group-hover:text-yellow-400 transition-colors" />
+          <span class="absolute left-full ml-3 bg-gray-900 text-white text-xs font-bold px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+            Archivio
+          </span>
+        </button>
         <div class="flex items-center gap-2 bg-gray-100 p-1 rounded-lg mb-2">
           <span class="text-[10px] font-bold text-gray-400 px-2 uppercase">Raggruppa per:</span>
           <button @click="activeView = 'CLIENTI'" class="px-3 py-1 rounded text-xs font-bold transition-all" :class="activeView === 'CLIENTI' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'">
