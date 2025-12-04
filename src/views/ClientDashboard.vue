@@ -305,8 +305,7 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
             <p class="text-lg font-medium text-gray-800 leading-none">{{ clientName }}</p>
             <h1 class="text-5xl font-bold font-heading text-gray-900">P.O.P.S. Dashboard</h1><br>
             <button @click="showArchive = true" class="bg-white hover:bg-gray-50 border border-gray-200 text-gray-600 px-4 py-3 rounded-lg font-bold shadow-sm flex items-center gap-2 transition-transform active:scale-95">
-                <ArchiveBoxIcon class="h-6 w-6 text-gray-400" />
-                ARCHIVIO
+                <ArchiveBoxIcon class="h-6 w-6 text-gray-400" /> ARCHIVIO
             </button>
             <button @click="vaiAlBuilder()" class="bg-yellow-400 hover:bg-yellow-300 text-black px-6 py-3 rounded-lg font-bold shadow-md flex items-center gap-2 transition-transform active:scale-95">
             <PlusCircleIcon class="h-7 w-7 text-black" />
@@ -630,11 +629,7 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
       >
         Ho capito
       </button>
-      <ArchiveModal 
-        :show="showArchive" 
-        :clientEmail="currentUserEmail" 
-        @close="showArchive = false" 
-      />
+      <ArchiveModal :show="showArchive" :clientEmail="currentUserEmail" @close="showArchive = false" />
     </div>
   </div>
 </template>
