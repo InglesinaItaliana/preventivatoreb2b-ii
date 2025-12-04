@@ -27,8 +27,8 @@ import {
   CheckCircleIcon,
   ChevronDoubleRightIcon,
   DocumentTextIcon,
-  EyeIcon,
   XCircleIcon,
+  EyeIcon,
   CogIcon,
   CurrencyEuroIcon,
   ShoppingCartIcon,
@@ -151,36 +151,51 @@ const handleCreaDdt = async (datiDdt: any) => {
     }
 };
 
+// Helper per determinare la data rilevante in base allo stato
+const getEffectiveDate = (p: any) => {
+  const st = p.stato || 'DRAFT';
+  
+  // CASO 1: Preventivi in lavorazione -> Data Modifica (o Creazione)
+  if (['DRAFT', 'PENDING_VAL', 'QUOTE_READY'].includes(st)) {
+    return p.dataModifica?.seconds || p.dataCreazione?.seconds || 0;
+  }
+  
+  // CASO 2: Ordini (Inviati/Chiusi) -> Data Invio Ordine (o Creazione se vecchio)
+  // Include: ORDER_REQ, WAITING..., SIGNED, IN_PRODUZIONE, READY, DELIVERY, etc.
+  return p.dataInvioOrdine?.seconds || p.dataConferma?.seconds || p.dataCreazione?.seconds || 0;
+};
+
 const preventiviFiltrati = computed(() => {
   const now = new Date();
   
-  return listaPreventivi.value.filter(p => {
-    // 1. Filtro Data
-    if (filtroPeriodo.value !== 'TUTTO' && p.dataCreazione?.seconds) {
-      const d = new Date(p.dataCreazione.seconds * 1000);
-      if (filtroPeriodo.value === 'CORRENTE' && (d.getMonth() !== now.getMonth() || d.getFullYear() !== now.getFullYear())) return false;
-      if (filtroPeriodo.value === 'SCORSO') {
-        const last = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-        if (d.getMonth() !== last.getMonth() || d.getFullYear() !== last.getFullYear()) return false;
+  // 1. Filtriamo la lista originale
+  const filtered = listaPreventivi.value.filter(p => {
+    // A. Filtro Data (MODIFICATO: Usa getEffectiveDate)
+    if (filtroPeriodo.value !== 'TUTTO') {
+      const seconds = getEffectiveDate(p); // <--- Usa la data "logica"
+      if (seconds) {
+        const d = new Date(seconds * 1000);
+        if (filtroPeriodo.value === 'CORRENTE' && (d.getMonth() !== now.getMonth() || d.getFullYear() !== now.getFullYear())) return false;
+        if (filtroPeriodo.value === 'SCORSO') {
+          const last = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+          if (d.getMonth() !== last.getMonth() || d.getFullYear() !== last.getFullYear()) return false;
+        }
       }
     }
 
-    // 2. Filtro Categoria (LOGICA AGGIORNATA)
+    // B. Filtro Categoria (Invariato)
     const st = p.stato || 'DRAFT';
-    
-    // Preventivi: via DRAFT e REJECTED
     if (activeCategory.value === 'PREVENTIVI') return ['PENDING_VAL', 'QUOTE_READY'].includes(st);
-    
-    // Ordini: via SIGNED (spostato in produzione)
     if (activeCategory.value === 'ORDINI') return ['ORDER_REQ', 'WAITING_SIGN'].includes(st);
-    
-    // Produzione: include SIGNED e IN_PRODUZIONE (via READY)
     if (activeCategory.value === 'PRODUZIONE') return ['SIGNED', 'IN_PRODUZIONE'].includes(st);
-
-    // Spedizioni: solo READY e DELIVERY
     if (activeCategory.value === 'SPEDIZIONI') return ['READY', 'DELIVERY'].includes(st);
     
     return true;
+  });
+
+  // 2. Ordinamento (MODIFICATO: Usa getEffectiveDate)
+  return filtered.sort((a, b) => {
+    return getEffectiveDate(b) - getEffectiveDate(a); // Decrescente
   });
 });
 
@@ -300,7 +315,7 @@ const handleClickAzione = (p: any) => {
     idOrdineInConferma.value = p.id;
   } else {
     // Per tutti gli altri stati (es. Apri, Vedi DDT) esegue subito l'azione
-    getActionData(p).action();
+    getActionData(p)?.action();
   }
 };
 
@@ -430,18 +445,12 @@ const getActionData = (p: any) => {
     return { text: 'CONTROLLA E ACCETTA', class: 'text-cyan-600 bg-cyan-50 border-cyan-200 hover:bg-cyan-100 animate-pulse', action: () => apriEditor(p.codice), icon: DocumentTextIcon };
 
   if (st === 'SIGNED')
-    return { text: 'AVVIA PRODUZIONE', class: 'text-emerald-500 border-emerald-200 bg-emerald-100  hover:bg-emerald-200', action: () => confermaProduzione(p), icon: CogIcon };
+    return { text: 'AVVIA PRODUZIONE', class: 'text-yellow-800 border-yellow-200 bg-yellow-100  hover:bg-yellow-200', action: () => confermaProduzione(p), icon: CogIcon };
     
-  if (st === 'WAITING_SIGN')
-    return { text: 'APRI', class: 'border border-gray-300 text-gray-600 px-4 py-2 rounded-lg font-bold text-xs hover:bg-gray-50', action: () => apriEditor(p.codice), icon: EyeIcon };
-
   if (st === 'IN_PRODUZIONE')
-    return { text: 'ORDINE PRONTO', class: 'text-emerald-500 border-emerald-200 bg-emerald-100  hover:bg-emerald-200', action: () => ordinePronto(p), icon: CubeIcon };
-  
-  if (st === 'READY')
-    return { text: 'APRI', class: 'border border-gray-300 text-gray-600 px-4 py-2 rounded-lg font-bold text-xs hover:bg-gray-50', action: () => apriEditor(p.codice), icon: EyeIcon };
+    return { text: 'ORDINE PRONTO', class: 'text-yellow-800 border-yellow-200 bg-yellow-100  hover:bg-yellow-200', action: () => ordinePronto(p), icon: CubeIcon };
 
-    if (st === 'DELIVERY')
+  if (st === 'DELIVERY')
     return { 
       text: 'VEDI DDT', 
       class: 'text-emerald-600 bg-emerald-100 border-emerald-200 hover:bg-emerald-200', 
@@ -449,7 +458,7 @@ const getActionData = (p: any) => {
       action: () => p.fic_ddt_url ? window.open(p.fic_ddt_url, '_blank') : apriEditor(p.codice), 
       icon: DocumentTextIcon 
     };
-  return { text: 'APRI', class: 'text-gray-500 border-gray-200', action: () => apriEditor(p.codice), icon: DocumentTextIcon };
+    return null;
 };
 
 const toggleCliente = (nome: string) => {
@@ -747,7 +756,7 @@ onUnmounted(() => {
                                 <CheckCircleIcon v-if="isOrderSelected(p)" class="h-6 w-6 text-blue-600" />
                                 <div v-else class="h-5 w-5 rounded-full border-2 border-gray-300 hover:border-blue-400"></div>
                             </div>
-                      <div class="text-xs text-gray-500 mt-1">DATA: {{ formatDate(p.dataCreazione?.seconds) }} • COMMESSA: {{ p.commessa || 'Nessun Rif.' }}</div>
+                      <div class="text-xs text-gray-500 mt-1">DATA: {{ formatDate(getEffectiveDate(p)) }} • COMMESSA: {{ p.commessa || 'Nessun Rif.' }}</div>
                       <div v-if="p.dataConsegnaPrevista" class="flex items-center gap-1 mt-1 text-emerald-600 font-bold text-[10px] uppercase">
                           <TruckIcon class="h-3 w-3" />
                           <span>Consegna: {{ formatDateShort(p.dataConsegnaPrevista) }}</span>
@@ -762,12 +771,13 @@ onUnmounted(() => {
                     <td class="align-middle px-4 py-3 text-right">
                       <div class="flex justify-end items-center gap-2 w-64">
                         <button
-                        @click.stop="getActionData(p).action()"
+                        v-if="getActionData(p)"
+                        @click.stop="getActionData(p)?.action()"
                         class="text-xs font-bold px-3 py-1.5 rounded border transition-all shadow-sm hover:shadow hover:brightness-95 flex items-center gap-2"
-                        :class="getActionData(p).class"
+                        :class="getActionData(p)?.class"
                         >
-                        <component :is="getActionData(p).icon" class="h-4 w-4" />
-                        <span>{{ getActionData(p).text }}</span>
+                        <component :is="getActionData(p)?.icon" class="h-4 w-4" />
+                        <span>{{ getActionData(p)?.text }}</span>
                         </button>
                       </div>
                     </td>
@@ -831,13 +841,13 @@ onUnmounted(() => {
           <div>
             <div class="flex items-center gap-2">
               <h3 class="text-xl font-bold text-gray-900">{{ p.cliente }}</h3>
-              <p class="text-xs text-gray-500">• {{ formatDate(p.dataCreazione?.seconds) }}</p>
+              <p class="text-xs text-gray-500">• {{ formatDate(getEffectiveDate(p)) }}</p>
               <span class="text-xs text-gray-500">• Rif. {{ p.commessa || 'Senza Nome' }}</span>
             </div>
             
             <div v-if="p.dataConsegnaPrevista" class="mt-1 flex items-center gap-1 px-2 py-0.5 bg-emerald-100 border border-emerald-200 rounded text-emerald-800 w-fit">
                 <TruckIcon class="h-3 w-3" />
-                <span class="text-[10px] font-bold uppercase">{{ formatDateShort(p.dataConsegnaPrevista) }}</span>
+                <span class="text-[10px] font-bold uppercase">DA CONSEGNARE IL {{ formatDateShort(p.dataConsegnaPrevista) }}</span>
             </div>
 
             <div v-if="p.sommarioPreventivo" class="flex flex-col gap-1 mt-2 items-start">
@@ -918,14 +928,14 @@ onUnmounted(() => {
                       </div>
 
                       <button
-                        v-else
-                        @click.stop="handleClickAzione(p)"
-                        class="text-xs font-bold px-12 py-2 rounded border transition-all shadow-sm hover:shadow whitespace-nowrap flex items-center gap-2 h-full"
-                        :class="getActionData(p).class"
-                        :disabled="p.stato === 'IN_PRODUZIONE' && !p.colli" 
+                      v-else-if="getActionData(p)"
+                      @click.stop="handleClickAzione(p)"
+                      class="text-xs font-bold px-12 py-2 rounded border transition-all shadow-sm hover:shadow whitespace-nowrap flex items-center gap-2 h-full"
+                      :class="getActionData(p)?.class"
+                      :disabled="p.stato === 'IN_PRODUZIONE' && !p.colli" 
                       >
-                        <component :is="getActionData(p).icon" class="h-4 w-4" />
-                        <span>{{ getActionData(p).text }}</span>
+                      <component :is="getActionData(p)?.icon" class="h-4 w-4" />
+                      <span>{{ getActionData(p)?.text }}</span>
                       </button>
 
                   </div>

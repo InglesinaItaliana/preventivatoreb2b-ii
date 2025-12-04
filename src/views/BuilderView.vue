@@ -37,6 +37,7 @@ const showCustomToast = (message: string) => {
 };
 const soloCanalino = ref(false);
 const adminExtraQty = ref(1); // Nuova variabile per la quantità extra
+const summarySectionRef = ref<HTMLElement | null>(null);
 
 // Computata per estrarre la lista degli extra dal catalogo
 const listaExtra = computed(() => {
@@ -491,7 +492,7 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
     }
 
     statoCorrente.value = nuovoStato;
-    showCustomToast(`✅ Salvato in stato: ${nuovoStato}`);
+    vaiDashboard();
 
     if (isAdmin.value) router.push('/admin');
     else caricaListaStorico();
@@ -607,6 +608,15 @@ const caricaPreventivo = async () => {
   } finally { 
     isSaving.value = false;
     isDataLoaded.value = true; // <--- NUOVO: Sblocca la visualizzazione dei pannelli (se lo stato lo permette)
+    // --- NUOVA LOGICA DI SCROLL AUTOMATICO ---
+    // Se abbiamo caricato un documento (quindi currentDocId esiste), scrolliamo alla fascia nera
+    if (currentDocId.value) {
+      await nextTick(); // Aspettiamo che il DOM si aggiorni e mostri gli elementi
+      if (summarySectionRef.value) {
+        // Scrolla in modo che la fascia nera sia al centro o in alto
+        summarySectionRef.value.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }
   }
 };
 
@@ -695,16 +705,16 @@ const aggiungiExtraAdmin = () => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50/90 p-6 font-sans text-gray-700">
+  <div class="min-h-screen bg-gray-50/90 p-6 font-sans text-gray-700" pb-40>
       <main class="max-w-5xl mx-auto flex flex-col gap-2">
         <div class="relative flex flex-col md:flex-row justify-between items-end mb-8 gap-4">
         
-        <button 
+          <button 
           @click="vaiDashboard" 
-          class="md:absolute md:-left-14 md:top-1.5 text-gray-400 hover:text-gray-700 transition-colors p-2 rounded-full hover:bg-gray-100 mb-4 md:mb-0" 
+          class="fixed top-8 left-20 z-0 bg-white/90 backdrop-blur border border-gray-200 text-gray-500 hover:text-yellow-600 shadow-md transition-all p-2 rounded-full hover:shadow-lg hover:scale-110 active:scale-95" 
           title="Torna alla Dashboard"
         >
-          <ChevronLeftIcon class="h-8 w-8 text-yellow-500" />         
+          <ChevronLeftIcon class="h-8 w-8" />         
         </button>
 
         <div class="flex items-center gap-4 w-full">
@@ -770,13 +780,13 @@ const aggiungiExtraAdmin = () => {
         <div class="flex flex-col lg:flex-row gap-4 items-start">
           <div class="flex-1 w-full flex flex-col justify-between">
               <div>
-                  <label class="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Riferimento Cantiere <span class="text-red-500">*</span></label>
+                  <label class="text-[10px] font-bold text-gray-400 uppercase mb-1 block"></label>
                   <input 
                     v-model="riferimentoCommessa" 
                     :disabled="isLocked" 
                     type="text" 
                     class="w-full p-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-yellow-400 focus:border-transparent outline-none transition-all" 
-                    placeholder="Es. Rossi Cucina"
+                    placeholder="Riferimento Cantiere *"
                     ref="riferimentoCommessaInput"
                     @focus="scrollToTopOnFocus"
                   >              
@@ -786,13 +796,13 @@ const aggiungiExtraAdmin = () => {
 
           <div class="flex-1 w-full flex flex-col justify-between">
             <div>
-                <label class="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Note Tecniche</label>
+                <label class="text-[10px] font-bold text-gray-400 uppercase mb-1 block"></label>
                 <textarea 
                     v-model="noteCliente" 
                     :disabled="isLocked" 
                     rows="1" 
                     class="w-full p-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-yellow-400 focus:border-transparent outline-none transition-all resize-none" 
-                    placeholder="Es. Consegna tassativa..."
+                    placeholder="Note..."
                     @focus="scrollToTopOnFocus"
                     >
                 </textarea>            
@@ -805,7 +815,7 @@ const aggiungiExtraAdmin = () => {
 
           <div class="flex-1 w-full flex flex-col justify-between">
             <div>
-                <label class="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Allegati</label>
+                <label class="text-[10px] font-bold text-gray-400 uppercase mb-1 block"></label>
                 <div class="flex gap-2 items-center">
                     <div class="relative border border-dashed border-gray-300 rounded-lg px-3 py-2 bg-gray-50 hover:bg-white transition-all text-center cursor-pointer flex-1" :class="isLocked ? 'opacity-50 pointer-events-none' : ''">
                         <input type="file" @change="uploadFile" :disabled="isLocked" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
@@ -831,7 +841,7 @@ const aggiungiExtraAdmin = () => {
       <div v-if="showConfigurationPanels" class="grid grid-cols-1 md:grid-cols-3 gap-6">
     
       <div class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all p-5 h-full">
-        <h2 class="font-bold text-lg border-b pb-2 font-heading text-gray-800">1. Griglia</h2>
+        <h2 class="font-bold text-lg border-b pb-2 font-heading text-gray-800">Griglia</h2>
         <div v-if="catalog.loading" class="text-center p-4 text-sm text-gray-400">Caricamento...</div>
         <div v-else>
             <select v-model="tipoGriglia" :disabled="!tipiGrigliaDisp.length || isLocked" class="w-full p-2 border rounded mt-4 bg-white text-sm disabled:opacity-60"><option value="" disabled>Seleziona Tipo</option><option v-for="m in tipiGrigliaDisp" :key="m" :value="m">{{ m }}</option></select>
@@ -846,7 +856,7 @@ const aggiungiExtraAdmin = () => {
 
       <div class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all p-5 space-y-4 h-full">
         <div class="flex justify-between items-center border-b pb-2">
-            <h2 class="font-bold text-lg font-heading text-gray-800">2. Canalino</h2>
+            <h2 class="font-bold text-lg font-heading text-gray-800">Canalino</h2>
             <label v-if="categoriaGriglia === 'DUPLEX'" class="flex items-center gap-2 text-[10px] font-bold text-black cursor-pointer px-2 py-1 rounded uppercase">
               <input type="checkbox" v-model="copiaDuplex" :disabled="isLocked" class="rounded border-black text-yellow-400">
               Copia
@@ -867,7 +877,7 @@ const aggiungiExtraAdmin = () => {
       </div>
 
       <div class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all p-5 space-y-4 h-full">
-        <h2 class="font-bold text-lg border-b pb-2 font-heading text-gray-800">3. Telaio</h2>
+        <h2 class="font-bold text-lg border-b pb-2 font-heading text-gray-800">Telaio</h2>
           <div class="grid grid-cols-2 gap-4">
             <div><input v-model.number="pannello.base" :disabled="isLocked" type="number" class="border p-2 rounded w-full text-center text-sm focus:ring-2 focus:ring-yellow-400 outline-none disabled:bg-gray-100" placeholder="Base (mm)"></div>
             <div><input v-model.number="pannello.altezza" :disabled="isLocked" type="number" class="border p-2 rounded w-full text-center text-sm focus:ring-2 focus:ring-yellow-400 outline-none disabled:bg-gray-100" placeholder="Altezza (mm)"></div>
@@ -909,14 +919,14 @@ const aggiungiExtraAdmin = () => {
           <button 
             @click="aggiungi" 
             :disabled="!canAdd"
-            class="w-full bg-yellow-200 hover:bg-yellow-300 text-yellow-600 font-bold py-3 rounded-lg shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 transition-all flex justify-center items-center gap-2">
-            <PlusCircleIcon class="h-7 w-7 text-yellow-600" />         
+            class="w-full bg-gray-300 hover:bg-gray-200 text-black font-bold py-3 rounded-lg shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 transition-all flex justify-center items-center gap-2">
+            <PlusCircleIcon class="h-7 w-7 text-black" />         
             AGGIUNGI
           </button>
       </div>
 
     </div>
-    <div class="lg:col-span-2 bg-white/50 backdrop-blur-sm backdrop-saturate-150 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all flex flex-col min-h-[600px] overflow-hidden">
+    <div ref="summarySectionRef" class="lg:col-span-2 bg-white/50 backdrop-blur-sm backdrop-saturate-150 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all flex flex-col min-h-[600px] overflow-hidden scroll-mt-24">
       <div v-if="isSaving" class="p-6 bg-gray-900/80 backdrop-blur-md text-white flex justify-center items-center h-[120px]">
           <span class="text-sm font-medium text-gray-400">Caricamento stato preventivo...</span>
           <svg class="animate-spin h-5 w-5 text-yellow-400 ml-3" viewBox="0 0 24 24">
@@ -977,12 +987,12 @@ const aggiungiExtraAdmin = () => {
                 <span class="text-xl text-gray-400 uppercase font-bold hidden xl:block">RICHIEDI CONFERMA D'ORDINE</span>
                 <div class="flex flex-col gap-1">
                   <label class="text-[10px] uppercase font-bold text-yellow-500 flex items-center gap-1">
-                    <CalendarIcon class="h-3 w-3 text-white" /> Data Consegna Prevista
+                   Data Consegna Prevista
                   </label>
                   <input type="date" v-model="dataConsegnaPrevista" class="bg-gray-800 text-white border border-gray-600 rounded px-3 py-2 text-sm font-bold outline-none native-date-icon-fix transition-all duration-300" :class="{'focus:border-yellow-400': !dateErrorAnim, 'ring-4 ring-red-500 bg-red-900/50 border-red-500 animate-pulse': dateErrorAnim }">
                 </div>
                 <div class="flex gap-2">
-                  <button @click="salvaPreventivo('ADMIN_FIRMA')" class="bg-blue-600 hover:bg-blue-500 text-blue-100 flex items-center px-6 py-3 rounded font-bold text-lg shadow-lg shadow-blue-600/20">FIRMA</button>
+                  <button @click="salvaPreventivo('ADMIN_FIRMA')" class="bg-cyan-100 hover:bg-cyan-200 text-cyan-500 flex items-center px-6 py-3 rounded font-bold text-lg shadow-lg shadow-cyan-600/20">ACCETTA ORDINE</button>
                 </div>
               </div>
               
@@ -1145,6 +1155,7 @@ const aggiungiExtraAdmin = () => {
         </div>
 
       </div>
+      <div class="h-48 w-full"></div>
     </main>
 
     <div v-if="mostraStorico" class="fixed inset-0 z-50 flex justify-end">

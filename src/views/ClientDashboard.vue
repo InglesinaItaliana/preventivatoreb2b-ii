@@ -66,17 +66,33 @@ const caricaProfilo = async (uid: string) => {
   } catch (e) { console.error("Errore profilo", e); }
 };
 
+// Helper per determinare la data rilevante in base allo stato
+const getEffectiveDate = (p: any) => {
+  const st = p.stato || 'DRAFT';
+  
+  // CASO 1: Preventivi in lavorazione -> Data Modifica (o Creazione se manca)
+  if (['DRAFT', 'PENDING_VAL', 'QUOTE_READY', 'ORDER_REQ'].includes(st)) {
+    return p.dataModifica?.seconds || p.dataCreazione?.seconds || 0;
+  }
+  
+  // CASO 2: Ordini (Inviati/Chiusi) -> Data Invio/Conferma (o Creazione se vecchio)
+  return p.dataInvioOrdine?.seconds || p.dataConferma?.seconds || p.dataCreazione?.seconds || 0;
+};
+
 const aggiornaVista = () => {
   const mapUnici = new Map();
+  // Unisce le due liste (nuovi e vecchi preventivi) rimuovendo i duplicati per ID
   [...docsVecchi, ...docsNuovi].forEach(doc => mapUnici.set(doc.id, doc));
 
+  // Crea l'array e lo ordina usando la nostra logica "intelligente" sulla data
   const arrayOrdinato = Array.from(mapUnici.values()).sort((a: any, b: any) => {
-    const timeA = a.dataCreazione?.seconds || 0;
-    const timeB = b.dataCreazione?.seconds || 0;
-    return timeB - timeA;
+    // Ordine decrescente (dal più recente al più vecchio) basato sulla data effettiva
+    return getEffectiveDate(b) - getEffectiveDate(a);
   });
 
   listaMieiPreventivi.value = arrayOrdinato;
+  
+  // Se entrambi i listener hanno caricato almeno una volta, togliamo il loading
   if (ready1 && ready2) loading.value = false;
 };
 
@@ -214,14 +230,14 @@ const ordiniConfermati = computed(() => {
 
 // 3. PRODUZIONE (MODIFICATO: SIGNED -> IN_PRODUZIONE)
 const ordiniInProduzione = computed(() => {
-  const customOrder = ['SIGNED', 'IN_PRODUZIONE'];
+  const customOrder = ['IN_PRODUZIONE','SIGNED'];
   const filtered = listaMieiPreventivi.value.filter(p => customOrder.includes(p.stato));
   return sortByOrder([...filtered], customOrder);
 });
 
 // 4. SPEDIZIONI (Solo READY)
 const ordiniSpediti = computed(() => {
-  const customOrder = ['READY', 'DELIVERY'];
+  const customOrder = ['DELIVERY', 'READY'];
   const filtered = listaMieiPreventivi.value.filter(p => customOrder.includes(p.stato));
   return sortByOrder([...filtered], customOrder);
 });
@@ -245,7 +261,7 @@ const getStatusStyling = (stato: string) => {
     'WAITING_FAST': { badge: 'bg-blue-50 text-blue-600 border-blue-100', icon: ShoppingCartIcon, iconBg: 'bg-blue-100 text-blue-600' },
     'WAITING_SIGN': { badge: 'bg-blue-50 text-blue-600 border-blue-100', icon: ShoppingCartIcon, iconBg: 'bg-blue-100 text-blue-600' },
     'SIGNED': { badge: 'bg-stone-200 text-stone-600 border-stone-300', icon: CogIcon, iconBg: 'bg-stone-200 text-stone-600' },
-    'IN_PRODUZIONE': { badge: 'bg-emerald-100 text-emerald-800 border-emerald-200', icon: CogIcon, iconBg: 'bg-emerald-100 text-emerald-800' },
+    'IN_PRODUZIONE': { badge: 'bg-yellow-100 text-yellow-800 border-yellow-200', icon: CogIcon, iconBg: 'bg-yellow-200 text-yellow-800' },
     'READY': { badge: 'bg-stone-200 text-stone-600 border-stone-300', icon: CubeIcon, iconBg: 'bg-stone-200 text-stone-600' },
     'DELIVERY': { badge: 'bg-emerald-100 text-emerald-800 border-emerald-200', icon: CubeIcon, iconBg: 'bg-emerald-200 text-emerald-800' },
     'REJECTED': { badge: 'bg-red-100 text-red-700 border-red-200', icon: XCircleIcon, iconBg: 'bg-red-100 text-red-600' },
@@ -314,7 +330,7 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
 
         <div class="flex items-center gap-3 mt-4 md:mt-0">
           <button @click="showArchive = true" class="bg-white hover:bg-gray-50 border border-gray-200 text-gray-600 px-3 py-2 rounded-lg font-bold shadow-sm flex items-center gap-2 transition-transform active:scale-95 text-xs">
-              <ArchiveBoxIcon class="h-5 w-5 text-gray-400" /> ARCHIVIO
+              <ArchiveBoxIcon class="h-5 w-5 text-gray-600" /> ARCHIVIO
           </button>
         </div>
       </div>
@@ -396,7 +412,7 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
               <button
                 v-if="p.stato === 'QUOTE_READY'"
                 @click="openConfirmModal(p)" 
-                class="w-full text-white bg-green-600 hover:bg-green-700 px-4 py-3 rounded-lg font-bold text-xs shadow-sm flex justify-center items-center gap-2 animate-pulse transition-transform active:scale-95"
+                class="w-full text-green-100 bg-green-600 hover:bg-green-700 px-8 py-2 rounded-lg font-bold text-xs shadow-sm flex justify-center items-center gap-2 animate-pulse transition-transform active:scale-95"
               >
                 <CheckCircleIcon class="h-5 w-5" />
                 CONFERMA PREVENTIVO
@@ -453,7 +469,7 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
               <button
                 v-if="['WAITING_SIGN', 'WAITING_FAST'].includes(p.stato)"
                 @click="gestisciAzioneOrdine(p)"
-                class="w-full text-white bg-blue-600 hover:bg-blue-700 px-12 py-2 rounded-lg font-bold text-xs shadow-sm flex justify-center items-center gap-2 animate-pulse transition-transform active:scale-95"
+                class="w-full text-blue-100 bg-blue-600 hover:bg-blue-700 px-12 py-2 rounded-lg font-bold text-xs shadow-sm flex justify-center items-center gap-2 animate-pulse transition-transform active:scale-95"
               >
                 <CheckCircleIcon class="h-5 w-5" />
                 {{ p.stato === 'WAITING_FAST' ? 'ACCETTA ORDINE' : 'FIRMA ORDINE' }}
@@ -558,9 +574,9 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
               <button 
                   v-if="p.stato === 'DELIVERY' && p.fic_ddt_url"
                   @click="apriDdt(p.fic_ddt_url)"
-                  class="bg-emerald-100 text-emerald-700 border border-emerald-200 hover:bg-emerald-200 px-12 py-2 rounded font-bold text-xs flex items-center justify-center gap-2 h-[34px] transition-colors shadow-sm w-full md:w-auto"
+                  class="w-full text-emerald-100 bg-emerald-600 hover:bg-emerald-700 px-12 py-2 rounded-lg font-bold text-xs shadow-sm flex justify-center items-center gap-2 transition-transform active:scale-95"
               >
-                  <DocumentTextIcon class="h-4 w-4" />
+                  <DocumentTextIcon class="h-5 w-5" />
                   VEDI DDT
               </button>
 

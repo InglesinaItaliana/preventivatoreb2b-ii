@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue';
 import { Dialog, DialogPanel, DialogTitle, TransitionChild, TransitionRoot } from '@headlessui/vue';
-import { XMarkIcon, ArchiveBoxIcon, ArrowPathIcon } from '@heroicons/vue/24/solid';
+import { XMarkIcon, ArchiveBoxIcon, ArrowPathIcon, DocumentTextIcon } from '@heroicons/vue/24/solid';
 import { collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
 import { db } from '../firebase';
 import { ARCHIVE_STATUSES, STATUS_DETAILS } from '../types';
@@ -35,8 +35,6 @@ const loadArchive = async () => {
 
     if (!props.isAdmin && props.clientEmail) {
       // Filtro per cliente specifico (Dashboard Cliente)
-      // Nota: Richiede indice composito [clienteEmail + stato + dataCreazione]
-      // Se manca l'indice, Firestore lancerà un errore in console con il link per crearlo.
       constraints.unshift(where('clienteEmail', '==', props.clientEmail));
     }
 
@@ -64,6 +62,10 @@ const formatDate = (seconds: number) => seconds ? new Date(seconds * 1000).toLoc
 const openOrder = (codice: string) => {
   const url = `/preventivatore?codice=${codice}${props.isAdmin ? '&admin=true&readonly=true' : ''}`;
   router.push(url);
+};
+
+const openDdt = (url: string) => {
+  window.open(url, '_blank');
 };
 </script>
 
@@ -115,7 +117,21 @@ const openOrder = (codice: string) => {
                     @click="openOrder(order.codice)"
                     class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-blue-300 cursor-pointer transition-all flex justify-between items-center group"
                   >
-                    <div>
+                    <div v-if="!isAdmin">
+                      <div class="flex items-baseline gap-2 mb-1">
+                        <span class="font-bold text-gray-800">{{ order.commessa || order.codice }}</span>
+                        <span class="text-[10px] text-gray-400">{{ formatDate(order.dataCreazione?.seconds) }}</span>
+                      </div>
+                      <div class="flex items-center gap-2">
+                        <span class="text-[10px] px-2 py-0.5 rounded border uppercase font-bold"
+                              :class="STATUS_DETAILS[order.stato as keyof typeof STATUS_DETAILS]?.badge">
+                          {{ STATUS_DETAILS[order.stato as keyof typeof STATUS_DETAILS]?.label }}
+                        </span>
+                        
+                      </div>
+                    </div>
+
+                    <div v-else>
                       <div class="flex items-center gap-2 mb-1">
                         <span class="font-bold text-gray-800">{{ order.commessa || order.codice }}</span>
                         <span class="text-[10px] px-2 py-0.5 rounded border uppercase font-bold"
@@ -129,10 +145,18 @@ const openOrder = (codice: string) => {
                         <span>{{ formatDate(order.dataCreazione?.seconds) }}</span>
                       </div>
                     </div>
-                    
+
                     <div class="text-right">
                       <div class="font-bold text-gray-900">{{ (order.totaleScontato || order.totaleImponibile || 0).toFixed(2) }} €</div>
-                      <div class="text-xs text-blue-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity">VEDI ></div>
+                      <div v-if="isAdmin" class="text-xs text-blue-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity">VEDI ></div>
+                      <button 
+                          v-if="order.fic_ddt_url" 
+                          @click.stop="openDdt(order.fic_ddt_url)"
+                          class="flex items-center gap-1 text-sm font-bold text-emerald-100 bg-emerald-700 border border-emerald-200 px-8 py-0.5 rounded hover:bg-emerald-800 transition-colors"
+                          title="Visualizza DDT"
+                        >
+                          <DocumentTextIcon class="w-3 h-3" /> DDT
+                        </button>
                     </div>
                   </div>
                 </div>
