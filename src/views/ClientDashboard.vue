@@ -12,7 +12,6 @@ import {
   XCircleIcon, 
   CogIcon, 
   CubeIcon,
-  PlusCircleIcon, 
   ExclamationTriangleIcon,
   ShoppingCartIcon, // NUOVA
   TruckIcon,        // NUOVA
@@ -261,7 +260,7 @@ const getStatusStyling = (stato: string) => {
     'WAITING_FAST': { badge: 'bg-blue-50 text-blue-600 border-blue-100', icon: ShoppingCartIcon, iconBg: 'bg-blue-100 text-blue-600' },
     'WAITING_SIGN': { badge: 'bg-blue-50 text-blue-600 border-blue-100', icon: ShoppingCartIcon, iconBg: 'bg-blue-100 text-blue-600' },
     'SIGNED': { badge: 'bg-stone-200 text-stone-600 border-stone-300', icon: CogIcon, iconBg: 'bg-stone-200 text-stone-600' },
-    'IN_PRODUZIONE': { badge: 'bg-yellow-100 text-yellow-800 border-yellow-200', icon: CogIcon, iconBg: 'bg-yellow-200 text-yellow-800' },
+    'IN_PRODUZIONE': { badge: 'bg-amber-300 text-black border-amber-400', icon: CogIcon, iconBg: 'bg-amber-300 text-black' },
     'READY': { badge: 'bg-stone-200 text-stone-600 border-stone-300', icon: CubeIcon, iconBg: 'bg-stone-200 text-stone-600' },
     'DELIVERY': { badge: 'bg-emerald-100 text-emerald-800 border-emerald-200', icon: CubeIcon, iconBg: 'bg-emerald-200 text-emerald-800' },
     'REJECTED': { badge: 'bg-red-100 text-red-700 border-red-200', icon: XCircleIcon, iconBg: 'bg-red-100 text-red-600' },
@@ -319,11 +318,7 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
         <div class="flex items-center gap-4">
           <div>
             <p class="text-lg font-medium text-gray-800 leading-none">{{ clientName }}</p>
-            <h1 class="text-5xl font-bold font-heading text-gray-900 mb-4">P.O.P.S. Dashboard</h1>
-            <button @click="vaiAlBuilder()" class="bg-yellow-400 hover:bg-yellow-300 text-black px-6 py-3 rounded-lg font-bold shadow-md flex items-center gap-2 transition-transform active:scale-95">
-            <PlusCircleIcon class="h-7 w-7 text-black" />
-            NUOVO
-            </button>
+            <h1 class="text-6xl font-bold font-heading text-gray-900 mb-4">P.O.P.S. Dashboard</h1>
           </div>
           
         </div>
@@ -337,25 +332,25 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
 
       <div class="flex overflow-x-auto border-b border-gray-200 mb-6 gap-2">
         
-        <button @click="activeTab = 'PREVENTIVI'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative flex items-center gap-2 whitespace-nowrap" :class="activeTab === 'PREVENTIVI' ? 'text-gray-600 border-b-4 border-yellow-400' : 'text-gray-400 hover:text-gray-600'">
+        <button @click="activeTab = 'PREVENTIVI'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative flex items-center gap-2 whitespace-nowrap" :class="activeTab === 'PREVENTIVI' ? 'text-gray-600 border-b-4 border-amber-300' : 'text-gray-400 hover:text-gray-600'">
           <DocumentTextIcon class="h-4 w-4" />
           PREVENTIVI
           <span v-if="preventiviInCorso.length" class="ml-2 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[10px]">{{ preventiviInCorso.length }}</span>
         </button>
         
-        <button @click="activeTab = 'ORDINI'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative flex items-center gap-2 whitespace-nowrap" :class="activeTab === 'ORDINI' ? 'text-gray-600 border-b-4 border-yellow-400' : 'text-gray-400 hover:text-gray-600'">
+        <button @click="activeTab = 'ORDINI'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative flex items-center gap-2 whitespace-nowrap" :class="activeTab === 'ORDINI' ? 'text-gray-600 border-b-4 border-amber-300' : 'text-gray-400 hover:text-gray-600'">
           <ShoppingCartIcon class="h-4 w-4" />
           ORDINI
           <span v-if="ordiniConfermati.length" class="ml-2 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[10px]">{{ ordiniConfermati.length }}</span>
         </button>
         
-        <button @click="activeTab = 'PRODUZIONE'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative flex items-center gap-2 whitespace-nowrap" :class="activeTab === 'PRODUZIONE' ? 'text-gray-600 border-b-4 border-yellow-400' : 'text-gray-400 hover:text-gray-600'">
+        <button @click="activeTab = 'PRODUZIONE'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative flex items-center gap-2 whitespace-nowrap" :class="activeTab === 'PRODUZIONE' ? 'text-gray-600 border-b-4 border-amber-300' : 'text-gray-400 hover:text-gray-600'">
           <CogIcon class="h-4 w-4" />
           PRODUZIONE
           <span v-if="ordiniInProduzione.length" class="ml-2 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[10px]">{{ ordiniInProduzione.length }}</span>
         </button>
 
-        <button @click="activeTab = 'SPEDIZIONI'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative flex items-center gap-2 whitespace-nowrap" :class="activeTab === 'SPEDIZIONI' ? 'text-gray-600 border-b-4 border-yellow-400' : 'text-gray-400 hover:text-gray-600'">
+        <button @click="activeTab = 'SPEDIZIONI'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative flex items-center gap-2 whitespace-nowrap" :class="activeTab === 'SPEDIZIONI' ? 'text-gray-600 border-b-4 border-amber-300' : 'text-gray-400 hover:text-gray-600'">
           <TruckIcon class="h-4 w-4" />
           SPEDIZIONI
           <span v-if="ordiniSpediti.length" class="ml-2 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[10px]">{{ ordiniSpediti.length }}</span>
@@ -429,7 +424,7 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
           class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all flex flex-col md:flex-row justify-between items-center gap-4 cursor-pointer">
             <div class="flex items-center gap-4 w-full md:w-auto">
               <div class="h-14 w-14 rounded-full flex items-center justify-center shrink-0 
-            bg-opacity-70 backdrop-blur 
+            bg-opacity-100 backdrop-blur 
             border-2 border-white/20 
             shadow-[inset_0_0_15px_rgba(255,255,255,0.1)] 
             ring-1 ring-black/5" 
@@ -485,11 +480,7 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
           <div v-else v-for="p in ordiniInProduzione" :key="p.id" 
           class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all flex flex-col md:flex-row justify-between items-center gap-4 cursor-pointer">
             <div class="flex items-center gap-4 w-full md:w-auto">
-              <div class="h-14 w-14 rounded-full flex items-center justify-center shrink-0 
-                          bg-opacity-70 backdrop-blur 
-                          border-2 border-white/20 
-                          shadow-[inset_0_0_15px_rgba(255,255,255,0.1)] 
-                          ring-1 ring-black/5" 
+              <div class="h-14 w-14 rounded-full flex items-center justify-center shrink-0 backdrop-blur"
                   :class="getStatusStyling(p.stato).iconBg">
                 <component :is="getStatusStyling(p.stato).icon" class="w-8 h-8 drop-shadow-sm" />
               </div>    
@@ -530,7 +521,7 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
           class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all flex flex-col md:flex-row justify-between items-center gap-4 cursor-pointer">
             <div class="flex items-center gap-4 w-full md:w-auto">
               <div class="h-14 w-14 rounded-full flex items-center justify-center shrink-0 
-            bg-opacity-70 backdrop-blur 
+            bg-opacity-100 backdrop-blur 
             border-2 border-white/20 
             shadow-[inset_0_0_15px_rgba(255,255,255,0.1)] 
             ring-1 ring-black/5" 

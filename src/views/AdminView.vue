@@ -28,7 +28,6 @@ import {
   ChevronDoubleRightIcon,
   DocumentTextIcon,
   XCircleIcon,
-  EyeIcon,
   CogIcon,
   CurrencyEuroIcon,
   ShoppingCartIcon,

@@ -9,11 +9,12 @@ import {
   XMarkIcon, 
   PaperAirplaneIcon, 
   ComputerDesktopIcon,
-  WrenchScrewdriverIcon,
+  PlusIcon,
   CalculatorIcon,
   ChartBarIcon,
   TruckIcon,
   UserPlusIcon,
+  PlusCircleIcon,
   CubeIcon,
   CogIcon
 } from '@heroicons/vue/24/solid';
@@ -82,6 +83,12 @@ const navigateTo = (path: string) => {
   router.push(path);
 };
 
+const avviaNuovoPreventivo = () => {
+  isMenuOpen.value = false;
+  // Aggiungiamo 'ts' per garantire che la rotta cambi sempre, attivando il watcher
+  router.push(`/preventivatore?cmd=new&ts=${Date.now()}`);
+};
+
 const submitBug = async () => {
   if (!form.title || !form.description) return alert("Compila titolo e descrizione.");
   
@@ -126,7 +133,14 @@ const submitBug = async () => {
       <div v-if="isMenuOpen" class="bg-white rounded-3xl shadow-2xl border border-gray-100 p-2 min-w-[220px] flex flex-col gap-1 mb-2 origin-bottom-right overflow-hidden">
         
         <div class="px-4 py-2 text-xs font-bold text-gray-400 uppercase tracking-wider">Strumenti Rapidi</div>
-
+        <button v-if="!isAdmin" @click="avviaNuovoPreventivo" class="flex items-center gap-3 w-full px-4 py-3 rounded-2xl hover:bg-amber-50 text-gray-700 hover:text-amber-600 transition-colors group">          <div class="bg-amber-100 p-2 rounded-xl group-hover:bg-amber-200 transition-colors">
+            <PlusCircleIcon class="h-5 w-5 text-amber-600" />
+          </div>
+          <div class="flex flex-col items-start">
+            <span class="font-bold text-sm">Nuovo Preventivo</span>
+            <span class="text-[10px] text-gray-400">Inizia configurazione</span>
+          </div>
+        </button>
         <button @click="openBugReport" class="flex items-center gap-3 w-full px-4 py-3 rounded-2xl hover:bg-rose-50 text-gray-700 hover:text-rose-600 transition-colors group">
           <div class="bg-rose-100 p-2 rounded-xl group-hover:bg-rose-200 transition-colors">
             <BugAntIcon class="h-5 w-5 text-rose-600" />
@@ -157,10 +171,10 @@ const submitBug = async () => {
 
     <button 
       @click="toggleMenu"
-      class="h-16 w-16 bg-yellow-400 hover:bg-yellow-300 text-black rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 flex items-center justify-center relative overflow-hidden group active:scale-95"
+      class="h-16 w-16 bg-amber-300 hover:bg-amber-200 text-black rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 flex items-center justify-center relative overflow-hidden group active:scale-95"
       :class="isMenuOpen ? 'rotate-90 rounded-[1.5rem]' : 'rounded-2xl'"
     >
-      <WrenchScrewdriverIcon 
+      <PlusIcon 
         class="h-7 w-7 absolute transition-all duration-300 transform"
         :class="isMenuOpen ? 'opacity-0 rotate-90 scale-50' : 'opacity-100 rotate-0 scale-100'"
       />
@@ -179,7 +193,7 @@ const submitBug = async () => {
       <div class="relative w-full max-w-md bg-white h-full shadow-2xl flex flex-col">
         <div class="bg-gray-900 text-white p-6 flex justify-between items-center shadow-sm shrink-0">
           <h2 class="font-bold text-xl flex items-center gap-2 font-heading">
-            <BugAntIcon class="h-6 w-6 text-yellow-400" />
+            <BugAntIcon class="h-6 w-6 text-amber-400" />
             Report Problema
           </h2>
           <button @click="isOpen = false" class="hover:bg-white/20 p-1.5 rounded-full transition-colors">
@@ -203,19 +217,19 @@ const submitBug = async () => {
           <div class="space-y-4">
             <div>
               <label class="block text-xs font-bold text-gray-500 uppercase mb-1.5">Titolo</label>
-              <input v-model="form.title" type="text" class="w-full bg-white border-gray-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-yellow-400 focus:border-transparent transition-shadow shadow-sm" placeholder="Breve riassunto del problema">
+              <input v-model="form.title" type="text" class="w-full bg-white border-gray-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-amber-400 focus:border-transparent transition-shadow shadow-sm" placeholder="Breve riassunto del problema">
             </div>
 
             <div>
               <label class="block text-xs font-bold text-gray-500 uppercase mb-1.5">Categoria</label>
-              <select v-model="form.category" class="w-full bg-white border-gray-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-yellow-400 focus:border-transparent shadow-sm">
+              <select v-model="form.category" class="w-full bg-white border-gray-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-amber-400 focus:border-transparent shadow-sm">
                 <option v-for="cat in categories" :key="cat" :value="cat">{{ cat }}</option>
               </select>
             </div>
 
             <div>
               <label class="block text-xs font-bold text-gray-500 uppercase mb-1.5">Descrizione</label>
-              <textarea v-model="form.description" rows="5" class="w-full bg-white border-gray-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-yellow-400 focus:border-transparent transition-shadow shadow-sm resize-none" placeholder="Cosa è successo?"></textarea>
+              <textarea v-model="form.description" rows="5" class="w-full bg-white border-gray-200 rounded-lg p-3 text-sm focus:ring-2 focus:ring-amber-400 focus:border-transparent transition-shadow shadow-sm resize-none" placeholder="Cosa è successo?"></textarea>
             </div>
           </div>
         </div>

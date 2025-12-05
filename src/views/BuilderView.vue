@@ -17,7 +17,6 @@ import {
   PlusCircleIcon,
   ChevronLeftIcon,
   InformationCircleIcon, 
-  MagnifyingGlassCircleIcon,
   ShoppingCartIcon,
   DocumentTextIcon,
   CalendarIcon,
@@ -361,6 +360,8 @@ const vaiDashboard = () => {
 
 const nuovaCommessa = () => {
   if (preventivo.value.length > 0 && !confirm("Attenzione: perderai le modifiche non salvate. Iniziare una nuova commessa?")) return;
+  
+  // 1. Reset Dati Generali
   preventivo.value = [];
   currentDocId.value = null;
   statoCorrente.value = 'DRAFT';
@@ -369,8 +370,29 @@ const nuovaCommessa = () => {
   noteCliente.value = '';
   scontoApplicato.value = 0;
   listaAllegati.value = [];
+  
+  // 2. Reset Campi Admin
+  searchClientQuery.value = '';
+  clienteUID.value = '';
+  clienteEmail.value = '';
+  nomeCliente.value = 'Cliente';
+  
+  // 3. Reset Input Pannello (Misure)
   Object.assign(pannello, { base: 0, altezza: 0, righe: 0, colonne: 0, qty: 1 });
   Object.assign(opzioniTelaio, { nonEquidistanti: false, curva: false, tacca: false });
+
+  // 4. RESET CAMPI SELEZIONE (Griglia/Canalino) - <--- QUESTA PARTE MANCAVA
+  categoriaGriglia.value = 'INGLESINA';
+  tipoGriglia.value = '';
+  dimensioneGriglia.value = '';
+  finituraGriglia.value = '';
+  
+  tipoCanalino.value = '';
+  dimensioneCanalino.value = '';
+  finituraCanalino.value = '';
+  
+  copiaDuplex.value = false;
+  fuseruolo.value = '';
 };
 
 const apriModaleAzione = () => {
@@ -501,7 +523,21 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
   finally { isSaving.value = false; }
 };
 
-// SOSTITUISCI onMounted CON QUESTO:
+// --- WATCHER PER COMANDO "NUOVO" DA FAB ---
+watch(() => route.query, (q) => {
+  if (q.cmd === 'new') {
+    // Esegue la logica di reset esistente (che include già il confirm se serve)
+    nuovaCommessa();
+    
+    // Pulisce l'URL per evitare che il comando rimanga attivo
+    // (Mantenendo eventuali altri parametri se necessario, o pulendo tutto)
+    const newQuery = { ...q };
+    delete newQuery.cmd;
+    delete newQuery.ts;
+    router.replace({ query: newQuery });
+  }
+});
+
 onMounted(() => {
   catalog.fetchCatalog();
   
@@ -753,15 +789,6 @@ const aggiungiExtraAdmin = () => {
             </div>
 
             <h1 class="text-5xl font-bold font-heading text-gray-900">P.O.P.S. Commesse</h1>
-            
-            <div v-if="!isNewAdminOrder" class="flex items-center gap-3 mt-4">
-              <button v-if="!isAdmin" @click="nuovaCommessa" class="bg-yellow-400 hover:bg-yellow-300 text-black px-6 py-3 rounded-lg font-bold shadow-md flex items-center gap-2 transition-transform active:scale-95">
-                <PlusCircleIcon class="h-7 w-7 text-black" /> NUOVO
-              </button>
-              <button v-if="!isAdmin" @click="mostraStorico = true" class="bg-stone-100 hover:bg-stone-50 text-black px-6 py-3 rounded-lg font-bold shadow-md flex items-center gap-2 transition-transform active:scale-95">
-                <MagnifyingGlassCircleIcon class="h-7 w-7 text-black" /> STORICO
-              </button>
-            </div>
 
           </div>
         </div>
@@ -1009,7 +1036,7 @@ const aggiungiExtraAdmin = () => {
             <template v-else>
                <template v-if="statoCorrente === 'DRAFT'">
                 <button @click="eliminaPreventivo()" class="bg-red-200 flex items-center gap-2 hover:bg-red-300 text-red-600 px-4 py-3 rounded-lg font-bold shadow-lg">ELIMINA</button>
-                <button @click="salvaPreventivo()" class="bg-green-200 flex items-center gap-2 hover:bg-green-300 text-green-600 px-4 py-3 rounded-lg font-bold shadow-lg">SALVA</button>
+                <button @click="salvaPreventivo()" class="bg-green-200 flex items-center gap-2 hover:bg-green-300 text-green-600 px-4 py-3 rounded-lg font-bold shadow-lg">SALVA COME PREVENTIVO</button>
                 <button v-if="isStandard" @click="salvaPreventivo('ORDINA')" class="bg-yellow-400 flex items-center gap-2 hover:bg-yellow-300 text-yellow-900 px-12 py-3 rounded-lg font-bold shadow-lg"><ShoppingCartIcon class="h-7 w-7 text-yellow-900" /> ORDINA</button>
                 <div v-else class="flex flex-col items-end">
                   <button @click="salvaPreventivo('RICHIEDI_VALIDAZIONE')" class="bg-yellow-400 hover:bg-yellow-500 text-black px-6 py-3 rounded-lg font-bold shadow-lg">INVIA PER VALIDAZIONE</button>
