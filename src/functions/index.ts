@@ -389,6 +389,7 @@ exports.creaDdtCumulativo = functions
                 batch.update(ref, { 
                     fic_ddt_id: newDdt.id,
                     fic_ddt_url: newDdt.url,
+                    fic_ddt_number: newDdt.number,
                     stato: 'DELIVERY',
                     dataConsegnaPrevista: date 
                 });

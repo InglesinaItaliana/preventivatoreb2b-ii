@@ -197,7 +197,7 @@ const isStandard = computed(() => {
 
 const isLocked = computed(() => {
   if (isAdmin.value) {
-    return ['WAITING_FAST', 'WAITING_SIGN', 'SIGNED', 'IN_PRODUZIONE', 'READY', 'REJECTED'].includes(statoCorrente.value);
+    return ['WAITING_FAST', 'WAITING_SIGN', 'SIGNED', 'IN_PRODUZIONE', 'READY', 'DELIVERY', 'REJECTED'].includes(statoCorrente.value);
   }
   return statoCorrente.value !== 'DRAFT';
 });

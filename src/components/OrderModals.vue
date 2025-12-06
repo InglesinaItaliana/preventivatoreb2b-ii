@@ -89,11 +89,23 @@ const copiedState = ref<Record<string, boolean>>({});
 const groupedElements = computed(() => {
   if (!props.order?.elementi) return {};
   const groups: Record<string, any[]> = {};
+
   props.order.elementi.forEach((el: any) => {
+    // --- NUOVO FILTRO ---
+    // Verifica se la categoria è EXTRA (ignorando maiuscole/minuscole)
+    // Nota: Ho messo sia 'categoria' che 'category' per sicurezza, 
+    // usa quello che corrisponde al tuo oggetto database.
+    const categoria = el.categoria || el.category || '';
+    if (categoria.toString().toUpperCase() === 'EXTRA') {
+      return; // Salta questo giro del ciclo, non aggiunge il prodotto
+    }
+    // --------------------
+
     const key = `${el.descrizioneCompleta} ◆ ${el.infoCanalino || 'Nessun canalino'}`;
     if (!groups[key]) groups[key] = [];
     groups[key].push(el);
   });
+  
   return groups;
 });
 
@@ -249,7 +261,7 @@ const handleProductionConfirm = () => emit('confirmProduction');
     </div>
 
     <div v-if="mode === 'PRODUCTION'" class="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col animate-in fade-in zoom-in duration-200">
-      <div class="bg-amber-100 p-5 text-amber-900 flex justify-between items-center shrink-0 rounded-t-xl">
+      <div class="bg-amber-400 p-5 text-amber-950 flex justify-between items-center shrink-0 rounded-t-xl">
         <h2 class="font-bold text-2xl flex items-center gap-2"><CogIcon class="w-10 h-10"/> Composizione Telai</h2>
       </div>
 
@@ -262,7 +274,7 @@ const handleProductionConfirm = () => emit('confirmProduction');
         <div v-for="(items, groupName) in groupedElements" :key="groupName" class="mb-6 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
           <div class="bg-gray-100 px-4 py-3 border-b border-gray-200 flex justify-between items-center">
             <h3 class="font-bold text-sm text-gray-700">{{ groupName }}</h3>
-            <button @click="copyToClipboard(groupName, items)" class="text-xs flex items-center gap-1 px-2 py-1 rounded border transition-all" :class="copiedState[groupName] ? 'bg-amber-100 text-amber-700 border-amber-200' : 'bg-white text-gray-600 hover:bg-gray-50 border-gray-300'">
+            <button @click="copyToClipboard(groupName, items)" class="text-xs flex items-center gap-1 px-2 py-1 rounded border transition-all" :class="copiedState[groupName] ? 'bg-amber-400 text-amber-950 border-amber-500' : 'bg-white text-gray-600 hover:bg-gray-50 border-gray-300'">
               <component :is="copiedState[groupName] ? ClipboardDocumentCheckIcon : ClipboardDocumentIcon" class="w-4 h-4"/> {{ copiedState[groupName] ? 'Copiato!' : 'Copia Tabella' }}
             </button>
           </div>
@@ -277,7 +289,7 @@ const handleProductionConfirm = () => emit('confirmProduction');
 
       <div class="p-4 border-t bg-white shrink-0 flex justify-end gap-3 rounded-b-xl">
         <button @click="close" class="px-4 py-2 text-gray-500 font-bold hover:bg-gray-100 rounded-lg transition-colors">Annulla</button>
-        <button @click="handleProductionConfirm" class="bg-amber-100 text-amber-900 px-6 py-2 rounded-lg font-bold shadow-md hover:bg-amber-200 flex items-center gap-2">AVVIA PRODUZIONE</button>
+        <button @click="handleProductionConfirm" class="bg-amber-400 text-amber-950 px-6 py-2 rounded-lg font-bold shadow-md hover:bg-amber-300 flex items-center gap-2">AVVIA PRODUZIONE</button>
       </div>
     </div>
   </div>
