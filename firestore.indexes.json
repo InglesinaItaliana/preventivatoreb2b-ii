@@ -32,6 +32,10 @@
           "order": "ASCENDING"
         },
         {
+          "fieldPath": "dataConsegnaPrevista",
+          "order": "ASCENDING"
+        },
+        {
           "fieldPath": "dataCreazione",
           "order": "DESCENDING"
         }

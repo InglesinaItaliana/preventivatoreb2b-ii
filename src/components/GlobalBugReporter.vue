@@ -7,7 +7,8 @@ import { onAuthStateChanged } from 'firebase/auth'; // Importante per la reattiv
 import { 
   BugAntIcon, 
   XMarkIcon, 
-  PaperAirplaneIcon, 
+  PaperAirplaneIcon,
+  AdjustmentsHorizontalIcon, 
   ComputerDesktopIcon,
   PlusIcon,
   CalculatorIcon,
@@ -49,6 +50,7 @@ const adminLinks = [
   { label: 'Produzione', route: '/production', icon: CogIcon },
   { label: 'Spedizioni', route: '/delivery', icon: TruckIcon },
   { label: 'Visualizzatore Stack', route: '/stack', icon: CubeIcon },
+  { label: 'Impostazioni', route: '/admin/settings', icon: AdjustmentsHorizontalIcon },
 ];
 
 const form = reactive({

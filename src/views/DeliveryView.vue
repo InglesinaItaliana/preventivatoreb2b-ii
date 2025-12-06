@@ -8,7 +8,7 @@ import { ref as storageRef, uploadString, getDownloadURL } from 'firebase/storag
 import { db, storage } from '../firebase';
 import DeliveryModal from '../components/DeliveryModal.vue';
 import { 
-  TruckIcon, PlayIcon, StopIcon, MapPinIcon, CalendarIcon, ChevronRightIcon 
+  TruckIcon, PlayIcon, StopIcon, MapPinIcon, CalendarIcon, ChevronRightIcon, DocumentTextIcon 
 } from '@heroicons/vue/24/solid';
 
 // STATO
@@ -23,9 +23,9 @@ const orders = ref<any[]>([]);
 const showModal = ref(false);
 const selectedOrder = ref<any>(null);
 
-// CARICAMENTO DRIVERS (Utenti)
+// CARICAMENTO DRIVERS
 const loadUsers = async () => {
-  const q = query(collection(db, 'users')); // Puoi filtrare per ruolo se hai un campo ruolo
+  const q = query(collection(db, 'team'), orderBy('lastName', 'asc')); 
   const snap = await getDocs(q);
   users.value = snap.docs.map(d => ({ id: d.id, ...d.data() }));
 };
@@ -41,7 +41,7 @@ const formatTime = (ms: number) => {
 
 const updateTimer = () => {
   if (!currentSession.value || !currentSession.value.startTime) return;
-  const start = currentSession.value.startTime.toDate ? currentSession.value.startTime.toDate() : new Date(currentSession.value.startTime); // Gestione timestamp firestore vs locale
+  const start = currentSession.value.startTime.toDate ? currentSession.value.startTime.toDate() : new Date(currentSession.value.startTime);
   const now = new Date();
   timerString.value = formatTime(now.getTime() - start.getTime());
 };
@@ -49,29 +49,19 @@ const updateTimer = () => {
 // CHECK SESSIONE APERTA
 const checkActiveSession = async () => {
   if (!selectedDriverId.value) return;
-  
-  // Cerchiamo se c'è una sessione OPEN per questo driver
   const q = query(
     collection(db, 'delivery_sessions'), 
     where('driverUid', '==', selectedDriverId.value),
     where('status', '==', 'OPEN')
   );
-  
   const snap = await getDocs(q);
-  
-  // VERIFICA AGGIORNATA PER COMPILATORE STRETTO
   if (!snap.empty) {
     const doc = snap.docs[0]; 
-    
-    // Controllo esplicito su 'doc' (soddisfa il compilatore TS)
     if (doc) {
       currentSession.value = { id: doc.id, ...doc.data() };
-      
-      // Se la data è un timestamp firestore, convertila
       if (currentSession.value.startTime?.seconds) {
           currentSession.value.startTime = new Date(currentSession.value.startTime.seconds * 1000);
       }
-      
       startLocalTimer();
     }
   } else {
@@ -94,13 +84,9 @@ const stopLocalTimer = () => {
 
 // AZIONI SESSIONE
 const toggleSession = async () => {
-  if (!selectedDriverId.value) {
-    alert("Seleziona un autista prima di iniziare.");
-    return;
-  }
+  if (!selectedDriverId.value) return alert("Seleziona un autista prima di iniziare.");
 
-  // STOP SESSION
-  if (currentSession.value) {
+  if (currentSession.value) { // STOP
     if (!confirm("Sei sicuro di voler terminare il giro consegne?")) return;
     try {
       await updateDoc(doc(db, 'delivery_sessions', currentSession.value.id), {
@@ -110,54 +96,100 @@ const toggleSession = async () => {
       currentSession.value = null;
       stopLocalTimer();
     } catch (e) { console.error(e); alert("Errore chiusura sessione"); }
-  
-  // START SESSION
-  } else {
+  } else { // START
     try {
       const driver = users.value.find(u => u.id === selectedDriverId.value);
+      const driverName = driver ? `${driver.firstName} ${driver.lastName}` : 'Autista';
       const newSession = {
         driverUid: selectedDriverId.value,
-        driverName: driver?.ragioneSociale || driver?.email || 'Autista',
-        startTime: serverTimestamp(), // Su firestore
+        driverName: driverName,
+        startTime: serverTimestamp(),
         status: 'OPEN',
         deliveredOrderIds: []
       };
-      
       const ref = await addDoc(collection(db, 'delivery_sessions'), newSession);
-      
-      // Impostiamo localmente start time a NOW per reattività immediata del timer
       currentSession.value = { ...newSession, id: ref.id, startTime: new Date() };
       startLocalTimer();
     } catch (e) { console.error(e); alert("Errore avvio sessione"); }
   }
 };
 
-// CARICAMENTO ORDINI (Realtime)
+// CARICAMENTO ORDINI
 let unsubscribeOrders: null | (() => void) = null;
-
 const loadOrders = () => {
   loading.value = true;
   if (unsubscribeOrders) unsubscribeOrders();
-
+  
   const q = query(
     collection(db, 'preventivi'), 
     where('stato', '==', 'DELIVERY'), 
     orderBy('dataConsegnaPrevista', 'asc')
   );
 
-  unsubscribeOrders = onSnapshot(q, (snap) => {
-    orders.value = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    loading.value = false;
+  unsubscribeOrders = onSnapshot(q, 
+    (snap) => {
+      orders.value = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      loading.value = false;
+    }, 
+    (error) => { // <--- AGGIUNTA GESTIONE ERRORE
+      console.error("Errore caricamento ordini:", error);
+      loading.value = false;
+      alert("Errore caricamento dati: " + error.message);
+    }
+  );
+};
+
+// HELPER RAGGRUPPAMENTO DDT
+const raggruppaPerDdt = (lista: any[]) => {
+  const gruppi: Record<string, any> = {};
+  lista.forEach(p => {
+    // Se c'è DDT ID, usa quello, altrimenti crea un gruppo univoco per l'ordine singolo
+    const key = p.fic_ddt_id ? `DDT_${p.fic_ddt_id}` : `ORD_${p.id}`;
+    
+    if(!gruppi[key]) {
+        gruppi[key] = {
+            uniqueKey: key,
+            isDdt: !!p.fic_ddt_id,
+            idDdt: p.fic_ddt_id,
+            number: p.fic_ddt_number,
+            url: p.fic_ddt_url,
+            // Dati comuni (assumiamo che il DDT sia per lo stesso cliente/indirizzo)
+            cliente: p.cliente,
+            indirizzo: p.indirizzoConsegna,
+            items: [], // Lista ordini in questo DDT
+            colliTotali: 0
+        };
+    }
+    gruppi[key].items.push(p);
+    gruppi[key].colliTotali += (Number(p.colli) || 1);
+  });
+  
+  // Ordina: Prima i DDT reali, poi gli ordini sfusi
+  return Object.values(gruppi).sort((a:any, b:any) => {
+      if (a.isDdt && !b.isDdt) return -1;
+      if (!a.isDdt && b.isDdt) return 1;
+      return 0; 
   });
 };
 
-// LOGICA CONSEGNA
-const openDeliveryModal = (order: any) => {
-  if (!currentSession.value) {
-    alert("Devi AVVIARE il turno di consegna prima di poter gestire gli ordini.");
-    return;
-  }
-  selectedOrder.value = order;
+// LOGICA CONSEGNA (GROUPED)
+const openDeliveryModal = (group: any) => {
+  if (!currentSession.value) return alert("Devi AVVIARE il turno di consegna.");
+  
+  // Creiamo un oggetto "virtuale" che aggrega i dati del DDT per il modale di firma
+  const mergedSummary = group.items.flatMap((i:any) => i.sommarioPreventivo || []);
+  
+  selectedOrder.value = {
+    // ID Fittizio per il modale (usiamo il primo), ma salviamo la lista di tutti gli ID
+    id: group.items[0].id, 
+    idsToUpdate: group.items.map((i:any) => i.id), // ARRAY DI ID DA AGGIORNARE
+    commessa: group.isDdt ? `DDT #${group.number} (${group.items.length} Ordini)` : group.items[0].commessa,
+    codice: group.isDdt ? `DDT ${group.number}` : group.items[0].codice,
+    cliente: group.cliente,
+    indirizzoConsegna: group.indirizzo,
+    colli: group.colliTotali,
+    sommarioPreventivo: mergedSummary
+  };
   showModal.value = true;
 };
 
@@ -165,88 +197,86 @@ const handleConfirmDelivery = async (signatureBase64: string) => {
   if (!selectedOrder.value || !currentSession.value) return;
   
   try {
-    const orderId = selectedOrder.value.id;
+    // FIX: Garantiamo che ids sia sempre un array
+    const rawIds = selectedOrder.value.idsToUpdate || [selectedOrder.value.id];
+    const ids: any[] = Array.isArray(rawIds) ? rawIds : [rawIds];
     
-    // 1. Upload Firma
-    const firmaRef = storageRef(storage, `firme_consegne/${orderId}_${Date.now()}.png`);
+    // 1. Upload Firma (Unica per il gruppo)
+    const firmaRef = storageRef(storage, `firme_consegne/DDT_${Date.now()}_${ids[0]}.png`);
     await uploadString(firmaRef, signatureBase64, 'data_url');
     const signatureUrl = await getDownloadURL(firmaRef);
 
-    // 2. Aggiorna Ordine
-    await updateDoc(doc(db, 'preventivi', orderId), {
-      stato: 'DELIVERED',
-      firmaConsegna: signatureUrl,
-      dataConsegnaEffettiva: serverTimestamp(),
-      consegnatoDa: currentSession.value.driverName,
-      idViaggio: currentSession.value.id
-    });
+    // 2. Aggiorna TUTTI gli ordini del gruppo
+    const updatePromises = ids.map((id: string) => 
+       updateDoc(doc(db, 'preventivi', id), {
+          stato: 'DELIVERED',
+          firmaConsegna: signatureUrl,
+          dataConsegnaEffettiva: serverTimestamp(),
+          consegnatoDa: currentSession.value.driverName,
+          idViaggio: currentSession.value.id
+       })
+    );
+    await Promise.all(updatePromises);
 
-    // 3. Aggiorna Sessione (Aggiungi ID Ordine)
-    // Nota: deliveredOrderIds è un array, usiamo una logica locale + update o arrayUnion se disponibile
-    // Per semplicità qui faccio un get e update classico o arrayUnion se preferisci
-    // Simulo arrayUnion per brevità ma importalo se serve
+    // 3. Aggiorna Sessione (Aggiungi tutti gli ID)
     const sessionRef = doc(db, 'delivery_sessions', currentSession.value.id);
-    // IMPORTANTE: Se usi arrayUnion devi importarlo da firestore. Qui faccio logica "dummy" per non complicare imports
-    // In produzione: updateDoc(sessionRef, { deliveredOrderIds: arrayUnion(orderId) });
-    const currentList = currentSession.value.deliveredOrderIds || [];
-    await updateDoc(sessionRef, { deliveredOrderIds: [...currentList, orderId] });
+    
+    // FIX RIGOROSO ERRORE 2345: Controllo esplicito su Array.isArray
+    const existingIds = currentSession.value.deliveredOrderIds;
+    const currentList: any[] = Array.isArray(existingIds) ? existingIds : [];
+    
+    // Unione sicura
+    const newList = [...new Set([...currentList, ...ids])];
+    
+    await updateDoc(sessionRef, { deliveredOrderIds: newList });
+    
+    // Aggiorna locale
+    if (currentSession.value) {
+        currentSession.value.deliveredOrderIds = newList;
+    }
 
     showModal.value = false;
-    // L'ordine sparirà dalla lista grazie al listener realtime
   } catch (e) {
     console.error("Errore consegna:", e);
-    alert("Errore durante il salvataggio della consegna.");
+    alert("Errore durante il salvataggio.");
   }
 };
 
-// RAGGRUPPAMENTO ORDINI PER DATA
-const groupedOrders = computed(() => {
-  const groups: Record<string, any[]> = {};
-  orders.value.forEach(o => {
-    const data = o.dataConsegnaPrevista ? o.dataConsegnaPrevista : 'Data non def.';
-    if (!groups[data]) groups[data] = [];
-    groups[data].push(o);
-  });
-  // Ordina le chiavi (date)
-  return Object.keys(groups).sort().map(date => ({
-    date,
-    list: groups[date]
-  }));
-});
-
-// Helper formattazione data
+// HELPER UI
 const formatDateLabel = (dateStr: string) => {
     if (dateStr === 'Data non def.') return dateStr;
     const d = new Date(dateStr);
-    const today = new Date();
-    today.setHours(0,0,0,0);
-    d.setHours(0,0,0,0); // reset ore per confronto
-
+    const today = new Date(); today.setHours(0,0,0,0); d.setHours(0,0,0,0);
     if (d.getTime() === today.getTime()) return 'OGGI';
-    
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
     if (d.getTime() === tomorrow.getTime()) return 'DOMANI';
-
     return new Date(dateStr).toLocaleDateString('it-IT', { weekday: 'short', day: '2-digit', month: 'long' });
 };
 
-onMounted(() => {
-  loadUsers();
-  loadOrders();
-  if (selectedDriverId.value) checkActiveSession();
+// GROUPED ORDERS
+const groupedOrders = computed(() => {
+  const groups: Record<string, any[]> = {};
+  orders.value.forEach(o => {
+    const data = o.dataConsegnaPrevista || 'Data non def.';
+    if (!groups[data]) groups[data] = [];
+    groups[data].push(o);
+  });
+  
+  return Object.keys(groups).sort().map(date => ({
+    date,
+    // FIX: Aggiunto '|| []' per garantire a TypeScript che l'argomento non sia mai undefined
+    ddtGroups: raggruppaPerDdt(groups[date] || []) 
+  }));
 });
 
-onUnmounted(() => {
-  if (unsubscribeOrders) unsubscribeOrders();
-  if (timerInterval) clearInterval(timerInterval);
-});
-
-// Watcher per cambio driver
-const onDriverChange = () => {
-    localStorage.setItem('lastDriverId', selectedDriverId.value);
-    checkActiveSession();
+const isGroupDelivered = (group: any) => {
+    // Se almeno un ordine del gruppo è stato consegnato (sono aggiornati insieme)
+    return group.items.some((i: any) => currentSession.value?.deliveredOrderIds?.includes(i.id));
 };
+
+onMounted(() => { loadUsers(); loadOrders(); if (selectedDriverId.value) checkActiveSession(); });
+onUnmounted(() => { if (unsubscribeOrders) unsubscribeOrders(); if (timerInterval) clearInterval(timerInterval); });
+const onDriverChange = () => { localStorage.setItem('lastDriverId', selectedDriverId.value); checkActiveSession(); };
 </script>
 
 <template>
@@ -266,23 +296,11 @@ const onDriverChange = () => {
         </div>
 
         <div class="flex gap-2">
-          <select 
-            v-model="selectedDriverId" 
-            @change="onDriverChange"
-            :disabled="!!currentSession"
-            class="flex-1 bg-gray-800 text-white text-sm rounded-lg border border-gray-600 px-3 py-2 outline-none focus:border-amber-400 disabled:opacity-50"
-          >
+          <select v-model="selectedDriverId" @change="onDriverChange" :disabled="!!currentSession" class="flex-1 bg-gray-800 text-white text-sm rounded-lg border border-gray-600 px-3 py-2 outline-none focus:border-amber-400 disabled:opacity-50">
             <option value="" disabled>Seleziona Autista</option>
-            <option v-for="u in users" :key="u.id" :value="u.id">
-              {{ u.ragioneSociale || u.email }}
-            </option>
+            <option v-for="u in users" :key="u.id" :value="u.id">{{ u.firstName }} {{ u.lastName }}</option>
           </select>
-
-          <button 
-            @click="toggleSession"
-            class="px-4 py-2 rounded-lg font-bold text-sm shadow flex items-center gap-2 transition-all active:scale-95"
-            :class="currentSession ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-amber-400 hover:bg-amber-400 text-white'"
-          >
+          <button @click="toggleSession" class="px-4 py-2 rounded-lg font-bold text-sm shadow flex items-center gap-2 transition-all active:scale-95" :class="currentSession ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-amber-400 hover:bg-amber-400 text-white'">
             <component :is="currentSession ? StopIcon : PlayIcon" class="w-5 h-5" />
             {{ currentSession ? 'STOP' : 'START' }}
           </button>
@@ -291,16 +309,13 @@ const onDriverChange = () => {
     </header>
 
     <main class="max-w-md mx-auto p-4 space-y-6">
-      
       <div v-if="loading" class="text-center py-10 text-gray-400">Caricamento spedizioni...</div>
-      
       <div v-else-if="orders.length === 0" class="text-center py-20 bg-white rounded-xl border-2 border-dashed border-gray-300">
          <TruckIcon class="w-12 h-12 text-gray-300 mx-auto mb-2"/>
          <p class="text-gray-500 font-bold">Nessuna spedizione programmata.</p>
       </div>
 
       <div v-else v-for="group in groupedOrders" :key="group.date">
-        
         <div class="sticky top-[105px] z-40 bg-gray-100/95 backdrop-blur py-2 mb-2 flex items-center gap-2 border-b border-gray-200 text-gray-500">
           <CalendarIcon class="w-4 h-4" />
           <h3 class="font-bold text-sm uppercase tracking-wide">{{ formatDateLabel(group.date) }}</h3>
@@ -308,27 +323,38 @@ const onDriverChange = () => {
 
         <div class="space-y-3">
           <div 
-            v-for="order in group.list" 
-            :key="order.id"
-            @click="openDeliveryModal(order)"
+            v-for="ddt in group.ddtGroups" 
+            :key="ddt.uniqueKey"
+            @click="openDeliveryModal(ddt)"
             class="bg-white rounded-xl p-4 shadow-sm border border-gray-200 active:bg-blue-50 transition-colors cursor-pointer relative overflow-hidden group"
+            :class="{ 'opacity-40 grayscale pointer-events-none': isGroupDelivered(ddt) }"
           >
             <div class="absolute left-0 top-0 bottom-0 w-1.5" :class="currentSession ? 'bg-amber-400' : 'bg-gray-300'"></div>
             
             <div class="flex justify-between items-start pl-2">
               <div>
-                <p class="text-[10px] text-gray-400 font-bold uppercase mb-0.5">{{ order.commessa || order.codice }}</p>
-                <h4 class="text-lg font-bold text-gray-900 leading-tight">{{ order.cliente }}</h4>
+                <div class="flex items-center gap-2 mb-1">
+                    <span v-if="ddt.isDdt" class="text-[10px] bg-gray-100 text-gray-600 px-1.5 py-0.5 rounded border border-gray-200 font-bold flex items-center gap-1">
+                        <DocumentTextIcon class="w-3 h-3"/> DDT #{{ ddt.number }}
+                    </span>
+                    <span v-else class="text-[10px] text-gray-400 font-bold uppercase">ORDINE SINGOLO</span>
+                </div>
+                
+                <h4 class="text-lg font-bold text-gray-900 leading-tight">{{ ddt.cliente }}</h4>
                 
                 <div class="flex items-center gap-1 mt-1 text-gray-500 text-xs">
                   <MapPinIcon class="w-3 h-3 text-gray-400" />
-                  <span class="truncate max-w-[200px]">{{ order.indirizzoConsegna || 'Indirizzo non specificato' }}</span>
+                  <span class="truncate max-w-[200px]">{{ ddt.indirizzo || 'Indirizzo non specificato' }}</span>
+                </div>
+                
+                <div class="mt-2 text-[10px] text-gray-400 line-clamp-1">
+                    Ref: <span v-for="(item, idx) in ddt.items" :key="item.id">{{ item.commessa || item.codice }}<span v-if="idx < ddt.items.length-1">, </span></span>
                 </div>
               </div>
 
               <div class="flex flex-col items-end gap-1">
                 <div class="bg-gray-100 text-gray-600 text-[10px] font-bold px-2 py-1 rounded border border-gray-200">
-                   {{ order.colli || 1 }} Colli
+                   {{ ddt.colliTotali }} Colli
                 </div>
                 <ChevronRightIcon class="w-5 h-5 text-gray-300 group-hover:text-blue-500" />
               </div>
@@ -339,9 +365,7 @@ const onDriverChange = () => {
             </div>
           </div>
         </div>
-
       </div>
-
     </main>
 
     <DeliveryModal 
@@ -350,6 +374,5 @@ const onDriverChange = () => {
       @close="showModal = false"
       @confirm="handleConfirmDelivery"
     />
-
   </div>
 </template>

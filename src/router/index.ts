@@ -54,6 +54,11 @@ const router = createRouter({
       path: '/Teaser',
       name: 'Teaser',
       component: () => import('../views/TeaserView.vue')
+    },
+    {
+      path: '/admin/settings',
+      name: 'admin-settings',
+      component: () => import('../views/AdminSettings.vue')
     }
   ]
 });

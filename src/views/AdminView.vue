@@ -921,7 +921,7 @@ onUnmounted(() => {
                       </h3>
                     </div>
                   </div>
-                  <button v-if="ddt.url" @click="apriDdt(ddt.url!)" class="text-xs bg-white border border-gray-300 hover:border-blue-400 hover:text-blue-600 px-4 py-2 rounded-full font-bold transition-all shadow-sm flex items-center gap-2">
+                  <button v-if="ddt.url" @click="apriDdt(ddt.url!)" class="text-xs bg-amber-400 border border-amber-500 hover:bg-amber-300 hover:text-amber-950 px-4 py-2 rounded-full font-bold transition-all shadow-sm flex items-center gap-2">
                     APRI DDT
                   </button>
                 </div>
