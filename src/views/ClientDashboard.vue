@@ -355,7 +355,7 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
           :class="activeTab === 'PRODUZIONE' ? 'bg-amber-400 text-amber-950 shadow-lg shadow-amber-200' : 'bg-white text-gray-500 hover:bg-gray-100'">
           <CogIcon class="h-5 w-5" />
           PRODUZIONE
-          <span v-if="ordiniInProduzione.length" class="ml-1 px-1.5 py-0.5 rounded-full text-[10px] border" :class="activeTab === 'PRODUZIONE' ? 'bg-black/10 text-amber-950 border-transparent' : 'bg-gray-100 text-gray-600 border-gray-200'">{{ ordiniInProduzione.length }}</span>
+          <span v-if="ordiniInProduzione.length" class="ml-1 px-1.5 py-0.5 rounded-full text-[10px] border" :class="activeTab === 'PRODUZIONE' ? 'bg-white/20 text-amber-950 border-transparent' : 'bg-gray-100 text-gray-600 border-gray-200'">{{ ordiniInProduzione.length }}</span>
         </button>
 
         <button @click="activeTab = 'SPEDIZIONI'" 
@@ -386,10 +386,7 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
               <div class="flex flex-col items-start">
                 <h3 class="font-bold text-xl text-gray-900 leading-tight">{{ p.commessa || 'Senza Nome' }}</h3>
                 <div class="mt-2 flex flex-col items-start gap-2">
-                  <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase border" 
-                        :class="getStatusStyling(p.stato).badge">
-                    {{ getStatusLabel(p.stato) }}
-                  </span>
+                  
                   <div v-if="p.sommarioPreventivo" class="flex flex-col gap-1">
                     <span v-for="(item, idx) in p.sommarioPreventivo" :key="idx" 
                           class="text-[10px] bg-gray-50 px-2 py-1 rounded border text-gray-600">
@@ -400,28 +397,35 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
               </div>
             </div>
 
-            <div class="flex flex-col items-end gap-3 w-full md:w-auto">
-              <div class="flex items-center gap-6 justify-between w-full md:w-auto">
-                <div class="text-right">
-                  <div class="text-xl font-bold font-heading text-gray-600">{{ (p.totaleScontato || p.totaleImponibile || 0).toFixed(2) }} €</div>
-                  <div class="text-xs text-gray-600">Importo netto</div>
-                </div>
+            <div class="flex flex-col items-end gap-2 w-full md:w-auto">
+  
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase border" 
+                    :class="getStatusStyling(p.stato).badge">
+                {{ getStatusLabel(p.stato) }}
+              </span>
 
-                <div class="flex gap-2">
-                   <button @click="vaiAlBuilder(p.codice)" class="border border-gray-300 text-gray-600 px-4 py-2 rounded-full font-bold text-xs hover:bg-gray-50 h-full">
-                    APRI
-                  </button>
-                </div>
+              <div class="text-right my-1">
+                <div class="text-xl font-bold font-heading text-gray-600">{{ (p.totaleScontato || p.totaleImponibile || 0).toFixed(2) }} €</div>
+                <div class="text-xs text-gray-600">Importo netto</div>
               </div>
 
-              <button
-                v-if="p.stato === 'QUOTE_READY'"
-                @click="openConfirmModal(p)" 
-                class="w-full text-black bg-amber-400 hover:bg-amber-300 px-8 py-2 rounded-full font-bold text-xs shadow-sm flex justify-center items-center gap-2 animate-pulse transition-transform active:scale-95"
-              >
-                <CheckCircleIcon class="h-5 w-5" />
-                CONFERMA PREVENTIVO
-              </button>
+              <div class="flex items-center gap-2">
+                  
+                  <button
+                    v-if="p.stato === 'QUOTE_READY'"
+                    @click="openConfirmModal(p)" 
+                    class="text-black bg-amber-400 hover:bg-amber-300 px-4 py-2 rounded-full font-bold text-xs shadow-sm flex justify-center items-center gap-1 animate-pulse transition-transform active:scale-95 whitespace-nowrap"
+                  >
+                    <CheckCircleIcon class="h-4 w-4" />
+                    CONFERMA PREVENTIVO
+                  </button>
+
+                  <button @click="vaiAlBuilder(p.codice)" class="border border-gray-300 text-gray-600 px-5 py-2 rounded-full font-bold text-xs hover:bg-gray-50 whitespace-nowrap">
+                    APRI
+                  </button>
+
+              </div>
+
             </div>
           </div>
         </div>
@@ -434,23 +438,20 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
           class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-[2rem] shadow-lg border border-white/80 transition-all duration-500 ease-spring hover:-translate-y-1 hover:scale-[1.02] hover:shadow-xl flex flex-col md:flex-row justify-between items-center gap-4 cursor-pointer">
             <div class="flex items-center gap-4 w-full md:w-auto">
               <div class="h-14 w-14 rounded-full flex items-center justify-center shrink-0 
-            bg-opacity-100 backdrop-blur 
-            border-2 border-white/20 
-            shadow-[inset_0_0_15px_rgba(255,255,255,0.1)] 
-            ring-1 ring-black/5" 
-     :class="getStatusStyling(p.stato).iconBg">
-  <component :is="getStatusStyling(p.stato).icon" class="w-8 h-8 drop-shadow-sm" />
-</div>
+                bg-opacity-100 backdrop-blur 
+                border-2 border-white/20 
+                shadow-[inset_0_0_15px_rgba(255,255,255,0.1)] 
+                ring-1 ring-black/5" 
+                :class="getStatusStyling(p.stato).iconBg">
+                <component :is="getStatusStyling(p.stato).icon" class="w-8 h-8 drop-shadow-sm" />
+              </div>
               <div class="flex flex-col items-start">
                 <h3 class="font-bold text-xl text-gray-900 leading-tight">{{ p.commessa || 'Senza Nome' }}</h3>
                 <div v-if="p.dataConsegnaPrevista" class="mt-2 flex items-center gap-1.5 px-3 py-1 bg-stone-200 border border-stone-300 rounded shadow-sm">
-                    <TruckIcon class="h-4 w-4 Prevista il" /> <span class="text-xs font-bold text-black uppercase">Prevista il {{ formatDateShort(p.dataConsegnaPrevista) }}</span>
+                    <TruckIcon class="h-4 w-4" /> <span class="text-xs font-bold text-black uppercase">Prevista il {{ formatDateShort(p.dataConsegnaPrevista) }}</span>
                 </div>
                 <div class="mt-2 flex flex-col items-start gap-2">
-                  <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase border" 
-                        :class="getStatusStyling(p.stato).badge">
-                    {{ getStatusLabel(p.stato) }}
-                  </span>
+                  
                   <div v-if="p.sommarioPreventivo" class="flex flex-col gap-1">
                     <span v-for="(item, idx) in p.sommarioPreventivo" :key="idx" 
                           class="text-[10px] bg-gray-50 px-2 py-1 rounded border text-gray-600">
@@ -461,17 +462,17 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
               </div>
             </div>
 
-            <div class="flex flex-col items-end gap-3 w-full md:w-auto">
-              <div class="flex items-center gap-6 justify-between w-full md:w-auto">
-                <div class="text-right">
+            <div class="flex flex-col items-end gap-2 w-full md:w-auto">
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase border" 
+                        :class="getStatusStyling(p.stato).badge">
+                    {{ getStatusLabel(p.stato) }}
+              </span>
+                <div class="text-right my-1">
                   <div class="text-xl font-bold font-heading text-gray-600">{{ (p.totaleScontato || p.totaleImponibile || 0).toFixed(2) }} €</div>
                   <div class="text-xs text-gray-600">Importo netto</div>
                 </div>
-                <button @click="vaiAlBuilder(p.codice)" class="border border-gray-300 text-gray-600 px-4 py-2 rounded-full font-bold text-xs hover:bg-gray-50 h-full">
-                  APRI
-                </button>
-              </div>
-              <button
+                <div class="flex items-center gap-2">
+                <button
                 v-if="['WAITING_SIGN', 'WAITING_FAST'].includes(p.stato)"
                 @click="gestisciAzioneOrdine(p)"
                 class="w-full text-amber-950 bg-amber-400 hover:bg-amber-300 px-12 py-2 rounded-full font-bold text-xs shadow-sm flex justify-center items-center gap-2 animate-pulse transition-transform active:scale-95"
@@ -479,6 +480,11 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
                 <CheckCircleIcon class="h-5 w-5" />
                 {{ p.stato === 'WAITING_FAST' ? 'ACCETTA ORDINE' : 'FIRMA ORDINE' }}
               </button>
+              <button @click="vaiAlBuilder(p.codice)" class="border border-gray-300 text-gray-600 px-4 py-2 rounded-full font-bold text-xs hover:bg-gray-50 h-full">
+                  APRI
+                </button>
+              </div>
+
             </div>
           </div>
         </div>
@@ -496,14 +502,11 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
               </div>    
               <div class="flex flex-col items-start">
                 <h3 class="font-bold text-xl text-gray-900 leading-tight">{{ p.commessa || 'Senza Nome' }}</h3>
-                <div v-if="p.dataConsegnaPrevista" class="mt-2 flex items-center gap-1.5 px-3 py-1 bg-amber-400 border border-amber-200 rounded shadow-sm">
-                    <TruckIcon class="h-4 w-4 text-amber-950" /> <span class="text-xs font-bold text-amber-950 uppercase">Prevista il {{ formatDateShort(p.dataConsegnaPrevista) }}</span>
+                <div v-if="p.dataConsegnaPrevista" class="mt-2 flex items-center gap-1.5 px-3 py-1 bg-stone-200 border border-stone-300 rounded shadow-sm">
+                  <TruckIcon class="h-4 w-4" /> <span class="text-xs font-bold text-black uppercase">Prevista il {{ formatDateShort(p.dataConsegnaPrevista) }}</span>
                 </div>
                 <div class="mt-2 flex flex-col items-start gap-2">
-                  <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase border" 
-                        :class="getStatusStyling(p.stato).badge">
-                    {{ getStatusLabel(p.stato) }}
-                  </span>
+                  
                   <div v-if="p.sommarioPreventivo" class="flex flex-col gap-1">
                     <span v-for="(item, idx) in p.sommarioPreventivo" :key="idx" 
                           class="text-[10px] bg-gray-50 px-2 py-1 rounded border text-gray-600">
@@ -513,8 +516,12 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
                 </div>
               </div>
             </div>
-            <div class="flex items-center gap-6 w-full md:w-auto justify-between md:justify-end">
-              <div class="text-right">
+            <div class="flex flex-col items-end gap-2 w-full md:w-auto">
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase border" 
+                :class="getStatusStyling(p.stato).badge">
+                {{ getStatusLabel(p.stato) }}
+              </span>
+              <div class="text-right my-1">
                 <div class="text-xl font-bold font-heading text-gray-600">{{ (p.totaleScontato || p.totaleImponibile || 0).toFixed(2) }} €</div>
                 <div class="text-xs text-gray-600">Importo netto</div>
               </div>
@@ -540,14 +547,11 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
 </div>
               <div class="flex flex-col items-start">
                 <h3 class="font-bold text-xl text-gray-900 leading-tight">{{ p.commessa || 'Senza Nome' }}</h3>
-                <div v-if="p.dataConsegnaPrevista" class="mt-2 flex items-center gap-1.5 px-3 py-1 bg-amber-400 border border-amber-200 rounded shadow-sm">
-                    <TruckIcon class="h-4 w-4 text-amber-950" /> <span class="text-xs font-bold text-amber-950 uppercase">Prevista il {{ formatDateShort(p.dataConsegnaPrevista) }}</span>
+                <div v-if="p.dataConsegnaPrevista" class="mt-2 flex items-center gap-1.5 px-3 py-1 bg-stone-200 border border-stone-300 rounded shadow-sm">
+                  <TruckIcon class="h-4 w-4" /> <span class="text-xs font-bold text-black uppercase">Prevista il {{ formatDateShort(p.dataConsegnaPrevista) }}</span>
                 </div>
                 <div class="mt-2 flex flex-col items-start gap-2">
-                  <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase border" 
-                        :class="getStatusStyling(p.stato).badge">
-                    {{ getStatusLabel(p.stato) }}
-                  </span>
+                  
                   <div v-if="p.sommarioPreventivo" class="flex flex-col gap-1">
                     <span v-for="(item, idx) in p.sommarioPreventivo" :key="idx" 
                           class="text-[10px] bg-gray-50 px-2 py-1 rounded border text-gray-600">
@@ -559,28 +563,26 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
             </div>
             <div class="mt-2 flex flex-col items-start gap-2">
             </div>
-            <div class="flex flex-col items-end gap-2 w-full md:w-auto justify-center">
-              
-              <div class="flex items-center gap-4">
-                <div class="text-right">
+            <div class="flex flex-col items-end gap-2 w-full md:w-auto">
+                <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase border" 
+                    :class="getStatusStyling(p.stato).badge">
+                    {{ getStatusLabel(p.stato) }}
+                </span>                
+                <div class="text-right my-1">
                   <div class="text-xl font-bold font-heading text-gray-600">{{ (p.totaleScontato || p.totaleImponibile || 0).toFixed(2) }} €</div>
                   <div class="text-xs text-gray-600">Importo netto</div>
                 </div>
-                <button @click="vaiAlBuilder(p.codice)" 
-                        class="border border-gray-300 text-gray-600 px-3 py-2 rounded font-bold text-xs hover:bg-gray-50 h-[34px] whitespace-nowrap shrink-0">
-                  APRI
-                </button>
-              </div>
-
-              <button 
+                <div class="flex items-center gap-2">
+                <button 
                   v-if="p.stato === 'DELIVERY' && p.fic_ddt_url"
                   @click="apriDdt(p.fic_ddt_url)"
                   class="w-full text-amber-950 bg-amber-400 hover:bg-amber-300 px-12 py-2 rounded-full font-bold text-xs shadow-sm flex justify-center items-center gap-2 transition-transform active:scale-95"
-              >
+                  >
                   <DocumentTextIcon class="h-5 w-5" />
                   VEDI DDT
-              </button>
-
+                </button>
+                <button @click="vaiAlBuilder(p.codice)" class="border border-gray-300 text-gray-600 px-4 py-2 rounded-full font-bold text-xs hover:bg-gray-50">APRI</button>
+              </div>             
             </div>
           </div>
         </div>

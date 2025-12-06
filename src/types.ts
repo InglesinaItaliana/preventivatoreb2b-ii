@@ -118,84 +118,84 @@ export interface PreventivoDocumento {
 // --- CONFIGURAZIONE CONDIVISA COLORI E TESTI ---
 export const STATUS_DETAILS: Record<StatoPreventivo, { label: string, badge: string, iconBg: string, darkBadge: string, hoverBadge:string }> = {
   'DRAFT': { 
-    label: 'BOZZA', 
+    label: 'BOZZE', 
     badge: 'bg-gray-100 text-gray-500 border-gray-200', 
     iconBg: 'bg-gray-100 text-gray-500', 
     darkBadge: 'bg-gray-500 text-gray-100',
     hoverBadge: 'hover:bg-gray-200'
   },
   'PENDING_VAL': { 
-    label: 'PREVENTIVO DA QUOTARE', 
-    badge: 'bg-orange-100 text-orange-500 border-orange-200 hover:bg-orange-200', 
-    iconBg: 'bg-orange-100 text-orange-500', 
-    darkBadge: 'bg-orange-500 text-orange-100 hover:bg-orange-600',
-    hoverBadge: 'hover:bg-orange-200'
+    label: 'PREVENTIVI DA QUOTARE', 
+    badge: 'bg-amber-400 text-amber-950 border-amber-500 hover:bg-amber-300', 
+    iconBg: 'bg-amber-400 text-amber-950', 
+    darkBadge: 'bg-amber-400 text-amber-950 hover:bg-amber-300',
+    hoverBadge: 'hover:bg-amber-300'
   },
   'QUOTE_READY': { 
-    label: 'PREVENTIVO QUOTATO', 
+    label: 'PREVENTIVI QUOTATI', 
     badge: 'bg-stone-200 text-stone-500 border-stone-200', 
     iconBg: 'bg-stone-200 text-stone-500', 
     darkBadge: 'bg-stone-500 text-stone-100',
     hoverBadge: 'hover:bg-stone-200'
   },
   'ORDER_REQ': { 
-    label: 'ORDINE DA ACCETTARE', 
-    badge: 'bg-cyan-100 text-cyan-500 border-cyan-200', 
-    iconBg: 'bg-cyan-100 text-cyan-500', 
-    darkBadge: 'bg-cyan-500 text-cyan-100',
-    hoverBadge: 'hover:bg-cyan-200'
+    label: 'ORDINI DA ACCETTARE', 
+    badge: 'bg-amber-400 text-amber-950 border-amber-500 hover:bg-amber-300', 
+    iconBg: 'bg-amber-400 text-amber-950', 
+    darkBadge: 'bg-amber-400 text-amber-950 hover:bg-amber-300',
+    hoverBadge: 'hover:bg-amber-300'
   },
   'WAITING_FAST': { 
-    label: 'ORDINE IN ATTESA FIRMA DEL CLIENTE', 
+    label: 'ORDINI IN ATTESA FIRMA DEL CLIENTE', 
     badge: 'bg-stone-200 text-stone-500 border-stone-200', 
     iconBg: 'bg-stone-200 text-stone-500', 
     darkBadge: 'bg-stone-500 text-stone-100',
     hoverBadge: 'hover:bg-stone-200'
   },
   'WAITING_SIGN': { 
-    label: 'ORDINE IN ATTESA FIRMA DEL CLIENTE', 
+    label: 'ORDINI IN ATTESA FIRMA DEL CLIENTE', 
     badge: 'bg-stone-200 text-stone-500 border-stone-200', 
     iconBg: 'bg-stone-200 text-stone-500', 
     darkBadge: 'bg-stone-500 text-stone-100',
     hoverBadge: 'hover:bg-stone-200'
   },
   'SIGNED': { 
-    label: 'ORDINE DA METTERE IN PRODUZIONE', 
-    badge: 'bg-amber-100 text-amber-800 border-amber-200', 
-    iconBg: 'bg-amber-100 text-amber-800', 
-    darkBadge: 'bg-amber-800 text-amber-100',
-    hoverBadge: 'hover:bg-amber-200'
+    label: 'ORDINI DA METTERE IN PRODUZIONE', 
+    badge: 'bg-amber-400 text-amber-950 border-amber-500 hover:bg-amber-300', 
+    iconBg: 'bg-amber-400 text-amber-950', 
+    darkBadge: 'bg-amber-400 text-amber-950 hover:bg-amber-300',
+    hoverBadge: 'hover:bg-amber-300'
   },
   'IN_PRODUZIONE': { 
-    label: 'ORDINE IN PRODUZIONE', 
-    badge: 'bg-amber-100 text-amber-800 border-amber-200', 
-    iconBg: 'bg-amber-100 text-amber-800', 
-    darkBadge: 'bg-amber-800 text-amber-100',
-    hoverBadge: 'hover:bg-amber-200'
+    label: 'ORDINI IN PRODUZIONE', 
+    badge: 'bg-amber-400 text-amber-950 border-amber-500 hover:bg-amber-300', 
+    iconBg: 'bg-amber-400 text-amber-950', 
+    darkBadge: 'bg-amber-400 text-amber-950 hover:bg-amber-300',
+    hoverBadge: 'hover:bg-amber-300'
   },
   'READY': { 
-    label: 'ORDINO PRONTO', 
-    badge: 'bg-emerald-100 text-emerald-600 border-emerald-200', 
-    iconBg: 'bg-emerald-100 text-emerald-600', 
-    darkBadge: 'bg-emerald-600 text-emerald-100',
-    hoverBadge: 'hover:bg-emerald-200'
+    label: 'ORDINI PRONTI', 
+    badge: 'bg-amber-400 text-amber-950 border-amber-500 hover:bg-amber-300', 
+    iconBg: 'bg-amber-400 text-amber-950', 
+    darkBadge: 'bg-amber-400 text-amber-950 hover:bg-amber-300',
+    hoverBadge: 'hover:bg-amber-300'
   },
   'DELIVERY': { 
-    label: 'SPEDIZIONE PROGRAMMATA', 
-    badge: 'bg-emerald-100 text-emerald-600 border-emerald-200', 
-    iconBg: 'bg-emerald-100 text-emerald-600', 
-    darkBadge: 'bg-emerald-600 text-emerald-100',
-    hoverBadge: 'hover:bg-emerald-200'
+    label: 'SPEDIZIONI PROGRAMMATE', 
+    badge: 'bg-amber-400 text-amber-950 border-amber-500 hover:bg-amber-300', 
+    iconBg: 'bg-amber-400 text-amber-950', 
+    darkBadge: 'bg-amber-400 text-amber-950 hover:bg-amber-300',
+    hoverBadge: 'hover:bg-amber-300'
   },
   'DELIVERED': { 
-    label: 'CONSEGNATO', 
-    badge: 'bg-emerald-100 text-emerald-800 border-emerald-200', 
-    iconBg: 'bg-emerald-100 text-emerald-800', 
-    darkBadge: 'bg-emerald-800 text-emerald-100',
-    hoverBadge: 'hover:bg-emerald-200'
+    label: 'CONSEGNATI', 
+    badge: 'bg-amber-400 text-amber-950 border-amber-500 hover:bg-amber-300', 
+    iconBg: 'bg-amber-400 text-amber-950', 
+    darkBadge: 'bg-amber-400 text-amber-950 hover:bg-amber-300',
+    hoverBadge: 'hover:bg-amber-300'
   },
   'REJECTED': { 
-    label: 'ANNULLATO', 
+    label: 'ANNULLATI', 
     badge: 'bg-red-100 text-red-700 border-red-200', 
     iconBg: 'bg-red-100 text-red-600', 
     darkBadge: 'bg-red-700 text-white',

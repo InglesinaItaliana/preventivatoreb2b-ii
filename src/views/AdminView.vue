@@ -29,7 +29,6 @@ import {
   DocumentTextIcon,
   XCircleIcon,
   CogIcon,
-  CurrencyEuroIcon,
   ShoppingCartIcon,
   UserIcon,
   CubeIcon,
@@ -67,7 +66,7 @@ const iconMap: Record<string, any> = {
 const activeView = ref<'CLIENTI' | 'COMMESSE'>('COMMESSE');
 // Aggiornato tipo per includere le nuove viste
 const activeCategory = ref<'PREVENTIVI' | 'ORDINI' | 'PRODUZIONE' | 'SPEDIZIONI'>('ORDINI');
-const filtroPeriodo = ref<'TUTTO' | 'CORRENTE' | 'SCORSO'>('CORRENTE');
+const filtroPeriodo = ref<'TUTTO' | 'CORRENTE' | 'SCORSO'>('TUTTO');
 const showArchive = ref(false); // Stato per il modale archivio
 
 // Calcolo conteggi
@@ -326,7 +325,7 @@ const confermaOrdinePronto = async (p: any) => {
 
 // --- HIGHLIGHTS ---
 const globalStats = computed(() => {
-  const stats = { da_validare: 0, richieste_ord: 0, in_produzione: 0, signed : 0, totale_valore_aperto: 0 };
+  const stats = { da_validare: 0, richieste_ord: 0, in_produzione: 0, signed : 0, productisready: 0 };
   const now = new Date();
   const currentMonth = now.getMonth();
   const currentYear = now.getFullYear();
@@ -348,10 +347,7 @@ const globalStats = computed(() => {
     if (st === 'PENDING_VAL') stats.da_validare++;
     if (st === 'ORDER_REQ') stats.richieste_ord++;
     if (st === 'SIGNED') stats.signed++; 
-    
-    if (['SIGNED', 'IN_PRODUZIONE', 'READY'].includes(st)) {
-      stats.totale_valore_aperto += (p.totaleScontato || p.totaleImponibile || p.totale || 0);
-    }
+    if (st === 'READY') stats.productisready++; 
   });
 
   return stats;
@@ -438,21 +434,21 @@ const getActionData = (p: any) => {
   const st = p.stato;
   
   if (st === 'PENDING_VAL') 
-    return { text: 'QUOTA E ACCETTA', class: 'text-orange-500 bg-orange-100 border-orange-200 hover:bg-orange-100 animate-pulse', action: () => apriEditor(p.codice), icon: DocumentTextIcon };
+    return { text: 'QUOTA E ACCETTA', class: 'text-amber-950 border-amber-500 bg-amber-400 rounded-full hover:bg-amber-300 animate-pulse', action: () => apriEditor(p.codice), icon: DocumentTextIcon };
   
   if (st === 'ORDER_REQ') 
-    return { text: 'CONTROLLA E ACCETTA', class: 'text-cyan-600 bg-cyan-50 border-cyan-200 hover:bg-cyan-100 animate-pulse', action: () => apriEditor(p.codice), icon: DocumentTextIcon };
+    return { text: 'CONTROLLA E ACCETTA', class: 'text-amber-950 border-amber-500 bg-amber-400 rounded-full hover:bg-amber-300 animate-pulse', action: () => apriEditor(p.codice), icon: DocumentTextIcon };
 
   if (st === 'SIGNED')
-    return { text: 'AVVIA PRODUZIONE', class: 'text-yellow-800 border-yellow-200 bg-yellow-100  hover:bg-yellow-200', action: () => confermaProduzione(p), icon: CogIcon };
+    return { text: 'AVVIA PRODUZIONE', class: 'text-amber-950 border-amber-500 bg-amber-400 rounded-full hover:bg-amber-300', action: () => confermaProduzione(p), icon: CogIcon };
     
   if (st === 'IN_PRODUZIONE')
-    return { text: 'ORDINE PRONTO', class: 'text-yellow-800 border-yellow-200 bg-yellow-100  hover:bg-yellow-200', action: () => ordinePronto(p), icon: CubeIcon };
+    return { text: 'ORDINE PRONTO', class: 'text-amber-950 border-amber-500 bg-amber-400 rounded-full hover:bg-amber-300', action: () => ordinePronto(p), icon: CubeIcon };
 
   if (st === 'DELIVERY')
     return { 
       text: 'VEDI DDT', 
-      class: 'text-emerald-600 bg-emerald-100 border-emerald-200 hover:bg-emerald-200', 
+      class: 'text-amber-950 border-amber-500 bg-amber-400  hover:bg-amber-300 rounded-full', 
       // Apre il PDF del DDT se disponibile, altrimenti apre l'editor
       action: () => p.fic_ddt_url ? window.open(p.fic_ddt_url, '_blank') : apriEditor(p.codice), 
       icon: DocumentTextIcon 
@@ -588,12 +584,18 @@ onUnmounted(() => {
         <div class="flex items-center gap-4">
           <div>
             <p class="text-lg font-medium text-gray-800 leading-none">Inglesina Italiana Srl</p>
-            <h1 class="text-5xl font-bold font-heading text-gray-900">P.O.P.S. Dashboard</h1>
+            <div class="relative inline-block">
+              <h1 class="relative z-10 text-6xl font-bold font-heading text-gray-900">P.O.P.S. Dashboard</h1>
+              <div class="absolute bottom-2 left-0 w-full h-8 bg-amber-400 rounded-sm -z-0 animate-marker"></div>
+            </div>
           </div>
         </div>
         <div class="flex items-center gap-3"><br>
           <span class="text-xs text-gray-400 animate-pulse hidden md:block">Live Sync</span>
-          <select v-model="filtroPeriodo" class="bg-white border border-gray-200 text-sm font-bold text-gray-700 rounded-lg px-3 py-2 outline-none hover:bg-stone-100 focus:border-yellow-400 cursor-pointer shadow-sm">
+          <button @click="showArchive = true" class="bg-white hover:bg-gray-50 border border-gray-200 text-gray-600 px-3 py-2 rounded-full font-bold shadow-sm flex items-center gap-2 transition-transform active:scale-95 text-xs">
+            <ArchiveBoxIcon class="h-5 w-5 text-gray-600" /> ARCHIVIO
+          </button>
+          <select v-model="filtroPeriodo" class="bg-white border border-gray-200 text-sm font-bold text-gray-700 rounded-full px-3 py-2 outline-none hover:bg-stone-100 focus:border-amber-400 cursor-pointer shadow-sm">
             <option value="TUTTO">Tutto</option>
             <option value="CORRENTE">Mese Corrente</option>
             <option value="SCORSO">Mese Scorso</option>
@@ -602,99 +604,91 @@ onUnmounted(() => {
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-yellow-100 cursor-pointer">
-          <div class="h-14 w-14 rounded-full flex items-center justify-center bg-yellow-100">
-            <CurrencyEuroIcon class="h-8 w-8 text-yellow-600" />
+        <div class="bg-white p-5 rounded-[2rem] shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-amber-400 cursor-pointer">
+          <div class="h-14 w-14 rounded-full flex items-center justify-center bg-amber-400">
+            <DocumentTextIcon class="h-8 w-8 text-amber-950" />
           </div>
           <div>
-            <div class="text-xs font-bold text-gray-500 uppercase">Valore Ordini</div>
-            <div class="text-2xl font-bold font-heading text-gray-900">€ {{ globalStats.totale_valore_aperto.toLocaleString('it-IT', {maximumFractionDigits: 0}) }}</div>
-          </div>
-        </div>
-        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-orange-100 cursor-pointer">
-          <div class="h-14 w-14 rounded-full flex items-center justify-center bg-orange-100">
-            <DocumentTextIcon class="h-8 w-8 text-orange-500" />
-          </div>
-          <div>
-            <div class="text-xs font-bold text-gray-400 uppercase">Preventivi da quotare</div>
+            <div class="text-xs font-bold text-gray-500 uppercase">Da quotare</div>
             <div class="text-2xl font-bold text-gray-900">{{ globalStats.da_validare }}</div>
           </div>
         </div>
-        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-cyan-100 cursor-pointer">
-          <div class="h-14 w-14 rounded-full flex items-center justify-center bg-cyan-100">
-            <ShoppingCartIcon class="h-8 w-8 text-cyan-500" />
+        <div class="bg-white p-5 rounded-[2rem] shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-amber-400 cursor-pointer">
+          <div class="h-14 w-14 rounded-full flex items-center justify-center bg-amber-400">
+            <ShoppingCartIcon class="h-8 w-8 text-amber-950" />
           </div>
           <div>
-            <div class="text-xs font-bold text-gray-400 uppercase">Ordini da accettare</div>
+            <div class="text-xs font-bold text-gray-500 uppercase">Da accettare</div>
             <div class="text-2xl font-bold text-gray-900">{{ globalStats.richieste_ord }}</div>
           </div>
         </div>
-        <div class="bg-white p-5 rounded-xl shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-emerald-100 cursor-pointer">
-          <div class="h-14 w-14 rounded-full flex items-center justify-center bg-emerald-100">
-            <ChevronDoubleRightIcon class="h-8 w-8 text-emerald-500" />
+        <div class="bg-white p-5 rounded-[2rem] shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-amber-400 cursor-pointer">
+          <div class="h-14 w-14 rounded-full flex items-center justify-center bg-amber-400">
+            <ChevronDoubleRightIcon class="h-8 w-8 text-amber-950" />
           </div>
           <div>
-            <div class="text-xs font-bold text-gray-400 uppercase">Da mettere in produzione</div>
+            <div class="text-xs font-bold text-gray-500 uppercase">Da mettere in produzione</div>
             <div class="text-2xl font-bold text-gray-900">{{ globalStats.signed }}</div>
+          </div>
+        </div>
+        <div class="bg-white p-5 rounded-[2rem] shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-amber-400 cursor-pointer">
+          <div class="h-14 w-14 rounded-full flex items-center justify-center bg-amber-400">
+            <CubeIcon class="h-8 w-8 text-amber-950" />
+          </div>
+          <div>
+            <div class="text-xs font-bold text-gray-500 uppercase">Da mettere in consegna</div>
+            <div class="text-2xl font-bold font-heading text-gray-900">{{ globalStats.productisready}}</div>
           </div>
         </div>
       </div>
 
-      <div class="flex flex-col md:flex-row border-b border-gray-200 mb-6 justify-between items-end gap-4">
+      <div class="flex flex-col md:flex-row border-gray-200 justify-between items-center gap-4">
         
-        <div class="flex overflow-x-auto">
-          <button @click="activeCategory = 'PREVENTIVI'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative whitespace-nowrap flex items-center gap-2" :class="activeCategory === 'PREVENTIVI' ? 'text-gray-900 border-b-4 border-yellow-400' : 'text-gray-400 hover:text-gray-600'">
+        <div class="flex overflow-x-auto gap-2 p-4 -ml-4">
+          <button @click="activeCategory = 'PREVENTIVI'" class="px-6 py-3 rounded-full font-bold text-xl transition-all flex items-center gap-2 whitespace-nowrap active:scale-95" :class="activeCategory === 'PREVENTIVI' ? 'bg-amber-400 text-amber-950 shadow-lg shadow-amber-200' : 'bg-white text-gray-500 hover:bg-gray-100'">
             <DocumentTextIcon class="h-4 w-4" />
             PREVENTIVI
             <span v-if="categoryCounts.PREVENTIVI" class="ml-2 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[10px] border">{{ categoryCounts.PREVENTIVI }}</span>
           </button>
-          <button @click="activeCategory = 'ORDINI'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative whitespace-nowrap flex items-center gap-2" :class="activeCategory === 'ORDINI' ? 'text-gray-900 border-b-4 border-yellow-400' : 'text-gray-400 hover:text-gray-600'">
+          <button @click="activeCategory = 'ORDINI'" class="px-6 py-3 rounded-full font-bold text-xl transition-all flex items-center gap-2 whitespace-nowrap active:scale-95" :class="activeCategory === 'ORDINI' ? 'bg-amber-400 text-amber-950 shadow-lg shadow-amber-200' : 'bg-white text-gray-500 hover:bg-gray-100'">
             <ShoppingCartIcon class="h-4 w-4" />
             ORDINI
             <span v-if="categoryCounts.ORDINI" class="ml-2 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[10px] border">{{ categoryCounts.ORDINI }}</span>
           </button>
-          <button @click="activeCategory = 'PRODUZIONE'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative whitespace-nowrap flex items-center gap-2" :class="activeCategory === 'PRODUZIONE' ? 'text-gray-900 border-b-4 border-yellow-400' : 'text-gray-400 hover:text-gray-600'">
+          <button @click="activeCategory = 'PRODUZIONE'" class="px-6 py-3 rounded-full font-bold text-xl transition-all flex items-center gap-2 whitespace-nowrap active:scale-95" :class="activeCategory === 'PRODUZIONE' ? 'bg-amber-400 text-amber-950 shadow-lg shadow-amber-200' : 'bg-white text-gray-500 hover:bg-gray-100'">
             <CogIcon class="h-4 w-4" />
             PRODUZIONE
             <span v-if="categoryCounts.PRODUZIONE" class="ml-2 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[10px] border">{{ categoryCounts.PRODUZIONE }}</span>
           </button>
-           <button @click="activeCategory = 'SPEDIZIONI'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative whitespace-nowrap flex items-center gap-2" :class="activeCategory === 'SPEDIZIONI' ? 'text-gray-900 border-b-4 border-yellow-400' : 'text-gray-400 hover:text-gray-600'">
+           <button @click="activeCategory = 'SPEDIZIONI'" class="px-6 py-3 rounded-full font-bold text-xl transition-all flex items-center gap-2 whitespace-nowrap active:scale-95" :class="activeCategory === 'SPEDIZIONI' ? 'bg-amber-400 text-amber-950 shadow-lg shadow-amber-200' : 'bg-white text-gray-500 hover:bg-gray-100'">
             <TruckIcon class="h-4 w-4" />
             SPEDIZIONI
             <span v-if="categoryCounts.SPEDIZIONI" class="ml-2 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[10px] border">{{ categoryCounts.SPEDIZIONI }}</span>
           </button>
         </div>
+
         <ArchiveModal :show="showArchive" :isAdmin="true" @close="showArchive = false" />
 
-        <button 
-          @click="showArchive = true"
-          class="fixed bottom-6 left-6 z-40 bg-gray-800 hover:bg-gray-700 text-white rounded-full p-4 shadow-2xl flex items-center justify-center transition-transform hover:scale-110 active:scale-95 group"
-          title="Apri Archivio"
-        >
-          <ArchiveBoxIcon class="h-7 w-7 group-hover:text-yellow-400 transition-colors" />
-          <span class="absolute left-full ml-3 bg-gray-900 text-white text-xs font-bold px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
-            Archivio
-          </span>
-        </button>
-        <div class="flex items-center gap-2 bg-gray-100 p-1 rounded-lg mb-2">
+        <div class="flex items-center gap-2 bg-gray-100 p-1 rounded-[2rem] shrink-0">
           <span class="text-[10px] font-bold text-gray-400 px-2 uppercase">Raggruppa per:</span>
-          <button @click="activeView = 'CLIENTI'" class="px-3 py-1 rounded text-xs font-bold transition-all" :class="activeView === 'CLIENTI' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'">
+          <button @click="activeView = 'CLIENTI'" class="px-3 py-1 rounded-full text-xs font-bold transition-all" :class="activeView === 'CLIENTI' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'">
             Clienti
           </button>
-          <button @click="activeView = 'COMMESSE'" class="px-3 py-1 rounded text-xs font-bold transition-all" :class="activeView === 'COMMESSE' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'">
+          <button @click="activeView = 'COMMESSE'" class="px-3 py-1 rounded-full text-xs font-bold transition-all" :class="activeView === 'COMMESSE' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'">
             Stato
           </button>
         </div>
+
       </div>
 
       <div v-if="loading" class="text-center py-20 text-gray-400">Caricamento...</div>
 
       <div v-else-if="activeView === 'CLIENTI'" class="space-y-4">
-                <div v-for="gruppo in clientiRaggruppati" :key="gruppo.nome" class="bg-white rounded-xl shadow-sm border overflow-hidden" :class="gruppo.priorita > 0 ? 'border-2 border-orange-300 ring-1 ring-orange-200' : 'border-gray-200'">
+                <div v-for="gruppo in clientiRaggruppati" :key="gruppo.nome" class="bg-white rounded-[2rem] shadow-sm border overflow-hidden" :class="gruppo.priorita > 0 ? 'border-2 border-amber-300 ring-1 ring-amber-200' : 'border-gray-200'">
 
           <div @click="toggleCliente(gruppo.nome)" class="p-5 cursor-pointer hover:bg-gray-50 flex flex-col md:flex-row justify-between items-center gap-4">
             <div class="flex items-center gap-4 w-full md:w-auto">
-              <div class="h-12 w-12 rounded-full flex items-center justify-center text-xl font-bold text-white shadow-sm shrink-0 font-heading" :class="gruppo.priorita > 0 ? 'bg-orange-500' : 'bg-gray-800'">
+              <div class="h-12 w-12 rounded-full flex items-center justify-center text-xl font-bold text-white shadow-sm shrink-0 font-heading" :class="gruppo.priorita > 0 ? 'bg-amber-400' : 'bg-gray-800'">
                 <UserIcon class="h-6 w-6" />
               </div>
               <div>
@@ -746,7 +740,7 @@ onUnmounted(() => {
                   <tr v-for="p in statoGruppo.lista" :key="p.id" 
                         class="transition-colors border-b border-gray-50 last:border-0 relative"
                         :class="[
-                          isOrderDimmed(p) ? 'opacity-30 grayscale pointer-events-none bg-gray-50' : 'hover:bg-yellow-50',
+                          isOrderDimmed(p) ? 'opacity-30 grayscale pointer-events-none bg-gray-50' : 'hover:bg-amber-50',
                           isOrderSelected(p) ? 'bg-blue-50/80' : 'odd:bg-gray-50'
                         ]"
                     >                    
@@ -756,7 +750,7 @@ onUnmounted(() => {
                                 <div v-else class="h-5 w-5 rounded-full border-2 border-gray-300 hover:border-blue-400"></div>
                             </div>
                       <div class="text-xs text-gray-500 mt-1">DATA: {{ formatDate(getEffectiveDate(p)) }} • COMMESSA: {{ p.commessa || 'Nessun Rif.' }}</div>
-                      <div v-if="p.dataConsegnaPrevista" class="flex items-center gap-1 mt-1 text-emerald-600 font-bold text-[10px] uppercase">
+                      <div v-if="p.dataConsegnaPrevista" class="flex items-center gap-1 mt-1 text-amber-950 font-bold text-[10px] uppercase">
                           <TruckIcon class="h-3 w-3" />
                           <span>Consegna: {{ formatDateShort(p.dataConsegnaPrevista) }}</span>
                       </div>
@@ -792,26 +786,23 @@ onUnmounted(() => {
       </div>
 
       <div v-else-if="activeView === 'COMMESSE'" class="space-y-4">
-        <div v-for="gruppo in preventiviPerStato" :key="gruppo.stato" class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div v-for="gruppo in preventiviPerStato" :key="gruppo.stato" class="bg-white rounded-[2rem] shadow-sm border border-gray-200 overflow-hidden">
 
-          <div @click="toggleStato(gruppo.stato)" class="p-4 cursor-pointer hover:bg-gray-50 flex justify-between items-center border-l-4" :class="getStatusStyling(gruppo.stato).badge.replace('text-','border-').split(' ')[0]">
+          <div @click="toggleStato(gruppo.stato)" class="p-5 cursor-pointer hover:bg-gray-50 flex flex-col md:flex-row justify-between items-center gap-4">
             
-            <div class="flex items-center gap-3">
-                <component 
-                    :is="getStatusStyling(gruppo.stato).icon" 
-                    class="h-8 w-8" 
-                    :class="getStatusStyling(gruppo.stato).badge.split(' ')[1]" 
-                />
-
-              <span class="text-xl font-bold font-heading text-l uppercase" :class="getStatusStyling(gruppo.stato).badge.split(' ')[1]">
-                {{ getStatusLabel(gruppo.stato) }}
-              </span>
+            <div class="flex items-center gap-4 w-full md:w-auto">
+              <div class="h-12 w-12 rounded-full flex items-center justify-center text-xl font-bold shadow-sm shrink-0" 
+                   :class="getUiConfig(gruppo.stato).darkBadge">
+                <component :is="getStatusStyling(gruppo.stato).icon" class="h-6 w-6" />
+              </div>
               
-              <span class="px-2 py-0.5 rounded-full text-xs font-bold" :class="getUiConfig(gruppo.stato).darkBadge">
-                {{ gruppo.lista?.length || 0 }}
-              </span>            
+              <div>
+                <h2 class="text-lg font-bold text-gray-900 font-heading uppercase">{{ getStatusLabel(gruppo.stato) }}</h2>
+              
+              </div>
             </div>
-            <div class="text-current transform transition-transform" :class="statiEspansi.includes(gruppo.stato) ? 'rotate-180' : ''">▼</div>
+
+            <div class="text-gray-300 hidden md:block transform transition-transform" :class="statiEspansi.includes(gruppo.stato) ? 'rotate-180' : ''">▼</div>
           </div>
 
           <div v-if="statiEspansi.includes(gruppo.stato)" class="border-t border-gray-100 bg-gray-50 p-4 grid gap-3 animate-fade-in">
@@ -844,7 +835,7 @@ onUnmounted(() => {
               <span class="text-xs text-gray-500">• Rif. {{ p.commessa || 'Senza Nome' }}</span>
             </div>
             
-            <div v-if="p.dataConsegnaPrevista" class="mt-1 flex items-center gap-1 px-2 py-0.5 bg-emerald-100 border border-emerald-200 rounded text-emerald-800 w-fit">
+            <div v-if="p.dataConsegnaPrevista" class="mt-1 flex items-center gap-1 px-2 py-0.5 bg-amber-400 border border-amber-500 rounded text-amber-950 w-fit">
                 <TruckIcon class="h-3 w-3" />
                 <span class="text-[10px] font-bold uppercase">DA CONSEGNARE IL {{ formatDateShort(p.dataConsegnaPrevista) }}</span>
             </div>
@@ -866,7 +857,7 @@ onUnmounted(() => {
                        </div>
                        
                        <button @click.stop="apriEditor(p.codice)" 
-                               class="border border-gray-300 text-gray-600 px-3 py-2 rounded p-1.5 font-bold text-xs hover:bg-gray-50 h-[34px] whitespace-nowrap shrink-0"
+                               class="border border-gray-300 text-gray-600 px-3 py-2 rounded-full p-1.5 font-bold text-xs hover:bg-gray-50 h-[34px] whitespace-nowrap shrink-0"
                                title="Apri l'editor per visualizzare i dettagli">
                            APRI
                        </button>
@@ -881,7 +872,7 @@ onUnmounted(() => {
                         
                         <button 
                             @click="() => { if((p.colli || 1) > 1) { p.colli = (p.colli || 1) - 1; saveColli(p.id, p.colli); } }"
-                            class="w-8 h-full flex items-center justify-center text-gray-500 hover:text-red-500 transition-colors active:bg-gray-200"
+                            class="w-8 h-full flex items-center justify-center text-gray-400 hover:text-amber-400 transition-colors active:bg-gray-200"
                             title="Diminuisci"
                         >
                             <span class="text-lg font-bold leading-none mb-0.5">−</span>
@@ -898,7 +889,7 @@ onUnmounted(() => {
 
                         <button 
                             @click="() => { p.colli = (p.colli || 1) + 1; saveColli(p.id, p.colli); }"
-                            class="w-8 h-full flex items-center justify-center text-gray-500 hover:text-emerald-600 transition-colors active:bg-gray-200 "
+                            class="w-8 h-full flex items-center justify-center text-gray-400 hover:text-amber-400 transition-colors active:bg-gray-200 "
                             title="Aumenta"
                         >
                             <span class="text-lg font-bold leading-none mb-0.5">+</span>
@@ -912,7 +903,7 @@ onUnmounted(() => {
                       <div v-if="idOrdineInConferma === p.id" class="flex gap-1 h-full animate-fade-in">
                           <button 
                               @click.stop="confermaOrdinePronto(p)"
-                              class="bg-emerald-100 hover:bg-emerald-200 text-emerald-600 border border-emerald-200 font-bold text-[10px] px-12 rounded shadow-sm transition-colors h-full flex items-center"
+                              class="bg-green-100 hover:bg-green-200 text-green-600 border border-green-200 font-bold text-[10px] px-12 rounded shadow-sm transition-colors h-full flex items-center"
                               title="Conferma"
                           >
                               SÌ
@@ -968,7 +959,7 @@ onUnmounted(() => {
       <div class="bg-gray-900/95 backdrop-blur text-white px-4 py-3 md:px-6 md:py-4 rounded-2xl shadow-2xl flex flex-col md:flex-row items-center gap-3 md:gap-8 border border-gray-700/50 ring-1 ring-white/10 overflow-hidden">
         
         <div class="flex items-center gap-3 w-full md:w-auto overflow-hidden">
-          <div class="bg-blue-600 p-2 rounded-xl shadow-lg shadow-blue-900/20 shrink-0">
+          <div class="bg-blue-600 p-2 rounded-[2rem] shadow-lg shadow-blue-900/20 shrink-0">
             <TruckIcon class="h-5 w-5 md:h-6 md:w-6 text-white" />
           </div>
           <div class="min-w-0"> <div class="text-[10px] text-blue-300 font-bold uppercase tracking-wider">Spedizione per</div>
@@ -989,11 +980,11 @@ onUnmounted(() => {
         </div>
 
         <div class="flex gap-2 w-full md:w-auto mt-1 md:mt-0">
-          <button @click="annullaSpedizione" class="flex-1 md:flex-none px-4 py-2 md:px-6 md:py-3 rounded-xl text-xs font-bold text-gray-300 hover:bg-gray-800 transition-colors border border-gray-700 whitespace-nowrap">
+          <button @click="annullaSpedizione" class="flex-1 md:flex-none px-4 py-2 md:px-6 md:py-3 rounded-[2rem] text-xs font-bold text-gray-300 hover:bg-gray-800 transition-colors border border-gray-700 whitespace-nowrap">
             ANNULLA
           </button>
           
-          <button @click="avviaCreazioneDdt" class="flex-1 md:flex-none bg-blue-600 hover:bg-blue-500 text-white px-5 py-2 md:px-6 md:py-3 rounded-xl font-bold text-sm shadow-xl shadow-blue-900/40 transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-2 whitespace-nowrap">
+          <button @click="avviaCreazioneDdt" class="flex-1 md:flex-none bg-blue-600 hover:bg-blue-500 text-white px-5 py-2 md:px-6 md:py-3 rounded-[2rem] font-bold text-sm shadow-xl shadow-blue-900/40 transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-2 whitespace-nowrap">
             <span>CREA DDT</span>
             <ChevronDoubleRightIcon class="w-4 h-4" />
           </button>
