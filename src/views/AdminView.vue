@@ -25,7 +25,7 @@ import ArchiveModal from '../components/ArchiveModal.vue'; // Importa Modale
 import {
   PencilIcon,
   CheckCircleIcon,
-  ChevronDoubleRightIcon,
+  CalculatorIcon,
   DocumentTextIcon,
   XCircleIcon,
   CogIcon,
@@ -55,7 +55,7 @@ const iconMap: Record<string, any> = {
   'ORDER_REQ': ShoppingCartIcon,
   'WAITING_FAST': ShoppingCartIcon,
   'WAITING_SIGN': ShoppingCartIcon,
-  'SIGNED': ChevronDoubleRightIcon, //ChevronDoubleRightIcon,
+  'SIGNED': CalculatorIcon, //CalculatorIcon,
   'IN_PRODUZIONE': CogIcon,
   'READY': CubeIcon,
   'DELIVERY': TruckIcon,
@@ -619,6 +619,38 @@ const raggruppaPerDdt = (lista: any[]) => {
   });
 };
 
+const mostraDaQuotare = () => {
+  activeCategory.value = 'PREVENTIVI';
+  activeView.value = 'COMMESSE'; // Assicura che la vista sia per Stato
+  if (!statiEspansi.value.includes('PENDING_VAL')) {
+    statiEspansi.value.push('PENDING_VAL');
+  }
+};
+
+const mostraDaConfermare = () => {
+  activeCategory.value = 'ORDINI';
+  activeView.value = 'COMMESSE'; // Assicura che la vista sia per Stato
+  if (!statiEspansi.value.includes('ORDER_REQ')) {
+    statiEspansi.value.push('ORDER_REQ');
+  }
+};
+
+const mostraDaProdurre = () => {
+  activeCategory.value = 'PRODUZIONE';
+  activeView.value = 'COMMESSE'; // Assicura che la vista sia per Stato
+  if (!statiEspansi.value.includes('SIGNED')) {
+    statiEspansi.value.push('SIGNED');
+  }
+};
+
+const mostraDaSpedire = () => {
+  activeCategory.value = 'SPEDIZIONI';
+  activeView.value = 'COMMESSE'; // Assicura che la vista sia per Stato
+  if (!statiEspansi.value.includes('READY')) {
+    statiEspansi.value.push('READY');
+  }
+};
+
 onMounted(() => {
   caricaAnagrafica();
   caricaTutti();
@@ -659,7 +691,7 @@ onUnmounted(() => {
       </div>
 
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <div class="bg-white p-5 rounded-[2rem] shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-amber-400 cursor-pointer">
+        <div @click="mostraDaQuotare" class="bg-white p-5 rounded-[2rem] shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-amber-400 cursor-pointer">
           <div class="h-14 w-14 rounded-full flex items-center justify-center bg-amber-400">
             <DocumentTextIcon class="h-8 w-8 text-amber-950" />
           </div>
@@ -668,7 +700,7 @@ onUnmounted(() => {
             <div class="text-2xl font-bold text-gray-900">{{ globalStats.da_validare }}</div>
           </div>
         </div>
-        <div class="bg-white p-5 rounded-[2rem] shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-amber-400 cursor-pointer">
+        <div @click="mostraDaConfermare" class="bg-white p-5 rounded-[2rem] shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-amber-400 cursor-pointer">
           <div class="h-14 w-14 rounded-full flex items-center justify-center bg-amber-400">
             <ShoppingCartIcon class="h-8 w-8 text-amber-950" />
           </div>
@@ -677,16 +709,16 @@ onUnmounted(() => {
             <div class="text-2xl font-bold text-gray-900">{{ globalStats.richieste_ord }}</div>
           </div>
         </div>
-        <div class="bg-white p-5 rounded-[2rem] shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-amber-400 cursor-pointer">
+        <div @click="mostraDaProdurre" class="bg-white p-5 rounded-[2rem] shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-amber-400 cursor-pointer">
           <div class="h-14 w-14 rounded-full flex items-center justify-center bg-amber-400">
-            <ChevronDoubleRightIcon class="h-8 w-8 text-amber-950" />
+            <CalculatorIcon class="h-8 w-8 text-amber-950" />
           </div>
           <div>
             <div class="text-xs font-bold text-gray-500 uppercase">Da mettere in produzione</div>
             <div class="text-2xl font-bold text-gray-900">{{ globalStats.signed }}</div>
           </div>
         </div>
-        <div class="bg-white p-5 rounded-[2rem] shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-amber-400 cursor-pointer">
+        <div @click="mostraDaSpedire" class="bg-white p-5 rounded-[2rem] shadow-sm border border-gray-200 flex items-center gap-5 transition-colors hover:bg-amber-400 cursor-pointer">
           <div class="h-14 w-14 rounded-full flex items-center justify-center bg-amber-400">
             <CubeIcon class="h-8 w-8 text-amber-950" />
           </div>
@@ -852,8 +884,12 @@ onUnmounted(() => {
               </div>
               
               <div>
-                <h2 class="text-lg font-bold text-gray-900 font-heading uppercase">{{ getStatusLabel(gruppo.stato) }}</h2>
-              
+                <h2 class="text-lg font-bold text-gray-900 font-heading uppercase flex items-center gap-2">
+  {{ getStatusLabel(gruppo.stato) }}
+  <span class="bg-gray-100 text-gray-600 text-xs px-2.5 py-0.5 rounded-full border border-gray-200 font-sans shadow-sm">
+    {{ gruppo.lista.length }}
+  </span>
+</h2>              
               </div>
             </div>
 
@@ -1059,7 +1095,7 @@ onUnmounted(() => {
           
           <button @click="avviaCreazioneDdt" class="flex-1 md:flex-none bg-blue-600 hover:bg-blue-500 text-white px-5 py-2 md:px-6 md:py-3 rounded-[2rem] font-bold text-sm shadow-xl shadow-blue-900/40 transition-all hover:scale-105 active:scale-95 flex items-center justify-center gap-2 whitespace-nowrap">
             <span>CREA DDT</span>
-            <ChevronDoubleRightIcon class="w-4 h-4" />
+            <CalculatorIcon class="w-4 h-4" />
           </button>
         </div>
 
