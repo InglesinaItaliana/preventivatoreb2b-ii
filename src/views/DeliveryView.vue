@@ -252,16 +252,16 @@ const onDriverChange = () => {
 <template>
   <div class="min-h-screen bg-gray-100 font-sans pb-20">
     
-    <header class="bg-gray-900 text-white sticky top-0 z-50 shadow-md">
+    <header class="bg-white text-white sticky top-0 z-50 shadow-md">
       <div class="max-w-md mx-auto px-4 py-3">
         <div class="flex items-center justify-between mb-3">
-           <h1 class="text-xl font-bold font-heading flex items-center gap-2">
-             <TruckIcon class="w-6 h-6 text-yellow-400"/>
-             Logistica
-           </h1>
+          <div class="relative inline-block">
+              <h1 class="relative z-10 text-5xl font-bold font-heading text-gray-900">P.O.P.S. Consegne</h1>
+              <div class="absolute bottom-2 left-0 w-64 h-8 bg-amber-400 rounded-sm -z-0 animate-marker"></div>
+            </div>
            <div class="bg-gray-800 rounded px-2 py-1 border border-gray-700">
              <span class="text-xs text-gray-400 block leading-none">Tempo Viaggio</span>
-             <span class="font-mono text-xl font-bold text-yellow-400 tracking-wider leading-none">{{ timerString }}</span>
+             <span class="font-mono text-xl font-bold text-amber-400 tracking-wider leading-none">{{ timerString }}</span>
            </div>
         </div>
 
@@ -270,7 +270,7 @@ const onDriverChange = () => {
             v-model="selectedDriverId" 
             @change="onDriverChange"
             :disabled="!!currentSession"
-            class="flex-1 bg-gray-800 text-white text-sm rounded-lg border border-gray-600 px-3 py-2 outline-none focus:border-yellow-400 disabled:opacity-50"
+            class="flex-1 bg-gray-800 text-white text-sm rounded-lg border border-gray-600 px-3 py-2 outline-none focus:border-amber-400 disabled:opacity-50"
           >
             <option value="" disabled>Seleziona Autista</option>
             <option v-for="u in users" :key="u.id" :value="u.id">
@@ -281,7 +281,7 @@ const onDriverChange = () => {
           <button 
             @click="toggleSession"
             class="px-4 py-2 rounded-lg font-bold text-sm shadow flex items-center gap-2 transition-all active:scale-95"
-            :class="currentSession ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-green-500 hover:bg-green-600 text-white'"
+            :class="currentSession ? 'bg-red-500 hover:bg-red-600 text-white' : 'bg-amber-400 hover:bg-amber-400 text-white'"
           >
             <component :is="currentSession ? StopIcon : PlayIcon" class="w-5 h-5" />
             {{ currentSession ? 'STOP' : 'START' }}
@@ -313,7 +313,7 @@ const onDriverChange = () => {
             @click="openDeliveryModal(order)"
             class="bg-white rounded-xl p-4 shadow-sm border border-gray-200 active:bg-blue-50 transition-colors cursor-pointer relative overflow-hidden group"
           >
-            <div class="absolute left-0 top-0 bottom-0 w-1.5" :class="currentSession ? 'bg-yellow-400' : 'bg-gray-300'"></div>
+            <div class="absolute left-0 top-0 bottom-0 w-1.5" :class="currentSession ? 'bg-amber-400' : 'bg-gray-300'"></div>
             
             <div class="flex justify-between items-start pl-2">
               <div>
