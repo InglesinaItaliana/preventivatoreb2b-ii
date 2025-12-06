@@ -135,7 +135,7 @@ const submitBug = async () => {
         
         <div class="px-5 py-3 text-[10px] font-extrabold text-gray-400 uppercase tracking-widest">Strumenti Rapidi</div>
 
-        <button v-if="!isAdmin" @click="avviaNuovoPreventivo" class="flex items-center gap-4 w-full px-4 py-3.5 rounded-3xl hover:bg-amber-50 text-gray-600 hover:text-amber-600 transition-colors group">
+        <button v-if="!isAdmin" @click="avviaNuovoPreventivo" class="flex items-center gap-4 w-full px-4 py-3.5 rounded-3xl hover:bg-amber-50 text-gray-600 hover:text-amber-400 transition-colors group">
           <div class="bg-amber-400 p-2.5 rounded-2xl group-hover:bg-amber-300 group-hover:scale-110 transition-all duration-300 ease-spring">
             <PlusCircleIcon class="h-6 w-6 text-amber-950" />
           </div>
@@ -157,13 +157,13 @@ const submitBug = async () => {
 
         <template v-if="isAdmin">
           <div class="h-px bg-gray-100 my-2 mx-4"></div>
-          <div class="px-5 py-1 text-[10px] font-extrabold text-blue-400 uppercase tracking-widest">Amministrazione</div>
+          <div class="px-5 py-1 text-[10px] font-extrabold text-gray-400 uppercase tracking-widest">Amministrazione</div>
           
           <button 
             v-for="link in adminLinks" 
             :key="link.route"
             @click="navigateTo(link.route)"
-            class="flex items-center gap-4 w-full px-4 py-3 rounded-3xl hover:bg-gray-50 text-gray-600 hover:text-blue-600 transition-colors group"
+            class="flex items-center gap-4 w-full px-4 py-3 rounded-3xl hover:bg-gray-50 text-gray-600 hover:text-amber-400 transition-colors group"
           >
             <component :is="link.icon" class="h-5 w-5 opacity-60 group-hover:opacity-100 group-hover:scale-110 transition-all duration-300 ease-spring" />
             <span class="text-sm font-bold">{{ link.label }}</span>
@@ -206,8 +206,8 @@ const submitBug = async () => {
         </div>
 
         <div class="p-6 flex-1 overflow-y-auto bg-gray-50 space-y-6">
-          <div class="bg-blue-50 border border-blue-100 rounded-xl p-4 text-xs text-blue-900 flex gap-3">
-            <ComputerDesktopIcon class="h-5 w-5 shrink-0 text-blue-600" />
+          <div class="bg-amber-50 border border-amber-100 rounded-xl p-4 text-xs text-amber-900 flex gap-3">
+            <ComputerDesktopIcon class="h-5 w-5 shrink-0 text-amber-400" />
             <div>
               <p class="font-bold mb-1">Contesto Automatico:</p>
               <ul class="space-y-0.5 opacity-80 font-mono">

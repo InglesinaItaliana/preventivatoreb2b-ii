@@ -747,7 +747,7 @@ const aggiungiExtraAdmin = () => {
         
           <button 
           @click="vaiDashboard" 
-          class="fixed top-8 left-20 z-0 bg-white/90 backdrop-blur border border-gray-200 text-gray-500 hover:text-yellow-600 shadow-md transition-all p-2 rounded-full hover:shadow-lg hover:scale-110 active:scale-95" 
+          class="fixed top-8 left-20 z-0 bg-white/90 backdrop-blur border border-gray-200 text-gray-500 hover:text-amber-500 shadow-md transition-all p-2 rounded-full hover:shadow-lg hover:scale-110 active:scale-95" 
           title="Torna alla Dashboard"
         >
           <ChevronLeftIcon class="h-8 w-8" />         
@@ -764,7 +764,7 @@ const aggiungiExtraAdmin = () => {
                         v-model="searchClientQuery" 
                         @input="searchClients"
                         type="text" 
-                        class="w-full md:w-96 p-3 border-2 border-yellow-400 rounded-lg text-lg font-bold text-gray-800 placeholder-gray-300 focus:outline-none focus:ring-4 focus:ring-yellow-100"
+                        class="w-full md:w-96 p-3 border-2 border-amber-400 rounded-lg text-lg font-bold text-gray-800 placeholder-gray-300 focus:outline-none focus:ring-4 focus:ring-amber-100"
                         placeholder="Cerca Ragione Sociale..."
                         :disabled="!!clienteUID" 
                     >
@@ -776,7 +776,7 @@ const aggiungiExtraAdmin = () => {
                         v-for="client in suggestedClients" 
                         :key="client.id" 
                         @click="selectClient(client)"
-                        class="p-3 hover:bg-yellow-50 cursor-pointer border-b last:border-0 border-gray-50 transition-colors"
+                        class="p-3 hover:bg-amber-50 cursor-pointer border-b last:border-0 border-gray-50 transition-colors"
                     >
                         <div class="font-bold text-gray-800">{{ client.ragioneSociale }}</div>
                         <div class="text-xs text-gray-400">{{ client.email }}</div>
@@ -787,9 +787,10 @@ const aggiungiExtraAdmin = () => {
             <div v-else>
                 <p class="text-lg font-medium text-gray-800 leading-none">{{ nomeCliente }}</p>
             </div>
-
-            <h1 class="text-5xl font-bold font-heading text-gray-900">P.O.P.S. Commesse</h1>
-
+            <div class="relative inline-block">
+              <h1 class="relative z-10 text-6xl font-bold font-heading text-gray-900">P.O.P.S. Dashboard</h1>
+              <div class="absolute bottom-2 left-0 w-full h-8 bg-amber-400 rounded-sm -z-0 animate-marker"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -802,7 +803,7 @@ const aggiungiExtraAdmin = () => {
           Dati Commessa
         </h2>
           <div class="flex bg-gray-100 p-1 rounded-lg mb-4">
-            <button v-for="c in categorieGrigliaDisp" :key="c" @click="categoriaGriglia = c as Categoria" :disabled="isLocked" :class="categoriaGriglia === c ? 'bg-yellow-400 shadow text-black' : 'text-gray-00'" class="flex-1 py-2 text-xs font-bold rounded-md transition-all uppercase disabled:opacity-50">{{ c }}</button>
+            <button v-for="c in categorieGrigliaDisp" :key="c" @click="categoriaGriglia = c as Categoria" :disabled="isLocked" :class="categoriaGriglia === c ? 'bg-amber-400 shadow text-black' : 'text-gray-00'" class="flex-1 py-2 text-xs font-bold rounded-md transition-all uppercase disabled:opacity-50">{{ c }}</button>
           </div>
         <div class="flex flex-col lg:flex-row gap-4 items-start">
           <div class="flex-1 w-full flex flex-col justify-between">
@@ -812,7 +813,7 @@ const aggiungiExtraAdmin = () => {
                     v-model="riferimentoCommessa" 
                     :disabled="isLocked" 
                     type="text" 
-                    class="w-full p-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-yellow-400 focus:border-transparent outline-none transition-all" 
+                    class="w-full p-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition-all" 
                     placeholder="Riferimento Cantiere *"
                     ref="riferimentoCommessaInput"
                     @focus="scrollToTopOnFocus"
@@ -828,14 +829,14 @@ const aggiungiExtraAdmin = () => {
                     v-model="noteCliente" 
                     :disabled="isLocked" 
                     rows="1" 
-                    class="w-full p-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-yellow-400 focus:border-transparent outline-none transition-all resize-none" 
+                    class="w-full p-2.5 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-amber-400 focus:border-transparent outline-none transition-all resize-none" 
                     placeholder="Note..."
                     @focus="scrollToTopOnFocus"
                     >
                 </textarea>            
             </div>
-            <div v-if="noteCliente" class="flex items-center gap-1 mt-1 text-yellow-500 text-xs font-bold animate-pulse">
-                <InformationCircleIcon class="h-5 w-5 text-yellow-500" />         
+            <div v-if="noteCliente" class="flex items-center gap-1 mt-1 text-amber-400 text-xs font-bold animate-pulse">
+                <InformationCircleIcon class="h-5 w-5 text-amber-400" />         
                 La presenza di una nota richiede una validazione
             </div>
           </div>
@@ -846,7 +847,7 @@ const aggiungiExtraAdmin = () => {
                 <div class="flex gap-2 items-center">
                     <div class="relative border border-dashed border-gray-300 rounded-lg px-3 py-2 bg-gray-50 hover:bg-white transition-all text-center cursor-pointer flex-1" :class="isLocked ? 'opacity-50 pointer-events-none' : ''">
                         <input type="file" @change="uploadFile" :disabled="isLocked" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
-                        <span v-if="isUploading" class="text-xs text-yellow-600 font-bold">Caricamento...</span>
+                        <span v-if="isUploading" class="text-xs text-amber-400 font-bold">Caricamento...</span>
                         <span v-else class="text-xs text-gray-500">Carica File</span>
                     </div>
                     <div v-if="listaAllegati.length > 0" class="flex flex-wrap gap-1">
@@ -858,8 +859,8 @@ const aggiungiExtraAdmin = () => {
                 </div>
             </div>
             
-            <div v-if="listaAllegati.length > 0" class="flex items-center gap-1 mt-1 text-yellow-500 text-xs font-bold animate-pulse">
-                <InformationCircleIcon class="h-5 w-5 text-yellow-500" />         
+            <div v-if="listaAllegati.length > 0" class="flex items-center gap-1 mt-1 text-amber-400 text-xs font-bold animate-pulse">
+                <InformationCircleIcon class="h-5 w-5 text-amber-400" />         
                 Ci sono file in allegato
             </div>
           </div>
@@ -876,7 +877,7 @@ const aggiungiExtraAdmin = () => {
             <select v-if="dimensioneGriglia" v-model="finituraGriglia" :disabled="!finitureGrigliaDisp.length || isLocked" class="w-full p-2 border rounded mt-4 bg-white text-sm disabled:opacity-60"><option value="" disabled>Seleziona Finitura</option><option v-for="f in finitureGrigliaDisp" :key="f" :value="f">{{ f }}</option></select>
             <div v-if="categoriaGriglia === 'DUPLEX'" class="mt-4 animate-slide-in">
               <label class="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Fuseruolo</label>
-              <input v-model="fuseruolo" :disabled="isLocked" type="number" class="w-full p-2 border border-gray-300 rounded-md bg-white text-sm focus:ring-2 focus:ring-yellow-400 outline-none disabled:opacity-60" placeholder="Es. 20">
+              <input v-model="fuseruolo" :disabled="isLocked" type="number" class="w-full p-2 border border-gray-300 rounded-md bg-white text-sm focus:ring-2 focus:ring-amber-400 outline-none disabled:opacity-60" placeholder="Es. 20">
             </div>
         </div>
       </div>
@@ -885,7 +886,7 @@ const aggiungiExtraAdmin = () => {
         <div class="flex justify-between items-center border-b pb-2">
             <h2 class="font-bold text-lg font-heading text-gray-800">Canalino</h2>
             <label v-if="categoriaGriglia === 'DUPLEX'" class="flex items-center gap-2 text-[10px] font-bold text-black cursor-pointer px-2 py-1 rounded uppercase">
-              <input type="checkbox" v-model="copiaDuplex" :disabled="isLocked" class="rounded border-black text-yellow-400">
+              <input type="checkbox" v-model="copiaDuplex" :disabled="isLocked" class="rounded border-black text-amber-400">
               Copia
             </label>
         </div>
@@ -896,7 +897,7 @@ const aggiungiExtraAdmin = () => {
             <select v-if="dimensioneCanalino" v-model="finituraCanalino" :disabled="copiaDuplex || !finitureCanalinoDisp.length || isLocked" class="w-full p-2 border rounded bg-gray-50 mt-4 text-sm disabled:opacity-60"><option value="" disabled>Seleziona Finitura</option><option v-for="f in finitureCanalinoDisp" :key="f" :value="f">{{ f }}</option></select>
             <div class="mt-4 pt-2 border-t border-gray-200">
                 <label class="flex items-center space-x-2 cursor-pointer">
-                    <input type="checkbox" v-model="soloCanalino" :disabled="isLocked" class="rounded text-yellow-500 focus:ring-yellow-500 h-4 w-4">
+                    <input type="checkbox" v-model="soloCanalino" :disabled="isLocked" class="rounded text-amber-400 focus:ring-amber-400 h-4 w-4">
                     <span class="text-xs font-bold text-gray-700 uppercase">Solo Canalino (No Griglia)</span>
                 </label>
             </div>
@@ -906,8 +907,8 @@ const aggiungiExtraAdmin = () => {
       <div class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all p-5 space-y-4 h-full">
         <h2 class="font-bold text-lg border-b pb-2 font-heading text-gray-800">Telaio</h2>
           <div class="grid grid-cols-2 gap-4">
-            <div><input v-model.number="pannello.base" :disabled="isLocked" type="number" class="border p-2 rounded w-full text-center text-sm focus:ring-2 focus:ring-yellow-400 outline-none disabled:bg-gray-100" placeholder="Base (mm)"></div>
-            <div><input v-model.number="pannello.altezza" :disabled="isLocked" type="number" class="border p-2 rounded w-full text-center text-sm focus:ring-2 focus:ring-yellow-400 outline-none disabled:bg-gray-100" placeholder="Altezza (mm)"></div>
+            <div><input v-model.number="pannello.base" :disabled="isLocked" type="number" class="border p-2 rounded w-full text-center text-sm focus:ring-2 focus:ring-amber-400 outline-none disabled:bg-gray-100" placeholder="Base (mm)"></div>
+            <div><input v-model.number="pannello.altezza" :disabled="isLocked" type="number" class="border p-2 rounded w-full text-center text-sm focus:ring-2 focus:ring-amber-400 outline-none disabled:bg-gray-100" placeholder="Altezza (mm)"></div>
           </div>
 
           <div class="grid grid-cols-3 gap-2">
@@ -956,7 +957,7 @@ const aggiungiExtraAdmin = () => {
     <div ref="summarySectionRef" class="lg:col-span-2 bg-white/50 backdrop-blur-sm backdrop-saturate-150 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all flex flex-col min-h-[600px] overflow-hidden scroll-mt-24">
       <div v-if="isSaving" class="p-6 bg-gray-900/80 backdrop-blur-md text-white flex justify-center items-center h-[120px]">
           <span class="text-sm font-medium text-gray-400">Caricamento stato preventivo...</span>
-          <svg class="animate-spin h-5 w-5 text-yellow-400 ml-3" viewBox="0 0 24 24">
+          <svg class="animate-spin h-5 w-5 text-amber-400 ml-3" viewBox="0 0 24 24">
             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
           </svg>
@@ -968,7 +969,7 @@ const aggiungiExtraAdmin = () => {
             <div class="text-xs text-gray-400 uppercase tracking-widest font-bold">Totale Ordine</div>
             <div class="flex items-baseline gap-3">
               <template v-if="isAdmin || isStandard || ['QUOTE_READY', 'SIGNED', 'IN_PRODUZIONE', 'READY'].includes(statoCorrente)">
-                <div class="text-3xl font-heading font-bold text-yellow-400">{{ totaleFinale.toFixed(2) }} €</div>
+                <div class="text-3xl font-heading font-bold text-amber-400">{{ totaleFinale.toFixed(2) }} €</div>
                 <div v-if="scontoApplicato > 0" class="text-sm text-green-400 line-through opacity-60">{{ totaleImponibile.toFixed(2) }} €</div>
               </template>
               <div v-else class="text-xl font-bold text-gray-500">DA CALCOLARE</div>
@@ -993,15 +994,15 @@ const aggiungiExtraAdmin = () => {
                     <input 
                       type="date" 
                       v-model="dataConsegnaPrevista" 
-                      class="w-full bg-white border border-gray-200 rounded-lg px-2 py-2.5 text-sm font-bold text-gray-800 outline-none focus:ring-2 focus:ring-yellow-400 h-[46px]"
+                      class="w-full bg-white border border-gray-200 rounded-lg px-2 py-2.5 text-sm font-bold text-gray-800 outline-none focus:ring-2 focus:ring-amber-400 h-[46px]"
                     >
                   </div>
 
-                  <button @click="salvaPreventivo('CREA_ORDINE_ADMIN')" class="flex-1 bg-cyan-100 hover:bg-cyan-200 text-cyan-600 border border-cyan-200 px-12 py-2.5 rounded-lg font-bold shadow-md flex items-center justify-center gap-2 h-[46px] transition-all">
+                  <button @click="salvaPreventivo('CREA_ORDINE_ADMIN')" class="flex-1 bg-amber-400 hover:bg-amber-300 text-amber-950 border border-amber-500 px-12 py-2.5 rounded-lg font-bold shadow-md flex items-center justify-center gap-2 h-[46px] transition-all">
                       <ShoppingCartIcon class="h-5 w-5"/> ORDINE
                   </button>
 
-                  <button @click="salvaPreventivo('CREA_PREVENTIVO_ADMIN')" class="flex-1 bg-orange-100 hover:bg-orange-200 text-orange-600 border border-orange-200 px-12 py-2.5 rounded-lg font-bold shadow-sm flex items-center justify-center gap-2 h-[46px] transition-all">
+                  <button @click="salvaPreventivo('CREA_PREVENTIVO_ADMIN')" class="flex-1 bg-amber-400 hover:bg-amber-300 text-amber-950 border border-amber-500 px-12 py-2.5 rounded-lg font-bold shadow-sm flex items-center justify-center gap-2 h-[46px] transition-all">
                       <DocumentTextIcon class="h-5 w-5"/> PREVENTIVO
                   </button>
                   
@@ -1013,18 +1014,18 @@ const aggiungiExtraAdmin = () => {
                <div v-if="statoCorrente === 'ORDER_REQ'" class="flex flex-col md:flex-row items-end md:items-center gap-6">
                 <span class="text-xl text-gray-400 uppercase font-bold hidden xl:block">RICHIEDI CONFERMA D'ORDINE</span>
                 <div class="flex flex-col gap-1">
-                  <label class="text-[10px] uppercase font-bold text-yellow-500 flex items-center gap-1">
+                  <label class="text-[10px] uppercase font-bold text-amber-400 flex items-center gap-1">
                    Data Consegna Prevista
                   </label>
-                  <input type="date" v-model="dataConsegnaPrevista" class="bg-gray-800 text-white border border-gray-600 rounded px-3 py-2 text-sm font-bold outline-none native-date-icon-fix transition-all duration-300" :class="{'focus:border-yellow-400': !dateErrorAnim, 'ring-4 ring-red-500 bg-red-900/50 border-red-500 animate-pulse': dateErrorAnim }">
+                  <input type="date" v-model="dataConsegnaPrevista" class="bg-gray-800 text-white border border-gray-600 rounded px-3 py-2 text-sm font-bold outline-none native-date-icon-fix transition-all duration-300" :class="{'focus:border-amber-400': !dateErrorAnim, 'ring-4 ring-red-500 bg-red-900/50 border-red-500 animate-pulse': dateErrorAnim }">
                 </div>
                 <div class="flex gap-2">
-                  <button @click="salvaPreventivo('ADMIN_FIRMA')" class="bg-cyan-100 hover:bg-cyan-200 text-cyan-500 flex items-center px-6 py-3 rounded font-bold text-lg shadow-lg shadow-cyan-600/20">ACCETTA ORDINE</button>
+                  <button @click="salvaPreventivo('ADMIN_FIRMA')" class="bg-amber-400 hover:bg-amber-300 text-amber-950 flex items-center px-6 py-3 rounded font-bold text-lg shadow-lg shadow-amber-600/20">ACCETTA ORDINE</button>
                 </div>
               </div>
               
               <div v-else-if="statoCorrente === 'PENDING_VAL' || statoCorrente === 'DRAFT'" class="flex gap-2">
-                <button @click="salvaPreventivo('ADMIN_VALIDA')" class="bg-yellow-400 hover:bg-yellow-300 text-yellow-900 flex items-center px-12 py-3 rounded font-bold text-xl">VALIDA E INVIA</button>
+                <button @click="salvaPreventivo('ADMIN_VALIDA')" class="bg-amber-400 hover:bg-amber-300 text-amber-950 flex items-center px-12 py-3 rounded font-bold text-xl">VALIDA PREVENTIVO</button>
               </div>
 
               <div v-else>
@@ -1037,20 +1038,20 @@ const aggiungiExtraAdmin = () => {
                <template v-if="statoCorrente === 'DRAFT'">
                 <button @click="eliminaPreventivo()" class="bg-red-200 flex items-center gap-2 hover:bg-red-300 text-red-600 px-4 py-3 rounded-lg font-bold shadow-lg">ELIMINA</button>
                 <button @click="salvaPreventivo()" class="bg-green-200 flex items-center gap-2 hover:bg-green-300 text-green-600 px-4 py-3 rounded-lg font-bold shadow-lg">SALVA COME PREVENTIVO</button>
-                <button v-if="isStandard" @click="salvaPreventivo('ORDINA')" class="bg-yellow-400 flex items-center gap-2 hover:bg-yellow-300 text-yellow-900 px-12 py-3 rounded-lg font-bold shadow-lg"><ShoppingCartIcon class="h-7 w-7 text-yellow-900" /> ORDINA</button>
+                <button v-if="isStandard" @click="salvaPreventivo('ORDINA')" class="bg-amber-400 flex items-center gap-2 hover:bg-amber-300 text-amber-900 px-12 py-3 rounded-lg font-bold shadow-lg"><ShoppingCartIcon class="h-7 w-7 text-amber-900" /> ORDINA</button>
                 <div v-else class="flex flex-col items-end">
-                  <button @click="salvaPreventivo('RICHIEDI_VALIDAZIONE')" class="bg-yellow-400 hover:bg-yellow-500 text-black px-6 py-3 rounded-lg font-bold shadow-lg">INVIA PER VALIDAZIONE</button>
+                  <button @click="salvaPreventivo('RICHIEDI_VALIDAZIONE')" class="bg-amber-400 hover:bg-amber-400 text-amber-950 px-6 py-3 rounded-lg font-bold shadow-lg">INVIA PER VALIDAZIONE</button>
                   <span class="text-[10px] text-gray-400 mt-1">Richiesta verifica tecnica</span>
                 </div>
               </template>
 
               <div v-else-if="statoCorrente === 'PENDING_VAL'" class="text-right">
-                <span class="text-yellow-500 font-bold text-2xl flex items-center gap-2">IN ATTESA DI VALIDAZIONE</span>
+                <span class="text-400 font-bold text-2xl flex items-center gap-2">IN ATTESA DI VALIDAZIONE</span>
               </div>
 
               <div v-else-if="statoCorrente === 'QUOTE_READY'" class="flex gap-3">
                 <button @click="sbloccaPerModifica()" class="bg-gray-700 text-white px-4 py-3 rounded-lg font-bold hover:bg-gray-600 text-sm">MODIFICA</button>
-                <button @click="salvaPreventivo('ORDINA')" class="bg-yellow-400 hover:bg-yellow-300 text-yellow-50 px-6 py-3 rounded-lg font-bold shadow-lg animate-pulse">CONFERMA ORDINE</button>
+                <button @click="salvaPreventivo('ORDINA')" class="bg-amber-400 hover:bg-amber-300 text-amber-950 px-6 py-3 rounded-lg font-bold shadow-lg animate-pulse">CONFERMA ORDINE</button>
               </div>
 
               <template v-else-if="['WAITING_FAST', 'WAITING_SIGN'].includes(statoCorrente)">
@@ -1068,7 +1069,7 @@ const aggiungiExtraAdmin = () => {
               </div>
 
               <div v-else class="text-right px-4">
-                <span class="text-yellow-500 font-bold text-2xl flex items-center gap-2">ORDINE IN LAVORAZIONE</span>
+                <span class="text-amber-400 font-bold text-2xl flex items-center gap-2">ORDINE IN LAVORAZIONE</span>
               </div>
             </template>
           </div>
@@ -1092,7 +1093,7 @@ const aggiungiExtraAdmin = () => {
               </tr>
             </thead>
             <tbody class="divide-y divide-gray-50">
-              <tr v-for="(r, idx) in preventivo" :key="r.id" class="hover:bg-yellow-50/30 transition-colors group">
+              <tr v-for="(r, idx) in preventivo" :key="r.id" class="hover:bg-amber-50/30 transition-colors group">
                 <td class="p-3 pl-5">
                   <div class="font-bold text-gray-900 text-sm">{{ r.descrizioneCompleta }}</div>
                   <div v-if="r.categoria !== 'EXTRA'" class="text-[10px] text-gray-500 uppercase mt-0.5 flex items-center gap-1">
@@ -1151,7 +1152,7 @@ const aggiungiExtraAdmin = () => {
             <label class="text-xs font-bold text-gray-500 uppercase mb-1 block">Aggiungi Extra / Lavorazione</label>
             
             <div class="mb-2">
-              <select @change="selezionaExtra" class="w-full p-2 border border-gray-300 rounded-md text-xs bg-white focus:ring-2 focus:ring-yellow-400 outline-none text-gray-600">
+              <select @change="selezionaExtra" class="w-full p-2 border border-gray-300 rounded-md text-xs bg-white focus:ring-2 focus:ring-amber-400 outline-none text-gray-600">
                 <option value="" selected>-- Seleziona da Listino (Opzionale) --</option>
                 <option v-for="item in listaExtra" :key="item.nome" :value="item.nome">
                   {{ item.nome }} ({{ item.prezzo.toFixed(2) }} €)
@@ -1194,7 +1195,7 @@ const aggiungiExtraAdmin = () => {
         </div>
         <div class="flex-1 overflow-y-auto p-4 space-y-3">
           <div v-for="ordine in storicoPreventivi" :key="ordine.id" @click="codiceRicerca = ordine.codice; caricaPreventivo(); mostraStorico = false;"
-            class="group border border-gray-200 rounded-lg p-4 hover:border-yellow-400 hover:bg-yellow-50 cursor-pointer transition-all shadow-sm relative overflow-hidden">
+            class="group border border-gray-200 rounded-lg p-4 hover:border-amber-400 hover:bg-amber-50 cursor-pointer transition-all shadow-sm relative overflow-hidden">
             <div class="absolute left-0 top-0 bottom-0 w-1.5" :class="{'bg-gray-300': !ordine.stato || ordine.stato === 'DRAFT', 'bg-orange-500': ordine.stato === 'PENDING_VAL', 'bg-green-500': ordine.stato === 'QUOTE_READY' || ordine.stato === 'SIGNED', 'bg-purple-500': ordine.stato === 'ORDER_REQ', 'bg-red-500': ordine.stato === 'REJECTED'}"></div>
             <div class="flex justify-between items-start mb-1 pl-3">
               <span class="font-bold text-lg text-gray-800 truncate">{{ ordine.commessa || 'Senza Nome' }}</span>
