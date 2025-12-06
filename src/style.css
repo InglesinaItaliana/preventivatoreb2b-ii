@@ -48,3 +48,18 @@ input[type=number] {
 .animation-delay-4000 {
   animation-delay: 4s;
 }
+/* Animazione "Tratto Evidenziatore" per Material 3 Expressive */
+@keyframes marker-breathe {
+  0%, 100% { 
+    transform: rotate(-2deg) scaleX(1) translateY(0);
+  }
+  50% { 
+    transform: rotate(-1deg) scaleX(1.05) translateY(-1px);
+  }
+}
+
+.animate-marker {
+  /* 4 secondi per un movimento molto lento e non distrattivo */
+  animation: marker-breathe 4s ease-in-out infinite;
+  transform-origin: center;
+}

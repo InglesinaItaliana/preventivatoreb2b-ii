@@ -253,16 +253,16 @@ const apriDdt = (url: string) => {
 
 const getStatusStyling = (stato: string) => {
   const styles: Record<string, any> = {
-    'DRAFT': { badge: 'bg-orange-100 text-orange-500 border-orange-200', icon: DocumentTextIcon, iconBg: 'bg-orange-100 text-orange-500' },
+    'DRAFT': { badge: 'bg-amber-400 text-black border-amber-200', icon: DocumentTextIcon, iconBg: 'bg-amber-400 text-black' },
     'PENDING_VAL': { badge: 'bg-stone-200 text-stone-700 border-stone-300', icon: DocumentTextIcon, iconBg: 'bg-stone-200 text-stone-600' },
-    'QUOTE_READY': { badge: 'bg-green-100 text-green-600 border-green-200', icon: DocumentTextIcon, iconBg: 'bg-green-100 text-green-600' },
+    'QUOTE_READY': { badge: 'bg-amber-400 text-black border-amber-200', icon: DocumentTextIcon, iconBg: 'bg-amber-400 text-amber-950' },
     'ORDER_REQ': { badge: 'bg-stone-200 text-stone-700 border-stone-300', icon: ShoppingCartIcon, iconBg: 'bg-stone-200 text-stone-600' },
-    'WAITING_FAST': { badge: 'bg-blue-50 text-blue-600 border-blue-100', icon: ShoppingCartIcon, iconBg: 'bg-blue-100 text-blue-600' },
-    'WAITING_SIGN': { badge: 'bg-blue-50 text-blue-600 border-blue-100', icon: ShoppingCartIcon, iconBg: 'bg-blue-100 text-blue-600' },
+    'WAITING_FAST': { badge: 'bg-amber-400 text-black border-amber-100', icon: ShoppingCartIcon, iconBg: 'bg-amber-400 text-black' },
+    'WAITING_SIGN': { badge: 'bg-amber-400 text-black border-amber-100', icon: ShoppingCartIcon, iconBg: 'bg-amber-400 text-black' },
     'SIGNED': { badge: 'bg-stone-200 text-stone-600 border-stone-300', icon: CogIcon, iconBg: 'bg-stone-200 text-stone-600' },
-    'IN_PRODUZIONE': { badge: 'bg-amber-300 text-black border-amber-400', icon: CogIcon, iconBg: 'bg-amber-300 text-black' },
+    'IN_PRODUZIONE': { badge: 'bg-amber-400 text-black border-amber-400', icon: CogIcon, iconBg: 'bg-amber-400 text-black' },
     'READY': { badge: 'bg-stone-200 text-stone-600 border-stone-300', icon: CubeIcon, iconBg: 'bg-stone-200 text-stone-600' },
-    'DELIVERY': { badge: 'bg-emerald-100 text-emerald-800 border-emerald-200', icon: CubeIcon, iconBg: 'bg-emerald-200 text-emerald-800' },
+    'DELIVERY': { badge: 'bg-amber-400 text-black border-amber-200', icon: CubeIcon, iconBg: 'bg-amber-400 text-black' },
     'REJECTED': { badge: 'bg-red-100 text-red-700 border-red-200', icon: XCircleIcon, iconBg: 'bg-red-100 text-red-600' },
   };
   return styles[stato] || styles['DRAFT'];
@@ -314,46 +314,56 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
   <div class="min-h-screen bg-gray-50/90 p-6 font-sans">
     <div class="max-w-5xl mx-auto">
 
-      <div class="flex flex-col md:flex-row justify-between items-start mb-8 gap-4">
+      <div class="flex flex-col md:flex-row justify-between items-start mb-12 gap-4">
         <div class="flex items-center gap-4">
           <div>
             <p class="text-lg font-medium text-gray-800 leading-none">{{ clientName }}</p>
-            <h1 class="text-6xl font-bold font-heading text-gray-900 mb-4">P.O.P.S. Dashboard</h1>
+            <div class="relative inline-block">
+              <h1 class="relative z-10 text-6xl font-bold font-heading text-gray-900">P.O.P.S. Dashboard</h1>
+              <div class="absolute bottom-2 left-0 w-full h-8 bg-amber-400 rounded-sm -z-0 animate-marker"></div>
+            </div>
           </div>
           
         </div>
 
         <div class="flex items-center gap-3 mt-4 md:mt-0">
-          <button @click="showArchive = true" class="bg-white hover:bg-gray-50 border border-gray-200 text-gray-600 px-3 py-2 rounded-lg font-bold shadow-sm flex items-center gap-2 transition-transform active:scale-95 text-xs">
+          <button @click="showArchive = true" class="bg-white hover:bg-gray-50 border border-gray-200 text-gray-600 px-3 py-2 rounded-full font-bold shadow-sm flex items-center gap-2 transition-transform active:scale-95 text-xs">
               <ArchiveBoxIcon class="h-5 w-5 text-gray-600" /> ARCHIVIO
           </button>
         </div>
       </div>
 
-      <div class="flex overflow-x-auto border-b border-gray-200 mb-6 gap-2">
-        
-        <button @click="activeTab = 'PREVENTIVI'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative flex items-center gap-2 whitespace-nowrap" :class="activeTab === 'PREVENTIVI' ? 'text-gray-600 border-b-4 border-amber-300' : 'text-gray-400 hover:text-gray-600'">
-          <DocumentTextIcon class="h-4 w-4" />
+      <div class="flex overflow-x-auto mb-4 gap-2 p-4 -ml-4">        
+        <button @click="activeTab = 'PREVENTIVI'" 
+          class="px-6 py-3 rounded-full font-bold text-xl transition-all flex items-center gap-2 whitespace-nowrap active:scale-95" 
+          :class="activeTab === 'PREVENTIVI' ? 'bg-amber-400 text-amber-950 shadow-lg shadow-amber-200' : 'bg-white text-gray-500 hover:bg-gray-100'">
+          <DocumentTextIcon class="h-5 w-5" />
           PREVENTIVI
-          <span v-if="preventiviInCorso.length" class="ml-2 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[10px]">{{ preventiviInCorso.length }}</span>
+          <span v-if="preventiviInCorso.length" class="ml-1 px-1.5 py-0.5 rounded-full text-[10px] border" :class="activeTab === 'PREVENTIVI' ? 'bg-white/20 text-amber-950 border-transparent' : 'bg-gray-100 text-gray-600 border-gray-200'">{{ preventiviInCorso.length }}</span>
         </button>
         
-        <button @click="activeTab = 'ORDINI'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative flex items-center gap-2 whitespace-nowrap" :class="activeTab === 'ORDINI' ? 'text-gray-600 border-b-4 border-amber-300' : 'text-gray-400 hover:text-gray-600'">
-          <ShoppingCartIcon class="h-4 w-4" />
+        <button @click="activeTab = 'ORDINI'" 
+          class="px-6 py-3 rounded-full font-bold text-xl transition-all flex items-center gap-2 whitespace-nowrap active:scale-95" 
+          :class="activeTab === 'ORDINI' ? 'bg-amber-400 text-amber-950 shadow-lg shadow-amber-200' : 'bg-white text-gray-500 hover:bg-gray-100'">
+          <ShoppingCartIcon class="h-5 w-5" />
           ORDINI
-          <span v-if="ordiniConfermati.length" class="ml-2 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[10px]">{{ ordiniConfermati.length }}</span>
+          <span v-if="ordiniConfermati.length" class="ml-1 px-1.5 py-0.5 rounded-full text-[10px] border" :class="activeTab === 'ORDINI' ? 'bg-white/20 text-amber-950 border-transparent' : 'bg-gray-100 text-gray-600 border-gray-200'">{{ ordiniConfermati.length }}</span>
         </button>
         
-        <button @click="activeTab = 'PRODUZIONE'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative flex items-center gap-2 whitespace-nowrap" :class="activeTab === 'PRODUZIONE' ? 'text-gray-600 border-b-4 border-amber-300' : 'text-gray-400 hover:text-gray-600'">
-          <CogIcon class="h-4 w-4" />
+        <button @click="activeTab = 'PRODUZIONE'" 
+          class="px-6 py-3 rounded-full font-bold text-xl transition-all flex items-center gap-2 whitespace-nowrap active:scale-95" 
+          :class="activeTab === 'PRODUZIONE' ? 'bg-amber-400 text-amber-950 shadow-lg shadow-amber-200' : 'bg-white text-gray-500 hover:bg-gray-100'">
+          <CogIcon class="h-5 w-5" />
           PRODUZIONE
-          <span v-if="ordiniInProduzione.length" class="ml-2 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[10px]">{{ ordiniInProduzione.length }}</span>
+          <span v-if="ordiniInProduzione.length" class="ml-1 px-1.5 py-0.5 rounded-full text-[10px] border" :class="activeTab === 'PRODUZIONE' ? 'bg-black/10 text-amber-950 border-transparent' : 'bg-gray-100 text-gray-600 border-gray-200'">{{ ordiniInProduzione.length }}</span>
         </button>
 
-        <button @click="activeTab = 'SPEDIZIONI'" class="pb-3 px-6 font-heading font-bold text-sm transition-all relative flex items-center gap-2 whitespace-nowrap" :class="activeTab === 'SPEDIZIONI' ? 'text-gray-600 border-b-4 border-amber-300' : 'text-gray-400 hover:text-gray-600'">
-          <TruckIcon class="h-4 w-4" />
+        <button @click="activeTab = 'SPEDIZIONI'" 
+          class="px-6 py-3 rounded-full font-bold text-xl transition-all flex items-center gap-2 whitespace-nowrap active:scale-95" 
+          :class="activeTab === 'SPEDIZIONI' ? 'bg-amber-400 text-amber-950 shadow-lg shadow-amber-200' : 'bg-white text-gray-500 hover:bg-gray-100'">
+          <TruckIcon class="h-5 w-5" />
           SPEDIZIONI
-          <span v-if="ordiniSpediti.length" class="ml-2 bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-[10px]">{{ ordiniSpediti.length }}</span>
+          <span v-if="ordiniSpediti.length" class="ml-1 px-1.5 py-0.5 rounded-full text-[10px] border" :class="activeTab === 'SPEDIZIONI' ? 'bg-white/20 text-amber-950 border-transparent' : 'bg-gray-100 text-gray-600 border-gray-200'">{{ ordiniSpediti.length }}</span>
         </button>
 
       </div>
@@ -363,12 +373,12 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
       <div v-else>
         
         <div v-if="activeTab === 'PREVENTIVI'" class="grid gap-4">
-          <div v-if="preventiviInCorso.length === 0" class="text-center py-20 bg-white rounded-xl border border-dashed border-gray-300">
+          <div v-if="preventiviInCorso.length === 0" class="text-center py-20 bg-white rounded-[2rem] border border-dashed border-gray-300">
             <p class="text-gray-500 mb-4">Non hai preventivi aperti al momento.</p>
-            <button @click="vaiAlBuilder()" class="text-blue-600 font-bold underline">Inizia ora</button>
+            <button @click="vaiAlBuilder()" class="text-amber-950 font-bold underline">Inizia ora</button>
           </div>
           <div v-for="p in preventiviInCorso" :key="p.id" 
-          class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all flex flex-col md:flex-row justify-between items-center gap-4 cursor-pointer">            
+          class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-[2rem] shadow-lg border border-white/80 transition-all duration-500 ease-spring hover:-translate-y-1 hover:scale-[1.02] hover:shadow-xl flex flex-col md:flex-row justify-between items-center gap-4 cursor-pointer">            
           <div class="flex items-center gap-4 w-full md:w-auto">
               <div class="h-14 w-14 rounded-full flex items-center justify-center shrink-0" :class="getStatusStyling(p.stato).iconBg">
                 <component :is="getStatusStyling(p.stato).icon" class="w-8 h-8" />
@@ -380,7 +390,7 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
                         :class="getStatusStyling(p.stato).badge">
                     {{ getStatusLabel(p.stato) }}
                   </span>
-                  <div v-if="p.sommarioPreventivo" class="flex flex-col gap-2">
+                  <div v-if="p.sommarioPreventivo" class="flex flex-col gap-1">
                     <span v-for="(item, idx) in p.sommarioPreventivo" :key="idx" 
                           class="text-[10px] bg-gray-50 px-2 py-1 rounded border text-gray-600">
                       <strong>{{ item.quantitaTotale }}x</strong> {{ item.descrizione }}
@@ -398,7 +408,7 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
                 </div>
 
                 <div class="flex gap-2">
-                   <button @click="vaiAlBuilder(p.codice)" class="border border-gray-300 text-gray-600 px-4 py-2 rounded-lg font-bold text-xs hover:bg-gray-50 h-full">
+                   <button @click="vaiAlBuilder(p.codice)" class="border border-gray-300 text-gray-600 px-4 py-2 rounded-full font-bold text-xs hover:bg-gray-50 h-full">
                     APRI
                   </button>
                 </div>
@@ -407,7 +417,7 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
               <button
                 v-if="p.stato === 'QUOTE_READY'"
                 @click="openConfirmModal(p)" 
-                class="w-full text-green-100 bg-green-600 hover:bg-green-700 px-8 py-2 rounded-lg font-bold text-xs shadow-sm flex justify-center items-center gap-2 animate-pulse transition-transform active:scale-95"
+                class="w-full text-black bg-amber-400 hover:bg-amber-300 px-8 py-2 rounded-full font-bold text-xs shadow-sm flex justify-center items-center gap-2 animate-pulse transition-transform active:scale-95"
               >
                 <CheckCircleIcon class="h-5 w-5" />
                 CONFERMA PREVENTIVO
@@ -417,11 +427,11 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
         </div>
 
         <div v-if="activeTab === 'ORDINI'" class="grid gap-4">
-          <div v-if="ordiniConfermati.length === 0" class="text-center py-20 bg-white rounded-xl border border-dashed border-gray-300">
+          <div v-if="ordiniConfermati.length === 0" class="text-center py-20 bg-white rounded-[2rem] border border-dashed border-gray-300">
             <p class="text-gray-500">Nessun ordine in attesa.</p>
           </div>
           <div v-for="p in ordiniConfermati" :key="p.id" 
-          class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all flex flex-col md:flex-row justify-between items-center gap-4 cursor-pointer">
+          class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-[2rem] shadow-lg border border-white/80 transition-all duration-500 ease-spring hover:-translate-y-1 hover:scale-[1.02] hover:shadow-xl flex flex-col md:flex-row justify-between items-center gap-4 cursor-pointer">
             <div class="flex items-center gap-4 w-full md:w-auto">
               <div class="h-14 w-14 rounded-full flex items-center justify-center shrink-0 
             bg-opacity-100 backdrop-blur 
@@ -433,15 +443,15 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
 </div>
               <div class="flex flex-col items-start">
                 <h3 class="font-bold text-xl text-gray-900 leading-tight">{{ p.commessa || 'Senza Nome' }}</h3>
-                <div v-if="p.dataConsegnaPrevista" class="mt-2 flex items-center gap-1.5 px-3 py-1 bg-emerald-100 border border-emerald-200 rounded shadow-sm">
-                    <TruckIcon class="h-4 w-4 text-emerald-700" /> <span class="text-xs font-bold text-emerald-700 uppercase">Prevista il {{ formatDateShort(p.dataConsegnaPrevista) }}</span>
+                <div v-if="p.dataConsegnaPrevista" class="mt-2 flex items-center gap-1.5 px-3 py-1 bg-stone-200 border border-stone-300 rounded shadow-sm">
+                    <TruckIcon class="h-4 w-4 Prevista il" /> <span class="text-xs font-bold text-black uppercase">Prevista il {{ formatDateShort(p.dataConsegnaPrevista) }}</span>
                 </div>
                 <div class="mt-2 flex flex-col items-start gap-2">
                   <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase border" 
                         :class="getStatusStyling(p.stato).badge">
                     {{ getStatusLabel(p.stato) }}
                   </span>
-                  <div v-if="p.sommarioPreventivo" class="flex flex-col gap-2">
+                  <div v-if="p.sommarioPreventivo" class="flex flex-col gap-1">
                     <span v-for="(item, idx) in p.sommarioPreventivo" :key="idx" 
                           class="text-[10px] bg-gray-50 px-2 py-1 rounded border text-gray-600">
                       <strong>{{ item.quantitaTotale }}x</strong> {{ item.descrizione }}
@@ -457,14 +467,14 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
                   <div class="text-xl font-bold font-heading text-gray-600">{{ (p.totaleScontato || p.totaleImponibile || 0).toFixed(2) }} €</div>
                   <div class="text-xs text-gray-600">Importo netto</div>
                 </div>
-                <button @click="vaiAlBuilder(p.codice)" class="border border-gray-300 text-gray-600 px-4 py-2 rounded-lg font-bold text-xs hover:bg-gray-50 h-full">
+                <button @click="vaiAlBuilder(p.codice)" class="border border-gray-300 text-gray-600 px-4 py-2 rounded-full font-bold text-xs hover:bg-gray-50 h-full">
                   APRI
                 </button>
               </div>
               <button
                 v-if="['WAITING_SIGN', 'WAITING_FAST'].includes(p.stato)"
                 @click="gestisciAzioneOrdine(p)"
-                class="w-full text-blue-100 bg-blue-600 hover:bg-blue-700 px-12 py-2 rounded-lg font-bold text-xs shadow-sm flex justify-center items-center gap-2 animate-pulse transition-transform active:scale-95"
+                class="w-full text-amber-950 bg-amber-400 hover:bg-amber-300 px-12 py-2 rounded-full font-bold text-xs shadow-sm flex justify-center items-center gap-2 animate-pulse transition-transform active:scale-95"
               >
                 <CheckCircleIcon class="h-5 w-5" />
                 {{ p.stato === 'WAITING_FAST' ? 'ACCETTA ORDINE' : 'FIRMA ORDINE' }}
@@ -474,11 +484,11 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
         </div>
 
         <div v-if="activeTab === 'PRODUZIONE'" class="grid gap-4">
-          <div v-if="ordiniInProduzione.length === 0" class="text-center py-20 bg-white rounded-xl border border-dashed border-gray-300">
+          <div v-if="ordiniInProduzione.length === 0" class="text-center py-20 bg-white rounded-[2rem] border border-dashed border-gray-300">
             <p class="text-gray-500">Nessun ordine in produzione.</p>
           </div>
           <div v-else v-for="p in ordiniInProduzione" :key="p.id" 
-          class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all flex flex-col md:flex-row justify-between items-center gap-4 cursor-pointer">
+          class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-[2rem] shadow-lg border border-white/80 transition-all duration-500 ease-spring hover:-translate-y-1 hover:scale-[1.02] hover:shadow-xl flex flex-col md:flex-row justify-between items-center gap-4 cursor-pointer">
             <div class="flex items-center gap-4 w-full md:w-auto">
               <div class="h-14 w-14 rounded-full flex items-center justify-center shrink-0 backdrop-blur"
                   :class="getStatusStyling(p.stato).iconBg">
@@ -486,15 +496,15 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
               </div>    
               <div class="flex flex-col items-start">
                 <h3 class="font-bold text-xl text-gray-900 leading-tight">{{ p.commessa || 'Senza Nome' }}</h3>
-                <div v-if="p.dataConsegnaPrevista" class="mt-2 flex items-center gap-1.5 px-3 py-1 bg-emerald-100 border border-emerald-200 rounded shadow-sm">
-                    <TruckIcon class="h-4 w-4 text-emerald-700" /> <span class="text-xs font-bold text-emerald-700 uppercase">Prevista il {{ formatDateShort(p.dataConsegnaPrevista) }}</span>
+                <div v-if="p.dataConsegnaPrevista" class="mt-2 flex items-center gap-1.5 px-3 py-1 bg-amber-400 border border-amber-200 rounded shadow-sm">
+                    <TruckIcon class="h-4 w-4 text-amber-950" /> <span class="text-xs font-bold text-amber-950 uppercase">Prevista il {{ formatDateShort(p.dataConsegnaPrevista) }}</span>
                 </div>
                 <div class="mt-2 flex flex-col items-start gap-2">
                   <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase border" 
                         :class="getStatusStyling(p.stato).badge">
                     {{ getStatusLabel(p.stato) }}
                   </span>
-                  <div v-if="p.sommarioPreventivo" class="flex flex-col gap-2">
+                  <div v-if="p.sommarioPreventivo" class="flex flex-col gap-1">
                     <span v-for="(item, idx) in p.sommarioPreventivo" :key="idx" 
                           class="text-[10px] bg-gray-50 px-2 py-1 rounded border text-gray-600">
                       <strong>{{ item.quantitaTotale }}x</strong> {{ item.descrizione }}
@@ -508,17 +518,17 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
                 <div class="text-xl font-bold font-heading text-gray-600">{{ (p.totaleScontato || p.totaleImponibile || 0).toFixed(2) }} €</div>
                 <div class="text-xs text-gray-600">Importo netto</div>
               </div>
-              <button @click="vaiAlBuilder(p.codice)" class="border border-gray-300 text-gray-600 px-4 py-2 rounded-lg font-bold text-xs hover:bg-gray-50">APRI</button>
+              <button @click="vaiAlBuilder(p.codice)" class="border border-gray-300 text-gray-600 px-4 py-2 rounded-full font-bold text-xs hover:bg-gray-50">APRI</button>
             </div>
           </div>
         </div>
 
         <div v-if="activeTab === 'SPEDIZIONI'" class="grid gap-4">
-          <div v-if="ordiniSpediti.length === 0" class="text-center py-20 bg-white rounded-xl border border-dashed border-gray-300">
+          <div v-if="ordiniSpediti.length === 0" class="text-center py-20 bg-white rounded-[2rem] border border-dashed border-gray-300">
             <p class="text-gray-500">Nessuna spedizione pronta.</p>
           </div>
           <div v-else v-for="p in ordiniSpediti" :key="p.id" 
-          class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all flex flex-col md:flex-row justify-between items-center gap-4 cursor-pointer">
+          class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-[2rem] shadow-lg border border-white/80 transition-all duration-500 ease-spring hover:-translate-y-1 hover:scale-[1.02] hover:shadow-xl flex flex-col md:flex-row justify-between items-center gap-4 cursor-pointer">
             <div class="flex items-center gap-4 w-full md:w-auto">
               <div class="h-14 w-14 rounded-full flex items-center justify-center shrink-0 
             bg-opacity-100 backdrop-blur 
@@ -530,8 +540,8 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
 </div>
               <div class="flex flex-col items-start">
                 <h3 class="font-bold text-xl text-gray-900 leading-tight">{{ p.commessa || 'Senza Nome' }}</h3>
-                <div v-if="p.dataConsegnaPrevista" class="mt-2 flex items-center gap-1.5 px-3 py-1 bg-emerald-100 border border-emerald-200 rounded shadow-sm">
-                    <TruckIcon class="h-4 w-4 text-emerald-700" /> <span class="text-xs font-bold text-emerald-700 uppercase">Prevista il {{ formatDateShort(p.dataConsegnaPrevista) }}</span>
+                <div v-if="p.dataConsegnaPrevista" class="mt-2 flex items-center gap-1.5 px-3 py-1 bg-amber-400 border border-amber-200 rounded shadow-sm">
+                    <TruckIcon class="h-4 w-4 text-amber-950" /> <span class="text-xs font-bold text-amber-950 uppercase">Prevista il {{ formatDateShort(p.dataConsegnaPrevista) }}</span>
                 </div>
                 <div class="mt-2 flex flex-col items-start gap-2">
                   <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase border" 
@@ -565,7 +575,7 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
               <button 
                   v-if="p.stato === 'DELIVERY' && p.fic_ddt_url"
                   @click="apriDdt(p.fic_ddt_url)"
-                  class="w-full text-emerald-100 bg-emerald-600 hover:bg-emerald-700 px-12 py-2 rounded-lg font-bold text-xs shadow-sm flex justify-center items-center gap-2 transition-transform active:scale-95"
+                  class="w-full text-amber-950 bg-amber-400 hover:bg-amber-300 px-12 py-2 rounded-full font-bold text-xs shadow-sm flex justify-center items-center gap-2 transition-transform active:scale-95"
               >
                   <DocumentTextIcon class="h-5 w-5" />
                   VEDI DDT
@@ -592,10 +602,10 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
   </div>
   <div v-if="showConfirmQuoteModal" class="fixed inset-0 z-[100] overflow-y-auto bg-gray-900/50 backdrop-blur-sm transition-opacity duration-300">
     <div class="flex items-center justify-center min-h-screen p-4">
-      <div class="bg-white rounded-xl shadow-2xl max-w-lg w-full transform transition-all duration-300 scale-100 p-6">
+      <div class="bg-white rounded-[2rem] shadow-2xl max-w-lg w-full transform transition-all duration-300 scale-100 p-6">
         
         <div class="flex items-center gap-3 mb-4 border-b pb-3">
-          <CheckCircleIcon class="h-8 w-8 text-green-600" />
+          <CheckCircleIcon class="h-8 w-8 text-amber-950" />
           <h3 class="text-xl font-bold text-gray-900">Conferma Invio Ordine</h3>
         </div>
 
@@ -607,13 +617,13 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
         <div class="flex justify-end gap-3 pt-2">
           <button
             @click="showConfirmQuoteModal = false"
-            class="px-4 py-2 rounded-lg text-gray-700 border border-gray-300 hover:bg-gray-50 font-medium"
+            class="px-4 py-2 rounded-full text-gray-700 border border-gray-300 hover:bg-gray-50 font-medium"
           >
             Annulla
           </button>
           <button
             @click="handleFinalOrderConfirmation"
-            class="px-4 py-2 rounded-lg text-green-100 bg-green-600 hover:bg-green-500 font-bold shadow-md"
+            class="px-4 py-2 rounded-full text-amber-950 bg-amber-400 hover:bg-amber-300 font-bold shadow-md"
           >
             Sì, Conferma e Invia
           </button>
@@ -622,11 +632,11 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
     </div>
   </div>
   <div v-if="resultModal.show" class="fixed inset-0 z-[9999] overflow-y-auto bg-gray-900/50 backdrop-blur-sm transition-opacity duration-300 flex items-center justify-center p-4">
-    <div class="bg-white rounded-xl shadow-2xl max-w-sm w-full transform transition-all scale-100 p-6 text-center animate-in fade-in zoom-in duration-200">
+    <div class="bg-white rounded-[2rem] shadow-2xl max-w-sm w-full transform transition-all scale-100 p-6 text-center animate-in fade-in zoom-in duration-200">
       
       <div class="mx-auto flex items-center justify-center h-16 w-16 rounded-full mb-4"
-          :class="resultModal.type === 'SUCCESS' ? 'bg-green-100' : 'bg-red-100'">
-        <CheckCircleIcon v-if="resultModal.type === 'SUCCESS'" class="h-10 w-10 text-green-600" />
+          :class="resultModal.type === 'SUCCESS' ? 'bg-amber-400' : 'bg-red-100'">
+        <CheckCircleIcon v-if="resultModal.type === 'SUCCESS'" class="h-10 w-10 text-amber-950" />
         <ExclamationTriangleIcon v-else class="h-10 w-10 text-red-600" />
       </div>
 
@@ -635,8 +645,8 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
 
       <button 
         @click="resultModal.show = false" 
-        class="w-full py-2.5 rounded-lg font-bold text-white shadow-md transition-transform active:scale-95 outline-none focus:ring-2 focus:ring-offset-2"
-        :class="resultModal.type === 'SUCCESS' ? 'bg-green-600 hover:bg-green-700 focus:ring-green-500' : 'bg-red-600 hover:bg-red-700 focus:ring-red-500'"
+        class="w-full py-2.5 rounded-full font-bold text-white shadow-md transition-transform active:scale-95 outline-none focus:ring-2 focus:ring-offset-2"
+        :class="resultModal.type === 'SUCCESS' ? 'bg-amber-600 hover:bg-amber-700 focus:ring-amber-500' : 'bg-red-600 hover:bg-red-700 focus:ring-red-500'"
       >
         Ho capito
       </button>

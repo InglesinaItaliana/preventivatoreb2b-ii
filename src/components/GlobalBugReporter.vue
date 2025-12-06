@@ -121,48 +121,52 @@ const submitBug = async () => {
 </script>
 
 <template>
-    <div v-if="isAuthReady" class="fixed bottom-6 right-6 z-[9999] flex flex-col items-end gap-3 animate-fade-in">    
+    <div v-if="isAuthReady" class="fixed bottom-6 right-6 z-[9999] flex flex-col items-end gap-3 animate-fade-in">
+    
     <Transition
-      enter-active-class="transition-all duration-300 cubic-bezier(0.175, 0.885, 0.32, 1.275)"
-      enter-from-class="opacity-0 scale-90 translate-y-4"
+      enter-active-class="transition-all duration-500 ease-spring"
+      enter-from-class="opacity-0 scale-75 translate-y-10"
       enter-to-class="opacity-100 scale-100 translate-y-0"
-      leave-active-class="transition-all duration-200 ease-in"
+      leave-active-class="transition-all duration-300 ease-in"
       leave-from-class="opacity-100 scale-100"
-      leave-to-class="opacity-0 scale-90 translate-y-4"
+      leave-to-class="opacity-0 scale-75 translate-y-10"
     >
-      <div v-if="isMenuOpen" class="bg-white rounded-3xl shadow-2xl border border-gray-100 p-2 min-w-[220px] flex flex-col gap-1 mb-2 origin-bottom-right overflow-hidden">
+      <div v-if="isMenuOpen" class="bg-white rounded-[2rem] shadow-xl shadow-gray-200/50 border border-gray-100 p-2 min-w-[240px] flex flex-col gap-1 mb-2 origin-bottom-right overflow-hidden">
         
-        <div class="px-4 py-2 text-xs font-bold text-gray-400 uppercase tracking-wider">Strumenti Rapidi</div>
-        <button v-if="!isAdmin" @click="avviaNuovoPreventivo" class="flex items-center gap-3 w-full px-4 py-3 rounded-2xl hover:bg-amber-50 text-gray-700 hover:text-amber-600 transition-colors group">          <div class="bg-amber-100 p-2 rounded-xl group-hover:bg-amber-200 transition-colors">
-            <PlusCircleIcon class="h-5 w-5 text-amber-600" />
+        <div class="px-5 py-3 text-[10px] font-extrabold text-gray-400 uppercase tracking-widest">Strumenti Rapidi</div>
+
+        <button v-if="!isAdmin" @click="avviaNuovoPreventivo" class="flex items-center gap-4 w-full px-4 py-3.5 rounded-3xl hover:bg-amber-50 text-gray-600 hover:text-amber-600 transition-colors group">
+          <div class="bg-amber-400 p-2.5 rounded-2xl group-hover:bg-amber-300 group-hover:scale-110 transition-all duration-300 ease-spring">
+            <PlusCircleIcon class="h-6 w-6 text-amber-950" />
           </div>
           <div class="flex flex-col items-start">
-            <span class="font-bold text-sm">Nuovo Preventivo</span>
-            <span class="text-[10px] text-gray-400">Inizia configurazione</span>
+            <span class="font-bold text-sm text-gray-800">Nuovo Preventivo</span>
+            <span class="text-[10px] text-gray-400 font-medium">Inizia configurazione</span>
           </div>
         </button>
-        <button @click="openBugReport" class="flex items-center gap-3 w-full px-4 py-3 rounded-2xl hover:bg-rose-50 text-gray-700 hover:text-rose-600 transition-colors group">
-          <div class="bg-rose-100 p-2 rounded-xl group-hover:bg-rose-200 transition-colors">
-            <BugAntIcon class="h-5 w-5 text-rose-600" />
+
+        <button @click="openBugReport" class="flex items-center gap-4 w-full px-4 py-3.5 rounded-3xl hover:bg-rose-50 text-gray-600 hover:text-rose-600 transition-colors group">
+          <div class="bg-rose-100 p-2.5 rounded-2xl group-hover:bg-rose-200 group-hover:scale-110 transition-all duration-300 ease-spring">
+            <BugAntIcon class="h-6 w-6 text-rose-600" />
           </div>
           <div class="flex flex-col items-start">
-            <span class="font-bold text-sm">Segnala un Bug</span>
-            <span class="text-[10px] text-gray-400">Invia feedback tecnico</span>
+            <span class="font-bold text-sm text-gray-800">Segnala un Bug</span>
+            <span class="text-[10px] text-gray-400 font-medium">Invia feedback tecnico</span>
           </div>
         </button>
 
         <template v-if="isAdmin">
-          <div class="h-px bg-gray-100 my-1 mx-2"></div>
-          <div class="px-4 py-1 text-[10px] font-bold text-blue-400 uppercase tracking-wider">Amministrazione</div>
+          <div class="h-px bg-gray-100 my-2 mx-4"></div>
+          <div class="px-5 py-1 text-[10px] font-extrabold text-blue-400 uppercase tracking-widest">Amministrazione</div>
           
           <button 
             v-for="link in adminLinks" 
             :key="link.route"
             @click="navigateTo(link.route)"
-            class="flex items-center gap-3 w-full px-4 py-2.5 rounded-xl hover:bg-gray-50 text-gray-600 hover:text-blue-600 transition-colors"
+            class="flex items-center gap-4 w-full px-4 py-3 rounded-3xl hover:bg-gray-50 text-gray-600 hover:text-blue-600 transition-colors group"
           >
-            <component :is="link.icon" class="h-5 w-5 opacity-70" />
-            <span class="text-sm font-medium">{{ link.label }}</span>
+            <component :is="link.icon" class="h-5 w-5 opacity-60 group-hover:opacity-100 group-hover:scale-110 transition-all duration-300 ease-spring" />
+            <span class="text-sm font-bold">{{ link.label }}</span>
           </button>
         </template>
 
@@ -171,16 +175,16 @@ const submitBug = async () => {
 
     <button 
       @click="toggleMenu"
-      class="h-16 w-16 bg-amber-300 hover:bg-amber-200 text-black rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 flex items-center justify-center relative overflow-hidden group active:scale-95"
-      :class="isMenuOpen ? 'rotate-90 rounded-[1.5rem]' : 'rounded-2xl'"
+      class="h-16 w-16 bg-amber-400 hover:bg-amber-300 text-amber-950 shadow-xl hover:shadow-2xl hover:shadow-gray-900/20 flex items-center justify-center relative overflow-hidden group active:scale-90 z-50 transition-all duration-500 ease-spring"
+      :class="isMenuOpen ? 'rounded-xl rotate-90 scale-90' : 'rounded-[2.2rem] hover:rounded-[2rem] hover:scale-105'"
     >
       <PlusIcon 
-        class="h-7 w-7 absolute transition-all duration-300 transform"
-        :class="isMenuOpen ? 'opacity-0 rotate-90 scale-50' : 'opacity-100 rotate-0 scale-100'"
+        class="h-7 w-7 absolute transition-all duration-500 ease-spring transform"
+        :class="isMenuOpen ? 'opacity-0 rotate-180 scale-50' : 'opacity-100 rotate-0 scale-100'"
       />
       <XMarkIcon 
-        class="h-8 w-8 absolute transition-all duration-300 transform"
-        :class="isMenuOpen ? 'opacity-100 rotate-0 scale-100' : 'opacity-0 -rotate-90 scale-50'"
+        class="h-8 w-8 absolute transition-all duration-500 ease-spring transform"
+        :class="isMenuOpen ? 'opacity-100 rotate-0 scale-100' : 'opacity-0 -rotate-180 scale-50'"
       />
     </button>
 

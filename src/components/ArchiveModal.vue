@@ -115,7 +115,7 @@ const openDdt = (url: string) => {
                     v-for="order in archivedOrders" 
                     :key="order.id"
                     @click="openOrder(order.codice)"
-                    class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-blue-300 cursor-pointer transition-all flex justify-between items-center group"
+                    class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-amber-300 cursor-pointer transition-all flex justify-between items-center group"
                   >
                     <div v-if="!isAdmin">
                       <div class="flex items-baseline gap-2 mb-1">
@@ -152,7 +152,7 @@ const openDdt = (url: string) => {
                       <button 
                           v-if="order.fic_ddt_url" 
                           @click.stop="openDdt(order.fic_ddt_url)"
-                          class="flex items-center gap-1 text-sm font-bold text-emerald-100 bg-emerald-700 border border-emerald-200 px-8 py-0.5 rounded hover:bg-emerald-800 transition-colors"
+                          class="flex items-center gap-1 text-sm font-bold text-amber-950 bg-amber-400 border border-amber-500 px-8 py-0.5 rounded-full hover:bg-amber-300 transition-colors"
                           title="Visualizza DDT"
                         >
                           <DocumentTextIcon class="w-3 h-3" /> DDT
