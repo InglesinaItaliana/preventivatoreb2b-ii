@@ -15,6 +15,7 @@ import {
   TruckIcon,
   UserPlusIcon,
   PlusCircleIcon,
+  SparklesIcon,
   CubeIcon,
   CogIcon
 } from '@heroicons/vue/24/solid';
@@ -134,7 +135,15 @@ const submitBug = async () => {
       <div v-if="isMenuOpen" class="bg-white rounded-[2rem] shadow-xl shadow-gray-200/50 border border-gray-100 p-2 min-w-[240px] flex flex-col gap-1 mb-2 origin-bottom-right overflow-hidden">
         
         <div class="px-5 py-3 text-[10px] font-extrabold text-gray-400 uppercase tracking-widest">Strumenti Rapidi</div>
-
+        <button @click="navigateTo('/teaser')" class="flex items-center gap-4 w-full px-4 py-3.5 rounded-3xl hover:bg-indigo-50 text-gray-600 hover:text-indigo-600 transition-colors group">
+          <div class="bg-indigo-100 p-2.5 rounded-2xl group-hover:bg-indigo-200 group-hover:scale-110 transition-all duration-300 ease-spring">
+            <SparklesIcon class="h-6 w-6 text-indigo-600" />
+          </div>
+          <div class="flex flex-col items-start">
+            <span class="font-bold text-sm text-gray-800">Visualizza Teaser</span>
+            <span class="text-[10px] text-gray-400 font-medium">Anteprima pagina</span>
+          </div>
+        </button>
         <button v-if="!isAdmin" @click="avviaNuovoPreventivo" class="flex items-center gap-4 w-full px-4 py-3.5 rounded-3xl hover:bg-amber-50 text-gray-600 hover:text-amber-400 transition-colors group">
           <div class="bg-amber-400 p-2.5 rounded-2xl group-hover:bg-amber-300 group-hover:scale-110 transition-all duration-300 ease-spring">
             <PlusCircleIcon class="h-6 w-6 text-amber-950" />

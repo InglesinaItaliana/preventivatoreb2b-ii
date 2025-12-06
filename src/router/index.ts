@@ -49,6 +49,11 @@ const router = createRouter({
       path: '/stack',
       name: 'stack',
       component: () => import('../components/StackVisualizer.vue')
+    },
+    {
+      path: '/Teaser',
+      name: 'Teaser',
+      component: () => import('../views/TeaserView.vue')
     }
   ]
 });
