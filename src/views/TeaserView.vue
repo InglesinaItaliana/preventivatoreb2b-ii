@@ -30,7 +30,7 @@ onUnmounted(() => {
   window.removeEventListener('scroll', handleScroll);
 });
 
-// Dati per le card "Funzionalità" per iterare con v-for
+// Dati per le card "Funzionalità"
 const featuresList = [
   {
     icon: ClockIcon,
@@ -56,7 +56,7 @@ const featuresList = [
   {
     icon: DocumentCheckIcon,
     title: "Stop alla Carta",
-    tag: "ecologico",
+    tag: "Ecologico",
     tagColor: "bg-emerald-100 text-emerald-800",
     description: "Niente stampe o scansioni. Conferma i tuoi ordini con un click o carica gli ordini firmati digitalmente."
   }
@@ -86,8 +86,7 @@ const statusRows = [
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-50 font-sans text-gray-600 selection:bg-amber-200 selection:text-amber-900">
-    <!-- --- NAVBAR --- -->
+  <div class="min-h-screen bg-gray-50 font-sans text-gray-600 selection:bg-amber-200 selection:text-amber-900 overflow-x-hidden">
     <nav 
       class="fixed w-full z-50 transition-all duration-300"
       :class="isScrolled ? 'bg-white/80 backdrop-blur-md shadow-sm py-4' : 'bg-transparent py-6'"
@@ -104,9 +103,7 @@ const statusRows = [
       </div>
     </nav>
 
-    <!-- --- HERO SECTION --- -->
     <header class="relative pt-32 pb-20 lg:pt-36 lg:pb-8 px-6 overflow-hidden">
-      <!-- Background Decorative Blobs -->
       <div class="absolute top-0 right-0 -mr-20 -mt-20 w-96 h-96 bg-amber-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob"></div>
       <div class="absolute top-0 left-0 -ml-20 -mt-20 w-72 h-72 bg-gray-200 rounded-full mix-blend-multiply filter blur-3xl opacity-30 animate-blob animation-delay-2000"></div>
 
@@ -136,7 +133,6 @@ const statusRows = [
       </div>
     </header>
 
-    <!-- --- FEATURES GRID --- -->
     <section id="funzionalita" class="py-20 px-6 bg-white/50 relative">
       <div class="container mx-auto max-w-6xl">
         <div class="text-center mb-16">
@@ -144,13 +140,12 @@ const statusRows = [
               <h1 class="relative z-10 text-8xl font-extrabold font-heading text-gray-900">P.O.P.S.</h1>
               <div class="absolute bottom-2 left-0 w-full h-12 bg-amber-400 rounded-sm -z-0 animate-marker"></div>
             </div>
-          <h2 class="text-3xl md:text-5xl font-bold text-gray-900 mb-4">Perché non potrai più farne a meno</h2>
+          <h2 class="text-3xl md:text-5xl font-bold text-gray-900 mb-4 mt-6">Perché non potrai più farne a meno</h2>
           <p class="text-xl text-gray-500">Abbiamo eliminato le attese. Ecco cosa potrai fare.</p>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           
-          <!-- Cards dinamiche -->
           <div 
             v-for="(feature, idx) in featuresList" 
             :key="idx"
@@ -175,7 +170,6 @@ const statusRows = [
            
           </div>
 
-          <!-- Card Mobile (Speciale) -->
           <div class="md:col-span-2 lg:col-span-2 bg-gray-900 rounded-[2.5rem] p-8 md:p-12 text-white relative overflow-hidden group hover:shadow-2xl transition-all duration-500">
             <div class="absolute top-0 right-0 w-64 h-64 bg-amber-500 rounded-full mix-blend-overlay filter blur-3xl opacity-20 group-hover:opacity-40 transition-opacity"></div>
             
@@ -191,7 +185,6 @@ const statusRows = [
                 </p>
               </div>
               
-              <!-- Mockup visuale stilizzato -->
               <div class="bg-gray-800 p-4 rounded-3xl border border-gray-700 shadow-2xl transform rotate-3 group-hover:rotate-0 transition-transform duration-500">
                  <div class="bg-gray-900 w-48 h-64 rounded-2xl flex flex-col p-4 gap-3">
                     <div class="w-full h-8 bg-gray-800 rounded-full"></div>
@@ -208,7 +201,6 @@ const statusRows = [
       </div>
     </section>
 
-    <!-- --- LIVE STATUS PREVIEW SECTION --- -->
     <section class="py-20 px-6 bg-white overflow-hidden">
       <div class="container mx-auto max-w-5xl">
         <div class="flex flex-col md:flex-row items-center gap-12">
@@ -239,68 +231,105 @@ const statusRows = [
           </div>
 
           <div class="w-full md:w-1/2 relative group cursor-default">
-  <div class="absolute inset-0 bg-gradient-to-tr from-amber-300 to-amber-100 rounded-[2.5rem] transform rotate-3 scale-105 opacity-60 blur-md transition-all duration-500 group-hover:rotate-2 group-hover:scale-110"></div>
-  
-  <div class="bg-white backdrop-blur-md backdrop-saturate-150 p-6 rounded-[2rem] shadow-2xl border border-white/60 relative z-10 flex flex-col gap-5 transition-transform duration-300 hover:-translate-y-1">
-     
-     <div class="flex items-start gap-4">
-        <div class="h-14 w-14 rounded-full flex items-center justify-center shrink-0 bg-amber-400 text-black border border-amber-400 shadow-sm">
-            <CogIcon class="h-8 w-8 text-amber-950" />
-        </div>
+            <div class="absolute inset-0 bg-gradient-to-tr from-amber-300 to-amber-100 rounded-[2.5rem] transform rotate-3 scale-105 opacity-60 blur-md transition-all duration-500 group-hover:rotate-2 group-hover:scale-110"></div>
+            
+            <div class="bg-white backdrop-blur-md backdrop-saturate-150 p-6 rounded-[2rem] shadow-2xl border border-white/60 relative z-10 flex flex-col gap-5 transition-transform duration-300 hover:-translate-y-1">
+              
+              <div class="flex items-start gap-4">
+                  <div class="h-14 w-14 rounded-full flex items-center justify-center shrink-0 bg-amber-400 text-black border border-amber-400 shadow-sm">
+                      <CogIcon class="h-8 w-8 text-amber-950" />
+                  </div>
 
-        <div class="flex flex-col items-start w-full min-w-0">
-           <h3 class="font-bold text-xl text-gray-900 leading-tight truncate w-full">Rossi S.r.l - Lotto A</h3>
-           
-           <div class="mt-2 flex items-center gap-1.5 px-3 py-1 bg-amber-400 border border-amber-200 rounded shadow-sm">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4 text-amber-950">
-                 <path d="M3.375 4.5C2.339 4.5 1.5 5.34 1.5 6.375V13.5h12V6.375c0-1.036-.84-1.875-1.875-1.875h-8.25zM13.5 15h-12v2.625c0 1.035.84 1.875 1.875 1.875h.375a3 3 0 116 0h3a.75.75 0 00.75-.75V15z" />
-                 <path d="M8.25 19.5a1.5 1.5 0 10-3 0 1.5 1.5 0 003 0zM15.75 6.75a.75.75 0 00-.75.75v11.25c0 .087.015.17.042.248a3 3 0 015.958.464c.853-.175 1.522-.935 1.464-1.883a18.659 18.659 0 00-3.732-10.104 1.837 1.837 0 00-1.47-.725H15.75z" />
-                 <path d="M19.5 19.5a1.5 1.5 0 10-3 0 1.5 1.5 0 003 0z" />
-              </svg>
-              <span class="text-xs font-bold text-amber-950 uppercase tracking-wide">Prevista il 25 DIC</span>
-           </div>
+                  <div class="flex flex-col items-start w-full min-w-0">
+                    <h3 class="font-bold text-xl text-gray-900 leading-tight truncate w-full">Rossi S.r.l - Lotto A</h3>
+                    
+                    <div class="mt-2 flex items-center gap-1.5 px-3 py-1 bg-amber-400 border border-amber-200 rounded shadow-sm">
+                        <TruckIcon class="w-4 h-4 text-amber-950" />
+                        <span class="text-xs font-bold text-amber-950 uppercase tracking-wide">Prevista il 25 DIC</span>
+                    </div>
 
-           <div class="mt-2.5">
-              <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase border bg-amber-400 text-black border-amber-400">
-                 ORDINE IN PRODUZIONE
-              </span>
-           </div>
-        </div>
-     </div>
+                    <div class="mt-2.5">
+                        <span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase border bg-amber-400 text-black border-amber-400">
+                          ORDINE IN PRODUZIONE
+                        </span>
+                    </div>
+                  </div>
+              </div>
 
-     <div class="flex flex-col gap-1.5 pl-[4.5rem]">
-        <span class="text-[10px] bg-gray-50 px-2 py-1.5 rounded border border-gray-100 text-gray-600 truncate">
-           <strong>12x</strong> INGLESINA VARSAVIA 26 - BIANCO 9010
-        </span>
-        <span class="text-[10px] bg-gray-50 px-2 py-1.5 rounded border border-gray-100 text-gray-600 truncate">
-           <strong>2x</strong> TELAI SOLO CANALINO
-        </span>
-     </div>
+              <div class="flex flex-col gap-1.5 pl-[4.5rem]">
+                  <span class="text-[10px] bg-gray-50 px-2 py-1.5 rounded border border-gray-100 text-gray-600 truncate">
+                    <strong>12x</strong> INGLESINA VARSAVIA 26 - BIANCO 9010
+                  </span>
+                  <span class="text-[10px] bg-gray-50 px-2 py-1.5 rounded border border-gray-100 text-gray-600 truncate">
+                    <strong>2x</strong> TELAI SOLO CANALINO
+                  </span>
+              </div>
 
-     <div class="flex items-end justify-between border-t border-gray-100 pt-4 mt-1">
-        <div class="text-left">
-           <div class="text-2xl font-bold font-heading text-gray-600 tracking-tight">€ 550<span class="text-lg">,00</span></div>
-           <div class="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Importo netto</div>
-        </div>
-        <button class="border border-gray-300 text-gray-600 px-6 py-2.5 rounded-full font-bold text-xs hover:bg-gray-50 hover:text-amber-900 hover:border-amber-200 transition-colors shadow-sm">
-           APRI
-        </button>
-     </div>
-  </div>
-</div>
+              <div class="flex items-end justify-between border-t border-gray-100 pt-4 mt-1">
+                  <div class="text-left">
+                    <div class="text-2xl font-bold font-heading text-gray-600 tracking-tight">€ 550<span class="text-lg">,00</span></div>
+                    <div class="text-[10px] text-gray-400 uppercase font-bold tracking-wider">Importo netto</div>
+                  </div>
+                  <button class="border border-gray-300 text-gray-600 px-6 py-2.5 rounded-full font-bold text-xs hover:bg-gray-50 hover:text-amber-900 hover:border-amber-200 transition-colors shadow-sm">
+                    APRI
+                  </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </section>
 
-    <!-- --- CTA FOOTER --- -->
-    <footer class="bg-amber-50 py-20 px-6 relative overflow-hidden">
+    <section class="bg-gray-900 text-white py-20 px-6">
+      <div class="container mx-auto max-w-4xl text-center">
+          <svg class="mx-auto h-16 w-16 text-amber-400 mb-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path></svg>
+          <h2 class="text-4xl md:text-5xl font-extrabold mb-4 font-heading">Sei pronto?</h2>
+          <p class="text-2xl text-amber-300 font-bold">
+              Ritorna il 25 dicembre per accedere alla tua pagina personale.
+          </p>
+      </div>
       
-        
-        <div class=" border-gray-200 text-gray-400 text-sm flex flex-col md:flex-row justify-center items-center gap-4">
-          <p>&copy; 2025 Inglesina Italiana S.p.A. Tutti i diritti riservati.</p>
-          <div class="flex gap-6">
-          </div>
-        </div>
-    </footer>
+      <div class="mt-16 border-t border-gray-800 pt-8 text-gray-400 text-sm flex flex-col md:flex-row justify-center items-center gap-4">
+        <p>&copy; 2025 Inglesina Italiana S.p.A. Tutti i diritti riservati.</p>
+      </div>
+    </section>
   </div>
 </template>
+
+<style scoped>
+/* Queste definizioni rendono il componente standalone 
+   sostituendo le configurazioni globali di tailwind.config.js 
+*/
+
+.font-heading {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  letter-spacing: -0.02em;
+}
+
+/* Animazione Blob Sfondo */
+@keyframes blob {
+  0% { transform: translate(0px, 0px) scale(1); }
+  33% { transform: translate(30px, -50px) scale(1.1); }
+  66% { transform: translate(-20px, 20px) scale(0.9); }
+  100% { transform: translate(0px, 0px) scale(1); }
+}
+
+.animate-blob {
+  animation: blob 7s infinite;
+}
+
+.animation-delay-2000 {
+  animation-delay: 2s;
+}
+
+/* Animazione Evidenziatore Testo */
+@keyframes marker {
+  0% { width: 0; opacity: 0; }
+  100% { width: 100%; opacity: 1; }
+}
+
+.animate-marker {
+  animation: marker 1s ease-out forwards;
+  animation-delay: 0.5s;
+}
+</style>
