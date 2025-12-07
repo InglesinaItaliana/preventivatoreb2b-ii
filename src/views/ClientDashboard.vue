@@ -648,7 +648,7 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
       <button 
         @click="resultModal.show = false" 
         class="w-full py-2.5 rounded-full font-bold text-white shadow-md transition-transform active:scale-95 outline-none focus:ring-2 focus:ring-offset-2"
-        :class="resultModal.type === 'SUCCESS' ? 'bg-amber-600 hover:bg-amber-700 focus:ring-amber-500' : 'bg-red-600 hover:bg-red-700 focus:ring-red-500'"
+        :class="resultModal.type === 'SUCCESS' ? 'bg-amber-400 hover:bg-amber-300 focus:ring-amber-500' : 'bg-red-600 hover:bg-red-700 focus:ring-red-500'"
       >
         Ho capito
       </button>

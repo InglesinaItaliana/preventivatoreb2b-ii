@@ -896,7 +896,7 @@ onUnmounted(() => {
             <div class="text-gray-300 hidden md:block transform transition-transform" :class="statiEspansi.includes(gruppo.stato) ? 'rotate-180' : ''">▼</div>
           </div>
 
-          <div v-if="statiEspansi.includes(gruppo.stato)" class="border-t border-gray-100 bg-gray-50 p-4 animate-fade-in">
+          <div v-if="statiEspansi.includes(gruppo.stato)" class="border-t border-gray-100 bg-gray-50 p-4 animate-fade-in space-y-4">
             
             <template v-if="gruppo.stato === 'DELIVERY'">
               <div v-for="ddt in raggruppaPerDdt(gruppo.lista)" :key="ddt.id" class="mb-6 bg-white rounded-xl border border-gray-300 overflow-hidden shadow-sm">
