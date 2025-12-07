@@ -39,6 +39,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const functions = __importStar(require("firebase-functions/v1"));
 const admin = __importStar(require("firebase-admin"));
 const axios_1 = __importDefault(require("axios"));
+const nodemailer = __importStar(require("nodemailer"));
 // Inizializza Firebase
 if (admin.apps.length === 0) {
     admin.initializeApp();
@@ -493,5 +494,184 @@ exports.submitBugToNotion = functions
         console.error("Errore Notion:", errorMsg);
         throw new functions.https.HttpsError('internal', 'Errore durante l\'invio a Notion.');
     }
+});
+// --- LISTE POP CULTURE PER PASSWORD ---
+const POP_ICONS = [
+    "Ironman", "Batman", "Spiderman", "Thor", "Hulk", "WonderWoman", "Superman",
+    "Joker", "Yoda", "Gandalf", "Frodo", "HarryPotter", "Skywalker", "Matrix",
+    "IndianaJones", "Rocky", "Rambo", "Terminator", "Godfather", "Gladiator",
+    "Bond", "Sherlock", "Dracula", "Zorro", "Tarzan", "RobinHood", "Vader"
+];
+function generatePopPassword() {
+    const icon = POP_ICONS[Math.floor(Math.random() * POP_ICONS.length)];
+    const number = Math.floor(Math.random() * 90) + 10; // 10-99
+    return `${icon}${number}!`;
+}
+// --- CONFIGURAZIONE EMAIL (Gmail SMTP) ---
+// Nota: Per Gmail serve una "App Password" se hai la 2FA attiva.
+const mailTransport = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: 'info@inglesinaitaliana.it',
+        pass: 'TU_APP_PASSWORD_QUI' // <--- DA CONFIGURARE IN CONFIG/ENV
+    }
+});
+// --- HELPER: RECUPERA CLIENTE DA FIC ---
+async function fetchFicClientByVat(vatNumber, token) {
+    try {
+        const res = await axios_1.default.get(`${FIC_API_URL}/c/${COMPANY_ID}/entities/clients`, {
+            headers: { Authorization: `Bearer ${token}` },
+            // CORREZIONE: Usa 'q' invece di 'filter' per le API di Fatture in Cloud
+            params: { q: `vat_number = '${vatNumber}'` }
+        });
+        return res.data.data && res.data.data.length > 0 ? res.data.data[0] : null;
+    }
+    catch (e) {
+        console.error(`Errore FiC lookup ${vatNumber}`, e);
+        return null;
+    }
+}
+// --- FUNZIONE 1: IMPORTAZIONE MASSIVA (O SINGOLA) ---
+// Non invia mail, crea solo le anagrafiche "dormienti"
+exports.importClientsFromFiC = functions
+    .region('europe-west1')
+    .runWith({ timeoutSeconds: 540 }) // Timeout lungo per import massivi
+    .https.onCall(async (data, context) => {
+    if (!context.auth)
+        throw new functions.https.HttpsError('unauthenticated', 'Richiesto login');
+    const vatNumbers = data.vatNumbers || [];
+    const results = { success: 0, failed: 0, errors: [] };
+    try {
+        const token = await getValidFicToken();
+        const db = admin.firestore();
+        const auth = admin.auth();
+        for (const piva of vatNumbers) {
+            // 1. Cerca su FiC
+            const ficClient = await fetchFicClientByVat(piva, token);
+            if (!ficClient) {
+                results.failed++;
+                results.errors.push(`${piva}: Non trovato su Fatture in Cloud`);
+                continue;
+            }
+            // Dati essenziali
+            const email = ficClient.email;
+            if (!email) {
+                results.failed++;
+                results.errors.push(`${piva} (${ficClient.name}): Email mancante su FiC`);
+                continue;
+            }
+            // 2. Crea/Aggiorna Utente Firebase
+            let uid;
+            try {
+                // Cerca se esiste già
+                const userRecord = await auth.getUserByEmail(email);
+                uid = userRecord.uid;
+            }
+            catch (e) {
+                if (e.code === 'auth/user-not-found') {
+                    // Crea nuovo utente DISABILITATO (senza password per ora)
+                    const newUser = await auth.createUser({
+                        email: email,
+                        displayName: ficClient.name,
+                        disabled: true // Importante: non può accedere
+                    });
+                    uid = newUser.uid;
+                }
+                else {
+                    throw e;
+                }
+            }
+            // 3. Salva Anagrafica su Firestore
+            const userData = {
+                ragioneSociale: ficClient.name,
+                piva: ficClient.vat_number,
+                codiceFiscale: ficClient.tax_code || '',
+                email: email,
+                indirizzo: ficClient.address_street || '',
+                cap: ficClient.address_postal_code || '',
+                citta: ficClient.address_city || '',
+                provincia: ficClient.address_province || '',
+                ficId: ficClient.id,
+                dataImportazione: admin.firestore.FieldValue.serverTimestamp()
+            };
+            // Controlla se il documento esiste già per preservare lo stato
+            const userRef = db.collection('users').doc(uid);
+            const userSnap = await userRef.get();
+            if (!userSnap.exists) {
+                // SE NUOVO: Imposta i default per l'invito
+                userData.status = 'PENDING_INVITE';
+                userData.mustChangePassword = true;
+            }
+            // SE ESISTE: Non tocchiamo 'status' né 'mustChangePassword',
+            // così se è già ACTIVE resta ACTIVE.
+            // Salva con merge (aggiorna anagrafica, preserva il resto)
+            await userRef.set(userData, { merge: true });
+            results.success++;
+        }
+        return results;
+    }
+    catch (e) {
+        console.error("Errore importazione", e);
+        throw new functions.https.HttpsError('internal', e.message);
+    }
+});
+// --- FUNZIONE 2: INVIO INVITI (ATTIVAZIONE) ---
+// Genera password, abilita account, invia mail
+exports.sendInvitesToClients = functions
+    .region('europe-west1')
+    .https.onCall(async (data, context) => {
+    if (!context.auth)
+        throw new functions.https.HttpsError('unauthenticated', 'Richiesto login');
+    const uids = data.uids || []; // Lista ID utenti da invitare
+    const results = { sent: 0, failed: 0 };
+    const db = admin.firestore();
+    const auth = admin.auth();
+    for (const uid of uids) {
+        try {
+            // 1. Recupera dati attuali
+            const userDoc = await db.collection('users').doc(uid).get();
+            if (!userDoc.exists)
+                continue;
+            const userData = userDoc.data();
+            // 2. Genera Password Pop
+            const tempPassword = generatePopPassword();
+            // 3. Aggiorna Auth (Abilita + Password)
+            await auth.updateUser(uid, {
+                password: tempPassword,
+                disabled: false // ORA PUÒ ACCEDERE
+            });
+            // 4. Invia Email
+            const mailOptions = {
+                from: '"Inglesina Italiana B2B" <info@inglesinaitaliana.it>',
+                to: userData === null || userData === void 0 ? void 0 : userData.email,
+                subject: 'Benvenuto nel Portale B2B Inglesina Italiana 🚀',
+                html: `
+                            <div style="font-family: Arial, sans-serif; color: #333;">
+                                <h2>Benvenuto ${userData === null || userData === void 0 ? void 0 : userData.ragioneSociale}!</h2>
+                                <p>Siamo felici di darti il benvenuto nel nuovo portale ordini B2B.</p>
+                                <p>Abbiamo creato il tuo account. Ecco le tue credenziali provvisorie:</p>
+                                <div style="background: #f4f4f4; padding: 15px; border-radius: 8px; margin: 20px 0;">
+                                    <p><strong>Username:</strong> ${userData === null || userData === void 0 ? void 0 : userData.email}</p>
+                                    <p><strong>Password:</strong> <span style="font-size: 1.2em; color: #d35400;">${tempPassword}</span></p>
+                                </div>
+                                <p>Accedi qui: <a href="https://preventivatoreb2b-ii.web.app">Portale B2B</a></p>
+                                <p><em>Al primo accesso ti verrà chiesto di cambiare la password.</em></p>
+                            </div>
+                        `
+            };
+            await mailTransport.sendMail(mailOptions);
+            // 5. Aggiorna Stato DB
+            await db.collection('users').doc(uid).update({
+                status: 'ACTIVE',
+                dataInvito: admin.firestore.FieldValue.serverTimestamp()
+            });
+            results.sent++;
+        }
+        catch (e) {
+            console.error(`Errore invito ${uid}`, e);
+            results.failed++;
+        }
+    }
+    return results;
 });
 //# sourceMappingURL=index.js.map
