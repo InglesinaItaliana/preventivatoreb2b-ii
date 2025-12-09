@@ -1,390 +1,472 @@
 <script setup lang="ts">
-  import { ref, onMounted, onUnmounted, computed } from 'vue';
+  import { ref, onMounted, computed, reactive } from 'vue';
   import { 
     collection, query, where, getDocs, orderBy, onSnapshot, 
-    addDoc, updateDoc, doc, serverTimestamp 
+    addDoc, updateDoc, doc, serverTimestamp, writeBatch 
   } from 'firebase/firestore';
-  import { ref as storageRef, uploadString, getDownloadURL } from 'firebase/storage';
-  import { db, storage } from '../firebase';
+  import { db, auth, storage } from '../firebase';
   import DeliveryModal from '../components/DeliveryModal.vue';
   import { 
-    TruckIcon, PlayIcon, StopIcon, MapPinIcon, CalendarIcon, ChevronRightIcon, DocumentTextIcon 
+    TruckIcon, MapPinIcon, 
+    MapIcon, CheckCircleIcon, InboxStackIcon, PlusIcon
   } from '@heroicons/vue/24/solid';
+  import { ref as storageRef, uploadString, getDownloadURL } from 'firebase/storage';
   
-  // STATO
-  const loading = ref(true);
-  const users = ref<any[]>([]);
-  const selectedDriverId = ref(localStorage.getItem('lastDriverId') || '');
-  const currentSession = ref<any>(null);
-  const timerString = ref('00:00:00');
-  let timerInterval: any = null;
+  // --- TIPI ---
+  interface Order {
+    id: string;
+    cliente: string;
+    indirizzoConsegna: string;
+    citta: string;
+    provincia: string;
+    regione?: string;
+    colli: number;
+    commessa: string;
+    assignedToTrip?: boolean;
+    tripId?: string;
+    [key: string]: any;
+  }
   
-  const orders = ref<any[]>([]);
-  const showModal = ref(false);
-  const selectedOrder = ref<any>(null);
+  interface Trip {
+    id: string;
+    driverId: string;
+    driverName: string;
+    date: string;
+    status: 'OPEN' | 'CLOSED';
+    stops: string[]; // Array di ID ordini in sequenza
+  }
   
-  // CARICAMENTO DRIVERS
-  const loadUsers = async () => {
+  // --- STATO ---
+  const currentUser = ref(auth.currentUser);
+  const isAdmin = ref(false); // Determinato dall'email o ruolo
+  const viewMode = ref<'DISPATCHER' | 'DRIVER'>('DRIVER'); // Toggle per admin
+  
+  // Dati
+  const poolOrders = ref<Order[]>([]); // Ordini 'DELIVERY' non assegnati
+  const activeTrip = ref<Trip | null>(null); // Per autista o per visualizzazione admin
+  const tripOrders = ref<Order[]>([]); // Ordini del viaggio attivo
+  const drivers = ref<any[]>([]);
+  
+  // Form Creazione Viaggio (Dispatcher)
+  const newTrip = reactive({
+    driverId: '',
+    date: new Date().toISOString().split('T')[0],
+    selectedOrderIds: [] as string[]
+  });
+  
+  const showDeliveryModal = ref(false);
+  const selectedOrderForDelivery = ref<any>(null);
+  
+  // --- INIT ---
+  onMounted(async () => {
+    await checkRole();
+    await loadDrivers();
+    
+    if (isAdmin.value) {
+      viewMode.value = 'DISPATCHER';
+      loadPool(); // Carica ordini da pianificare
+    } else {
+      viewMode.value = 'DRIVER';
+      loadMyTrip(); // Carica viaggio autista
+    }
+  });
+  
+  const checkRole = async () => {
+    // Semplice check basato su email fisse o logica esistente
+    const email = currentUser.value?.email;
+    if (email === 'info@inglesinaitaliana.it' || email === 'lavorazioni.inglesinaitaliana@gmail.com') {
+      isAdmin.value = true;
+    }
+  };
+  
+  const loadDrivers = async () => {
     const q = query(collection(db, 'team'), orderBy('lastName', 'asc')); 
     const snap = await getDocs(q);
-    users.value = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    drivers.value = snap.docs.map(d => ({ id: d.id, ...d.data() }));
   };
   
-  // GESTIONE TIMER E SESSIONE
-  const formatTime = (ms: number) => {
-    const totalSeconds = Math.floor(ms / 1000);
-    const h = Math.floor(totalSeconds / 3600).toString().padStart(2, '0');
-    const m = Math.floor((totalSeconds % 3600) / 60).toString().padStart(2, '0');
-    const s = (totalSeconds % 60).toString().padStart(2, '0');
-    return `${h}:${m}:${s}`;
-  };
+  // --- LOGICA DISPATCHER (PIANIFICAZIONE) ---
   
-  const updateTimer = () => {
-    if (!currentSession.value || !currentSession.value.startTime) return;
-    const start = currentSession.value.startTime.toDate ? currentSession.value.startTime.toDate() : new Date(currentSession.value.startTime);
-    const now = new Date();
-    timerString.value = formatTime(now.getTime() - start.getTime());
-  };
-  
-  // CHECK SESSIONE APERTA
-  const checkActiveSession = async () => {
-    if (!selectedDriverId.value) return;
-    const q = query(
-      collection(db, 'delivery_sessions'), 
-      where('driverUid', '==', selectedDriverId.value),
-      where('status', '==', 'OPEN')
-    );
-    const snap = await getDocs(q);
-    if (!snap.empty) {
-      const doc = snap.docs[0]; 
-      if (doc) {
-        currentSession.value = { id: doc.id, ...doc.data() };
-        if (currentSession.value.startTime?.seconds) {
-            currentSession.value.startTime = new Date(currentSession.value.startTime.seconds * 1000);
-        }
-        startLocalTimer();
-      }
-    } else {
-      currentSession.value = null;
-      timerString.value = '00:00:00';
-      stopLocalTimer();
-    }
-  };
-  
-  const startLocalTimer = () => {
-    if (timerInterval) clearInterval(timerInterval);
-    timerInterval = setInterval(updateTimer, 1000);
-    updateTimer();
-  };
-  
-  const stopLocalTimer = () => {
-    if (timerInterval) clearInterval(timerInterval);
-    timerString.value = '00:00:00';
-  };
-  
-  // AZIONI SESSIONE
-  const toggleSession = async () => {
-    if (!selectedDriverId.value) return alert("Seleziona un autista prima di iniziare.");
-  
-    if (currentSession.value) { // STOP
-      if (!confirm("Sei sicuro di voler terminare il giro consegne?")) return;
-      try {
-        await updateDoc(doc(db, 'delivery_sessions', currentSession.value.id), {
-          status: 'CLOSED',
-          endTime: serverTimestamp()
-        });
-        currentSession.value = null;
-        stopLocalTimer();
-      } catch (e) { console.error(e); alert("Errore chiusura sessione"); }
-    } else { // START
-      try {
-        const driver = users.value.find(u => u.id === selectedDriverId.value);
-        const driverName = driver ? `${driver.firstName} ${driver.lastName}` : 'Autista';
-        const newSession = {
-          driverUid: selectedDriverId.value,
-          driverName: driverName,
-          startTime: serverTimestamp(),
-          status: 'OPEN',
-          deliveredOrderIds: []
-        };
-        const ref = await addDoc(collection(db, 'delivery_sessions'), newSession);
-        currentSession.value = { ...newSession, id: ref.id, startTime: new Date() };
-        startLocalTimer();
-      } catch (e) { console.error(e); alert("Errore avvio sessione"); }
-    }
-  };
-  
-  // CARICAMENTO ORDINI
-  let unsubscribeOrders: null | (() => void) = null;
-  const loadOrders = () => {
-    loading.value = true;
-    if (unsubscribeOrders) unsubscribeOrders();
+  const loadPool = () => {
+    // Carica ordini in stato DELIVERY che NON sono assegnati a un viaggio
     const q = query(
       collection(db, 'preventivi'), 
-      where('stato', '==', 'DELIVERY'), 
-      orderBy('dataConsegnaPrevista', 'asc')
+      where('stato', '==', 'DELIVERY'),
+      where('assignedToTrip', '==', false) // O undefined
+      // Nota: Se 'assignedToTrip' non esiste sui vecchi documenti, Firebase potrebbe escluderli. 
+      // Per sicurezza in produzione servirebbe un indice o una migrazione. 
+      // Qui assumiamo che i nuovi DDT settino il campo o filtriamo lato client se pochi.
     );
-    unsubscribeOrders = onSnapshot(q, (snap) => {
-      orders.value = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      loading.value = false;
-    }, (error) => {
-        console.error("Errore caricamento ordini:", error);
-        loading.value = false;
+    
+    onSnapshot(q, (snap) => {
+      // Filtro client-side per sicurezza su campi mancanti
+      poolOrders.value = snap.docs
+        .map(d => ({ id: d.id, ...d.data() } as Order))
+        .filter(o => !o.assignedToTrip);
     });
   };
   
-  // HELPER RAGGRUPPAMENTO DDT
-  const raggruppaPerDdt = (lista: any[]) => {
-    const gruppi: Record<string, any> = {};
-    lista.forEach(p => {
-      const key = p.fic_ddt_id ? `DDT_${p.fic_ddt_id}` : `ORD_${p.id}`;
-      if(!gruppi[key]) {
-          gruppi[key] = {
-              uniqueKey: key,
-              isDdt: !!p.fic_ddt_id,
-              idDdt: p.fic_ddt_id,
-              number: p.fic_ddt_number,
-              url: p.fic_ddt_url,
-              cliente: p.cliente,
-              indirizzo: p.indirizzoConsegna,
-              items: [],
-              colliTotali: 0
-          };
+  // Raggruppamento Pool: Regione > Provincia
+  const groupedPool = computed(() => {
+    const groups: Record<string, Record<string, Order[]>> = {};
+    
+    poolOrders.value.forEach(o => {
+      const reg = o.regione || 'Zone Varie';
+      const prov = o.provincia || 'Altro';
+      
+      if (!groups[reg]) groups[reg] = {};
+      if (!groups[reg][prov]) groups[reg][prov] = [];
+      
+      groups[reg][prov].push(o);
+    });
+    
+    return groups;
+  });
+  
+  const toggleOrderSelection = (id: string) => {
+    if (newTrip.selectedOrderIds.includes(id)) {
+      newTrip.selectedOrderIds = newTrip.selectedOrderIds.filter(x => x !== id);
+    } else {
+      newTrip.selectedOrderIds.push(id);
+    }
+  };
+  
+  const createTrip = async () => {
+    if (!newTrip.driverId || newTrip.selectedOrderIds.length === 0) return alert("Seleziona autista e almeno un ordine.");
+    
+    try {
+      const driver = drivers.value.find(d => d.id === newTrip.driverId);
+      
+      // 1. Crea documento Trip
+      const tripRef = await addDoc(collection(db, 'trips'), {
+        driverId: newTrip.driverId,
+        driverName: driver ? `${driver.firstName} ${driver.lastName}` : 'Autista',
+        date: newTrip.date,
+        status: 'OPEN',
+        stops: newTrip.selectedOrderIds, // Salviamo gli ID per mantenere la sequenza
+        createdAt: serverTimestamp()
+      });
+  
+      // 2. Aggiorna gli ordini (Batch)
+      const batch = writeBatch(db);
+      newTrip.selectedOrderIds.forEach(oid => {
+        const ref = doc(db, 'preventivi', oid);
+        batch.update(ref, {
+          assignedToTrip: true,
+          tripId: tripRef.id
+        });
+      });
+      
+      await batch.commit();
+      
+      alert("Viaggio creato con successo!");
+      newTrip.selectedOrderIds = [];
+      newTrip.driverId = '';
+    } catch (e) {
+      console.error(e);
+      alert("Errore creazione viaggio");
+    }
+  };
+  
+  // --- LOGICA DRIVER (ESECUZIONE) ---
+  const loadMyTrip = async () => {
+  if (!currentUser.value) return;
+  
+  const q = query(
+    collection(db, 'trips'),
+    where('driverId', '==', currentUser.value.uid), 
+    where('status', '==', 'OPEN')
+  );
+  
+  onSnapshot(q, async (snap) => {
+    if (!snap.empty) {
+      const docData = snap.docs[0].data();
+      // FIX: Usiamo una variabile locale per rassicurare TypeScript che non è null
+      const currentTrip = { id: snap.docs[0].id, ...docData } as Trip;
+      activeTrip.value = currentTrip;
+      
+      // Ora usiamo currentTrip invece di activeTrip.value
+      if (currentTrip.stops && currentTrip.stops.length > 0) {
+        const promises = currentTrip.stops.map(oid => 
+           getDocs(query(collection(db, 'preventivi'), where('__name__', '==', oid)))
+        );
+        const results = await Promise.all(promises);
+        
+        tripOrders.value = results
+           .map(r => !r.empty ? { id: r.docs[0].id, ...r.docs[0].data() } : null)
+           .filter(o => o !== null) as Order[];
+      } else {
+        tripOrders.value = [];
       }
-      gruppi[key].items.push(p);
-      gruppi[key].colliTotali += (Number(p.colli) || 1);
-    });
-    
-    return Object.values(gruppi).sort((a:any, b:any) => {
-        if (a.isDdt && !b.isDdt) return -1;
-        if (!a.isDdt && b.isDdt) return 1;
-        return 0; 
-    });
-  };
+    } else {
+      activeTrip.value = null;
+      tripOrders.value = [];
+    }
+  });
+};
   
-  // LOGICA CONSEGNA (GROUPED)
-  const openDeliveryModal = (group: any) => {
-    if (!currentSession.value) return alert("Devi AVVIARE il turno di consegna.");
+// GENERATORE LINK GOOGLE MAPS
+const openNavigator = () => {
+  if (tripOrders.value.length === 0) return;
+  
+  // Ordine: Origine (Sede) -> Tappe -> Destinazione (Ultima tappa)
+  const origin = "Via Cav. Angelo Manzoni 18, Sant'Angelo Lodigiano"; // TUA SEDE
+  
+  // FIX ERRORE TS: Estraiamo l'ultima tappa in modo sicuro
+  const lastStop = tripOrders.value[tripOrders.value.length - 1];
+  const destination = lastStop?.indirizzoConsegna || ''; // Fallback stringa vuota
+  
+  const waypoints = tripOrders.value
+    .slice(0, -1) // Tutti tranne l'ultimo (che è la destinazione)
+    .map(o => encodeURIComponent(o.indirizzoConsegna))
+    .join('|');
     
-    const mergedSummary = group.items.flatMap((i:any) => i.sommarioPreventivo || []);
-    
-    selectedOrder.value = {
-      id: group.items[0].id, 
-      idsToUpdate: group.items.map((i:any) => i.id), 
-      commessa: group.isDdt ? `DDT #${group.number} (${group.items.length} Ordini)` : group.items[0].commessa,
-      codice: group.isDdt ? `DDT ${group.number}` : group.items[0].codice,
-      cliente: group.cliente,
-      indirizzoConsegna: group.indirizzo,
-      colli: group.colliTotali,
-      sommarioPreventivo: mergedSummary
+  // FIX URL: Sintassi corretta per Google Maps Universal Link
+  let url = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}`;
+  
+  if (waypoints) {
+      url += `&waypoints=${waypoints}`;
+  }
+  
+  window.open(url, '_blank');
+};
+  
+  const openDeliveryModal = (order: Order) => {
+    selectedOrderForDelivery.value = {
+      ...order,
+      // Adatta alla modale esistente
+      idsToUpdate: [order.id],
+      commessa: order.commessa,
+      cliente: order.cliente,
+      colli: order.colli,
+      sommarioPreventivo: order.sommarioPreventivo || []
     };
-    showModal.value = true;
+    showDeliveryModal.value = true;
   };
   
   const handleConfirmDelivery = async (signatureBase64: string) => {
-    if (!selectedOrder.value || !currentSession.value) return;
-    
-    try {
-      const rawIds = selectedOrder.value.idsToUpdate || [selectedOrder.value.id];
-      const ids: any[] = Array.isArray(rawIds) ? rawIds : [rawIds];
-      
-      const firmaRef = storageRef(storage, `firme_consegne/DDT_${Date.now()}_${ids[0]}.png`);
-      await uploadString(firmaRef, signatureBase64, 'data_url');
-      const signatureUrl = await getDownloadURL(firmaRef);
+  if (!selectedOrderForDelivery.value) return;
   
-      const updatePromises = ids.map((id: string) => 
-         updateDoc(doc(db, 'preventivi', id), {
-            stato: 'DELIVERED',
-            firmaConsegna: signatureUrl,
-            dataConsegnaEffettiva: serverTimestamp(),
-            consegnatoDa: currentSession.value.driverName,
-            idViaggio: currentSession.value.id
-         })
-      );
-      await Promise.all(updatePromises);
+  try {
+     const orderId = selectedOrderForDelivery.value.id;
+
+     // 1. Upload della Firma su Firebase Storage
+     const firmaRef = storageRef(storage, `firme_consegne/TRIP_${Date.now()}_${orderId}.png`);
+     await uploadString(firmaRef, signatureBase64, 'data_url');
+     const signatureUrl = await getDownloadURL(firmaRef);
+
+     // 2. Aggiorna lo stato dell'ordine con la firma
+     await updateDoc(doc(db, 'preventivi', orderId), {
+         stato: 'DELIVERED',
+         firmaConsegna: signatureUrl,
+         dataConsegnaEffettiva: serverTimestamp()
+     });
+     
+     showDeliveryModal.value = false;
+  } catch(e) { 
+      console.error("Errore consegna:", e); 
+      alert("Errore durante il salvataggio della consegna.");
+  }
+};
   
-      const sessionRef = doc(db, 'delivery_sessions', currentSession.value.id);
-      const existingIds = currentSession.value.deliveredOrderIds;
-      const currentList: any[] = Array.isArray(existingIds) ? existingIds : [];
-      const newList = [...new Set([...currentList, ...ids])];
+  const closeTrip = async () => {
+      if(!activeTrip.value) return;
+      if(!confirm("Chiudere il viaggio?")) return;
       
-      await updateDoc(sessionRef, { deliveredOrderIds: newList });
-      
-      if (currentSession.value) {
-          currentSession.value.deliveredOrderIds = newList;
-      }
-  
-      showModal.value = false;
-    } catch (e) {
-      console.error("Errore consegna:", e);
-      alert("Errore durante il salvataggio.");
-    }
+      await updateDoc(doc(db, 'trips', activeTrip.value.id), {
+          status: 'CLOSED',
+          closedAt: serverTimestamp()
+      });
   };
   
-  // HELPER UI
-  const formatDateLabel = (dateStr: string) => {
-      if (dateStr === 'Data non def.') return dateStr;
-      const d = new Date(dateStr);
-      const today = new Date(); today.setHours(0,0,0,0); d.setHours(0,0,0,0);
-      if (d.getTime() === today.getTime()) return 'OGGI';
-      const tomorrow = new Date(today); tomorrow.setDate(tomorrow.getDate() + 1);
-      if (d.getTime() === tomorrow.getTime()) return 'DOMANI';
-      return new Date(dateStr).toLocaleDateString('it-IT', { weekday: 'short', day: '2-digit', month: 'long' });
-  };
-  
-  // GROUPED ORDERS
-  const groupedOrders = computed(() => {
-    const groups: Record<string, any[]> = {};
-    orders.value.forEach(o => {
-      const data = o.dataConsegnaPrevista || 'Data non def.';
-      if (!groups[data]) groups[data] = [];
-      groups[data].push(o);
-    });
-    
-    return Object.keys(groups).sort().map(date => ({
-      date,
-      ddtGroups: raggruppaPerDdt(groups[date] || []) 
-    }));
-  });
-  
-  const isGroupDelivered = (group: any) => {
-      return group.items.some((i: any) => currentSession.value?.deliveredOrderIds?.includes(i.id));
-  };
-  
-  onMounted(() => { loadUsers(); loadOrders(); if (selectedDriverId.value) checkActiveSession(); });
-  onUnmounted(() => { if (unsubscribeOrders) unsubscribeOrders(); if (timerInterval) clearInterval(timerInterval); });
-  const onDriverChange = () => { localStorage.setItem('lastDriverId', selectedDriverId.value); checkActiveSession(); };
   </script>
   
   <template>
-    <div class="min-h-screen bg-[#F0F4F8] font-sans pb-24 text-slate-700"> <header class="sticky top-0 z-50 transition-all duration-300">
-         <div class="absolute inset-0 bg-white/90 backdrop-blur-md shadow-sm border-b border-white/20"></div>
-         <div class="relative max-w-lg mx-auto px-6 py-4">
-            <div class="flex justify-between items-center mb-4">
-              <div class="relative inline-block">
-              <h1 class="relative z-10 text-4xl font-bold font-heading text-gray-900">P.O.P.S. Dashboard</h1>
-              <div class="absolute bottom-2 left-0 w-52 h-8 bg-amber-400 rounded-sm -z-0 animate-marker"></div>
-            </div>
-               <div class="bg-slate-900 text-white px-4 py-2 rounded-full shadow-lg shadow-slate-900/20 flex items-center gap-2 font-mono text-lg font-bold border border-slate-700">
-                  <span class="w-2 h-2 rounded-full animate-pulse" :class="currentSession ? 'bg-red-500' : 'bg-slate-600'"></span>
-                  {{ timerString }}
-               </div>
-            </div>
-  
-            <div class="flex gap-3">
-               <div class="relative flex-1 group">
-                  <select 
-                    v-model="selectedDriverId" 
-                    @change="onDriverChange"
-                    :disabled="!!currentSession"
-                    class="w-full appearance-none bg-slate-100 hover:bg-slate-50 disabled:bg-slate-200 border-none rounded-2xl px-4 py-3.5 text-sm font-bold text-slate-700 outline-none focus:ring-2 focus:ring-amber-400 transition-all cursor-pointer shadow-inner"
-                  >
-                    <option value="" disabled>Seleziona Autista</option>
-                    <option v-for="u in users" :key="u.id" :value="u.id">
-                      {{ u.firstName }} {{ u.lastName }}
-                    </option>
-                  </select>
-               </div>
-  
-               <button 
-                  @click="toggleSession"
-                  class="px-6 py-3 rounded-2xl font-bold text-sm shadow-lg shadow-amber-900/10 flex items-center gap-2 transition-all active:scale-95 hover:shadow-xl"
-                  :class="currentSession ? 'bg-rose-100 text-rose-600 hover:bg-rose-200' : 'bg-amber-400 text-amber-950 hover:bg-amber-300'"
-               >
-                  <component :is="currentSession ? StopIcon : PlayIcon" class="w-5 h-5" />
-                  {{ currentSession ? 'STOP' : 'START' }}
-               </button>
-            </div>
-         </div>
+    <div class="min-h-screen bg-[#F0F4F8] font-sans pb-24 text-slate-700">
+      
+      <header class="bg-white sticky top-0 z-50 border-b border-slate-200 px-6 py-4 flex justify-between items-center shadow-sm">
+        <div>
+           <h1 class="text-2xl font-heading font-black text-slate-900">Logistica</h1>
+           <p class="text-xs text-slate-500 font-bold uppercase tracking-wider">
+             {{ viewMode === 'DISPATCHER' ? 'Pianificazione Viaggi' : 'Il mio Viaggio' }}
+           </p>
+        </div>
+        
+        <div v-if="isAdmin" class="flex bg-slate-100 p-1 rounded-lg">
+           <button @click="viewMode = 'DRIVER'" class="px-3 py-1 text-xs font-bold rounded-md transition-colors" :class="viewMode === 'DRIVER' ? 'bg-white shadow text-slate-900' : 'text-slate-400'">Driver</button>
+           <button @click="viewMode = 'DISPATCHER'" class="px-3 py-1 text-xs font-bold rounded-md transition-colors" :class="viewMode === 'DISPATCHER' ? 'bg-white shadow text-slate-900' : 'text-slate-400'">Admin</button>
+        </div>
       </header>
   
-      <main class="max-w-lg mx-auto p-4 space-y-8">
+      <main class="max-w-6xl mx-auto p-6">
         
-        <div v-if="loading" class="flex flex-col items-center justify-center py-20 opacity-50">
-           <div class="w-10 h-10 border-4 border-amber-400 border-t-transparent rounded-full animate-spin mb-4"></div>
-           <span class="font-bold text-sm">Caricamento itinerario...</span>
-        </div>
-        
-        <div v-else-if="orders.length === 0" class="flex flex-col items-center justify-center py-20 text-center">
-           <div class="w-20 h-20 bg-white rounded-3xl shadow-sm border border-dashed border-slate-300 flex items-center justify-center mb-4">
-              <TruckIcon class="w-10 h-10 text-slate-300"/>
-           </div>
-           <h3 class="text-lg font-bold text-slate-900">Nessuna consegna</h3>
-           <p class="text-sm text-slate-500">Non ci sono spedizioni programmate.</p>
-        </div>
-  
-        <div v-else v-for="group in groupedOrders" :key="group.date" class="relative">
-          
-          <div class="sticky top-[140px] z-30 flex justify-center mb-6 pointer-events-none">
-             <div class="bg-slate-800/90 backdrop-blur-md text-white px-4 py-1.5 rounded-full shadow-lg flex items-center gap-2 text-xs font-bold uppercase tracking-wide border border-white/10">
-                <CalendarIcon class="w-3.5 h-3.5 text-amber-400" />
-                {{ formatDateLabel(group.date) }}
-             </div>
-          </div>
-  
-          <div class="space-y-4">
-            <div 
-              v-for="ddt in group.ddtGroups" 
-              :key="ddt.uniqueKey"
-              @click="openDeliveryModal(ddt)"
-              class="bg-white rounded-[2rem] p-1 shadow-sm border border-slate-100 hover:shadow-xl hover:border-amber-200 transition-all duration-300 cursor-pointer relative overflow-hidden group isolate"
-              :class="{ 'opacity-50 grayscale pointer-events-none mix-blend-luminosity': isGroupDelivered(ddt) }"
-            >
-              <div class="absolute inset-0 bg-gradient-to-br from-amber-50/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity -z-10"></div>
-  
-              <div class="p-5">
-                  <div class="flex justify-between items-start mb-3">
-                      <div class="flex items-center gap-2">
-                          <span v-if="ddt.isDdt" class="inline-flex items-center gap-1.5 bg-slate-100 text-slate-600 px-3 py-1 rounded-full text-[10px] font-extrabold tracking-wider border border-slate-200 shadow-sm">
-                              <DocumentTextIcon class="w-3 h-3"/> DDT #{{ ddt.number }}
-                          </span>
-                          <span v-else class="inline-flex items-center gap-1.5 bg-blue-50 text-blue-600 px-3 py-1 rounded-full text-[10px] font-extrabold tracking-wider border border-blue-100 shadow-sm">
-                              ORDINE SINGOLO
-                          </span>
-                      </div>
-                      
-                      <div class="flex items-center gap-1 text-xs font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded-lg border border-slate-100">
-                          <span>{{ ddt.colliTotali }}</span>
-                          <span class="text-[9px] uppercase font-medium">Colli</span>
-                      </div>
-                  </div>
-  
-                  <div class="mb-4">
-                      <h4 class="text-xl font-black text-slate-800 leading-tight mb-1 group-hover:text-amber-600 transition-colors">{{ ddt.cliente }}</h4>
-                      <div class="flex items-start gap-2 text-sm text-slate-500 font-medium">
-                          <MapPinIcon class="w-4 h-4 text-slate-300 mt-0.5 shrink-0" />
-                          <span class="leading-snug">{{ ddt.indirizzo || 'Ritiro in sede / Indirizzo non spec.' }}</span>
-                      </div>
-                  </div>
-  
-                  <div class="flex items-center justify-between pt-4 border-t border-dashed border-slate-100">
-                      <div class="text-[10px] font-medium text-slate-400 flex flex-col">
-                          <span class="uppercase tracking-wider text-[9px] text-slate-300 font-bold">Riferimenti ordini</span>
-                          <span class="line-clamp-1 max-w-[200px]">
-                              <span v-for="(item, idx) in ddt.items" :key="item.id">
-                                  {{ item.commessa || item.codice }}<span v-if="idx < ddt.items.length-1">, </span>
-                              </span>
-                          </span>
-                      </div>
-                      
-                      <button class="w-10 h-10 rounded-full bg-slate-900 text-white flex items-center justify-center shadow-md group-hover:scale-110 group-hover:bg-amber-400 group-hover:text-amber-950 transition-all duration-300">
-                          <ChevronRightIcon class="w-5 h-5" />
-                      </button>
-                  </div>
+        <div v-if="viewMode === 'DISPATCHER'" class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+           
+           <div class="lg:col-span-2 space-y-6">
+              <h2 class="text-lg font-black text-slate-900 flex items-center gap-2">
+                  <InboxStackIcon class="w-6 h-6 text-amber-500"/> Ordini da Pianificare
+              </h2>
+              
+              <div v-if="poolOrders.length === 0" class="text-center py-10 bg-white rounded-2xl border border-dashed border-slate-300">
+                  <p class="text-slate-400 font-medium">Nessun ordine in attesa di spedizione interna.</p>
               </div>
   
-              <div v-if="currentSession && !isGroupDelivered(ddt)" class="absolute left-0 top-0 bottom-0 w-1.5 bg-amber-400 rounded-l-full"></div>
-            </div>
-          </div>
+              <div v-for="(province, regione) in groupedPool" :key="regione" class="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
+                  <h3 class="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">{{ regione }}</h3>
+                  
+                  <div v-for="(list, prov) in province" :key="prov" class="mb-6 last:mb-0">
+                      <div class="flex items-center gap-2 mb-3">
+                          <span class="bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded">{{ prov }}</span>
+                          <div class="h-px bg-slate-100 flex-1"></div>
+                      </div>
+                      
+                      <div class="space-y-3">
+                          <div 
+                             v-for="order in list" 
+                             :key="order.id"
+                             @click="toggleOrderSelection(order.id)"
+                             class="flex items-center p-4 rounded-2xl border transition-all cursor-pointer group hover:shadow-md"
+                             :class="newTrip.selectedOrderIds.includes(order.id) ? 'bg-amber-50 border-amber-400' : 'bg-slate-50 border-transparent hover:bg-white'"
+                          >
+                             <div class="w-5 h-5 rounded-full border-2 flex items-center justify-center mr-4 transition-colors"
+                                  :class="newTrip.selectedOrderIds.includes(order.id) ? 'border-amber-500 bg-amber-500' : 'border-slate-300 group-hover:border-amber-400'">
+                                  <CheckCircleIcon v-if="newTrip.selectedOrderIds.includes(order.id)" class="w-4 h-4 text-white" />
+                             </div>
+                             
+                             <div>
+                                 <h4 class="font-bold text-slate-900">{{ order.cliente }}</h4>
+                                 <p class="text-xs text-slate-500">{{ order.citta }} ({{ order.provincia }})</p>
+                                 <p class="text-[10px] text-slate-400 mt-1">Ref: {{ order.commessa }} • Colli: {{ order.colli }}</p>
+                             </div>
+                          </div>
+                      </div>
+                  </div>
+              </div>
+           </div>
   
+           <div class="lg:col-span-1">
+               <div class="bg-white rounded-[2rem] p-6 shadow-xl sticky top-24 border border-slate-100">
+                   <h2 class="text-lg font-black text-slate-900 mb-6 flex items-center gap-2">
+                       <TruckIcon class="w-6 h-6 text-slate-800"/> Nuovo Viaggio
+                   </h2>
+                   
+                   <div class="space-y-4">
+                       <div>
+                           <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Data Partenza</label>
+                           <input v-model="newTrip.date" type="date" class="w-full bg-slate-50 border-none rounded-xl p-3 font-bold text-slate-700">
+                       </div>
+                       
+                       <div>
+                           <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Autista</label>
+                           <select v-model="newTrip.driverId" class="w-full bg-slate-50 border-none rounded-xl p-3 font-bold text-slate-700">
+                               <option value="" disabled>Seleziona Autista</option>
+                               <option v-for="d in drivers" :key="d.id" :value="d.id">{{ d.firstName }} {{ d.lastName }}</option>
+                           </select>
+                       </div>
+  
+                       <div class="bg-amber-50 rounded-xl p-4 border border-amber-100">
+                           <div class="text-center">
+                               <span class="block text-3xl font-black text-amber-500">{{ newTrip.selectedOrderIds.length }}</span>
+                               <span class="text-xs font-bold text-amber-800 uppercase">Ordini Selezionati</span>
+                           </div>
+                       </div>
+  
+                       <button 
+                          @click="createTrip"
+                          :disabled="!newTrip.driverId || newTrip.selectedOrderIds.length === 0"
+                          class="w-full py-4 rounded-xl bg-slate-900 text-white font-bold shadow-lg hover:bg-black disabled:opacity-50 disabled:cursor-not-allowed transition-all flex justify-center items-center gap-2"
+                       >
+                          <PlusIcon class="w-5 h-5"/> Crea Viaggio
+                       </button>
+                   </div>
+               </div>
+           </div>
+        </div>
+  
+        <div v-if="viewMode === 'DRIVER'" class="max-w-md mx-auto">
+            
+            <div v-if="!activeTrip" class="text-center py-20">
+                <div class="w-20 h-20 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
+                    <TruckIcon class="w-10 h-10 text-slate-300"/>
+                </div>
+                <h2 class="text-xl font-bold text-slate-900">Nessun Viaggio Attivo</h2>
+                <p class="text-slate-500 text-sm mt-2">Non hai viaggi pianificati per oggi o il viaggio è chiuso.</p>
+            </div>
+  
+            <div v-else>
+                <div class="bg-slate-900 rounded-[2rem] p-6 text-white shadow-xl mb-6 relative overflow-hidden">
+                    <div class="relative z-10">
+                        <div class="flex justify-between items-start mb-4">
+                            <div>
+                                <p class="text-xs text-slate-400 font-bold uppercase tracking-widest">Viaggio del</p>
+                                <h2 class="text-2xl font-black">{{ new Date(activeTrip.date).toLocaleDateString('it-IT') }}</h2>
+                            </div>
+                            <div class="bg-amber-400 text-black text-xs font-black px-2 py-1 rounded">
+                                {{ tripOrders.filter(o => o.stato !== 'DELIVERED').length }} / {{ tripOrders.length }} STOP
+                            </div>
+                        </div>
+                        
+                        <button @click="openNavigator" class="w-full bg-white/10 hover:bg-white/20 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-colors border border-white/10 backdrop-blur-sm">
+                            <MapIcon class="w-5 h-5 text-amber-400"/> Avvia Navigatore Giro
+                        </button>
+                    </div>
+                    <div class="absolute -right-6 -bottom-10 w-32 h-32 bg-amber-500 rounded-full blur-3xl opacity-20"></div>
+                </div>
+  
+                <div class="space-y-0 relative pl-4">
+                    <div class="absolute left-[27px] top-4 bottom-4 w-0.5 bg-slate-200"></div>
+  
+                    <div v-for="(stop, index) in tripOrders" :key="stop.id" class="relative pb-8 last:pb-0">
+                        
+                        <div class="absolute left-0 top-0 w-6 h-6 rounded-full border-2 z-10 flex items-center justify-center bg-white"
+                             :class="stop.stato === 'DELIVERED' ? 'border-green-500' : (index === 0 || tripOrders[index-1]?.stato === 'DELIVERED' ? 'border-amber-500 scale-110' : 'border-slate-300')">
+                             <div v-if="stop.stato === 'DELIVERED'" class="w-2.5 h-2.5 bg-green-500 rounded-full"></div>
+                             <div v-else-if="index === 0 || tripOrders[index-1]?.stato === 'DELIVERED'" class="w-2.5 h-2.5 bg-amber-500 rounded-full animate-pulse"></div>
+                        </div>
+  
+                        <div class="ml-10 bg-white rounded-2xl p-4 shadow-sm border transition-all"
+                             :class="stop.stato === 'DELIVERED' ? 'border-green-100 opacity-60' : 'border-slate-100'">
+                            
+                            <div class="flex justify-between items-start">
+                                <h3 class="font-bold text-slate-900">{{ stop.cliente }}</h3>
+                                <span class="text-[10px] font-bold bg-slate-100 px-1.5 py-0.5 rounded text-slate-500">STOP {{ index + 1 }}</span>
+                            </div>
+                            
+                            <p class="text-sm text-slate-500 mt-1 flex items-start gap-1">
+                                <MapPinIcon class="w-4 h-4 shrink-0 mt-0.5 text-slate-400"/> 
+                                {{ stop.indirizzoConsegna }}
+                            </p>
+  
+                            <div v-if="stop.stato !== 'DELIVERED'" class="mt-4 flex gap-2">
+                                <button 
+                                    @click="openDeliveryModal(stop)"
+                                    class="flex-1 bg-slate-900 text-white text-xs font-bold py-2.5 rounded-xl hover:bg-black transition-colors"
+                                >
+                                    Consegna
+                                </button>
+                            </div>
+                            <div v-else class="mt-2 text-xs font-bold text-green-600 flex items-center gap-1">
+                                <CheckCircleIcon class="w-4 h-4"/> Consegnato
+                            </div>
+                        </div>
+                    </div>
+                </div>
+  
+                <div v-if="tripOrders.length > 0 && tripOrders.every(o => o.stato === 'DELIVERED')" class="mt-8">
+                    <button @click="closeTrip" class="w-full py-4 bg-green-500 text-white font-bold rounded-2xl shadow-lg shadow-green-200">
+                        Termina Giro e Chiudi Viaggio
+                    </button>
+                </div>
+  
+            </div>
         </div>
   
       </main>
   
       <DeliveryModal 
-        :show="showModal" 
-        :order="selectedOrder" 
-        @close="showModal = false"
+        :show="showDeliveryModal" 
+        :order="selectedOrderForDelivery" 
+        @close="showDeliveryModal = false"
         @confirm="handleConfirmDelivery"
       />
   

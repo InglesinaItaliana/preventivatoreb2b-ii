@@ -236,7 +236,7 @@ const ordiniInProduzione = computed(() => {
 
 // 4. SPEDIZIONI (Solo READY)
 const ordiniSpediti = computed(() => {
-  const customOrder = ['DELIVERY', 'READY'];
+  const customOrder = ['SHIPPED','DELIVERY', 'READY'];
   const filtered = listaMieiPreventivi.value.filter(p => customOrder.includes(p.stato));
   return sortByOrder([...filtered], customOrder);
 });
@@ -263,6 +263,7 @@ const getStatusStyling = (stato: string) => {
     'IN_PRODUZIONE': { badge: 'bg-amber-400 text-black border-amber-400', icon: CogIcon, iconBg: 'bg-amber-400 text-black' },
     'READY': { badge: 'bg-stone-200 text-stone-600 border-stone-300', icon: CubeIcon, iconBg: 'bg-stone-200 text-stone-600' },
     'DELIVERY': { badge: 'bg-amber-400 text-black border-amber-200', icon: CubeIcon, iconBg: 'bg-amber-400 text-black' },
+    'SHIPPED': { badge: 'bg-amber-400 text-black border-amber-200', icon: TruckIcon, iconBg: 'bg-amber-400 text-black' },
     'REJECTED': { badge: 'bg-red-100 text-red-700 border-red-200', icon: XCircleIcon, iconBg: 'bg-red-100 text-red-600' },
   };
   return styles[stato] || styles['DRAFT'];
@@ -549,6 +550,15 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
                 <h3 class="font-bold text-xl text-gray-900 leading-tight">{{ p.commessa || 'Senza Nome' }}</h3>
                 <div v-if="p.dataConsegnaPrevista" class="mt-2 flex items-center gap-1.5 px-3 py-1 bg-stone-200 border border-stone-300 rounded shadow-sm">
                   <TruckIcon class="h-4 w-4" /> <span class="text-xs font-bold text-black uppercase">Prevista il {{ formatDateShort(p.dataConsegnaPrevista) }}</span>
+                </div>
+                <div v-if="p.stato === 'SHIPPED'" class="mt-2 p-3 bg-blue-50 rounded-lg border border-blue-100 w-full max-w-sm">
+                  <div class="flex items-center gap-2 text-blue-800 font-bold text-xs uppercase mb-1">
+                    <TruckIcon class="h-4 w-4" />
+                    <span>Spedito con {{ p.corriere || 'Corriere' }}</span>
+                  </div>
+                  <div v-if="p.trackingCode" class="text-xs text-blue-600 font-mono select-all">
+                    Tracking: {{ p.trackingCode }}
+                  </div>
                 </div>
                 <div class="mt-2 flex flex-col items-start gap-2">
                   

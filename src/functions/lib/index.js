@@ -36,6 +36,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+const dotenv = __importStar(require("dotenv")); // <--- AGGIUNGI QUESTO
+dotenv.config(); // <--- E QUESTO (Carica subito il file .env)
 const functions = __importStar(require("firebase-functions/v1"));
 const admin = __importStar(require("firebase-admin"));
 const axios_1 = __importDefault(require("axios"));
@@ -45,10 +47,14 @@ if (admin.apps.length === 0) {
     admin.initializeApp();
 }
 // --- CONFIGURAZIONE ---
-const FIC_API_URL = "https://api-v2.fattureincloud.it";
-const COMPANY_ID = "185254";
-const FIC_CLIENT_ID = "m6V7Abz1NneFHAXvmEPP6X8vO96QdIVv";
-const FIC_CLIENT_SECRET = "FvVpcC0YyyPnaKNR9mNMuCslrk6ycDqrdGHl0v6szYu3nVpBFs7jfqU2IvoWF96U";
+const FIC_API_URL = process.env.FIC_API_URL || "https://api-v2.fattureincloud.it";
+const COMPANY_ID = process.env.FIC_COMPANY_ID;
+const FIC_CLIENT_ID = process.env.FIC_CLIENT_ID;
+const FIC_CLIENT_SECRET = process.env.FIC_CLIENT_SECRET;
+// Controllo di sicurezza all'avvio (opzionale ma consigliato)
+if (!COMPANY_ID || !FIC_CLIENT_ID || !FIC_CLIENT_SECRET) {
+    console.warn("⚠️ Attenzione: Credenziali FiC mancanti nel file .env");
+}
 const VAT_ID = 0;
 const VAT_VALUE = 22;
 // --- HELPER DATE ---
@@ -255,7 +261,7 @@ exports.creaDdtCumulativo = functions
     .region('europe-west1')
     .https.onCall(async (data, _context) => {
     var _a, _b, _c, _d, _e, _f, _g;
-    const { orderIds, date, colli, weight } = data;
+    const { orderIds, date, colli, weight, tipoTrasporto, corriere, tracking } = data; // Aggiornato destructuring
     if (!orderIds || orderIds.length === 0) {
         return { success: false, message: "Nessun ordine selezionato." };
     }
@@ -340,7 +346,7 @@ exports.creaDdtCumulativo = functions
             // Dati Trasporto
             dn_ai_packages_number: colli.toString(),
             dn_ai_causal: "VENDITA",
-            dn_ai_transporter: "MITTENTE",
+            dn_ai_transporter: tipoTrasporto === 'COURIER' ? corriere : 'MITTENTE',
             // Mappatura standard
             c_driver_and_contents: {
                 packages_number: parseInt(colli),
@@ -361,14 +367,20 @@ exports.creaDdtCumulativo = functions
         console.log(`[FIC] DDT Creato: ID ${newDdt.id}, Numero ${newDdt.number}`);
         // 6. AGGIORNAMENTO FIRESTORE
         const batch = db.batch();
+        const nuovoStato = tipoTrasporto === 'COURIER' ? 'SHIPPED' : 'DELIVERY';
         ordersData.forEach(o => {
             const ref = db.collection('preventivi').doc(o.firestoreId);
             batch.update(ref, {
                 fic_ddt_id: newDdt.id,
                 fic_ddt_url: newDdt.url,
                 fic_ddt_number: newDdt.number,
-                stato: 'DELIVERY',
-                dataConsegnaPrevista: date
+                stato: nuovoStato, // <--- STATO DINAMICO
+                dataConsegnaPrevista: date,
+                // NUOVI DATI SPEDIZIONE
+                metodoSpedizione: tipoTrasporto, // 'INTERNAL' o 'COURIER'
+                corriere: tipoTrasporto === 'COURIER' ? corriere : null,
+                trackingCode: tipoTrasporto === 'COURIER' ? tracking : null,
+                dataSpedizione: admin.firestore.FieldValue.serverTimestamp()
             });
         });
         await batch.commit();
@@ -508,12 +520,11 @@ function generatePopPassword() {
     return `${icon}${number}!`;
 }
 // --- CONFIGURAZIONE EMAIL (Gmail SMTP) ---
-// Nota: Per Gmail serve una "App Password" se hai la 2FA attiva.
 const mailTransport = nodemailer.createTransport({
     service: 'gmail',
     auth: {
-        user: 'info@inglesinaitaliana.it',
-        pass: 'TU_APP_PASSWORD_QUI' // <--- DA CONFIGURARE IN CONFIG/ENV
+        user: process.env.GMAIL_EMAIL,
+        pass: process.env.GMAIL_PASSWORD
     }
 });
 // --- HELPER: RECUPERA CLIENTE DA FIC ---

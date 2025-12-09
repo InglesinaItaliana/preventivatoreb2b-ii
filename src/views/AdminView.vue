@@ -59,6 +59,7 @@ const iconMap: Record<string, any> = {
   'IN_PRODUZIONE': CogIcon,
   'READY': CubeIcon,
   'DELIVERY': TruckIcon,
+  'SHIPPED': TruckIcon, // Icona Camion per spedito
   'REJECTED': XCircleIcon
 };
 
@@ -90,7 +91,7 @@ const categoryCounts = computed(() => {
     if (['PENDING_VAL', 'QUOTE_READY'].includes(st)) counts.PREVENTIVI++;
     else if (['ORDER_REQ', 'WAITING_SIGN'].includes(st)) counts.ORDINI++;
     else if (['SIGNED', 'IN_PRODUZIONE'].includes(st)) counts.PRODUZIONE++;
-    else if (['READY', 'DELIVERY'].includes(st)) counts.SPEDIZIONI++;
+    else if (['READY', 'DELIVERY', 'SHIPPED'].includes(st)) counts.SPEDIZIONI++;
   });
   return counts;
 });
@@ -130,7 +131,11 @@ const handleCreaDdt = async (datiDdt: any) => {
             orderIds: orderIds,
             date: datiDdt.date,
             colli: datiDdt.colli,
-            weight: datiDdt.weight
+            weight: datiDdt.weight,
+            // NUOVI CAMPI
+            tipoTrasporto: datiDdt.tipoTrasporto,
+            corriere: datiDdt.corriere,
+            tracking: datiDdt.tracking
         });
 
         if (response.data.success) {
@@ -210,7 +215,7 @@ const preventiviFiltrati = computed(() => {
     if (activeCategory.value === 'PREVENTIVI') return ['PENDING_VAL', 'QUOTE_READY'].includes(st);
     if (activeCategory.value === 'ORDINI') return ['ORDER_REQ', 'WAITING_SIGN'].includes(st);
     if (activeCategory.value === 'PRODUZIONE') return ['SIGNED', 'IN_PRODUZIONE'].includes(st);
-    if (activeCategory.value === 'SPEDIZIONI') return ['READY', 'DELIVERY'].includes(st);
+    if (activeCategory.value === 'SPEDIZIONI') return ['READY', 'DELIVERY', 'SHIPPED'].includes(st);
     
     return true;
   });
@@ -415,7 +420,7 @@ const clientiRaggruppati = computed(() => {
 });
 
 // --- RAGGRUPPAMENTO PER STATO ---
-const ordineStati = ['PENDING_VAL', 'QUOTE_READY', 'ORDER_REQ', 'WAITING_SIGN', 'SIGNED', 'IN_PRODUZIONE', 'READY', 'DELIVERY', 'DRAFT', 'REJECTED'];
+const ordineStati = ['PENDING_VAL', 'QUOTE_READY', 'ORDER_REQ', 'WAITING_SIGN', 'SIGNED', 'IN_PRODUZIONE', 'READY', 'SHIPPED', 'DELIVERY', 'DRAFT', 'REJECTED'];
 
 const preventiviPerStato = computed(() => {
   const gruppi: Record<string, any[]> = {};

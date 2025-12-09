@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue';
+import { ref, watch, computed, reactive } from 'vue';
 import { Dialog, DialogPanel, DialogTitle, TransitionChild, TransitionRoot } from '@headlessui/vue';
 import { TruckIcon } from '@heroicons/vue/24/solid';
 
@@ -29,29 +29,36 @@ const modalDescription = computed(() => {
     return `Stai per creare un unico DDT per <strong>${props.orders.length} ordini</strong>. Verifica i dati di trasporto qui sotto.`;
 });
 
+const form = reactive({
+  date: new Date().toISOString().split('T')[0],
+  colli: 1,
+  weight: 0,
+  tipoTrasporto: 'INTERNAL', // 'INTERNAL' o 'COURIER'
+  corriere: '', // Es. BRT, GLS
+  tracking: ''
+});
+
+const corrieriList = ['BRT', 'GLS', 'TNT', 'DHL', 'SDA', 'UPS', 'FEDEX'];
+
 watch(() => props.orders, (newOrders: any[]) => {
   if (newOrders.length > 0) {
-    dataDdt.value = newOrders[0].dataConsegnaPrevista || new Date().toISOString().split('T')[0];
+    form.date = newOrders[0].dataConsegnaPrevista || new Date().toISOString().split('T')[0];
     
     const totaleColli = newOrders.reduce((somma: number, ordine: any) => {
-        const colliOrdine = ordine.colli ? Number(ordine.colli) : 1;
-        return somma + colliOrdine;
+        return somma + (ordine.colli ? Number(ordine.colli) : 1);
     }, 0);
 
-    numeroColli.value = totaleColli;
+    form.colli = totaleColli;
   }
 }, { immediate: true, deep: true });
 
 const confirm = () => {
-  if (numeroColli.value < 1) return alert("Inserire almeno 1 collo");
-  if (!dataDdt.value) return alert("Data obbligatoria");
+  if (form.colli < 1) return alert("Inserire almeno 1 collo");
+  if (!form.date) return alert("Data obbligatoria");
 
   loading.value = true;
-  emit('confirm', {
-    date: dataDdt.value,
-    colli: numeroColli.value,
-    weight: pesoKg.value
-  });
+  // Passiamo tutto l'oggetto form
+  emit('confirm', { ...form });
 };
 </script>
 
@@ -77,7 +84,42 @@ const confirm = () => {
                   </DialogTitle>
                   <div class="mt-2">
                     <p class="text-sm text-gray-500" v-html="modalDescription"></p>
+                    <div class="mb-4 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                      <label class="block text-xs font-bold text-slate-400 uppercase mb-2">Modalità Spedizione</label>
+                      <div class="flex gap-2">
+                        <button 
+                          type="button"
+                          @click="form.tipoTrasporto = 'INTERNAL'"
+                          class="flex-1 py-2 rounded-lg text-xs font-bold border transition-all"
+                          :class="form.tipoTrasporto === 'INTERNAL' ? 'bg-slate-800 text-white border-slate-800' : 'bg-white text-slate-500 border-slate-200'"
+                        >
+                          Mezzi Interni
+                        </button>
+                        <button 
+                          type="button"
+                          @click="form.tipoTrasporto = 'COURIER'"
+                          class="flex-1 py-2 rounded-lg text-xs font-bold border transition-all"
+                          :class="form.tipoTrasporto === 'COURIER' ? 'bg-amber-400 text-amber-950 border-amber-400' : 'bg-white text-slate-500 border-slate-200'"
+                        >
+                          Corriere Esterno
+                        </button>
+                      </div>
+                    </div>
 
+                    <div v-if="form.tipoTrasporto === 'COURIER'" class="mb-4 space-y-3 animate-in fade-in slide-in-from-top-2">
+                      <div>
+                        <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Vettore / Corriere</label>
+                        <select v-model="form.corriere" class="w-full bg-slate-50 border-none rounded-xl p-3 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-amber-200">
+                          <option value="" disabled>Seleziona Corriere</option>
+                          <option v-for="c in corrieriList" :key="c" :value="c">{{ c }}</option>
+                          <option value="ALTRO">Altro</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Codice Tracking</label>
+                        <input v-model="form.tracking" type="text" placeholder="Es. 1234567890" class="w-full bg-slate-50 border-none rounded-xl p-3 text-sm font-bold text-slate-700 focus:ring-2 focus:ring-amber-200">
+                      </div>
+                    </div>
                     <div class="mt-4 grid grid-cols-1 gap-y-4 gap-x-4 sm:grid-cols-2">
                         <div class="col-span-2 sm:col-span-1">
                             <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Data DDT</label>
