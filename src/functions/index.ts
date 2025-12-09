@@ -204,12 +204,12 @@ exports.generaOrdineFIC = functions
                     entity: {
                         id: ficId, 
                         name: detailedClient.name,
-                        vat_number: detailedClient.vat_number || null,
-                        tax_code: detailedClient.tax_code || null,
-                        address_street: detailedClient.address_street || null,
-                        address_postal_code: detailedClient.address_postal_code || null,
-                        address_city: detailedClient.address_city || null,
-                        address_province: detailedClient.address_province || null,
+                        vat_number: detailedClient.vat_number || "", // Meglio stringa vuota anche qui per sicurezza
+                        tax_code: detailedClient.tax_code || "",     // <--- Stringa vuota
+                        address_street: detailedClient.address_street || "",
+                        address_postal_code: detailedClient.address_postal_code || "",
+                        address_city: detailedClient.address_city || "",
+                        address_province: detailedClient.address_province || "",
                         country: detailedClient.country || "Italia"
                     },
                     date: dataOrdine,
@@ -339,12 +339,12 @@ exports.creaDdtCumulativo = functions
             const entityData = detailedClient ? {
                 id: detailedClient.id,
                 name: detailedClient.name,
-                vat_number: detailedClient.vat_number || null,
-                tax_code: detailedClient.tax_code || null,
-                address_street: detailedClient.address_street || null,
-                address_postal_code: detailedClient.address_postal_code || null,
-                address_city: detailedClient.address_city || null,
-                address_province: detailedClient.address_province || null,
+                vat_number: detailedClient.vat_number || "", // Stringa vuota
+                tax_code: detailedClient.tax_code || "",     // Stringa vuota
+                address_street: detailedClient.address_street || "", // Stringa vuota
+                address_postal_code: detailedClient.address_postal_code || "", // Stringa vuota
+                address_city: detailedClient.address_city || "", // Stringa vuota
+                address_province: detailedClient.address_province || "", // Stringa vuota
                 country: detailedClient.country || "Italia"
             } : joinedData.entity;
 

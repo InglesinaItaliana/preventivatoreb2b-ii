@@ -180,9 +180,9 @@
   
   onSnapshot(q, async (snap) => {
     if (!snap.empty) {
-      const docData = snap.docs[0].data();
+      const docData = snap.docs[0]!.data();
       // FIX: Usiamo una variabile locale per rassicurare TypeScript che non è null
-      const currentTrip = { id: snap.docs[0].id, ...docData } as Trip;
+      const currentTrip = { id: snap.docs[0]!.id, ...docData } as Trip;
       activeTrip.value = currentTrip;
       
       // Ora usiamo currentTrip invece di activeTrip.value
@@ -193,7 +193,7 @@
         const results = await Promise.all(promises);
         
         tripOrders.value = results
-           .map(r => !r.empty ? { id: r.docs[0].id, ...r.docs[0].data() } : null)
+           .map(r => !r.empty ? { id: r.docs[0]!.id, ...r.docs[0]!.data() } : null)
            .filter(o => o !== null) as Order[];
       } else {
         tripOrders.value = [];

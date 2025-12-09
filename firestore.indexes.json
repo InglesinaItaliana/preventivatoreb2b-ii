@@ -40,6 +40,20 @@
           "order": "DESCENDING"
         }
       ]
+    },
+    {
+      "collectionGroup": "preventivi",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "stato",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "dataConsegnaPrevista",
+          "order": "ASCENDING"
+        }
+      ]
     }
   ],
   "fieldOverrides": []
