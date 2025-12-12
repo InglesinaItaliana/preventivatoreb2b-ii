@@ -47,6 +47,12 @@
   const tripOrders = ref<Order[]>([]); // Ordini del viaggio attivo
   const drivers = ref<any[]>([]);
   
+  const confirmModal = reactive({
+  show: false,
+  message: '',
+  onConfirm: () => {}
+});
+
   // Form Creazione Viaggio (Dispatcher)
   const newTrip = reactive({
     driverId: '',
@@ -333,15 +339,19 @@ const openNavigator = () => {
   }
 };
   
-  const closeTrip = async () => {
-      if(!activeTrip.value) return;
-      if(!confirm("Chiudere il viaggio?")) return;
-      
-      await updateDoc(doc(db, 'trips', activeTrip.value.id), {
+const closeTrip = async () => {
+  if(!activeTrip.value) return;
+  
+  confirmModal.message = "Sei sicuro di voler chiudere questo viaggio? Non potrai più modificarlo.";
+  confirmModal.onConfirm = async () => {
+      await updateDoc(doc(db, 'trips', activeTrip.value!.id), {
           status: 'CLOSED',
           closedAt: serverTimestamp()
       });
+      confirmModal.show = false;
   };
+  confirmModal.show = true;
+};
   
 // --- HELPER RAGGRUPPAMENTO SPEDIZIONI (DDT vs ORDINI) ---
 const getShipments = (list: Order[]) => {
@@ -652,5 +662,15 @@ const isSelected = (ids: string[]) => {
         @confirm="handleConfirmDelivery"
       />
   
+    </div>
+    <div v-if="confirmModal.show" class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm">
+      <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 text-center">
+        <h3 class="text-lg font-bold text-gray-900 mb-2">Conferma Azione</h3>
+        <p class="text-gray-500 mb-6 text-sm">{{ confirmModal.message }}</p>
+        <div class="flex gap-3 justify-center">
+          <button @click="confirmModal.show = false" class="px-4 py-2 rounded-lg text-gray-600 font-bold hover:bg-gray-100">Annulla</button>
+          <button @click="confirmModal.onConfirm" class="px-6 py-2 rounded-lg bg-green-600 text-white font-bold hover:bg-green-500 shadow-md">Conferma</button>
+        </div>
+      </div>
     </div>
   </template>

@@ -71,6 +71,23 @@
     'bg-violet-400', 'bg-purple-400', 'bg-fuchsia-400', 'bg-pink-400', 'bg-rose-400'
   ];
   
+const toastMessage = ref('');
+const showToast = ref(false);
+const confirmModal = reactive({
+  show: false,
+  message: '',
+  onConfirm: () => {}
+});
+
+const showCustomToast = (message: string) => {
+  toastMessage.value = message;
+  showToast.value = true;
+  setTimeout(() => {
+    showToast.value = false;
+    toastMessage.value = '';
+  }, 2500); 
+};
+
   // --- CARICAMENTO DATI ---
   const fetchData = async () => {
     loading.value = true;
@@ -133,7 +150,7 @@
   };
   
   const saveMember = async () => {
-    if (!memberForm.firstName || !memberForm.lastName || !memberForm.email) return alert("Dati mancanti");
+    if (!memberForm.firstName || !memberForm.lastName || !memberForm.email) return showCustomToast("Dati mancanti");
     try {
       const payload = { ...memberForm, lastUpdate: serverTimestamp() };
       if (isEditing.value && currentMemberId.value) {
@@ -143,7 +160,7 @@
       }
       showMemberModal.value = false;
       fetchData(); 
-    } catch (e) { alert("Errore salvataggio"); }
+    } catch (e) { showCustomToast("Errore salvataggio"); }
   };
   
   // --- AZIONI CLIENTI ---
@@ -175,11 +192,11 @@
       });
     });
   } else {
-    return alert("Inserisci una P.IVA o carica un CSV");
+    return showCustomToast("Inserisci una P.IVA o carica un CSV");
   }
 
   const total = pivaList.length;
-  if (total === 0) return alert("Nessuna P.IVA trovata.");
+  if (total === 0) return showCustomToast("Nessuna P.IVA trovata.");
 
   processing.value = true;
   
@@ -224,7 +241,7 @@
       msg += `\n\nPrimi errori riscontrati:\n${allErrors.slice(0, 10).join('\n')}`;
       if (allErrors.length > 10) msg += `\n...e altri ${allErrors.length - 10}`;
     }
-    alert(msg);
+    showCustomToast(msg);
 
     // 3. Gestione "Invia Subito" per inserimento singolo manuale
     if (clientImportForm.manualPiva && clientImportForm.sendNow && successCount > 0) {
@@ -243,7 +260,7 @@
 
   } catch (e: any) {
     console.error(e);
-    alert("Errore critico importazione: " + e.message);
+    showCustomToast("Errore critico importazione: " + e.message);
   } finally {
     processing.value = false;
   }
@@ -255,14 +272,16 @@
   };
   
   const sendInvites = async (ids: string[]) => {
-    if (ids.length === 0) return alert("Nessun cliente selezionato");
-    if (!confirm(`Stai per inviare ${ids.length} email di invito con password. Procedere?`)) return;
+  if (ids.length === 0) return alert("Nessun cliente selezionato"); // Qui puoi usare showCustomToast se l'hai aggiunto
   
+  confirmModal.message = `Stai per inviare ${ids.length} email di invito con password. Procedere?`;
+  confirmModal.onConfirm = async () => {
+    confirmModal.show = false; // Chiudi prima dell'azione
     processing.value = true;
     try {
       const inviteFn = httpsCallable(functions, 'sendInvitesToClients');
       const res: any = await inviteFn({ uids: ids });
-      alert(`Inviti inviati: ${res.data.sent}. Errori: ${res.data.failed}`);
+      alert(`Inviti inviati: ${res.data.sent}. Errori: ${res.data.failed}`); // O showCustomToast
       selectedClientIds.value = [];
       fetchData();
     } catch (e: any) {
@@ -271,6 +290,8 @@
       processing.value = false;
     }
   };
+  confirmModal.show = true;
+};
   
   const getInitials = (f: string, l: string) => {
     const first = f ? f.charAt(0) : '';
@@ -285,7 +306,7 @@
         
         <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-6">
           <div>
-            <p class="text-lg font-medium text-gray-800 leading-none">Pannello di controllo amministrativo</p>
+            <p class="text-lg font-medium text-gray-800 leading-none">Inglesina Italiana Srl</p>
             <div class="relative inline-block">
               <h1 class="relative z-10 text-6xl font-bold font-heading text-gray-900">P.O.P.S. Settings</h1>
               <div class="absolute bottom-2 left-0 w-full h-8 bg-amber-400 rounded-sm -z-0 animate-marker"></div>
@@ -361,7 +382,7 @@
                     <input v-model="searchQuery" type="text" placeholder="Cerca cliente P.IVA o nome..." class="w-full pl-12 pr-4 py-3 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-amber-200 text-sm font-bold text-slate-700 placeholder-slate-400">
                  </div>
                  <select v-model="filterClientStatus" class="bg-slate-50 border-none rounded-xl px-4 py-3 text-sm font-bold text-slate-600 cursor-pointer focus:ring-2 focus:ring-amber-200">
-                    <option value="ALL">Tutti gli stati</option>
+                    <option value="ALL">Tutti</option>
                     <option value="PENDING">Da Invitare</option>
                     <option value="ACTIVE">Attivi</option>
                  </select>
@@ -540,5 +561,25 @@
         </div>
       </div>
   
+    </div>
+    <div 
+      v-if="showToast" 
+      class="fixed inset-0 z-[9999] flex items-center justify-center transition-all duration-300"
+      :class="showToast ? 'opacity-100 backdrop-blur-sm bg-black/10' : 'opacity-0'">
+      <div 
+        class="bg-gray-800 text-white px-6 py-3 rounded-xl shadow-2xl transition-all duration-300 transform scale-100"
+        :class="showToast ? 'translate-y-0' : 'translate-y-10'">
+        <p class="font-bold text-lg whitespace-pre-line text-center">{{ toastMessage }}</p>
+      </div>
+    </div>
+    <div v-if="confirmModal.show" class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm">
+      <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 text-center">
+        <h3 class="text-lg font-bold text-gray-900 mb-2">Conferma Invio</h3>
+        <p class="text-gray-500 mb-6 text-sm">{{ confirmModal.message }}</p>
+        <div class="flex gap-3 justify-center">
+          <button @click="confirmModal.show = false" class="px-4 py-2 rounded-lg text-gray-600 font-bold hover:bg-gray-100">Annulla</button>
+          <button @click="confirmModal.onConfirm" class="px-6 py-2 rounded-lg bg-amber-400 text-amber-950 font-bold hover:bg-amber-300 shadow-md">Procedi</button>
+        </div>
+      </div>
     </div>
   </template>

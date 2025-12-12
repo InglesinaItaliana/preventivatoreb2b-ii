@@ -36,6 +36,18 @@ import {
   ArchiveBoxIcon  // NUOVO: Per Archivio
 } from '@heroicons/vue/24/solid'
 
+// --- TOAST NOTIFICATION ---
+const toastMessage = ref('');
+const showToast = ref(false);
+
+const showCustomToast = (message: string) => {
+  toastMessage.value = message;
+  showToast.value = true;
+  setTimeout(() => {
+    showToast.value = false;
+    toastMessage.value = '';
+  }, 2500); 
+};
 const router = useRouter();
 const listaPreventivi = ref<any[]>([]);
 const anagraficaClienti = ref<Record<string, string>>({});
@@ -139,7 +151,7 @@ const handleCreaDdt = async (datiDdt: any) => {
         });
 
         if (response.data.success) {
-            alert(`✅ DDT Creato con successo! ID: ${response.data.fic_id}`);
+          showCustomToast(`✅ DDT Creato con successo! ID: ${response.data.fic_id}`);
             annullaSpedizione(); // Pulisce la selezione
             showDdtModal.value = false;
             // Qui potresti ricaricare i dati o aggiornare lo stato locale
@@ -149,7 +161,7 @@ const handleCreaDdt = async (datiDdt: any) => {
 
     } catch (e: any) {
         console.error(e);
-        alert(`❌ Errore creazione DDT: ${e.message}`);
+        showCustomToast(`❌ Errore creazione DDT: ${e.message}`);
         showDdtModal.value = false; // Chiudiamo comunque per evitare blocchi, o gestisci il loading dentro la modale
     }
 };
@@ -314,8 +326,8 @@ const onConfirmProduction = async () => {
     if (item) item.stato = 'IN_PRODUZIONE';
     
     showModals.value = false;
-    alert("✅ Ordine inviato in produzione!");
-  } catch (e) { console.error(e); alert("Errore aggiornamento stato."); }
+    showCustomToast("✅ Ordine inviato in produzione!");
+  } catch (e) { console.error(e); showCustomToast("Errore aggiornamento stato."); }
 };
 
 // Variabile per tracciare l'ID dell'ordine che sta chiedendo conferma "Sì/No"
@@ -331,7 +343,7 @@ const ordinePronto = async (preventivo: any) => {
       if (index !== -1) listaPreventivi.value[index].stato = 'READY';
   } catch (e) {
       console.error(e);
-      alert("Errore aggiornamento");
+      showCustomToast("Errore aggiornamento.");
   }
 };
 
@@ -575,7 +587,7 @@ const toggleSpedizione = (preventivo: any) => {
 
   // CASO 2: Clicco su un ordine di un ALTRO cliente -> Errore o Ignora
   if (spedizioneAttivaCliente.value !== preventivo.clienteEmail) {
-    alert("Puoi creare un DDT solo per un cliente alla volta. Termina o annulla la selezione corrente.");
+    showCustomToast("Puoi creare un DDT solo per un cliente alla volta. Termina o annulla la selezione corrente.");
     return;
   }
 
@@ -1104,6 +1116,16 @@ onUnmounted(() => {
           </button>
         </div>
 
+      </div>
+    </div>
+    <div 
+      v-if="showToast" 
+      class="fixed inset-0 z-[9999] flex items-center justify-center transition-all duration-300"
+      :class="showToast ? 'opacity-100 backdrop-blur-sm bg-black/10' : 'opacity-0'">
+      <div 
+        class="bg-gray-800 text-white px-6 py-3 rounded-xl shadow-2xl transition-all duration-300 transform scale-100"
+        :class="showToast ? 'translate-y-0' : 'translate-y-10'">
+        <p class="font-bold text-lg whitespace-nowrap">{{ toastMessage }}</p>
       </div>
     </div>
 </template>

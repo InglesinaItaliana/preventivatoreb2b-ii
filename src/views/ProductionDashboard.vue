@@ -38,6 +38,18 @@ const iconMap: Record<string, any> = {
 const activeView = ref<'CLIENTI' | 'COMMESSE'>('COMMESSE'); // Default su Commesse per vedere la lista operativa
 const filtroPeriodo = ref<'TUTTO' | 'CORRENTE' | 'SCORSO'>('TUTTO'); // Default TUTTO per non perdere ordini vecchi
 
+const toastMessage = ref('');
+const showToast = ref(false);
+
+const showCustomToast = (message: string) => {
+  toastMessage.value = message;
+  showToast.value = true;
+  setTimeout(() => {
+    showToast.value = false;
+    toastMessage.value = '';
+  }, 2500); 
+};
+
 // Calcolo statistiche rapide per la testata
 const productionStats = computed(() => {
   const stats = { da_avviare: 0, in_lavorazione: 0 };
@@ -145,7 +157,7 @@ const onConfirmProduction = async () => {
   try {
     await updateDoc(doc(db, 'preventivi', selectedOrder.value.id), { stato: 'IN_PRODUZIONE' });
     showModals.value = false;
-  } catch (e) { console.error(e); alert("Errore aggiornamento stato."); }
+  } catch (e) { console.error(e); showCustomToast("Errore aggiornamento stato."); }
 };
 
 // Gestione Ordine Pronto
@@ -155,7 +167,7 @@ const ordinePronto = async (preventivo: any) => {
   try {
       await updateDoc(doc(db, 'preventivi', preventivo.id), { stato: 'READY' });
       // L'ordine sparirà dalla lista perché lo stato diventa READY (non incluso nel filtro produzione)
-  } catch (e) { console.error(e); alert("Errore aggiornamento"); }
+  } catch (e) { console.error(e); showCustomToast("Errore aggiornamento."); }
 };
 
 const handleClickAzione = (p: any) => {
@@ -454,7 +466,16 @@ onUnmounted(() => { if (unsubscribe) unsubscribe(); });
 
     </div>
   </div>
-
+  <div 
+      v-if="showToast" 
+      class="fixed inset-0 z-[9999] flex items-center justify-center transition-all duration-300"
+      :class="showToast ? 'opacity-100 backdrop-blur-sm bg-black/10' : 'opacity-0'">
+      <div 
+        class="bg-gray-800 text-white px-6 py-3 rounded-xl shadow-2xl transition-all duration-300 transform scale-100"
+        :class="showToast ? 'translate-y-0' : 'translate-y-10'">
+        <p class="font-bold text-lg whitespace-nowrap">{{ toastMessage }}</p>
+      </div>
+    </div>
   <OrderModals 
       :show="showModals"
       :mode="modalMode"

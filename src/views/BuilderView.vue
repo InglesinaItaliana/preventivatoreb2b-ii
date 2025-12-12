@@ -32,8 +32,26 @@ const showCustomToast = (message: string) => {
   setTimeout(() => {
     showToast.value = false;
     toastMessage.value = '';
-  }, 3000); 
+  }, 2500); 
 };
+
+// --- CONFIRM MODAL STATE ---
+const confirmModal = reactive({
+  show: false,
+  title: 'Richiesta Conferma',
+  message: '',
+  onConfirm: () => {}
+});
+
+const openConfirm = (message: string, callback: () => void) => {
+  confirmModal.message = message;
+  confirmModal.onConfirm = () => {
+    callback();
+    confirmModal.show = false;
+  };
+  confirmModal.show = true;
+};
+
 const soloCanalino = ref(false);
 const adminExtraQty = ref(1); // Nuova variabile per la quantità extra
 const summarySectionRef = ref<HTMLElement | null>(null);
@@ -262,7 +280,9 @@ onUnmounted(() => {
 const aggiungi = () => {
   // Validazione condizionale: Se è solo canalino, non controlliamo la griglia
   const gridValid = soloCanalino.value || (tipoGriglia.value && dimensioneGriglia.value && finituraGriglia.value);
-  const canalinoValid = tipoCanalino.value && dimensioneCanalino.value && finituraCanalino.value;
+  const canalinoValid = soloCanalino.value 
+    ? (tipoCanalino.value && dimensioneCanalino.value && finituraCanalino.value) 
+    : true;
   const sizesValid = pannello.base && pannello.altezza;
 
   if (!gridValid || !canalinoValid || !sizesValid) return;
@@ -313,7 +333,7 @@ const aggiungi = () => {
         ? 'TELAIO (SOLO CANALINO)' 
         : `${descStart} ${tipoGriglia.value} ${dimensioneGriglia.value} - ${finituraGriglia.value}`,
         
-    infoCanalino: `Canalino: ${tipoCanalino.value} ${dimensioneCanalino.value} ${finituraCanalino.value}`,
+        infoCanalino: tipoCanalino.value ? `Canalino: ${tipoCanalino.value} ${dimensioneCanalino.value} ${finituraCanalino.value}` : '',
     prezzo_unitario: result.prezzo_unitario, 
     prezzo_totale: result.prezzo_totale,
     nonEquidistanti: opzioniTelaio.nonEquidistanti, 
@@ -349,55 +369,67 @@ const uploadFile = async (event: Event) => {
       tipo: file.name.split('.').pop()?.toUpperCase() || 'FILE',
       dataCaricamento: new Date().toISOString()
     });
-  } catch (e) { alert("Errore upload."); console.error(e); }
+  } catch (e) { showCustomToast("Errore durante il caricamento."); console.error(e); }
   finally { isUploading.value = false; }
 };
 
-const rimuoviAllegato = (index: number) => { if(confirm("Rimuovere allegato?")) listaAllegati.value.splice(index, 1); };
+const rimuoviAllegato = (index: number) => { 
+  openConfirm("Sei sicuro di voler rimuovere questo allegato?", () => {
+    listaAllegati.value.splice(index, 1);
+  });
+};
 
 const vaiDashboard = () => {
+  const proceed = () => {
+    if (isAdmin.value) router.push('/admin');
+    else router.push('/dashboard');
+  };
+
   if (preventivo.value.length > 0 && !currentDocId.value) {
-    if (!confirm("Hai un preventivo in corso non salvato. Vuoi uscire?")) return;
+    openConfirm("Hai un preventivo in corso non salvato. Vuoi uscire? Le modifiche andranno perse.", proceed);
+  } else {
+    proceed();
   }
-  if (isAdmin.value) router.push('/admin');
-  else router.push('/dashboard');
 };
 
 const nuovaCommessa = () => {
-  if (preventivo.value.length > 0 && !confirm("Attenzione: perderai le modifiche non salvate. Iniziare una nuova commessa?")) return;
-  
-  // 1. Reset Dati Generali
-  preventivo.value = [];
-  currentDocId.value = null;
-  statoCorrente.value = 'DRAFT';
-  riferimentoCommessa.value = '';
-  codiceRicerca.value = '';
-  noteCliente.value = '';
-  scontoApplicato.value = 0;
-  listaAllegati.value = [];
-  
-  // 2. Reset Campi Admin
-  searchClientQuery.value = '';
-  clienteUID.value = '';
-  clienteEmail.value = '';
-  nomeCliente.value = 'Cliente';
-  
-  // 3. Reset Input Pannello (Misure)
-  Object.assign(pannello, { base: 0, altezza: 0, righe: 0, colonne: 0, qty: 1 });
-  Object.assign(opzioniTelaio, { nonEquidistanti: false, curva: false, tacca: false });
+  const proceed = () => {
+    // Logica di reset esistente...
+    preventivo.value = [];
+    currentDocId.value = null;
+    statoCorrente.value = 'DRAFT';
+    riferimentoCommessa.value = '';
+    codiceRicerca.value = '';
+    noteCliente.value = '';
+    scontoApplicato.value = 0;
+    listaAllegati.value = [];
+    
+    searchClientQuery.value = '';
+    clienteUID.value = '';
+    clienteEmail.value = '';
+    nomeCliente.value = 'Cliente';
+    
+    Object.assign(pannello, { base: 0, altezza: 0, righe: 0, colonne: 0, qty: 1 });
+    Object.assign(opzioniTelaio, { nonEquidistanti: false, curva: false, tacca: false });
 
-  // 4. RESET CAMPI SELEZIONE (Griglia/Canalino) - <--- QUESTA PARTE MANCAVA
-  categoriaGriglia.value = 'INGLESINA';
-  tipoGriglia.value = '';
-  dimensioneGriglia.value = '';
-  finituraGriglia.value = '';
-  
-  tipoCanalino.value = '';
-  dimensioneCanalino.value = '';
-  finituraCanalino.value = '';
-  
-  copiaDuplex.value = false;
-  fuseruolo.value = '';
+    categoriaGriglia.value = 'INGLESINA';
+    tipoGriglia.value = '';
+    dimensioneGriglia.value = '';
+    finituraGriglia.value = '';
+    
+    tipoCanalino.value = '';
+    dimensioneCanalino.value = '';
+    finituraCanalino.value = '';
+    
+    copiaDuplex.value = false;
+    fuseruolo.value = '';
+  };
+
+  if (preventivo.value.length > 0) {
+    openConfirm("Attenzione: perderai le modifiche non salvate. Iniziare una nuova commessa?", proceed);
+  } else {
+    proceed();
+  }
 };
 
 const apriModaleAzione = () => {
@@ -414,9 +446,9 @@ const onConfirmFast = async () => {
     });
     statoCorrente.value = 'SIGNED';
     showModals.value = false;
-    alert("✅ Ordine Confermato!");
+    showCustomToast("✅ Ordine Confermato!");
     router.push('/dashboard');
-  } catch(e) { console.error(e); alert("Errore conferma."); }
+  } catch(e) { console.error(e); showCustomToast("Errore durante la conferma."); }
 };
 
 const onConfirmSign = async (url: string) => {
@@ -427,20 +459,45 @@ const onConfirmSign = async (url: string) => {
     });
     statoCorrente.value = 'SIGNED';
     showModals.value = false;
-    alert("✅ Ordine Confermato e inviato in produzione!");
+    showCustomToast("✅ Ordine Confermato e inviato in produzione!");
     router.push('/dashboard');
   } catch(e) { console.error(e); alert("Errore conferma."); }
 };
 
-// SOSTITUISCI LA FUNZIONE salvaPreventivo CON QUESTA:
-const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADMIN_VALIDA' | 'ADMIN_RIFIUTA' | 'ADMIN_FIRMA' | 'FORCE_EDIT' | 'CREA_PREVENTIVO_ADMIN' | 'CREA_ORDINE_ADMIN') => {
-  if (preventivo.value.length === 0) return alert("Preventivo vuoto.");
-  if (!riferimentoCommessa.value.trim()) return alert("Il campo 'Riferimento Cantiere' è obbligatorio.");
+const richiediConfermaOrdine = () => {
+  // 1. Validazioni preliminari (le stesse di salvaPreventivo, per non aprire il modal inutilmente)
+  if (preventivo.value.length === 0) return showCustomToast("Preventivo vuoto.");
+  if (!riferimentoCommessa.value.trim()) return showCustomToast("Il campo 'Riferimento Cantiere' è obbligatorio.");
   
+  // Controllo Allegati per lavorazioni speciali
+  const richiedeSpecifiche = preventivo.value.some(r => r.tacca || r.nonEquidistanti || r.curva);
+  if (richiedeSpecifiche && listaAllegati.value.length === 0) {
+    return showCustomToast("Non hai allegato il file con le quote specifiche. Carica un allegato per procedere.");
+  }
+
+  // 2. Apre la conferma
+  openConfirm("Stai per inviare un ordine definitivo. Confermi di voler procedere?", () => {
+    salvaPreventivo('ORDINA');
+  });
+};
+
+const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADMIN_VALIDA' | 'ADMIN_RIFIUTA' | 'ADMIN_FIRMA' | 'FORCE_EDIT' | 'CREA_PREVENTIVO_ADMIN' | 'CREA_ORDINE_ADMIN') => {
+  if (preventivo.value.length === 0) return showCustomToast("Preventivo vuoto.");
+  if (!riferimentoCommessa.value.trim()) return showCustomToast("Il campo 'Riferimento Cantiere' è obbligatorio.");
+  
+  const richiedeSpecifiche = preventivo.value.some(r => r.tacca || r.nonEquidistanti || r.curva);
+  // --- INIZIO MODIFICA: Controllo Allegati per lavorazioni speciali ---
+  if (richiedeSpecifiche && listaAllegati.value.length === 0) {
+    // Blocca sia l'ordine diretto CHE la richiesta di validazione
+    if (azione === 'ORDINA' || azione === 'RICHIEDI_VALIDAZIONE' || azione === 'CREA_ORDINE_ADMIN') {
+            return showCustomToast("Non hai allegato il file con le quote specifiche. Carica un allegato per procedere.");
+    }
+  }
+
   // Validazione specifica per Admin
-  if (isNewAdminOrder.value && !clienteUID.value) return alert("Seleziona un cliente prima di salvare.");
+  if (isNewAdminOrder.value && !clienteUID.value) return showCustomToast("Seleziona un cliente prima di salvare.");
   if (azione === 'CREA_ORDINE_ADMIN' && !dataConsegnaPrevista.value) {
-      return alert("Attenzione: La Data Ordine è obbligatoria per procedere.");
+      return showCustomToast("Attenzione: La Data Ordine è obbligatoria per procedere.");
   }
   isSaving.value = true;
 
@@ -524,7 +581,7 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
     if (isAdmin.value) router.push('/admin');
     else caricaListaStorico();
 
-  } catch (e) { alert("Errore salvataggio."); console.error(e); }
+  } catch (e) { showCustomToast("Errore durante il salvataggio."); console.error(e); }
   finally { isSaving.value = false; }
 };
 
@@ -571,36 +628,31 @@ onMounted(() => {
 
 const eliminaPreventivo = async () => {
   if (!currentDocId.value) {
-    alert("Nessun preventivo selezionato da annullare.");
+    showCustomToast("Nessun preventivo selezionato da annullare.");
     return;
   }
-  if (!confirm("Sei sicuro di voler ELIMINARE questo preventivo?")) {
-    return;
-  }
-  try {
-    // Aggiorna lo stato su Firestore a REJECTED
-    await updateDoc(doc(db, 'preventivi', currentDocId.value), {
-      stato: 'REJECTED',
-      dataModifica: serverTimestamp(),
-    });
-    
-    // Aggiorna lo stato locale
-    statoCorrente.value = 'REJECTED';
-    showCustomToast("❌ Preventivo annullato e archiviato.");
-
-    // Reindirizza l'utente alla dashboard appropriata dopo l'annullamento
-    if (isAdmin.value) router.push('/admin');
-    else router.push('/dashboard');
-
-  } catch (e) {
-    console.error("Errore annullamento:", e);
-    alert("Errore durante l'annullamento del preventivo.");
-  }
+  
+  openConfirm("Sei sicuro di voler ELIMINARE questo preventivo? L'operazione è irreversibile.", async () => {
+    try {
+      await updateDoc(doc(db, 'preventivi', currentDocId.value!), {
+        stato: 'REJECTED',
+        dataModifica: serverTimestamp(),
+      });
+      statoCorrente.value = 'REJECTED';
+      showCustomToast("❌ Preventivo annullato e archiviato.");
+      if (isAdmin.value) router.push('/admin');
+      else router.push('/dashboard');
+    } catch (e) {
+      console.error("Errore annullamento:", e);
+      showCustomToast("Errore durante l'annullamento.");
+    }
+  });
 };
 
 const sbloccaPerModifica = () => {
-  if(!confirm("Attenzione: Se modifichi questo preventivo, tornerà in stato 'DA VALIDARE' e dovrà essere riapprovato. Procedere?")) return;
-  statoCorrente.value = 'DRAFT';
+  openConfirm("Attenzione: Se modifichi questo preventivo, tornerà in stato 'DA VALIDARE'. Procedere?", () => {
+    statoCorrente.value = 'DRAFT';
+  });
 };
 
 const caricaPreventivo = async () => {
@@ -617,7 +669,7 @@ const caricaPreventivo = async () => {
     }
 
     const snap = await getDocs(q);
-    if (snap.empty) return alert("Commessa non trovata (Attenzione a maiuscole/minuscole)");
+    if (snap.empty) return showCustomToast("Commessa non trovata.");
     
     // FIX: Safe access to docs[0] (TS2532)
     const docSnapshot = snap.docs[0];
@@ -663,7 +715,7 @@ const caricaPreventivo = async () => {
 
   } catch(e) { 
     console.error(e); 
-    alert("Errore ricerca"); 
+    showCustomToast("Errore durante la ricerca.");
   } finally { 
     isSaving.value = false;
     isDataLoaded.value = true; // <--- NUOVO: Sblocca la visualizzazione dei pannelli (se lo stato lo permette)
@@ -780,19 +832,6 @@ const aggiungiExtraAdmin = () => {
           <div class="w-full">
             
             <div v-if="isNewAdminOrder && !currentDocId" class="mb-4 relative z-50">
-                <label class="text-xs font-bold text-gray-500 uppercase mb-1 flex items-center gap-1">
-                </label>
-                <div class="relative">
-                    <input 
-                        v-model="searchClientQuery" 
-                        @input="searchClients"
-                        type="text" 
-                        class="w-full md:w-96 p-3 border-2 border-amber-400 rounded-lg text-lg font-bold text-gray-800 placeholder-gray-300 focus:outline-none focus:ring-4 focus:ring-amber-100"
-                        placeholder="Cerca Ragione Sociale..."
-                        :disabled="!!clienteUID" 
-                    >
-                    <button v-if="clienteUID" @click="() => { clienteUID=''; searchClientQuery=''; nomeCliente=''; }" class="absolute right-3 top-3 text-gray-400 hover:text-red-500">✕</button>
-                </div>
                 
                 <div v-if="suggestedClients.length > 0" class="absolute top-full left-0 w-full md:w-96 bg-white shadow-xl rounded-lg border border-gray-100 mt-1 overflow-hidden">
                     <div 
@@ -814,6 +853,22 @@ const aggiungiExtraAdmin = () => {
               <h1 class="relative z-10 text-6xl font-bold font-heading text-gray-900">P.O.P.S. Commesse</h1>
               <div class="absolute bottom-2 left-0 w-full h-8 bg-amber-400 rounded-sm -z-0 animate-marker"></div>
             </div>
+            <br><br>
+            <div v-if="isNewAdminOrder && !currentDocId" class="mb-4 relative z-50 mb-4">
+                <label class="text-xs font-bold text-gray-500 uppercase mb-1 flex items-center gap-1">
+                </label>
+                <div class="relative">
+                    <input 
+                        v-model="searchClientQuery" 
+                        @input="searchClients"
+                        type="text" 
+                        class="w-full md:w-96 p-3 border-2 border-amber-400 rounded-lg text-lg font-bold text-gray-800 placeholder-gray-300 focus:outline-none focus:ring-4 focus:ring-amber-100"
+                        placeholder="Cerca Ragione Sociale..."
+                        :disabled="!!clienteUID" 
+                    >
+                    <button v-if="clienteUID" @click="() => { clienteUID=''; searchClientQuery=''; nomeCliente=''; }" class="absolute right-3 top-3 text-gray-400 hover:text-red-500 uppercase">✕</button>
+                </div>
+              </div>
           </div>
         </div>
       </div>
@@ -1061,7 +1116,9 @@ const aggiungiExtraAdmin = () => {
                <template v-if="statoCorrente === 'DRAFT'">
                 <button @click="eliminaPreventivo()" class="bg-red-200 flex items-center gap-2 hover:bg-red-300 text-red-600 px-4 py-3 rounded-lg font-bold shadow-lg">ELIMINA</button>
                 <button @click="salvaPreventivo()" class="bg-green-200 flex items-center gap-2 hover:bg-green-300 text-green-600 px-4 py-3 rounded-lg font-bold shadow-lg">SALVA COME PREVENTIVO</button>
-                <button v-if="isStandard" @click="salvaPreventivo('ORDINA')" class="bg-amber-400 flex items-center gap-2 hover:bg-amber-300 text-amber-900 px-12 py-3 rounded-lg font-bold shadow-lg"><ShoppingCartIcon class="h-7 w-7 text-amber-900" /> ORDINA</button>
+                <button v-if="isStandard" @click="richiediConfermaOrdine()" class="bg-amber-400 flex items-center gap-2 hover:bg-amber-300 text-amber-900 px-12 py-3 rounded-lg font-bold shadow-lg">
+                  <ShoppingCartIcon class="h-7 w-7 text-amber-900" /> ORDINA
+                </button>
                 <div v-else class="flex flex-col items-end">
                   <button @click="salvaPreventivo('RICHIEDI_VALIDAZIONE')" class="bg-amber-400 hover:bg-amber-400 text-amber-950 px-6 py-3 rounded-lg font-bold shadow-lg">INVIA PER VALIDAZIONE</button>
                   <span class="text-[10px] text-gray-400 mt-1">Richiesta verifica tecnica</span>
@@ -1257,6 +1314,20 @@ const aggiungiExtraAdmin = () => {
       </div>
     </div>
   </div>
+  <div v-if="confirmModal.show" class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm transition-opacity">
+      <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 text-center transform transition-all scale-100">
+        <h3 class="text-lg font-bold text-gray-900 mb-2">{{ confirmModal.title }}</h3>
+        <p class="text-gray-500 mb-6 text-sm">{{ confirmModal.message }}</p>
+        <div class="flex gap-3 justify-center">
+          <button @click="confirmModal.show = false" class="px-4 py-2 rounded-lg text-gray-600 font-bold hover:bg-gray-100 transition-colors">
+            Annulla
+          </button>
+          <button @click="confirmModal.onConfirm" class="px-6 py-2 rounded-lg bg-amber-400 text-amber-950 font-bold hover:bg-amber-300 shadow-md transition-colors">
+            Conferma
+          </button>
+        </div>
+      </div>
+    </div>
 </template>
 
 <style scoped>
