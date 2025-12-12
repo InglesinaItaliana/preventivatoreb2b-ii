@@ -2,10 +2,11 @@
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
-  collection, addDoc, setDoc, doc, serverTimestamp, query, where, getDocs, orderBy, limit, updateDoc, onSnapshot, DocumentSnapshot
+  collection, addDoc, setDoc, doc, serverTimestamp, query, where, getDocs, orderBy, limit, updateDoc, onSnapshot, DocumentSnapshot, deleteField
 } from 'firebase/firestore';
+import { httpsCallable } from 'firebase/functions';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage, auth } from '../firebase';
+import { db, storage, auth, functions } from '../firebase';
 import { useCatalogStore } from '../Data/catalog';
 import type { Categoria, RigaPreventivo, StatoPreventivo, Allegato, RiepilogoRiga } from '../types';
 import { calculatePrice } from '../logic/pricing';
@@ -14,6 +15,8 @@ import OrderModals from '../components/OrderModals.vue';
 import { STATUS_DETAILS } from '../types';
 import {
   RectangleStackIcon,
+  LockOpenIcon,
+  LockClosedIcon,
   PlusCircleIcon,
   ChevronLeftIcon,
   InformationCircleIcon, 
@@ -83,6 +86,39 @@ const listaExtra = computed(() => {
     }
   });
 });
+
+// --- NUOVA LOGICA SBLOCCO ORDINE ---
+
+// L'ordine è sbloccabile solo se è in attesa di firma o già firmato (ma non ancora in produzione)
+const canUnlockOrder = computed(() => {
+  return ['WAITING_SIGN', 'SIGNED'].includes(statoCorrente.value);
+});
+
+const sbloccaOrdine = async () => {
+  if (!currentDocId.value) return;
+
+  openConfirm(
+    "⚠️ ATTENZIONE: Stai per sbloccare un ordine già avanzato.\n\nQuesta azione:\n1. ELIMINERÀ l'ordine generato su Fatture in Cloud.\n2. ANNULLERÀ eventuali firme o conferme ricevute.\n3. Riporterà lo stato a 'RICHIESTA ORDINE' per permettere modifiche.\n\nVuoi procedere?",
+    async () => {
+      isSaving.value = true; // Mostra loader
+      try {
+        const resetFn = httpsCallable(functions, 'resetOrderState');
+        const res: any = await resetFn({ orderId: currentDocId.value });
+        
+        if (res.data.success) {
+          showCustomToast("✅ Ordine sbloccato e ripristinato!");
+          // Ricarica i dati per vedere lo stato aggiornato
+          await caricaPreventivo();
+        }
+      } catch (e: any) {
+        console.error(e);
+        showCustomToast("❌ Errore durante lo sblocco: " + e.message);
+      } finally {
+        isSaving.value = false;
+      }
+    }
+  );
+};
 
 // Funzione per popolare i campi quando si seleziona dal menu
 const selezionaExtra = (event: Event) => {
@@ -373,6 +409,8 @@ const uploadFile = async (event: Event) => {
   finally { isUploading.value = false; }
 };
 
+const ficOrderUrl = ref('');
+
 const rimuoviAllegato = (index: number) => { 
   openConfirm("Sei sicuro di voler rimuovere questo allegato?", () => {
     listaAllegati.value.splice(index, 1);
@@ -397,6 +435,7 @@ const nuovaCommessa = () => {
     // Logica di reset esistente...
     preventivo.value = [];
     currentDocId.value = null;
+    ficOrderUrl.value = '';
     statoCorrente.value = 'DRAFT';
     riferimentoCommessa.value = '';
     codiceRicerca.value = '';
@@ -442,7 +481,10 @@ const onConfirmFast = async () => {
   if (!currentDocId.value) return;
   try {
     await updateDoc(doc(db, 'preventivi', currentDocId.value), {
-      stato: 'SIGNED', dataConferma: serverTimestamp(), metodoConferma: 'FAST_TRACK'
+      stato: 'SIGNED', 
+      dataConferma: serverTimestamp(), 
+      metodoConferma: 'FAST_TRACK',
+      isReopened: deleteField() // <--- RIMUOVE IL FLAG
     });
     statoCorrente.value = 'SIGNED';
     showModals.value = false;
@@ -455,7 +497,11 @@ const onConfirmSign = async (url: string) => {
   if (!currentDocId.value) return;
   try {
     await updateDoc(doc(db, 'preventivi', currentDocId.value), {
-      stato: 'SIGNED', dataConferma: serverTimestamp(), contrattoFirmatoUrl: url, metodoConferma: 'UPLOAD_FIRMA'
+      stato: 'SIGNED', 
+      dataConferma: serverTimestamp(), 
+      contrattoFirmatoUrl: url, 
+      metodoConferma: 'UPLOAD_FIRMA',
+      isReopened: deleteField() // <--- RIMUOVE IL FLAG
     });
     statoCorrente.value = 'SIGNED';
     showModals.value = false;
@@ -680,6 +726,7 @@ const caricaPreventivo = async () => {
     // Aggiorniamo i dati locali
     codiceRicerca.value = d.codice;
     nomeCliente.value = d.cliente;
+    ficOrderUrl.value = d.fic_order_url || '';
     riferimentoCommessa.value = d.commessa;
     clienteEmail.value = d.clienteEmail || '';
     statoCorrente.value = d.stato || 'DRAFT';
@@ -701,12 +748,21 @@ const caricaPreventivo = async () => {
     
     // Assicurati che currentDocId.value non sia null
     if (currentDocId.value) {
-        unsubscribeSnapshot = onSnapshot(doc(db, 'preventivi', currentDocId.value), (docSnapRealtime: DocumentSnapshot) => {
-            // Se il cambiamento è locale (l'ho appena fatto io o è il caricamento iniziale), ignoralo
+        let isFirstSnapshot = true; // <--- FIX: Flag per ignorare il caricamento iniziale
+
+        unsubscribeSnapshot = onSnapshot(doc(db, 'preventivi', currentDocId.value!), (docSnapRealtime: DocumentSnapshot) => {
+            // 1. Se è il primo snapshot (inizializzazione), lo ignoriamo
+            if (isFirstSnapshot) {
+                isFirstSnapshot = false;
+                return;
+            }
+
+            // 2. Se il cambiamento è locale (lo sto facendo io ora), ignoralo
             if (docSnapRealtime.metadata.hasPendingWrites) return;
 
             const newData = docSnapRealtime.data();
-            // Se i dati cambiano da fuori mentre non sto salvando, avvisa.
+            
+            // 3. Se i dati cambiano da fuori mentre non sto salvando, avvisa.
             if (newData && !isSaving.value) {
                showCustomToast("⚠️ ATTENZIONE: Questo preventivo è stato modificato da un altro utente! Ricarica la pagina.");
             }
@@ -1061,7 +1117,15 @@ const aggiungiExtraAdmin = () => {
           </div>
 
           <div class="flex gap-3">
-            
+            <button 
+              v-if="canUnlockOrder" 
+              @click="sbloccaOrdine()" 
+              class="bg-orange-100 hover:bg-orange-200 text-orange-700 border border-orange-200 px-4 py-2 rounded-lg shadow-sm flex items-center gap-2 transition-all font-bold text-sm"
+              title="Sblocca per modificare (Richiede reset)"
+            >
+              <LockOpenIcon class="h-4 w-4" /> 
+              SBLOCCA E MODIFICA
+            </button>
             <template v-if="isNewAdminOrder && !currentDocId">
                 <div class="flex items-end gap-2 w-full mb-4">
                   
@@ -1107,8 +1171,15 @@ const aggiungiExtraAdmin = () => {
               </div>
 
               <div v-else>
-                <button v-if="!isLocked" @click="salvaPreventivo()" class="bg-gray-800 text-white px-6 py-2 rounded-lg font-bold hover:bg-black">💾 SALVA MODIFICHE</button>
-                <span v-else class="text-gray-400 font-bold text-sm border border-gray-300 px-3 py-1 rounded bg-gray-50">🔒 SOLA LETTURA</span>
+                
+                <button 
+                  v-if="!isLocked" 
+                  @click="salvaPreventivo()" 
+                  class="bg-gray-800 hover:bg-black text-white px-4 py-2 rounded-lg shadow-sm flex items-center gap-2 transition-all font-bold text-sm"
+                  >
+                  💾 SALVA MODIFICHE
+                </button>
+                <span v-else class="bg-gray-200 hover:bg-black text-black px-4 py-2 rounded-lg shadow-sm flex items-center gap-2 transition-all font-bold text-sm"> <LockClosedIcon class="h-4 w-4" />SOLA LETTURA</span>
               </div>
             </template>
 
@@ -1297,7 +1368,7 @@ const aggiungiExtraAdmin = () => {
     <OrderModals 
       :show="showModals"
       :mode="modalMode"
-      :order="{ id: currentDocId, codice: codiceRicerca, totaleScontato: totaleFinale, elementi: preventivo, commessa: riferimentoCommessa }"
+      :order="{ id: currentDocId, codice: codiceRicerca, totaleScontato: totaleFinale, elementi: preventivo, commessa: riferimentoCommessa, fic_order_url: ficOrderUrl }"
       :clientName="nomeCliente"
       @close="showModals = false"
       @confirmFast="onConfirmFast"

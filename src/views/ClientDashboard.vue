@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue';
-import { collection, query, where, updateDoc, doc, serverTimestamp, getDoc, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, updateDoc, doc, serverTimestamp, getDoc, onSnapshot, deleteField } from 'firebase/firestore';
 import { db, auth } from '../firebase';
 import { useRouter } from 'vue-router';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -146,7 +146,8 @@ const onConfirmFast = async () => {
       stato: 'SIGNED',
       dataConferma: serverTimestamp(),
       metodoConferma: 'FAST_TRACK',
-      clienteUID: user.uid
+      clienteUID: user.uid,
+      isReopened: deleteField() // <--- RIMUOVE IL FLAG
     });
     showModals.value = false;
     openResultModal("Ordine Confermato!", "L'ordine è stato accettato con successo ed è pronto per la produzione.", "SUCCESS");
@@ -168,7 +169,8 @@ const onConfirmSign = async (url: string) => {
       dataConferma: serverTimestamp(),
       contrattoFirmatoUrl: url,
       metodoConferma: 'UPLOAD_FIRMA',
-      clienteUID: user.uid
+      clienteUID: user.uid,
+      isReopened: deleteField() // <--- RIMUOVE IL FLAG
     });
 
     showModals.value = false;

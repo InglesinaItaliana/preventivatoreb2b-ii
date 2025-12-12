@@ -744,3 +744,63 @@ async function fetchFicClientByVat(vatNumber: string, token: string) {
     
             return results;
         });
+
+// --- FUNZIONE 3: RESET ORDINE (SBLOCCO) ---
+// Cancella l'ordine su FiC e resetta lo stato su Firestore
+exports.resetOrderState = functions
+    .region('europe-west1')
+    .https.onCall(async (data, context) => {
+        // 1. Verifica Autenticazione (Opzionale: puoi restringere agli admin se vuoi)
+        if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Richiesto login');
+        
+        const orderId = data.orderId;
+        if (!orderId) throw new functions.https.HttpsError('invalid-argument', 'ID ordine mancante');
+
+        const db = admin.firestore();
+        const docRef = db.collection('preventivi').doc(orderId);
+
+        try {
+            const docSnap = await docRef.get();
+            if (!docSnap.exists) throw new functions.https.HttpsError('not-found', 'Ordine non trovato');
+            
+            const orderData = docSnap.data();
+            const ficId = orderData?.fic_order_id;
+
+            // 2. Se esiste su Fatture in Cloud, ELIMINALO
+            if (ficId) {
+                try {
+                    const token = await getValidFicToken();
+                    console.log(`[RESET] Eliminazione ordine FiC ID: ${ficId}...`);
+                    
+                    await axios.delete(`${FIC_API_URL}/c/${COMPANY_ID}/issued_documents/${ficId}`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    console.log(`[RESET] Ordine FiC eliminato correttamente.`);
+                } catch (ficError: any) {
+                    console.error("[RESET] Errore eliminazione FiC (procedo comunque al reset DB):", ficError.message);
+                    // Non blocchiamo il reset del DB se FiC fallisce (es. già cancellato)
+                }
+            }
+
+            // 3. Resetta lo stato e pulisce i campi su Firestore
+            await docRef.update({
+                stato: 'DRAFT',
+                fic_order_id: admin.firestore.FieldValue.delete(),
+                fic_order_url: admin.firestore.FieldValue.delete(),
+                dataConferma: admin.firestore.FieldValue.delete(),
+                metodoConferma: admin.firestore.FieldValue.delete(),
+                contrattoFirmatoUrl: admin.firestore.FieldValue.delete(),
+                datiLegali: admin.firestore.FieldValue.delete(),
+                isReopened: true, // Flag che indica che è un ex-ordine
+                // Opzionale: Traccia chi ha fatto il reset
+                resetBy: context.auth.token.email || context.auth.uid,
+                lastResetDate: admin.firestore.FieldValue.serverTimestamp()
+            });
+
+            return { success: true };
+
+        } catch (e: any) {
+            console.error("[RESET] Errore critico:", e);
+            throw new functions.https.HttpsError('internal', e.message);
+        }
+    });

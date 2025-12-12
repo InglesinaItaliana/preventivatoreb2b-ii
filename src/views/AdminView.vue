@@ -853,7 +853,12 @@ onUnmounted(() => {
                                 <CheckCircleIcon v-if="isOrderSelected(p)" class="h-6 w-6 text-blue-600" />
                                 <div v-else class="h-5 w-5 rounded-full border-2 border-gray-300 hover:border-blue-400"></div>
                             </div>
-                      <div class="text-xs text-gray-500 mt-1">DATA: {{ formatDate(getEffectiveDate(p)) }} • COMMESSA: {{ p.commessa || 'Nessun Rif.' }}</div>
+                      <div class="text-xs text-gray-500 mt-1 flex items-center flex-wrap gap-2">
+                        <span>DATA: {{ formatDate(getEffectiveDate(p)) }} • COMMESSA: {{ p.commessa || 'Nessun Rif.' }}</span>
+                        <span v-if="p.isReopened" class="text-[9px] px-2 py-0.5 rounded border uppercase font-bold bg-purple-100 text-purple-700 border-purple-200">
+                          RIAPERTO
+                        </span>
+                      </div>
                       <div v-if="p.dataConsegnaPrevista" class="flex items-center gap-1 mt-1 text-amber-950 font-bold text-[10px] uppercase">
                           <TruckIcon class="h-3 w-3" />
                           <span>Consegna: {{ formatDateShort(p.dataConsegnaPrevista) }}</span>
@@ -902,11 +907,11 @@ onUnmounted(() => {
               
               <div>
                 <h2 class="text-lg font-bold text-gray-900 font-heading uppercase flex items-center gap-2">
-  {{ getStatusLabel(gruppo.stato) }}
-  <span class="bg-gray-100 text-gray-600 text-xs px-2.5 py-0.5 rounded-full border border-gray-200 font-sans shadow-sm">
-    {{ gruppo.lista.length }}
-  </span>
-</h2>              
+                  {{ getStatusLabel(gruppo.stato) }}
+                  <span class="bg-gray-100 text-gray-600 text-xs px-2.5 py-0.5 rounded-full border border-gray-200 font-sans shadow-sm">
+                    {{ gruppo.lista.length }}
+                  </span>
+                </h2>              
               </div>
             </div>
 
@@ -1020,6 +1025,7 @@ onUnmounted(() => {
                         <div class="flex items-center gap-2">
                           <h3 class="text-xl font-bold text-gray-900">{{ p.cliente }}</h3>
                           <span class="text-xs text-gray-500">• Rif. {{ p.commessa || 'Senza Nome' }}</span>
+                          <span v-if="p.isReopened" class="text-[9px] px-2 py-0.5 rounded border uppercase font-bold bg-purple-100 text-purple-700 border-purple-200">RIAPERTO</span>
                         </div>
                         <div v-if="p.sommarioPreventivo" class="flex flex-col gap-1 mt-2 items-start">
                           <span v-for="(item, idx) in p.sommarioPreventivo" :key="idx" 
