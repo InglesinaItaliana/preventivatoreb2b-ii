@@ -151,7 +151,7 @@ const submitBug = async () => {
             <PlusCircleIcon class="h-6 w-6 text-amber-950" />
           </div>
           <div class="flex flex-col items-start">
-            <span class="font-bold text-sm text-gray-800">Nuovo Preventivo</span>
+            <span class="font-bold text-sm text-gray-800">Nuova Commessa</span>
             <span class="text-[10px] text-gray-400 font-medium">Inizia configurazione</span>
           </div>
         </button>

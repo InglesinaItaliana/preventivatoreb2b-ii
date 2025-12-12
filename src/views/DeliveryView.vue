@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { ref, onMounted, computed, reactive } from 'vue';
+  import { ref, onMounted, computed, reactive, watch } from 'vue';
   import { 
     collection, query, where, getDocs, orderBy, onSnapshot, 
     addDoc, updateDoc, doc, serverTimestamp, writeBatch 
@@ -8,7 +8,7 @@
   import DeliveryModal from '../components/DeliveryModal.vue';
   import { 
     TruckIcon, MapPinIcon, 
-    MapIcon, CheckCircleIcon, InboxStackIcon, PlusIcon
+    MapIcon, CheckCircleIcon, InboxStackIcon, PlusIcon,ChevronUpIcon, ChevronDownIcon
   } from '@heroicons/vue/24/solid';
   import { ref as storageRef, uploadString, getDownloadURL } from 'firebase/storage';
   
@@ -57,23 +57,10 @@
   const showDeliveryModal = ref(false);
   const selectedOrderForDelivery = ref<any>(null);
   
-  // --- INIT ---
-  onMounted(async () => {
-    await checkRole();
-    await loadDrivers();
-    
-    if (isAdmin.value) {
-      viewMode.value = 'DISPATCHER';
-      loadPool(); // Carica ordini da pianificare
-    } else {
-      viewMode.value = 'DRIVER';
-      loadMyTrip(); // Carica viaggio autista
-    }
-  });
-  
   const checkRole = async () => {
     // Semplice check basato su email fisse o logica esistente
     const email = currentUser.value?.email;
+    // Aggiungi qui la tua email se serve per testare
     if (email === 'info@inglesinaitaliana.it' || email === 'lavorazioni.inglesinaitaliana@gmail.com') {
       isAdmin.value = true;
     }
@@ -88,21 +75,22 @@
   // --- LOGICA DISPATCHER (PIANIFICAZIONE) ---
   
   const loadPool = () => {
-    // Carica ordini in stato DELIVERY che NON sono assegnati a un viaggio
+    // MODIFICA CRUCIALE: Rimosso where('assignedToTrip', '==', false)
+    // Firestore esclude i documenti se il campo manca.
+    // Filtriamo client-side per includere anche quelli dove il campo è undefined.
     const q = query(
       collection(db, 'preventivi'), 
-      where('stato', '==', 'DELIVERY'),
-      where('assignedToTrip', '==', false) // O undefined
-      // Nota: Se 'assignedToTrip' non esiste sui vecchi documenti, Firebase potrebbe escluderli. 
-      // Per sicurezza in produzione servirebbe un indice o una migrazione. 
-      // Qui assumiamo che i nuovi DDT settino il campo o filtriamo lato client se pochi.
+      where('stato', '==', 'DELIVERY')
     );
     
     onSnapshot(q, (snap) => {
-      // Filtro client-side per sicurezza su campi mancanti
+      console.log(`[DEBUG] Ordini in DELIVERY trovati: ${snap.docs.length}`);
+      
       poolOrders.value = snap.docs
         .map(d => ({ id: d.id, ...d.data() } as Order))
-        .filter(o => !o.assignedToTrip);
+        .filter(o => !o.assignedToTrip); // Include undefined, null e false
+        
+      console.log(`[DEBUG] Ordini da pianificare (Pool): ${poolOrders.value.length}`);
     });
   };
   
@@ -123,14 +111,90 @@
     return groups;
   });
   
-  const toggleOrderSelection = (id: string) => {
-    if (newTrip.selectedOrderIds.includes(id)) {
-      newTrip.selectedOrderIds = newTrip.selectedOrderIds.filter(x => x !== id);
-    } else {
-      newTrip.selectedOrderIds.push(id);
-    }
-  };
+  // --- FUNZIONI DI RIORDINAMENTO (SEQUENZA) ---
+  const moveStop = async (index: number, direction: 'UP' | 'DOWN') => {
+  if (!activeTrip.value || !tripOrders.value) return;
   
+  const newIndex = direction === 'UP' ? index - 1 : index + 1;
+  
+  // Controlli limiti array
+  if (newIndex < 0 || newIndex >= tripOrders.value.length) return;
+
+  // 1. Scambia nell'array locale
+  // AGGIUNTI I PUNTI ESCLAMATIVI (!) PER CORREGGERE L'ERRORE TYPESCRIPT
+  const temp = tripOrders.value[index]!; 
+  tripOrders.value[index] = tripOrders.value[newIndex]!;
+  tripOrders.value[newIndex] = temp;
+
+  // 2. Aggiorna Firestore
+  const newStopsIds = tripOrders.value.map(o => o.id);
+  
+  try {
+    await updateDoc(doc(db, 'trips', activeTrip.value.id), {
+       stops: newStopsIds
+    });
+    // Aggiorniamo anche l'oggetto locale activeTrip per coerenza
+    if (activeTrip.value) {
+        activeTrip.value.stops = newStopsIds;
+    }
+  } catch (e) {
+    console.error("Errore riordino:", e);
+    alert("Errore salvataggio sequenza");
+    loadMyTrip(); 
+  }
+};
+
+// --- AGGIUNGI QUESTO ALLO STATO ---
+const allTrips = ref<Trip[]>([]);
+
+// --- AGGIUNGI QUESTA FUNZIONE ---
+const loadAllActiveTrips = () => {
+  // Scarica tutti i viaggi APERTI ordinati per data creazione
+  const q = query(collection(db, 'trips'), where('status', '==', 'OPEN'), orderBy('createdAt', 'desc'));
+  onSnapshot(q, (snap) => {
+    allTrips.value = snap.docs.map(d => ({ id: d.id, ...d.data() } as Trip));
+  });
+};
+
+// --- AGGIORNA ONMOUNTED ---
+onMounted(async () => {
+  await checkRole();
+  await loadDrivers();
+  
+  if (isAdmin.value) {
+    viewMode.value = 'DISPATCHER';
+    loadPool(); 
+    loadAllActiveTrips(); // <--- AGGIUNGI QUESTA CHIAMATA
+  } else {
+    viewMode.value = 'DRIVER';
+    loadMyTrip();
+  }
+});
+
+// Se passo a "DRIVER", provo a caricare il MIO viaggio (se non ne sto già guardando uno)
+watch(viewMode, (newMode: 'DISPATCHER' | 'DRIVER') => {
+  if (newMode === 'DRIVER' && !activeTrip.value) {
+     loadMyTrip();
+  }
+});
+
+// --- FUNZIONE PER SPIARE IL VIAGGIO (Opzionale) ---
+const inspectTrip = (trip: Trip) => {
+    // Impostiamo manualmente il viaggio attivo e andiamo in modalità driver
+    // Nota: serve una piccola modifica a loadMyTrip per non sovrascriverlo subito
+    activeTrip.value = trip;
+    // Carichiamo gli ordini di quel viaggio specifico
+    const promises = trip.stops.map(oid => 
+       getDocs(query(collection(db, 'preventivi'), where('__name__', '==', oid)))
+    );
+    Promise.all(promises).then(results => {
+        tripOrders.value = results
+           .map(r => !r.empty ? { id: r.docs[0]!.id, ...r.docs[0]!.data() } : null)
+           .filter(o => o !== null) as Order[];
+        viewMode.value = 'DRIVER';
+    });
+};
+
   const createTrip = async () => {
     if (!newTrip.driverId || newTrip.selectedOrderIds.length === 0) return alert("Seleziona autista e almeno un ordine.");
     
@@ -279,6 +343,70 @@ const openNavigator = () => {
       });
   };
   
+// --- HELPER RAGGRUPPAMENTO SPEDIZIONI (DDT vs ORDINI) ---
+const getShipments = (list: Order[]) => {
+  const groups: any[] = [];
+  const ddtMap = new Map<string, Order[]>();
+
+  list.forEach(o => {
+    if (o.fic_ddt_id) {
+      const key = String(o.fic_ddt_id);
+      if (!ddtMap.has(key)) ddtMap.set(key, []);
+      ddtMap.get(key)!.push(o);
+    } else {
+      groups.push({
+        isDdt: false,
+        key: o.id,
+        ids: [o.id],
+        cliente: o.cliente,
+        info: `Ref: ${o.commessa}`,
+        colli: Number(o.colli) || 1,
+        citta: o.citta,
+        provincia: o.provincia
+      });
+    }
+  });
+
+  ddtMap.forEach((orders, ddtId) => {
+    const first = orders[0];
+    
+    // --- FIX: Controllo di sicurezza ---
+    if (!first) return; 
+
+    const totColli = orders.reduce((acc, curr) => acc + (Number(curr.colli) || 1), 0);
+    groups.push({
+      isDdt: true,
+      key: `DDT_${ddtId}`,
+      ids: orders.map(o => o.id),
+      cliente: first.cliente,
+      info: `DDT #${first.fic_ddt_number} • ${orders.length} Ordini`,
+      colli: totColli,
+      citta: first.citta,
+      provincia: first.provincia
+    });
+  });
+
+  return groups.sort((a, b) => a.cliente.localeCompare(b.cliente));
+};
+
+// Funzione di selezione modificata per accettare array di ID
+const toggleSelection = (ids: string[]) => {
+  const allSelected = ids.every(id => newTrip.selectedOrderIds.includes(id));
+  if (allSelected) {
+    // Deseleziona tutti
+    newTrip.selectedOrderIds = newTrip.selectedOrderIds.filter(id => !ids.includes(id));
+  } else {
+    // Seleziona quelli mancanti
+    const toAdd = ids.filter(id => !newTrip.selectedOrderIds.includes(id));
+    newTrip.selectedOrderIds.push(...toAdd);
+  }
+};
+
+// Helper visivo
+const isSelected = (ids: string[]) => {
+  return ids.length > 0 && ids.every(id => newTrip.selectedOrderIds.includes(id));
+};
+
   </script>
   
   <template>
@@ -321,25 +449,28 @@ const openNavigator = () => {
                       </div>
                       
                       <div class="space-y-3">
-                          <div 
-                             v-for="order in list" 
-                             :key="order.id"
-                             @click="toggleOrderSelection(order.id)"
-                             class="flex items-center p-4 rounded-2xl border transition-all cursor-pointer group hover:shadow-md"
-                             :class="newTrip.selectedOrderIds.includes(order.id) ? 'bg-amber-50 border-amber-400' : 'bg-slate-50 border-transparent hover:bg-white'"
-                          >
-                             <div class="w-5 h-5 rounded-full border-2 flex items-center justify-center mr-4 transition-colors"
-                                  :class="newTrip.selectedOrderIds.includes(order.id) ? 'border-amber-500 bg-amber-500' : 'border-slate-300 group-hover:border-amber-400'">
-                                  <CheckCircleIcon v-if="newTrip.selectedOrderIds.includes(order.id)" class="w-4 h-4 text-white" />
-                             </div>
-                             
-                             <div>
-                                 <h4 class="font-bold text-slate-900">{{ order.cliente }}</h4>
-                                 <p class="text-xs text-slate-500">{{ order.citta }} ({{ order.provincia }})</p>
-                                 <p class="text-[10px] text-slate-400 mt-1">Ref: {{ order.commessa }} • Colli: {{ order.colli }}</p>
-                             </div>
+                        <div 
+                          v-for="shipment in getShipments(list)" 
+                          :key="shipment.key"
+                          @click="toggleSelection(shipment.ids)"
+                          class="flex items-center p-4 rounded-2xl border transition-all cursor-pointer group hover:shadow-md"
+                          :class="isSelected(shipment.ids) ? 'bg-amber-50 border-amber-400' : 'bg-slate-50 border-transparent hover:bg-white'"
+                        >
+                          <div class="w-5 h-5 rounded-full border-2 flex items-center justify-center mr-4 transition-colors shrink-0"
+                                :class="isSelected(shipment.ids) ? 'border-amber-500 bg-amber-500' : 'border-slate-300 group-hover:border-amber-400'">
+                                <CheckCircleIcon v-if="isSelected(shipment.ids)" class="w-4 h-4 text-white" />
                           </div>
-                      </div>
+                          
+                          <div class="flex-1 min-w-0">
+                              <div class="flex justify-between items-center mb-0.5">
+                                  <h4 class="font-bold text-slate-900 truncate">{{ shipment.cliente }}</h4>
+                                  <span v-if="shipment.isDdt" class="ml-2 text-[9px] font-black bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded uppercase tracking-wider shrink-0">DDT</span>
+                              </div>
+                              <p class="text-xs text-slate-500 truncate">{{ shipment.citta }} ({{ shipment.provincia }})</p>
+                              <p class="text-[10px] text-slate-400 mt-1 font-medium">{{ shipment.info }} • Colli: {{ shipment.colli }}</p>
+                          </div>
+                        </div>
+                    </div>
                   </div>
               </div>
            </div>
@@ -349,7 +480,36 @@ const openNavigator = () => {
                    <h2 class="text-lg font-black text-slate-900 mb-6 flex items-center gap-2">
                        <TruckIcon class="w-6 h-6 text-slate-800"/> Nuovo Viaggio
                    </h2>
-                   
+                   <div class="mt-8">
+   <h3 class="text-sm font-black text-slate-400 uppercase tracking-widest mb-4">Viaggi in Corso ({{ allTrips.length }})</h3>
+   
+   <div v-if="allTrips.length === 0" class="text-sm text-slate-400 italic">Nessun viaggio attivo.</div>
+
+   <div class="space-y-3">
+       <div 
+         v-for="trip in allTrips" 
+         :key="trip.id"
+         class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex justify-between items-center group hover:border-amber-200 transition-all"
+       >
+           <div>
+               <div class="font-bold text-slate-900 flex items-center gap-2">
+                   <TruckIcon class="w-4 h-4 text-slate-400"/>
+                   {{ trip.driverName }}
+               </div>
+               <div class="text-xs text-slate-500 mt-0.5">
+                   {{ new Date(trip.date).toLocaleDateString('it-IT') }} • {{ trip.stops.length }} Stop
+               </div>
+           </div>
+           
+           <button 
+             @click="inspectTrip(trip)"
+             class="bg-slate-50 text-slate-600 hover:bg-slate-900 hover:text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
+           >
+             Vedi
+           </button>
+       </div>
+   </div>
+</div>
                    <div class="space-y-4">
                        <div>
                            <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Data Partenza</label>
@@ -425,30 +585,52 @@ const openNavigator = () => {
                         </div>
   
                         <div class="ml-10 bg-white rounded-2xl p-4 shadow-sm border transition-all"
-                             :class="stop.stato === 'DELIVERED' ? 'border-green-100 opacity-60' : 'border-slate-100'">
-                            
-                            <div class="flex justify-between items-start">
-                                <h3 class="font-bold text-slate-900">{{ stop.cliente }}</h3>
-                                <span class="text-[10px] font-bold bg-slate-100 px-1.5 py-0.5 rounded text-slate-500">STOP {{ index + 1 }}</span>
-                            </div>
-                            
-                            <p class="text-sm text-slate-500 mt-1 flex items-start gap-1">
-                                <MapPinIcon class="w-4 h-4 shrink-0 mt-0.5 text-slate-400"/> 
-                                {{ stop.indirizzoConsegna }}
-                            </p>
-  
-                            <div v-if="stop.stato !== 'DELIVERED'" class="mt-4 flex gap-2">
-                                <button 
-                                    @click="openDeliveryModal(stop)"
-                                    class="flex-1 bg-slate-900 text-white text-xs font-bold py-2.5 rounded-xl hover:bg-black transition-colors"
-                                >
-                                    Consegna
-                                </button>
-                            </div>
-                            <div v-else class="mt-2 text-xs font-bold text-green-600 flex items-center gap-1">
-                                <CheckCircleIcon class="w-4 h-4"/> Consegnato
-                            </div>
-                        </div>
+                          :class="stop.stato === 'DELIVERED' ? 'border-green-100 opacity-60' : 'border-slate-100'">
+                          
+                          <div class="flex justify-between items-start">
+                              <h3 class="font-bold text-slate-900 truncate pr-2">{{ stop.cliente }}</h3>
+                              
+                              <div class="flex items-center gap-2">
+                                  <div v-if="stop.stato !== 'DELIVERED' && activeTrip?.status === 'OPEN'" class="flex flex-col gap-1">
+                                      <button 
+                                        @click.stop="moveStop(index, 'UP')" 
+                                        :disabled="index === 0"
+                                        class="p-1 rounded bg-slate-100 hover:bg-amber-100 disabled:opacity-20 disabled:cursor-not-allowed"
+                                      >
+                                        <ChevronUpIcon class="w-3 h-3 text-slate-600"/>
+                                      </button>
+                                      <button 
+                                        @click.stop="moveStop(index, 'DOWN')" 
+                                        :disabled="index === tripOrders.length - 1"
+                                        class="p-1 rounded bg-slate-100 hover:bg-amber-100 disabled:opacity-20 disabled:cursor-not-allowed"
+                                      >
+                                        <ChevronDownIcon class="w-3 h-3 text-slate-600"/>
+                                      </button>
+                                  </div>
+
+                                  <span class="text-[10px] font-bold bg-slate-100 px-1.5 py-0.5 rounded text-slate-500 whitespace-nowrap">
+                                      STOP {{ index + 1 }}
+                                  </span>
+                              </div>
+                          </div>
+                          
+                          <p class="text-sm text-slate-500 mt-1 flex items-start gap-1">
+                              <MapPinIcon class="w-4 h-4 shrink-0 mt-0.5 text-slate-400"/> 
+                              {{ stop.indirizzoConsegna }}
+                          </p>
+
+                          <div v-if="stop.stato !== 'DELIVERED'" class="mt-4 flex gap-2">
+                              <button 
+                                  @click="openDeliveryModal(stop)"
+                                  class="flex-1 bg-slate-900 text-white text-xs font-bold py-2.5 rounded-xl hover:bg-black transition-colors"
+                              >
+                                  Consegna
+                              </button>
+                          </div>
+                          <div v-else class="mt-2 text-xs font-bold text-green-600 flex items-center gap-1">
+                              <CheckCircleIcon class="w-4 h-4"/> Consegnato
+                          </div>
+                      </div>
                     </div>
                 </div>
   

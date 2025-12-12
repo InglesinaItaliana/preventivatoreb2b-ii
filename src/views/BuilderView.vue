@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref, reactive, computed, watch, onMounted, nextTick } from 'vue';
+import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
-  collection, addDoc, setDoc, doc, serverTimestamp, query, where, getDocs, orderBy, limit, updateDoc
+  collection, addDoc, setDoc, doc, serverTimestamp, query, where, getDocs, orderBy, limit, updateDoc, onSnapshot, DocumentSnapshot
 } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage, auth } from '../firebase';
@@ -105,6 +105,7 @@ const mostraStorico = ref(false);
 const codiceRicerca = ref('');
 const isSaving = ref(false);
 const isDataLoaded = ref(!route.query.codice);
+let unsubscribeSnapshot: null | (() => void) = null;
 const riferimentoCommessaInput = ref<HTMLInputElement | null>(null);
 
 // --- NUOVA LOGICA: CREAZIONE ORDINE ADMIN ---
@@ -252,6 +253,10 @@ const canAdd = computed(() => {
   const duplexOk = categoriaGriglia.value !== 'DUPLEX' || (fuseruolo.value && Number(fuseruolo.value) > 0);
   
   return !!(grigliaOk && duplexOk);
+});
+
+onUnmounted(() => {
+  if (unsubscribeSnapshot) unsubscribeSnapshot();
 });
 
 const aggiungi = () => {
@@ -638,6 +643,24 @@ const caricaPreventivo = async () => {
       righe: Number(el.righe) || 0,
       colonne: Number(el.colonne) || 0
     }));
+
+    // ATTIVA L'ASCOLTO IN TEMPO REALE PER EVITARE CONFLITTI
+    if (unsubscribeSnapshot) unsubscribeSnapshot(); // Pulisci precedente se esiste
+    
+    // Assicurati che currentDocId.value non sia null
+    if (currentDocId.value) {
+        unsubscribeSnapshot = onSnapshot(doc(db, 'preventivi', currentDocId.value), (docSnapRealtime: DocumentSnapshot) => {
+            // Se il cambiamento è locale (l'ho appena fatto io o è il caricamento iniziale), ignoralo
+            if (docSnapRealtime.metadata.hasPendingWrites) return;
+
+            const newData = docSnapRealtime.data();
+            // Se i dati cambiano da fuori mentre non sto salvando, avvisa.
+            if (newData && !isSaving.value) {
+               showCustomToast("⚠️ ATTENZIONE: Questo preventivo è stato modificato da un altro utente! Ricarica la pagina.");
+            }
+        });
+    }
+
   } catch(e) { 
     console.error(e); 
     alert("Errore ricerca"); 
@@ -788,7 +811,7 @@ const aggiungiExtraAdmin = () => {
                 <p class="text-lg font-medium text-gray-800 leading-none">{{ nomeCliente }}</p>
             </div>
             <div class="relative inline-block">
-              <h1 class="relative z-10 text-6xl font-bold font-heading text-gray-900">P.O.P.S. Dashboard</h1>
+              <h1 class="relative z-10 text-6xl font-bold font-heading text-gray-900">P.O.P.S. Commesse</h1>
               <div class="absolute bottom-2 left-0 w-full h-8 bg-amber-400 rounded-sm -z-0 animate-marker"></div>
             </div>
           </div>
