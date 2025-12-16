@@ -19,7 +19,12 @@ const FIC_CLIENT_SECRET = process.env.FIC_CLIENT_SECRET;
 if (!COMPANY_ID || !FIC_CLIENT_ID || !FIC_CLIENT_SECRET) {
     console.warn("⚠️ Attenzione: Credenziali FiC mancanti nel file .env");
 }
-
+const DELIVERY_TARIFF_CODES = [
+    'Consegna Diretta V1', 
+    'Consegna Diretta V2', 
+    'Consegna Diretta V3', 
+    'Spedizione'
+];
 const VAT_ID = 0;   
 const VAT_VALUE = 22; 
 
@@ -261,8 +266,8 @@ exports.creaDdtCumulativo = functions
     .region('europe-west1')
     .https.onCall(async (data, _context) => {
         
-        const { orderIds, date, colli, weight, tipoTrasporto, corriere, tracking } = data; // Aggiornato destructuring
-        
+        const { orderIds, date, colli, weight, tipoTrasporto, corriere, tracking } = data;
+
         if (!orderIds || orderIds.length === 0) {
             return { success: false, message: "Nessun ordine selezionato." };
         }
@@ -288,21 +293,12 @@ exports.creaDdtCumulativo = functions
                  return { success: false, message: "Nessun ID FiC valido trovato." };
             }
 
-            // =========================================================
-            // CALCOLO OGGETTO (COMMESSE)
-            // =========================================================
-            // Estraiamo tutte le commesse (o codici se commessa manca)
+            // Calcolo Oggetto
             const listCommesse = ordersData.map(o => 
-                (o.data.commessa && o.data.commessa.trim() !== "") 
-                ? o.data.commessa 
-                : o.data.codice
+                (o.data.commessa && o.data.commessa.trim() !== "") ? o.data.commessa : o.data.codice
             );
-            
-            // Rimuoviamo duplicati (es. 2 ordini della stessa commessa) e uniamo con " - "
             const uniqueCommesse = [...new Set(listCommesse)];
             const visibleSubject = uniqueCommesse.join(' - ');
-
-            console.log(`[FIC] Creazione DDT per ${ordersData.length} ordini. Oggetto: ${visibleSubject}`);
             
             const ficIdsToJoin = ordersData.map(o => o.ficId);
             const joinUrl = `${FIC_API_URL}/c/${COMPANY_ID}/issued_documents/join`;
@@ -318,12 +314,48 @@ exports.creaDdtCumulativo = functions
 
             const joinedData = joinResponse.data.data;
 
-            // 3. RECUPERO DETTAGLI COMPLETI CLIENTE
-            // Il join ci dà l'ID dell'entità, ma non sempre tutti i dettagli dell'indirizzo.
-            // Li recuperiamo esplicitamente per popolare il DDT come facciamo per gli ordini.
+            // =================================================================================
+            // 🔥 LOGICA UNIFICAZIONE SPEDIZIONI (MODIFICA RICHIESTA)
+            // =================================================================================
+            
+            let finalItems = joinedData.items_list || [];
+
+            // 1. Troviamo tutte le righe che corrispondono ai codici di consegna noti
+            const shippingItems = finalItems.filter((item: any) => 
+                DELIVERY_TARIFF_CODES.includes(item.name) // Controlla se il nome è uno dei codici
+            );
+
+            // 2. Se abbiamo trovato spedizioni, procediamo all'unificazione
+            if (shippingItems.length > 0) {
+                // A. Rimuoviamo TUTTE le righe spedizione dalla lista principale
+                finalItems = finalItems.filter((item: any) => 
+                    !DELIVERY_TARIFF_CODES.includes(item.name)
+                );
+
+                // B. Troviamo la spedizione con il prezzo più alto (Logica: nel cumulativo paga la tariffa maggiore)
+                // Ordiniamo decrescente per prezzo
+                shippingItems.sort((a: any, b: any) => (b.net_price || 0) - (a.net_price || 0));
+                
+                // C. Prendiamo la "vincente"
+                const bestShippingItem = shippingItems[0];
+                
+                // D. Forziamo quantità a 1 e la aggiungiamo in coda
+                bestShippingItem.qty = 1;
+
+                // Opzionale: Se vuoi che il nome cambi dinamicamente in base alla selezione della modale:
+                if (tipoTrasporto === 'COURIER') {
+                    bestShippingItem.name = 'Spedizione'; // Uniforma il nome se è corriere
+                }
+                // Se è INTERNAL, manteniamo il nome originale (es. "Consegna Diretta V2") che ha il prezzo corretto
+
+                finalItems.push(bestShippingItem);
+            }
+            
+            // =================================================================================
+
+            // 3. RECUPERO DETTAGLI CLIENTE (Fallback come prima)
             let detailedClient = null;
             if (joinedData.entity && joinedData.entity.id) {
-                console.log(`[FIC] Recupero dettagli completi cliente ID: ${joinedData.entity.id}...`);
                 try {
                     const clientDetailRes: any = await axios.get(`${FIC_API_URL}/c/${COMPANY_ID}/entities/clients/${joinedData.entity.id}`, {
                         headers: { Authorization: `Bearer ${accessToken}` },
@@ -331,43 +363,38 @@ exports.creaDdtCumulativo = functions
                     });
                     detailedClient = clientDetailRes.data.data;
                 } catch (err) {
-                    console.warn("[FIC] Impossibile recuperare dettagli cliente, userò dati base del join.");
+                    console.warn("[FIC] Impossibile recuperare dettagli cliente, userò dati base.");
                 }
             }
 
-            // Se il recupero fallisce, usiamo l'entity del join come fallback
             const entityData = detailedClient ? {
                 id: detailedClient.id,
                 name: detailedClient.name,
-                vat_number: detailedClient.vat_number || "", // Stringa vuota
-                tax_code: detailedClient.tax_code || "",     // Stringa vuota
-                address_street: detailedClient.address_street || "", // Stringa vuota
-                address_postal_code: detailedClient.address_postal_code || "", // Stringa vuota
-                address_city: detailedClient.address_city || "", // Stringa vuota
-                address_province: detailedClient.address_province || "", // Stringa vuota
+                vat_number: detailedClient.vat_number || "",
+                tax_code: detailedClient.tax_code || "",
+                address_street: detailedClient.address_street || "",
+                address_postal_code: detailedClient.address_postal_code || "",
+                address_city: detailedClient.address_city || "",
+                address_province: detailedClient.address_province || "",
                 country: detailedClient.country || "Italia"
             } : joinedData.entity;
 
 
-            // 4. COSTRUZIONE PAYLOAD
+            // 4. COSTRUZIONE PAYLOAD (Usa finalItems invece di joinedData.items_list)
             const finalDocData: any = {
                 type: 'delivery_note',
-                // Usiamo i dati cliente completi
                 entity: entityData,
                 date: date,
-                // Usiamo l'oggetto calcolato (Lista commesse)
                 visible_subject: visibleSubject,
                 currency: joinedData.currency,
                 language: joinedData.language,
-                items_list: joinedData.items_list, 
-                payments_list: joinedData.payments_list,
                 
-                // Dati Trasporto
+                items_list: finalItems, // <--- LISTA PULITA
+                
+                payments_list: joinedData.payments_list,
                 dn_ai_packages_number: colli.toString(),
                 dn_ai_causal: "VENDITA",
                 dn_ai_transporter: tipoTrasporto === 'COURIER' ? corriere : 'MITTENTE',
-                
-                // Mappatura standard
                 c_driver_and_contents: {
                         packages_number: parseInt(colli),
                         transport_causal: "VENDITA"
@@ -387,7 +414,7 @@ exports.creaDdtCumulativo = functions
             });
 
             const newDdt = createRes.data.data;
-            console.log(`[FIC] DDT Creato: ID ${newDdt.id}, Numero ${newDdt.number}`);
+            console.log(`[FIC] DDT Creato: ID ${newDdt.id}`);
 
             // 6. AGGIORNAMENTO FIRESTORE
             const batch = db.batch();
@@ -399,11 +426,9 @@ exports.creaDdtCumulativo = functions
                     fic_ddt_id: newDdt.id,
                     fic_ddt_url: newDdt.url,
                     fic_ddt_number: newDdt.number,
-                    stato: nuovoStato, // <--- STATO DINAMICO
+                    stato: nuovoStato,
                     dataConsegnaPrevista: date,
-                    
-                    // NUOVI DATI SPEDIZIONE
-                    metodoSpedizione: tipoTrasporto, // 'INTERNAL' o 'COURIER'
+                    metodoSpedizione: tipoTrasporto,
                     corriere: tipoTrasporto === 'COURIER' ? corriere : null,
                     trackingCode: tipoTrasporto === 'COURIER' ? tracking : null,
                     dataSpedizione: admin.firestore.FieldValue.serverTimestamp()
@@ -415,15 +440,11 @@ exports.creaDdtCumulativo = functions
 
         } catch (error: any) {
             console.error("❌ Errore API FiC:", JSON.stringify(error.response?.data || error.message, null, 2));
-
             const dettagliErrore = error.response?.data?.error?.validation_errors 
                 ? JSON.stringify(error.response.data.error.validation_errors)
                 : (error.response?.data?.error?.message || error.message);
 
-            return { 
-                success: false, 
-                message: "Errore FiC: " + dettagliErrore 
-            };
+            return { success: false, message: "Errore FiC: " + dettagliErrore };
         }
     });
 

@@ -51,16 +51,10 @@ const router = createRouter({
       component: () => import('../components/StackVisualizer.vue')
     },
     {
-      path: '/Teaser',
-      name: 'Teaser',
-      component: () => import('../views/TeaserView.vue')
-    },
-    {
       path: '/admin/settings',
       name: 'admin-settings',
       component: () => import('../views/AdminSettings.vue')
     }
   ]
 });
-
 export default router;

@@ -1,6 +1,26 @@
 <script setup lang="ts">
 import { RouterView } from 'vue-router'
+import { onMounted } from 'vue';
 import GlobalBugReporter from './components/GlobalBugReporter.vue'; // <--- Importa
+onMounted(() => {
+  // 1. Imposta il NOME DELLA TAB (Titolo)
+  document.title = 'Inglesina Italiana P.O.P.S.';
+
+  // 2. Imposta la FAVICON dinamicamente
+  // Cerca se esiste già un link per l'icona
+  let link = document.querySelector("link[rel~='icon']") as HTMLLinkElement;
+  
+  // Se non esiste, crealo
+  if (!link) {
+    link = document.createElement('link');
+    link.rel = 'icon';
+    document.head.appendChild(link);
+  }
+
+  // Imposta l'immagine (assicurati di aver messo il file favicon.png in public/)
+  link.type = 'image/png';
+  link.href = '/favicon.png';
+});
 </script>
 
 <template>
