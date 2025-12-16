@@ -202,3 +202,21 @@ export const STATUS_DETAILS: Record<StatoPreventivo, { label: string, badge: str
     hoverBadge: 'hover:bg-red-200'
   }
 };
+// --- NUOVI TIPI PER GESTIONE LISTINI E CLIENTI ---
+
+export interface CustomerPricingSettings {
+  delivery_tariff_code: 'Consegna Diretta V1' | 'Consegna Diretta V2' | 'Consegna Diretta V3' | 'Spedizione';
+  detraction_value: number; // Intero
+  price_list_mode: 'default' | '2025-a' | '2025-x' | '2026-a';
+}
+
+export interface GlobalAdminSettings {
+  delivery_tariffs: Record<string, number>; // es. { Consegna Diretta V1: 5, Consegna Diretta V2: 10 }
+  active_global_default: string; // es. '2026-a'
+}
+
+// Estensione dell'interfaccia utente (se la usi globalmente, altrimenti la useremo localmente)
+export interface ClientUserExtension extends CustomerPricingSettings {
+  id: string;
+  // ... altri campi user
+}

@@ -1,6 +1,9 @@
 import { useCatalogStore } from '../Data/catalog';
+import { calculateLogic2025 } from './pricing2025'; // <--- Importiamo la logica vecchia
+import { calculateLogic2025x } from './pricing2025x';
 
-interface PricingInput {
+// Esportiamo l'interfaccia così la può usare anche il file 2025
+export interface PricingInput {
   base_mm: number;
   altezza_mm: number;
   qty: number;
@@ -20,7 +23,7 @@ function getSupplementoPrice(catalog: any, code: string): number {
   return price !== undefined ? price : 0;
 }
 
-// MAPPA DEI MOLTIPLICATORI PER SOLO CANALINO (Prezzo al metro lineare)
+// MAPPA DEI MOLTIPLICATORI PER SOLO CANALINO
 const MOLTIPLICATORI_SOLO_CANALINO: Record<string, number> = {
   'C111': 1.5,
   'C112': 2.0,
@@ -28,11 +31,11 @@ const MOLTIPLICATORI_SOLO_CANALINO: Record<string, number> = {
   'C311': 3.0
 };
 
-export function calculatePrice(input: PricingInput) {
-  const catalog = useCatalogStore();
-  
-  if (!catalog.isLoaded) return { prezzo_unitario: 0, prezzo_totale: 0 };
-
+/**
+ * LOGICA 2026 (Attuale Standard)
+ * Questa funzione contiene esattamente la logica che avevi prima.
+ */
+function calculateLogic2026(input: PricingInput, catalog: any) {
   // 1. Normalizzazione Misure (Arrotondamento ai 50mm)
   const base_round = Math.ceil(input.base_mm / 50) * 50;
   const altezza_round = Math.ceil(input.altezza_mm / 50) * 50;
@@ -46,14 +49,10 @@ export function calculatePrice(input: PricingInput) {
     
     if (input.codice_canalino) {
       const code = input.codice_canalino.toUpperCase();
-      // Cerchiamo il moltiplicatore nella mappa
       const moltiplicatore = MOLTIPLICATORI_SOLO_CANALINO[code];
       
       if (moltiplicatore) {
-        // Calcolo: Perimetro * Moltiplicatore
         prezzo_unitario = metri_perimetro * moltiplicatore;
-      } else {
-        console.warn(`Codice canalino '${code}' non trovato nella mappa moltiplicatori.`);
       }
     }
     
@@ -62,12 +61,10 @@ export function calculatePrice(input: PricingInput) {
   }
   // --------------------------------------
 
-  // ... SE NON È SOLO CANALINO, PROSEGUE CON LA LOGICA STANDARD ...
-
   // Sviluppo lineare della griglia
   const metri_griglia = ((input.num_orizzontali * base_round) + (input.num_verticali * altezza_round)) / 1000;
   
-  // Determinazione Taglia (S, M, L, XL) basata sul perimetro
+  // Determinazione Taglia (S, M, L, XL)
   let taglia: 'S' | 'M' | 'L' | 'XL' = 'XL';
   if (metri_perimetro < 2.5) taglia = 'S';
   else if (metri_perimetro < 5.0) taglia = 'M';
@@ -113,4 +110,26 @@ export function calculatePrice(input: PricingInput) {
   const prezzo_totale = prezzo_unitario * input.qty;
 
   return { prezzo_unitario, prezzo_totale };
+}
+
+/**
+ * MAIN CALCULATOR (DISPATCHER)
+ * Riceve l'input e il nome del listino, decide chi deve fare i calcoli.
+ */
+export function calculatePrice(input: PricingInput, activeList: string = '2026-a') {
+  const catalog = useCatalogStore();
+  
+  if (!catalog.isLoaded) return { prezzo_unitario: 0, prezzo_totale: 0 };
+
+  // 1. SE È IL LISTINO VECCHIO -> Delega al file esterno
+  if (activeList === '2025x') {
+    return calculateLogic2025x(input);
+  }
+  
+  if (activeList === '2025-a') {
+    return calculateLogic2025(input);
+  }
+
+  // 2. DEFAULT (2026-a o sconosciuto) -> Usa logica interna
+  return calculateLogic2026(input, catalog);
 }

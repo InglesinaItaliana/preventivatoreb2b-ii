@@ -13,6 +13,7 @@ import { calculatePrice } from '../logic/pricing';
 import { onAuthStateChanged } from 'firebase/auth';
 import OrderModals from '../components/OrderModals.vue';
 import { STATUS_DETAILS } from '../types';
+import { getCustomerPricingContext } from '../logic/customerConfig';
 import {
   RectangleStackIcon,
   LockOpenIcon,
@@ -26,6 +27,7 @@ import {
   TruckIcon,
 } from '@heroicons/vue/24/solid'
 
+const currentPriceList = ref('2026-a');
 const toastMessage = ref('');
 const showToast = ref(false);
 const dataConsegnaPrevista = ref('');
@@ -328,6 +330,48 @@ onUnmounted(() => {
   if (unsubscribeSnapshot) unsubscribeSnapshot();
 });
 
+// Funzione per inserire/aggiornare la riga spedizione automaticamente
+// src/views/BuilderView.vue
+
+const updateShippingLine = (costo: number, nomeTariffa: string) => {
+  if (!nomeTariffa) return;
+
+  const descrizione = `Spedizione: ${nomeTariffa}`;
+  
+  // Cerchiamo se c'è già una riga di spedizione (EXTRA)
+  const index = preventivo.value.findIndex(r => 
+    r.categoria === 'EXTRA' && r.descrizioneCompleta.startsWith('Spedizione:')
+  );
+
+  if (index >= 0) {
+    // FIX 1: Assegniamo a una variabile e verifichiamo che esista per calmare TypeScript
+    const rigaEsistente = preventivo.value[index];
+    if (rigaEsistente) {
+      rigaEsistente.prezzo_unitario = costo;
+      rigaEsistente.prezzo_totale = costo * rigaEsistente.quantita;
+      rigaEsistente.descrizioneCompleta = descrizione;
+    }
+  } else {
+    // SE NON ESISTE: La creiamo nuova
+    preventivo.value.push({
+      id: Date.now().toString(),
+      categoria: 'EXTRA',
+      modello: 'MANUALE' as any,
+      descrizioneCompleta: descrizione,
+      infoCanalino: '',
+      base_mm: 0, altezza_mm: 0, righe: 0, colonne: 0,
+      quantita: 1,
+      prezzo_unitario: costo,
+      prezzo_totale: costo,
+      curva: false, tacca: false, nonEquidistanti: false,
+      
+      // FIX 2: Aggiunti i campi obbligatori mancanti
+      dimensione: '-',  
+      finitura: '-'
+    });
+  }
+};
+
 const aggiungi = () => {
   // Validazione condizionale: Se è solo canalino, non controlliamo la griglia
   const gridValid = soloCanalino.value || (tipoGriglia.value && dimensioneGriglia.value && finituraGriglia.value);
@@ -359,7 +403,7 @@ const aggiungi = () => {
     
     prezzo_unitario_griglia: pGriglia, 
     prezzo_unitario_canalino: pCanalino
-  });
+  },currentPriceList.value);
 
   let descStart = soloCanalino.value ? 'TELAIO' : categoriaGriglia.value;
   if (!soloCanalino.value && categoriaGriglia.value === 'DUPLEX' && fuseruolo.value) {
@@ -655,6 +699,22 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
   finally { isSaving.value = false; }
 };
 
+// --- AGGIUNGI QUESTO WATCHER ---
+// Serve per ricaricare il listino quando l'Admin seleziona un cliente diverso
+watch(clienteUID, async (newId) => {
+  if (newId) {
+    try {
+      console.log("Caricamento listino per cliente:", newId);
+      const ctx = await getCustomerPricingContext(newId);
+      currentPriceList.value = ctx.activeList;
+      updateShippingLine(ctx.deliveryCost, ctx.tariffName);
+      console.log("Listino aggiornato:", currentPriceList.value);
+    } catch (e) {
+      console.error("Errore cambio cliente:", e);
+    }
+  }
+});
+
 // --- WATCHER PER COMANDO "NUOVO" DA FAB ---
 watch(() => route.query, (q) => {
   if (q.cmd === 'new') {
@@ -684,11 +744,21 @@ onMounted(async() => {
     const s = await getDoc(doc(db, 'settings', 'general'));
     if (s.exists()) minDays.value = s.data().minProcessingDays || 14;
   } catch(e) { console.error(e); }
-  onAuthStateChanged(auth, (user) => {
+  onAuthStateChanged(auth, async (user) => {
     if (user) {
       // Se non è admin creation mode, l'email è quella dell'utente corrente
       if(!isNewAdminOrder.value) clienteEmail.value = user.email || '';
       caricaListaStorico();
+      try {
+        const ctx = await getCustomerPricingContext(user.uid);
+        currentPriceList.value = ctx.activeList;
+        console.log("Listino applicato:", currentPriceList.value);
+        if (preventivo.value.length === 0 && !route.query.codice) {
+         updateShippingLine(ctx.deliveryCost, ctx.tariffName);
+        }
+      } catch (e) {
+        console.error("Errore caricamento contesto prezzi", e);
+      }
     }
   });
 
@@ -901,11 +971,11 @@ const aggiungiExtraAdmin = () => {
 <template>
   <div class="min-h-screen bg-gray-50/90 p-6 font-sans text-gray-700" pb-40>
       <main class="max-w-5xl mx-auto flex flex-col gap-2">
-        <div class="relative flex flex-col md:flex-row justify-between items-end mb-8 gap-4">
+        <div class="relative flex flex-col md:flex-row justify-between items-end mb-2 gap-4">
         
           <button 
           @click="vaiDashboard" 
-          class="fixed top-8 left-20 z-0 bg-white/90 backdrop-blur border border-gray-200 text-gray-500 hover:text-amber-500 shadow-md transition-all p-2 rounded-full hover:shadow-lg hover:scale-110 active:scale-95" 
+          class="fixed top-8 left-20 z-50 bg-white/90 backdrop-blur border border-gray-200 text-gray-500 hover:text-amber-500 shadow-md transition-all p-2 rounded-full hover:shadow-lg hover:scale-110 active:scale-95" 
           title="Torna alla Dashboard"
         >
           <ChevronLeftIcon class="h-8 w-8" />         
@@ -915,18 +985,6 @@ const aggiungiExtraAdmin = () => {
           <div class="w-full">
             
             <div v-if="isNewAdminOrder && !currentDocId" class="mb-4 relative z-50">
-                
-                <div v-if="suggestedClients.length > 0" class="absolute top-full left-0 w-full md:w-96 bg-white shadow-xl rounded-lg border border-gray-100 mt-1 overflow-hidden">
-                    <div 
-                        v-for="client in suggestedClients" 
-                        :key="client.id" 
-                        @click="selectClient(client)"
-                        class="p-3 hover:bg-amber-50 cursor-pointer border-b last:border-0 border-gray-50 transition-colors"
-                    >
-                        <div class="font-bold text-gray-800">{{ client.ragioneSociale }}</div>
-                        <div class="text-xs text-gray-400">{{ client.email }}</div>
-                    </div>
-                </div>
             </div>
             
             <div v-else>
@@ -940,16 +998,33 @@ const aggiungiExtraAdmin = () => {
             <div v-if="isNewAdminOrder && !currentDocId" class="mb-4 relative z-50 mb-4">
                 <label class="text-xs font-bold text-gray-500 uppercase mb-1 flex items-center gap-1">
                 </label>
-                <div class="relative">
+                <div class="relative w-full md:w-96">
                     <input 
                         v-model="searchClientQuery" 
                         @input="searchClients"
                         type="text" 
-                        class="w-full md:w-96 p-3 border-2 border-amber-400 rounded-lg text-lg font-bold text-gray-800 placeholder-gray-300 focus:outline-none focus:ring-4 focus:ring-amber-100"
+                        class="w-full p-3 border-2 border-amber-400 rounded-lg text-lg font-bold text-gray-800 placeholder-gray-300 focus:outline-none focus:ring-4 focus:ring-amber-100"
                         placeholder="Cerca Ragione Sociale..."
                         :disabled="!!clienteUID" 
                     >
-                    <button v-if="clienteUID" @click="() => { clienteUID=''; searchClientQuery=''; nomeCliente=''; }" class="absolute right-3 top-3 text-gray-400 hover:text-red-500 uppercase">✕</button>
+                    <button 
+                      v-if="clienteUID" 
+                      @click="() => { clienteUID=''; searchClientQuery=''; nomeCliente=''; }" 
+                      class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-red-500 uppercase font-bold"
+                    >
+                      ✕
+                    </button>
+                    <div v-if="suggestedClients.length > 0" class="absolute top-full left-0 w-full md:w-96 bg-white shadow-xl rounded-lg border border-gray-100 mt-1 overflow-hidden">
+                        <div 
+                            v-for="client in suggestedClients" 
+                            :key="client.id" 
+                            @click="selectClient(client)"
+                            class="p-3 hover:bg-amber-50 cursor-pointer border-b last:border-0 border-gray-50 transition-colors"
+                        >
+                            <div class="font-bold text-gray-800">{{ client.ragioneSociale }}</div>
+                            <div class="text-xs text-gray-400">{{ client.email }}</div>
+                        </div>
+                    </div>
                 </div>
               </div>
           </div>

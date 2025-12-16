@@ -6,7 +6,7 @@
   import { 
   UserPlusIcon, PencilSquareIcon, MagnifyingGlassIcon, PhoneIcon, EnvelopeIcon,
   UsersIcon, BuildingOfficeIcon, CloudArrowUpIcon, PaperAirplaneIcon, CheckCircleIcon, ExclamationTriangleIcon,
-  XCircleIcon, Cog6ToothIcon 
+  XCircleIcon, Cog6ToothIcon, TruckIcon, ClockIcon, CurrencyEuroIcon, TagIcon, MapPinIcon, IdentificationIcon
 } from '@heroicons/vue/24/solid';
   
   // --- TIPI ---
@@ -29,7 +29,32 @@
     citta?: string;
     status: 'PENDING_INVITE' | 'ACTIVE';
     dataImportazione?: any;
+    delivery_tariff_code?: string;
+    detraction_value?: number;
+    price_list_mode?: string;
   }
+
+// --- STATO SETTINGS GLOBALI (Tipizzato per evitare errori TS) ---
+const globalPricing = reactive<{
+    delivery_tariffs: Record<string, number>;
+    active_global_default: string;
+  }>({
+    delivery_tariffs: { 'Consegna Diretta V1': 0, 'Consegna Diretta V2': 0, 'Consegna Diretta V3': 0, 'Spedizione': 0 },
+    active_global_default: '2026-a'
+  });
+
+  const deliveryOptions = ['Consegna Diretta V1', 'Consegna Diretta V2', 'Consegna Diretta V3', 'Spedizione'];
+  const pricelistOptions = ['default', '2025-a', '2025x', '2026-a'];
+
+  // --- STATO MODALE CLIENTE ---
+  const showClientEditModal = ref(false);
+  const editingClient = reactive({
+    id: '',
+    ragioneSociale: '',
+    delivery_tariff_code: 'Consegna Diretta V1',
+    detraction_value: 0,
+    price_list_mode: 'default'
+  });
   
   // --- STATO ---
   const activeTab = ref<'TEAM' | 'CLIENTI' | 'VARIE'>('TEAM');
@@ -88,17 +113,53 @@ const showCustomToast = (message: string) => {
   }, 2500); 
 };
 
+const openEditClient = (client: ClientUser) => {
+  editingClient.id = client.id;
+  editingClient.ragioneSociale = client.ragioneSociale;
+  editingClient.delivery_tariff_code = client.delivery_tariff_code || 'Consegna Diretta V1';
+  editingClient.detraction_value = client.detraction_value || 0;
+  editingClient.price_list_mode = client.price_list_mode || 'default';
+  showClientEditModal.value = true;
+};
+
+const saveClientSettings = async () => {
+  try {
+    await updateDoc(doc(db, 'users', editingClient.id), {
+      delivery_tariff_code: editingClient.delivery_tariff_code,
+      detraction_value: editingClient.detraction_value,
+      price_list_mode: editingClient.price_list_mode
+    });
+    showClientEditModal.value = false;
+    showCustomToast("Cliente aggiornato!");
+    fetchData(); // Ricarica tabella
+  } catch(e) {
+    showCustomToast("Errore aggiornamento cliente");
+  }
+};
+
 const saveSettings = async () => {
     try {
+      // Salvataggio General
       await setDoc(doc(db, 'settings', 'general'), { minProcessingDays: minDays.value }, { merge: true });
+      
+      // Salvataggio Pricing
+      await setDoc(doc(db, 'settings', 'pricing'), { 
+        delivery_tariffs: globalPricing.delivery_tariffs,
+        active_global_default: globalPricing.active_global_default
+      }, { merge: true });
+
       showCustomToast("Impostazioni salvate!");
-    } catch (e) { showCustomToast("Errore salvataggio"); }
+    } catch (e) { 
+      console.error(e);
+      showCustomToast("Errore salvataggio"); 
+    }
   };
 
   // --- CARICAMENTO DATI ---
   const fetchData = async () => {
     loading.value = true;
     try {
+      // 1. Carica Team
       const teamSnap = await getDocs(collection(db, 'team'));
       members.value = teamSnap.docs.map(d => {
         const data = d.data();
@@ -114,17 +175,30 @@ const saveSettings = async () => {
         } as TeamMember;
       });
       
+      // 2. Carica Clienti
       const qClients = query(collection(db, 'users'), orderBy('ragioneSociale', 'asc'));
       const clientsSnap = await getDocs(qClients);
       clients.value = clientsSnap.docs.map(d => ({ id: d.id, ...d.data() } as ClientUser));
 
+      // 3. Carica Settings Generali
       const settingsSnap = await getDoc(doc(db, 'settings', 'general'));
       if (settingsSnap.exists()) {
         minDays.value = settingsSnap.data().minProcessingDays || 14;
       }
 
-    } catch (e) { console.error(e); } 
-    finally { loading.value = false; }
+      // 4. Carica Settings Prezzi (NUOVO)
+      const priceSettingsSnap = await getDoc(doc(db, 'settings', 'pricing'));
+      if (priceSettingsSnap.exists()) {
+        const data = priceSettingsSnap.data();
+        if(data.delivery_tariffs) Object.assign(globalPricing.delivery_tariffs, data.delivery_tariffs);
+        if(data.active_global_default) globalPricing.active_global_default = data.active_global_default;
+      }
+
+    } catch (e) { 
+      console.error(e); 
+    } finally { 
+      loading.value = false; 
+    }
   };
   
   onMounted(fetchData);
@@ -389,88 +463,236 @@ const saveSettings = async () => {
            </div>
         </div>
   
-        <div v-if="activeTab === 'CLIENTI'">
-           <div class="bg-white p-4 rounded-[1.5rem] shadow-sm border border-slate-200 mb-6 flex flex-col md:flex-row gap-4 items-center justify-between">
-              <div class="flex gap-4 flex-1 w-full">
-                 <div class="relative flex-1">
-                    <MagnifyingGlassIcon class="h-5 w-5 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2" />
-                    <input v-model="searchQuery" type="text" placeholder="Cerca cliente P.IVA o nome..." class="w-full pl-12 pr-4 py-3 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-amber-200 text-sm font-bold text-slate-700 placeholder-slate-400">
-                 </div>
-                 <select v-model="filterClientStatus" class="bg-slate-50 border-none rounded-xl px-4 py-3 text-sm font-bold text-slate-600 cursor-pointer focus:ring-2 focus:ring-amber-200">
-                    <option value="ALL">Tutti</option>
-                    <option value="PENDING">Da Invitare</option>
-                    <option value="ACTIVE">Attivi</option>
-                 </select>
+        <div v-if="activeTab === 'CLIENTI'" class="animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div class="bg-white p-4 rounded-[2rem] shadow-sm border border-slate-200 mb-6 flex flex-col md:flex-row gap-4 items-center justify-between">
+              <div class="flex flex-col md:flex-row gap-4 flex-1 w-full">
+                  <div class="relative flex-1">
+                      <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                          <MagnifyingGlassIcon class="h-5 w-5 text-slate-400" />
+                      </div>
+                      <input 
+                          v-model="searchQuery" 
+                          type="text" 
+                          placeholder="Cerca per Ragione Sociale, P.IVA..." 
+                          class="w-full pl-11 pr-4 py-3 bg-slate-50 border-none rounded-xl focus:ring-2 focus:ring-amber-200 text-sm font-bold text-slate-700 placeholder-slate-400 transition-all hover:bg-slate-100"
+                      >
+                  </div>
+                  
+                  <div class="relative min-w-[160px]">
+                      <select v-model="filterClientStatus" class="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-sm font-bold text-slate-600 cursor-pointer focus:ring-2 focus:ring-amber-200 appearance-none hover:bg-slate-100 transition-all">
+                          <option value="ALL">Tutti gli Stati</option>
+                          <option value="PENDING">Da Invitare</option>
+                          <option value="ACTIVE">Attivi</option>
+                      </select>
+                  </div>
               </div>
               
-              <div class="flex gap-2">
-                 <button v-if="selectedClientIds.length > 0" @click="sendInvites(selectedClientIds)" class="bg-amber-400 hover:bg-amber-300 text-amber-950 px-6 py-3 rounded-xl font-bold shadow-lg shadow-amber-200/50 transition-transform active:scale-95 flex items-center gap-2 animate-pulse">
-                    <PaperAirplaneIcon class="h-5 w-5" /> Invia {{ selectedClientIds.length }} Inviti
-                 </button>
-                 <button @click="showClientImportModal = true" class="bg-amber-400 hover:bg-amber-300 text-amber-950 px-6 py-3 rounded-xl font-bold shadow-lg shadow-slate-300 transition-transform active:scale-95 flex items-center gap-2">
-                    <CloudArrowUpIcon class="h-5 w-5" /> Importa / Aggiungi
-                 </button>
+              <div class="flex gap-2 w-full md:w-auto">
+                  <button v-if="selectedClientIds.length > 0" @click="sendInvites(selectedClientIds)" class="flex-1 md:flex-none bg-amber-400 hover:bg-amber-300 text-amber-950 px-6 py-3 rounded-xl font-bold shadow-lg shadow-amber-200/50 transition-transform active:scale-95 flex items-center justify-center gap-2 animate-pulse">
+                      <PaperAirplaneIcon class="h-5 w-5" /> Invia Inviti ({{ selectedClientIds.length }})
+                  </button>
+                  <button @click="showClientImportModal = true" class="flex-1 md:flex-none bg-slate-900 hover:bg-black text-white px-6 py-3 rounded-xl font-bold shadow-lg shadow-slate-300 transition-transform active:scale-95 flex items-center justify-center gap-2">
+                      <CloudArrowUpIcon class="h-5 w-5" /> Importa
+                  </button>
               </div>
-           </div>
-  
-           <div class="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden">
-              <table class="w-full text-left">
-                 <thead class="bg-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
-                    <tr>
-                       <th class="px-6 py-4 w-10">
-                       </th>
-                       <th class="px-6 py-4">Ragione Sociale</th>
-                       <th class="px-6 py-4">P.IVA / Città</th>
-                       <th class="px-6 py-4">Email</th>
-                       <th class="px-6 py-4 text-center">Stato</th>
-                       <th class="px-6 py-4 text-right">Azioni</th>
-                    </tr>
-                 </thead>
-                 <tbody class="divide-y divide-slate-50">
-                    <tr v-for="client in filteredClients" :key="client.id" class="hover:bg-amber-50/30 transition-colors group">
-                       <td class="px-6 py-4">
-                          <input type="checkbox" :checked="selectedClientIds.includes(client.id)" @change="toggleClientSelection(client.id)" :disabled="client.status === 'ACTIVE'" class="rounded border-slate-300 text-amber-500 focus:ring-amber-400 h-5 w-5 cursor-pointer disabled:opacity-30">
-                       </td>
-                       <td class="px-6 py-4 font-bold text-slate-800">{{ client.ragioneSociale }}</td>
-                       <td class="px-6 py-4 text-sm">
-                          <div class="font-mono text-slate-600">{{ client.piva }}</div>
-                          <div class="text-xs text-slate-400 font-medium">{{ client.citta }}</div>
-                       </td>
-                       <td class="px-6 py-4 text-sm text-slate-600">{{ client.email }}</td>
-                       <td class="px-6 py-4 text-center">
-                          <span v-if="client.status === 'ACTIVE'" class="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-green-100 text-green-700 text-[10px] font-black border border-green-200 uppercase">
-                             <CheckCircleIcon class="h-3 w-3" /> Attivo
-                          </span>
-                          <span v-else class="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-amber-100 text-amber-700 text-[10px] font-black border border-amber-200 uppercase">
-                             <ExclamationTriangleIcon class="h-3 w-3" /> Da Invitare
-                          </span>
-                       </td>
-                       <td class="px-6 py-4 text-right">
-                          <button v-if="client.status !== 'ACTIVE'" @click="sendInvites([client.id])" class="text-xs font-bold text-blue-600 hover:underline">Invita Ora</button>
-                       </td>
-                    </tr>
-                 </tbody>
+          </div>
+
+          <div class="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden">
+              <table class="w-full text-left border-collapse">
+                  <thead class="bg-slate-50/80 text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">
+                      <tr>
+                          <th class="px-6 py-5 w-10 text-center">
+                              <span class="text-slate-300">#</span>
+                          </th>
+                          <th class="px-6 py-5">Azienda / Info</th>
+                          <th class="px-6 py-5 hidden md:table-cell">Contatti & Sede</th>
+                          <th class="px-6 py-5 text-center">Stato Account</th>
+                          <th class="px-6 py-5 text-right">Azioni</th>
+                      </tr>
+                  </thead>
+                  <tbody class="divide-y divide-slate-50">
+                      <tr v-for="client in filteredClients" :key="client.id" class="hover:bg-amber-50/40 transition-colors group">
+                          
+                          <td class="px-6 py-4 text-center">
+                              <input 
+                                  type="checkbox" 
+                                  :checked="selectedClientIds.includes(client.id)" 
+                                  @change="toggleClientSelection(client.id)" 
+                                  :disabled="client.status === 'ACTIVE'" 
+                                  class="rounded-[6px] border-slate-300 text-amber-500 focus:ring-amber-400 h-5 w-5 cursor-pointer disabled:opacity-20 disabled:cursor-not-allowed"
+                              >
+                          </td>
+
+                          <td class="px-6 py-4">
+                              <div class="flex items-center gap-4">
+                                  <div class="h-12 w-12 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-400 group-hover:bg-white group-hover:shadow-sm transition-all border border-slate-100">
+                                      <BuildingOfficeIcon class="h-6 w-6" />
+                                  </div>
+                                  <div>
+                                      <div class="font-bold text-slate-800 text-base leading-tight">{{ client.ragioneSociale }}</div>
+                                      <div class="flex items-center gap-1 mt-1 text-slate-400 text-xs font-mono">
+                                          <IdentificationIcon class="h-3 w-3" />
+                                          <span>{{ client.piva }}</span>
+                                      </div>
+                                  </div>
+                              </div>
+                          </td>
+
+                          <td class="px-6 py-4 hidden md:table-cell">
+                              <div class="space-y-1.5">
+                                  <div class="flex items-center gap-2 text-sm font-medium text-slate-600">
+                                      <EnvelopeIcon class="h-4 w-4 text-slate-300" />
+                                      <span>{{ client.email }}</span>
+                                  </div>
+                                  <div v-if="client.citta" class="flex items-center gap-2 text-xs font-bold text-slate-400 uppercase">
+                                      <MapPinIcon class="h-3 w-3 text-slate-300" />
+                                      <span>{{ client.citta }}</span>
+                                  </div>
+                              </div>
+                          </td>
+
+                          <td class="px-6 py-4 text-center">
+                              <span v-if="client.status === 'ACTIVE'" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-black border border-emerald-200 uppercase tracking-wide shadow-sm">
+                                  <CheckCircleIcon class="h-3.5 w-3.5" /> Attivo
+                              </span>
+                              <span v-else class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-100 text-amber-700 text-[10px] font-black border border-amber-200 uppercase tracking-wide shadow-sm animate-pulse">
+                                  <ExclamationTriangleIcon class="h-3.5 w-3.5" /> Da Invitare
+                              </span>
+                          </td>
+
+                          <td class="px-6 py-4 text-right">
+                              <div class="flex justify-end gap-2">
+                                  <button 
+                                      @click="openEditClient(client)" 
+                                      class="p-2.5 bg-slate-100 hover:bg-white hover:text-amber-600 hover:shadow-md border border-transparent hover:border-amber-100 text-slate-500 rounded-xl transition-all" 
+                                      title="Configura Cliente"
+                                  >
+                                      <PencilSquareIcon class="h-5 w-5" />
+                                  </button>
+
+                                  <button 
+                                      v-if="client.status !== 'ACTIVE'" 
+                                      @click="sendInvites([client.id])" 
+                                      class="p-2.5 bg-blue-50 hover:bg-blue-500 hover:text-white border border-blue-100 text-blue-600 rounded-xl transition-all shadow-sm"
+                                      title="Invia Email di Invito"
+                                  >
+                                      <PaperAirplaneIcon class="h-5 w-5" />
+                                  </button>
+                              </div>
+                          </td>
+                      </tr>
+                  </tbody>
               </table>
-              <div v-if="filteredClients.length === 0" class="p-10 text-center text-slate-400 font-medium">Nessun cliente trovato.</div>
-           </div>
-        </div>
-        <div v-if="activeTab === 'VARIE'">
-          <div class="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-200 max-w-md">
-            <h3 class="text-xl font-bold text-slate-900 mb-4">Configurazioni Generali</h3>
-            
-            <label class="block text-xs font-bold text-slate-400 uppercase mb-2">Giorni minimi di lavorazione</label>
-            <p class="text-xs text-slate-500 mb-3">Definisce la prima data utile selezionabile dal cliente in fase di ordine.</p>
-            
-            <div class="flex items-center gap-4">
-              <input v-model.number="minDays" type="number" min="1" class="w-full bg-slate-50 border-none rounded-xl p-3 text-lg font-bold focus:ring-2 focus:ring-amber-200">
-              <span class="text-sm font-bold text-slate-500">Giorni</span>
+              
+              <div v-if="filteredClients.length === 0" class="py-20 flex flex-col items-center justify-center text-slate-400 gap-4">
+                  <div class="bg-slate-50 p-6 rounded-full">
+                      <UsersIcon class="h-12 w-12 text-slate-300" />
+                  </div>
+                  <p class="font-bold text-lg">Nessun cliente trovato</p>
+                  <p class="text-sm opacity-60">Prova a modificare i filtri di ricerca</p>
+              </div>
+          </div>
+      </div>
+        <div v-if="activeTab === 'VARIE'" class="max-w-5xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+
+            <div class="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden flex flex-col">
+              <div class="bg-slate-50/50 px-8 py-5 border-b border-slate-100 flex items-center gap-3">
+                <div class="bg-blue-100 p-2.5 rounded-xl text-blue-600 shadow-sm">
+                  <TruckIcon class="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 class="text-lg font-bold text-slate-800 leading-tight">Tariffe Spedizioni</h3>
+                  <p class="text-xs text-slate-400 font-medium">Gestione costi di consegna globali</p>
+                </div>
+              </div>
+
+              <div class="p-8 flex-1">
+                <div class="grid grid-cols-1 gap-5">
+                  <div v-for="code in deliveryOptions" :key="code" class="relative group">
+                    <label class="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1.5 ml-1">{{ code }}</label>
+                    <div class="relative">
+                      <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                        <CurrencyEuroIcon class="w-5 h-5 text-slate-400" />
+                      </div>
+                      <input 
+                        type="number" 
+                        step="0.5" 
+                        v-model.number="globalPricing.delivery_tariffs[code]" 
+                        class="w-full pl-12 pr-4 py-3.5 bg-slate-50 border-none rounded-xl font-bold text-slate-700 text-lg focus:ring-2 focus:ring-blue-200 transition-all outline-none group-hover:bg-slate-100 focus:bg-white"
+                        placeholder="0.00"
+                      >
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
 
-            <button @click="saveSettings" class="mt-6 w-full bg-slate-900 text-white py-3 rounded-xl font-bold hover:bg-black transition-transform active:scale-95 shadow-lg">
-              Salva Impostazioni
-            </button>
+            <div class="space-y-6">
+              <div class="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden">
+                <div class="bg-slate-50/50 px-8 py-5 border-b border-slate-100 flex items-center gap-3">
+                  <div class="bg-amber-100 p-2.5 rounded-xl text-amber-600 shadow-sm">
+                    <Cog6ToothIcon class="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h3 class="text-lg font-bold text-slate-800 leading-tight">Impostazioni Generali</h3>
+                    <p class="text-xs text-slate-400 font-medium">Parametri di sistema</p>
+                  </div>
+                </div>
+
+                <div class="p-8 space-y-8">
+                  
+                  <div>
+                    <label class="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2 ml-1">Listino Default Nuovi Clienti</label>
+                    <div class="relative">
+                      <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                          <TagIcon class="w-5 h-5 text-slate-400" />
+                      </div>
+                      <select 
+                        v-model="globalPricing.active_global_default" 
+                        class="w-full pl-12 pr-4 py-4 bg-slate-50 border-none rounded-xl font-bold text-slate-700 focus:ring-2 focus:ring-amber-200 outline-none appearance-none cursor-pointer hover:bg-slate-100 transition-colors"
+                      >
+                        <option v-for="opt in pricelistOptions" :key="opt" :value="opt">{{ opt }}</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label class="block text-[10px] font-black text-slate-400 uppercase tracking-wider mb-2 ml-1">Tempo min. Produzione</label>
+                    <div class="relative">
+                      <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                          <ClockIcon class="w-5 h-5 text-slate-400" />
+                      </div>
+                      <input 
+                        type="number" 
+                        v-model.number="minDays" 
+                        min="1"
+                        class="w-full pl-12 pr-4 py-4 border-none bg-slate-50 rounded-xl font-bold text-slate-700 text-lg focus:ring-2 focus:ring-amber-200 outline-none hover:bg-slate-100 transition-colors"
+                        placeholder="Es. 14"
+                      >
+                      <div class="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
+                          <span class="text-[10px] font-black text-slate-400 uppercase bg-slate-200/50 px-2 py-1 rounded-md">Giorni</span>
+                        </div>
+                    </div>
+                    <p class="text-[10px] text-slate-400 mt-2 ml-1">Blocca la selezione di date antecedenti nel calendario ordini.</p>
+                  </div>
+
+                </div>
+              </div>
+              
+              <button 
+                @click="saveSettings" 
+                class="w-full bg-slate-900 text-white py-4 rounded-[1.5rem] font-bold text-lg shadow-xl shadow-slate-200 hover:bg-black hover:scale-[1.01] transition-all active:scale-95 flex items-center justify-center gap-2"
+              >
+                <span>Salva Tutte le Impostazioni</span>
+                <CheckCircleIcon class="w-6 h-6 text-green-400" />
+              </button>
+
+            </div>
+
           </div>
-        </div>
+          </div>
   
       </div>
   
@@ -614,4 +836,43 @@ const saveSettings = async () => {
         </div>
       </div>
     </div>
+
+    <div v-if="showClientEditModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" @click="showClientEditModal = false"></div>
+      <div class="relative bg-white rounded-[2rem] shadow-2xl w-full max-w-md p-8 animate-in zoom-in duration-200">
+        <h2 class="text-xl font-bold text-slate-900 mb-1">Settings Cliente</h2>
+        <p class="text-sm text-slate-500 mb-6">{{ editingClient.ragioneSociale }}</p>
+
+        <div class="space-y-4">
+          <div>
+            <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Listino Applicato</label>
+            <select v-model="editingClient.price_list_mode" class="w-full bg-slate-50 border-none rounded-xl p-3 font-bold">
+              <option value="default">Usa Default ({{ globalPricing.active_global_default }})</option>
+              <option value="2025-a">Listino 2025-a</option>
+              <option value="2025-x">Listino 2025-x (LEALI)</option>
+              <option value="2026-a">Listino 2026-a</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Tariffa Consegna</label>
+            <select v-model="editingClient.delivery_tariff_code" class="w-full bg-slate-50 border-none rounded-xl p-3 font-bold">
+              <option v-for="code in deliveryOptions" :key="code" :value="code">{{ code }} ({{ globalPricing.delivery_tariffs[code] }}€)</option>
+            </select>
+          </div>
+
+          <div>
+            <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Detrazione (Valore Intero)</label>
+            <input type="number" v-model.number="editingClient.detraction_value" class="w-full bg-slate-50 border-none rounded-xl p-3 font-bold">
+            <p class="text-[10px] text-slate-400 mt-1">Valore usato per calcoli futuri, non modifica il preventivo corrente.</p>
+          </div>
+        </div>
+
+        <div class="mt-8 flex justify-end gap-3">
+          <button @click="showClientEditModal = false" class="px-5 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-100">Annulla</button>
+          <button @click="saveClientSettings" class="px-8 py-3 rounded-xl bg-slate-900 text-white font-bold hover:bg-black shadow-lg">Salva</button>
+        </div>
+      </div>
+    </div>
+
   </template>
