@@ -214,6 +214,9 @@ const handleProductionConfirm = () => emit('confirmProduction');
         <div class="bg-white p-4 rounded-lg shadow-sm mb-6 border border-gray-200 flex justify-between items-center">
           <div><p class="text-sm text-gray-500 uppercase font-bold">Cliente</p><p class="text-xl font-bold text-gray-900">{{ clientName }}</p></div>
           <div class="text-right"><p class="text-sm text-gray-500 uppercase font-bold">Commessa</p><p class="font-medium">{{ order?.commessa || order?.codice }}</p></div>
+          <div v-if="order.order_detraction_value" class="mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-blue-50 border border-blue-100 text-blue-800 text-xs font-bold">
+            <span>Detrazione Specifica: {{ order.order_detraction_value }}%</span>
+          </div>
         </div>
 
         <div v-for="(items, groupName) in groupedElements" :key="groupName" class="mb-6 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">

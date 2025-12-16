@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { collection, query, where, updateDoc, doc, serverTimestamp, getDoc, onSnapshot, deleteField } from 'firebase/firestore';
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, auth } from '../firebase';
 import { useRouter } from 'vue-router';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -12,6 +13,8 @@ import {
   XCircleIcon, 
   CogIcon, 
   CubeIcon,
+  LockClosedIcon,
+  LockOpenIcon,
   ExclamationTriangleIcon,
   ShoppingCartIcon, // NUOVA
   TruckIcon,        // NUOVA
@@ -67,6 +70,42 @@ const maxDateStr = computed(() => {
   d.setMonth(d.getMonth() + 3);
   return d.toISOString().split('T')[0];
 });
+
+// --- LOGICA UPLOAD ALLEGATI ---
+const uploadedFiles = ref<{ name: string, url: string }[]>([]);
+const isUploading = ref(false);
+
+const handleFileUpload = async (event: any) => {
+  const file = event.target.files[0];
+  if (!file || !selectedOrder.value) return;
+
+  isUploading.value = true;
+  try {
+    const storage = getStorage();
+    // Salva in: allegati_clienti/ID_COMMESSA/TIMESTAMP_NOME
+    const fileRef = storageRef(storage, `allegati_clienti/${selectedOrder.value.id}/${Date.now()}_${file.name}`);
+    
+    await uploadBytes(fileRef, file);
+    const url = await getDownloadURL(fileRef);
+
+    uploadedFiles.value.push({ name: file.name, url: url });
+  } catch (e) {
+    console.error("Errore upload:", e);
+    openResultModal("Errore", "Impossibile caricare il file.", "ERROR");
+  } finally {
+    isUploading.value = false;
+    event.target.value = ''; // Reset input per poter ricaricare se serve
+  }
+};
+
+const removeFile = (index: number) => {
+  uploadedFiles.value.splice(index, 1);
+};
+
+const userDefaultDetraction = ref(50); // Valore base utente (default 50 se manca)
+const currentDetraction = ref(50);     // Valore modificabile per l'ordine
+const isDetractionLocked = ref(true);  // Stato del lucchetto
+
 const caricaProfilo = async (uid: string) => {
   try {
     const userSnap = await getDoc(doc(db, 'users', uid));
@@ -74,6 +113,9 @@ const caricaProfilo = async (uid: string) => {
       const data = userSnap.data();
       clientName.value = data.ragioneSociale || data.email;
       localStorage.setItem('clientName', clientName.value);
+      
+      // AGGIUNTA: Carica detrazione default (fallback a 50%)
+      userDefaultDetraction.value = data.detraction_value !== undefined ? data.detraction_value : 50;
     }
   } catch (e) { console.error("Errore profilo", e); }
 };
@@ -146,6 +188,9 @@ const gestisciAzioneOrdine = (p: any) => {
 const openConfirmModal = (p: any) => {
   selectedOrder.value = p;
   userInputDate.value = ''; // Reset
+  uploadedFiles.value = [];
+  currentDetraction.value = userDefaultDetraction.value;
+  isDetractionLocked.value = true;
   showConfirmQuoteModal.value = true;
 };
 
@@ -199,12 +244,23 @@ const onConfirmSign = async (url: string) => {
 const handleFinalOrderConfirmation = async () => {
   if(!selectedOrder.value) return;
   if(!userInputDate.value) return openResultModal("Attenzione", "Seleziona una data di consegna desiderata.", "ERROR");
+  
   try {
-    await updateDoc(doc(db, 'preventivi', selectedOrder.value.id), {
+    // 1. Prepara l'oggetto base
+    const updatePayload: any = {
       stato: 'ORDER_REQ', 
       dataInvioOrdine: serverTimestamp(),
-      dataConsegnaPrevista: userInputDate.value
-    });
+      dataConsegnaPrevista: userInputDate.value,
+      allegati: uploadedFiles.value
+    };
+
+    // 2. AGGIUNTA: Se la detrazione è stata cambiata, salvala
+    if (currentDetraction.value !== userDefaultDetraction.value) {
+      updatePayload.order_detraction_value = currentDetraction.value;
+    }
+
+    // 3. Esegui update con il payload dinamico
+    await updateDoc(doc(db, 'preventivi', selectedOrder.value.id), updatePayload);
     
     showConfirmQuoteModal.value = false;
     openResultModal("Richiesta Inviata", "Il preventivo è stato inviato correttamente per l'elaborazione.", "SUCCESS");
@@ -657,6 +713,73 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
           >
           <p class="text-[10px] text-amber-700 mt-2 leading-tight">
             Seleziona una data a partire da {{ minDays }} giorni da oggi. L'azienda farà il possibile per rispettarla.
+          </p>
+        </div>
+        <div class="mb-6 bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
+          <div>
+            <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Detrazione Fiscale</label>
+            <p class="text-[10px] text-gray-500">Percentuale applicata a questa commessa</p>
+          </div>
+          
+          <div class="flex items-center gap-3">
+            <div class="relative">
+              <input 
+                type="number" 
+                v-model="currentDetraction" 
+                :disabled="isDetractionLocked"
+                class="w-20 text-center font-bold text-lg border rounded-lg py-2 outline-none transition-colors"
+                :class="isDetractionLocked ? 'bg-gray-100 text-gray-500 border-transparent' : 'bg-white text-amber-900 border-amber-300 ring-2 ring-amber-100'"
+              >
+              <span class="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">%</span>
+            </div>
+
+            <button 
+              @click="isDetractionLocked = !isDetractionLocked"
+              class="p-2 rounded-full transition-colors"
+              :class="isDetractionLocked ? 'bg-gray-100 text-gray-400 hover:bg-gray-200' : 'bg-amber-100 text-amber-600 hover:bg-amber-200'"
+              title="Modifica Detrazione"
+            >
+              <LockClosedIcon v-if="isDetractionLocked" class="w-5 h-5" />
+              <LockOpenIcon v-else class="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+        <div class="mb-6 p-4 rounded-xl border border-gray-200 bg-gray-50">
+          <label class="block text-xs font-bold text-gray-700 uppercase mb-2">Allegati Tecnici (Disegni, Sagome, ecc.)</label>
+          
+          <div class="flex items-center gap-2 mb-3">
+            <input 
+              type="file" 
+              @change="handleFileUpload" 
+              :disabled="isUploading"
+              class="block w-full text-sm text-gray-500
+                file:mr-4 file:py-2 file:px-4
+                file:rounded-full file:border-0
+                file:text-xs file:font-semibold
+                file:bg-amber-50 file:text-amber-700
+                hover:file:bg-amber-100 cursor-pointer"
+            />
+            <span v-if="isUploading" class="text-xs text-amber-600 font-bold animate-pulse">Caricamento...</span>
+          </div>
+
+          <div v-if="uploadedFiles.length > 0" class="flex flex-col gap-2">
+            <div v-for="(file, index) in uploadedFiles" :key="index" class="flex justify-between items-center bg-white p-2 rounded border border-gray-200 text-xs shadow-sm">
+              <div class="flex items-center gap-2 overflow-hidden">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-green-500 shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clip-rule="evenodd" />
+                </svg>
+                <span class="truncate font-medium text-gray-700">{{ file.name }}</span>
+              </div>
+              <button @click="removeFile(index)" class="text-gray-400 hover:text-red-500 transition-colors p-1">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                  <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                </svg>
+              </button>
+            </div>
+          </div>
+          
+          <p class="text-[10px] text-gray-500 mt-2 italic">
+            * Obbligatorio allegare disegni per lavorazioni curve o fuori squadro.
           </p>
         </div>
         <div class="flex justify-end gap-3 pt-2">

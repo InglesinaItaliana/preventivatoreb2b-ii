@@ -4,7 +4,7 @@ import { onMounted } from 'vue';
 import GlobalBugReporter from './components/GlobalBugReporter.vue'; // <--- Importa
 onMounted(() => {
   // 1. Imposta il NOME DELLA TAB (Titolo)
-  document.title = 'Inglesina Italiana P.O.P.S.';
+  document.title = 'P.O.P.S. Inglesina Italiana';
 
   // 2. Imposta la FAVICON dinamicamente
   // Cerca se esiste già un link per l'icona
