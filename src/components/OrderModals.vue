@@ -1,9 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
-import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { storage } from '../firebase';
 import { 
-  CheckCircleIcon, DocumentTextIcon, CloudArrowUpIcon, CogIcon, ClipboardDocumentIcon, ClipboardDocumentCheckIcon, EyeIcon 
+  CheckCircleIcon, DocumentTextIcon, CogIcon, ClipboardDocumentIcon, ClipboardDocumentCheckIcon, EyeIcon 
 } from '@heroicons/vue/24/solid';
 
 const props = defineProps<{
@@ -19,8 +17,6 @@ const emit = defineEmits(['close', 'confirmFast', 'confirmSign', 'confirmProduct
 const legalCheck1 = ref(false);
 const legalCheck2 = ref(false);
 const isConfirming = ref(false);
-const isUploading = ref(false);
-const uploadedUrl = ref('');
 
 // Reset quando si apre
 watch(() => props.show, (val) => {
@@ -28,8 +24,6 @@ watch(() => props.show, (val) => {
     legalCheck1.value = false;
     legalCheck2.value = false;
     isConfirming.value = false;
-    uploadedUrl.value = '';
-    isUploading.value = false;
   }
 });
 
@@ -56,30 +50,8 @@ const openConditions = () => {
     emit('error', 'File condizioni non ancora disponibile');
 };
 
-const handleUpload = async (event: Event) => {
-  const target = event.target as HTMLInputElement;
-  const files = target.files;
-  
-  if (!files || files.length === 0) return;
-  const file = files[0];
-  if (!file) return; 
-  
-  isUploading.value = true;
-  try {
-    const path = `contratti_firmati/${props.order.codice}_${Date.now()}_${file.name}`;
-    const fileRef = storageRef(storage, path);
-    await uploadBytes(fileRef, file);
-    uploadedUrl.value = await getDownloadURL(fileRef);
-  } catch (e) {
-    console.error(e);
-    emit('error', "Errore durante il caricamento del file.")
-  } finally {
-    isUploading.value = false;
-  }
-};
-
 const handleSignConfirm = () => {
-  emit('confirmSign', uploadedUrl.value);
+  emit('confirmSign', '');
 };
 
 // --- LOGICA PRODUZIONE ---
@@ -182,46 +154,19 @@ const handleProductionConfirm = () => emit('confirmProduction');
       <div class="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
         
         <div class="bg-blue-50 border border-blue-100 p-4 rounded-xl text-sm text-blue-800">
-          Per procedere è necessario scaricare, firmare e ricaricare il contratto.
+          Controlla il documento e accetta le condizioni per procedere.
         </div>
 
         <div class="border border-gray-200 rounded-xl p-4 flex items-center gap-4 bg-white shadow-sm hover:border-blue-300 transition-colors">
           <div class="h-8 w-8 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center font-bold text-gray-500 shrink-0">1</div>
-          <div class="flex-1 font-bold text-gray-700 text-sm">Scarica Contratto</div>
+          <div class="flex-1 font-bold text-gray-700 text-sm">Controlla l'ordine</div>
           <button @click="openDocument" class="bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-2">
-            <EyeIcon class="w-4 h-4"/> APRI FILE
+            <EyeIcon class="w-4 h-4"/> APRI ORDINE
           </button>
         </div>
 
         <div class="border border-gray-200 rounded-xl p-4 flex items-start gap-4 bg-white shadow-sm hover:border-blue-300 transition-colors">
-          <div class="h-8 w-8 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center font-bold text-gray-500 shrink-0">2</div>
-          <div class="flex-1 w-full">
-            <p class="text-sm font-bold text-gray-700 mb-2">Carica file firmato</p>
-            <div class="relative border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:bg-blue-50 hover:border-blue-400 transition-colors cursor-pointer group">
-              <input type="file" @change="handleUpload" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10">
-              
-              <div v-if="isUploading" class="flex flex-col items-center text-blue-500">
-                <span class="animate-spin text-2xl">⌛</span>
-                <span class="text-xs font-bold mt-2">Caricamento...</span>
-              </div>
-              
-              <div v-else-if="uploadedUrl" class="flex flex-col items-center text-green-600 animate-bounce">
-                <CheckCircleIcon class="w-8 h-8"/>
-                <span class="font-bold mt-1 text-sm">Caricato!</span>
-                <span class="text-[10px] text-gray-400">Clicca per cambiare</span>
-              </div>
-              
-              <div v-else class="flex flex-col items-center text-gray-400 group-hover:text-blue-500 transition-colors">
-                <CloudArrowUpIcon class="w-8 h-8 mb-1"/>
-                <span class="text-xs font-bold">Clicca per caricare</span>
-                <span class="text-[10px]">PDF/IMG (Max 10MB)</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div class="border border-gray-200 rounded-xl p-4 flex items-start gap-4 bg-white shadow-sm hover:border-blue-300 transition-colors">
-            <div class="h-8 w-8 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center font-bold text-gray-500 shrink-0">3</div>
+            <div class="h-8 w-8 rounded-full bg-gray-100 border border-gray-200 flex items-center justify-center font-bold text-gray-500 shrink-0">2</div>
             <div class="flex-1 space-y-3 w-full">
                 
                 <label class="flex items-start gap-3 cursor-pointer group select-none">
@@ -238,11 +183,11 @@ const handleProductionConfirm = () => emit('confirmProduction');
                         <input type="checkbox" v-model="legalCheck2" class="peer h-4 w-4 cursor-pointer appearance-none rounded border border-gray-300 shadow-sm checked:border-blue-600 checked:bg-blue-600 hover:border-blue-400 focus:ring-blue-200">
                         <svg class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-3 h-3 text-white opacity-0 peer-checked:opacity-100 pointer-events-none" viewBox="0 0 14 14" fill="none"><path d="M3 8L6 11L11 3.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                         </div>
-                        <span class="text-xs text-gray-700 group-hover:text-black transition-colors font-medium leading-tight">Accetto Condizioni di Vendita.</span>
+                        <span class="text-xs text-gray-700 group-hover:text-black transition-colors font-medium leading-tight">Accetto Condizioni Generali di Vendita.</span>
                     </label>
                     
                     <button @click="openConditions" class="bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-2 whitespace-nowrap">
-                        <EyeIcon class="w-4 h-4"/> VEDI FILE
+                        <EyeIcon class="w-4 h-4"/> APRI CGV
                     </button>
                 </div>
 
@@ -251,11 +196,11 @@ const handleProductionConfirm = () => emit('confirmProduction');
 
         <button
           @click="handleSignConfirm"
-          :disabled="!uploadedUrl || !legalCheck1 || !legalCheck2"
+          :disabled="!legalCheck1 || !legalCheck2"
           class="w-full py-3 rounded-lg font-bold shadow-md transition-all flex justify-center items-center gap-2 mt-2"
-          :class="(uploadedUrl && legalCheck1 && legalCheck2) ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-gray-200 text-gray-400 cursor-not-allowed'"
+          :class="(legalCheck1 && legalCheck2) ? 'bg-green-600 hover:bg-green-700 text-white' : 'bg-gray-200 text-gray-400 cursor-not-allowed'"
         >
-          INVIA ORDINE FIRMATO
+          CONFERMA E INVIA ORDINE
         </button>
       </div>
     </div>

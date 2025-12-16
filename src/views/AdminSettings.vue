@@ -1,14 +1,13 @@
 <script setup lang="ts">
   import { ref, onMounted, reactive, computed } from 'vue';
-  import { collection, getDocs, addDoc, updateDoc, doc, serverTimestamp, query, orderBy } from 'firebase/firestore';
-  import { httpsCallable } from 'firebase/functions';
+  import { collection, getDocs, addDoc, updateDoc, doc, serverTimestamp, query, orderBy, setDoc, getDoc } from 'firebase/firestore';  import { httpsCallable } from 'firebase/functions';
   import { db, functions } from '../firebase';
   import Papa from 'papaparse';
   import { 
-    UserPlusIcon, PencilSquareIcon, MagnifyingGlassIcon, PhoneIcon, EnvelopeIcon,
-    UsersIcon, BuildingOfficeIcon, CloudArrowUpIcon, PaperAirplaneIcon, CheckCircleIcon, ExclamationTriangleIcon,
-    XCircleIcon 
-  } from '@heroicons/vue/24/solid';
+  UserPlusIcon, PencilSquareIcon, MagnifyingGlassIcon, PhoneIcon, EnvelopeIcon,
+  UsersIcon, BuildingOfficeIcon, CloudArrowUpIcon, PaperAirplaneIcon, CheckCircleIcon, ExclamationTriangleIcon,
+  XCircleIcon, Cog6ToothIcon 
+} from '@heroicons/vue/24/solid';
   
   // --- TIPI ---
   interface TeamMember {
@@ -33,7 +32,8 @@
   }
   
   // --- STATO ---
-  const activeTab = ref<'TEAM' | 'CLIENTI'>('TEAM');
+  const activeTab = ref<'TEAM' | 'CLIENTI' | 'VARIE'>('TEAM');
+  const minDays = ref(14);
   const members = ref<TeamMember[]>([]);
   const clients = ref<ClientUser[]>([]);
   const loading = ref(true);
@@ -88,6 +88,13 @@ const showCustomToast = (message: string) => {
   }, 2500); 
 };
 
+const saveSettings = async () => {
+    try {
+      await setDoc(doc(db, 'settings', 'general'), { minProcessingDays: minDays.value }, { merge: true });
+      showCustomToast("Impostazioni salvate!");
+    } catch (e) { showCustomToast("Errore salvataggio"); }
+  };
+
   // --- CARICAMENTO DATI ---
   const fetchData = async () => {
     loading.value = true;
@@ -108,9 +115,14 @@ const showCustomToast = (message: string) => {
       });
       
       const qClients = query(collection(db, 'users'), orderBy('ragioneSociale', 'asc'));
-    const clientsSnap = await getDocs(qClients);
-    
-    clients.value = clientsSnap.docs.map(d => ({ id: d.id, ...d.data() } as ClientUser));
+      const clientsSnap = await getDocs(qClients);
+      clients.value = clientsSnap.docs.map(d => ({ id: d.id, ...d.data() } as ClientUser));
+
+      const settingsSnap = await getDoc(doc(db, 'settings', 'general'));
+      if (settingsSnap.exists()) {
+        minDays.value = settingsSnap.data().minProcessingDays || 14;
+      }
+
     } catch (e) { console.error(e); } 
     finally { loading.value = false; }
   };
@@ -320,6 +332,9 @@ const showCustomToast = (message: string) => {
             <button @click="activeTab = 'CLIENTI'" class="px-6 py-2 rounded-full text-sm font-bold transition-all flex items-center gap-2" :class="activeTab === 'CLIENTI' ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'">
               <BuildingOfficeIcon class="h-4 w-4" /> Clienti B2B
             </button>
+            <button @click="activeTab = 'VARIE'" class="px-6 py-2 rounded-full text-sm font-bold transition-all flex items-center gap-2" :class="activeTab === 'VARIE' ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'">
+              <Cog6ToothIcon class="h-4 w-4" /> Varie
+            </button>
           </div>
         </div>
   
@@ -438,6 +453,23 @@ const showCustomToast = (message: string) => {
               </table>
               <div v-if="filteredClients.length === 0" class="p-10 text-center text-slate-400 font-medium">Nessun cliente trovato.</div>
            </div>
+        </div>
+        <div v-if="activeTab === 'VARIE'">
+          <div class="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-200 max-w-md">
+            <h3 class="text-xl font-bold text-slate-900 mb-4">Configurazioni Generali</h3>
+            
+            <label class="block text-xs font-bold text-slate-400 uppercase mb-2">Giorni minimi di lavorazione</label>
+            <p class="text-xs text-slate-500 mb-3">Definisce la prima data utile selezionabile dal cliente in fase di ordine.</p>
+            
+            <div class="flex items-center gap-4">
+              <input v-model.number="minDays" type="number" min="1" class="w-full bg-slate-50 border-none rounded-xl p-3 text-lg font-bold focus:ring-2 focus:ring-amber-200">
+              <span class="text-sm font-bold text-slate-500">Giorni</span>
+            </div>
+
+            <button @click="saveSettings" class="mt-6 w-full bg-slate-900 text-white py-3 rounded-xl font-bold hover:bg-black transition-transform active:scale-95 shadow-lg">
+              Salva Impostazioni
+            </button>
+          </div>
         </div>
   
       </div>

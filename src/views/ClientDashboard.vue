@@ -53,7 +53,20 @@ const showModals = ref(false);
 const modalMode = ref<'FAST' | 'SIGN'>('FAST');
 const selectedOrder = ref<any>(null);
 const showConfirmQuoteModal = ref(false); 
+const userInputDate = ref('');
+const minDays = ref(14);
 
+const minDateStr = computed(() => {
+  const d = new Date();
+  d.setDate(d.getDate() + minDays.value);
+  return d.toISOString().split('T')[0];
+});
+
+const maxDateStr = computed(() => {
+  const d = new Date();
+  d.setMonth(d.getMonth() + 3);
+  return d.toISOString().split('T')[0];
+});
 const caricaProfilo = async (uid: string) => {
   try {
     const userSnap = await getDoc(doc(db, 'users', uid));
@@ -132,6 +145,7 @@ const gestisciAzioneOrdine = (p: any) => {
 
 const openConfirmModal = (p: any) => {
   selectedOrder.value = p;
+  userInputDate.value = ''; // Reset
   showConfirmQuoteModal.value = true;
 };
 
@@ -184,11 +198,12 @@ const onConfirmSign = async (url: string) => {
 // 3. Callback Invio Ordine
 const handleFinalOrderConfirmation = async () => {
   if(!selectedOrder.value) return;
-
+  if(!userInputDate.value) return openResultModal("Attenzione", "Seleziona una data di consegna desiderata.", "ERROR");
   try {
     await updateDoc(doc(db, 'preventivi', selectedOrder.value.id), {
       stato: 'ORDER_REQ', 
-      dataInvioOrdine: serverTimestamp()
+      dataInvioOrdine: serverTimestamp(),
+      dataConsegnaPrevista: userInputDate.value
     });
     
     showConfirmQuoteModal.value = false;
@@ -300,7 +315,7 @@ const formatDateShort = (dateString: string) => {
   }).toUpperCase().replace(/\./g, ''); 
 };
 
-onMounted(() => {
+onMounted(async() => {
   onAuthStateChanged(auth, (user) => {
     if (user && user.email) {
       currentUserEmail.value = user.email;
@@ -309,6 +324,10 @@ onMounted(() => {
       avviaAscoltoDati(user.email);
     } else { router.push('/'); }
   });
+  try {
+    const s = await getDoc(doc(db, 'settings', 'general'));
+    if (s.exists()) minDays.value = s.data().minProcessingDays || 14;
+  } catch(e) { console.error(e); }
 });
 onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
 </script>
@@ -627,7 +646,19 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
           Stai per confermare il preventivo <span class="font-bold">{{ selectedOrder?.commessa || selectedOrder?.codice }}</span> e inviarlo come ordine.        <br>
           Importo Netto: <span class="font-bold text-stone-600">{{ (selectedOrder?.totaleScontato || selectedOrder?.totaleImponibile || 0).toFixed(2) }} €</span>
         </p>
-
+        <div class="mb-6 bg-amber-50 p-4 rounded-xl border border-amber-100">
+          <label class="block text-xs font-bold text-amber-800 uppercase mb-2">Data Consegna Desiderata *</label>
+          <input 
+            type="date" 
+            v-model="userInputDate" 
+            :min="minDateStr" 
+            :max="maxDateStr"
+            class="w-full bg-white border border-amber-200 rounded-lg p-3 text-gray-800 font-bold outline-none focus:ring-2 focus:ring-amber-400"
+          >
+          <p class="text-[10px] text-amber-700 mt-2 leading-tight">
+            Seleziona una data a partire da {{ minDays }} giorni da oggi. L'azienda farà il possibile per rispettarla.
+          </p>
+        </div>
         <div class="flex justify-end gap-3 pt-2">
           <button
             @click="showConfirmQuoteModal = false"
@@ -637,7 +668,8 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
           </button>
           <button
             @click="handleFinalOrderConfirmation"
-            class="px-4 py-2 rounded-full text-amber-950 bg-amber-400 hover:bg-amber-300 font-bold shadow-md"
+            :disabled="!userInputDate"
+            class="px-4 py-2 rounded-full text-amber-950 bg-amber-400 hover:bg-amber-300 font-bold shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Sì, Conferma e Invia
           </button>

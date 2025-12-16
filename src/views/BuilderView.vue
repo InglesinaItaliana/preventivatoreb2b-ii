@@ -2,7 +2,7 @@
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import {
-  collection, addDoc, setDoc, doc, serverTimestamp, query, where, getDocs, orderBy, limit, updateDoc, onSnapshot, DocumentSnapshot, deleteField
+  collection, addDoc, setDoc, doc, serverTimestamp, query, where, getDocs, orderBy, limit, updateDoc, onSnapshot, DocumentSnapshot, deleteField, getDoc
 } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -56,6 +56,21 @@ const openConfirm = (message: string, callback: () => void) => {
 };
 
 const soloCanalino = ref(false);
+const minDays = ref(14);
+const showOrderDateModal = ref(false);
+const orderDateInput = ref('');
+
+const minDateStr = computed(() => {
+  const d = new Date();
+  d.setDate(d.getDate() + minDays.value);
+  return d.toISOString().split('T')[0];
+});
+
+const maxDateStr = computed(() => {
+  const d = new Date();
+  d.setMonth(d.getMonth() + 3);
+  return d.toISOString().split('T')[0];
+});
 const adminExtraQty = ref(1); // Nuova variabile per la quantità extra
 const summarySectionRef = ref<HTMLElement | null>(null);
 
@@ -521,10 +536,19 @@ const richiediConfermaOrdine = () => {
     return showCustomToast("Non hai allegato il file con le quote specifiche. Carica un allegato per procedere.");
   }
 
-  // 2. Apre la conferma
-  openConfirm("Stai per inviare un ordine definitivo. Confermi di voler procedere?", () => {
-    salvaPreventivo('ORDINA');
-  });
+  orderDateInput.value = ''; // Reset
+  showOrderDateModal.value = true;
+};
+
+const confermaOrdineConData = async () => {
+  if (!orderDateInput.value) return showCustomToast("Seleziona una data.");
+  
+  // Aggiorna il ref che verrà usato da salvaPreventivo
+  dataConsegnaPrevista.value = orderDateInput.value;
+  showOrderDateModal.value = false;
+  
+  // Chiama la funzione originale
+  await salvaPreventivo('ORDINA');
 };
 
 const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADMIN_VALIDA' | 'ADMIN_RIFIUTA' | 'ADMIN_FIRMA' | 'FORCE_EDIT' | 'CREA_PREVENTIVO_ADMIN' | 'CREA_ORDINE_ADMIN') => {
@@ -646,7 +670,7 @@ watch(() => route.query, (q) => {
   }
 });
 
-onMounted(() => {
+onMounted(async() => {
   catalog.fetchCatalog();
   
   // Se NON è un nuovo ordine admin, carica il nome cliente dalla memoria
@@ -656,7 +680,10 @@ onMounted(() => {
   } else {
       nomeCliente.value = ''; // Pulisce il nome per permettere la ricerca
   }
-
+  try {
+    const s = await getDoc(doc(db, 'settings', 'general'));
+    if (s.exists()) minDays.value = s.data().minProcessingDays || 14;
+  } catch(e) { console.error(e); }
   onAuthStateChanged(auth, (user) => {
     if (user) {
       // Se non è admin creation mode, l'email è quella dell'utente corrente
@@ -1399,6 +1426,45 @@ const aggiungiExtraAdmin = () => {
         </div>
       </div>
     </div>
+    <div v-if="showOrderDateModal" class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm transition-opacity">
+  <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 text-center transform transition-all scale-100 animate-in fade-in zoom-in duration-200">
+    
+    <div class="flex justify-center mb-4">
+      <div class="h-12 w-12 rounded-full bg-amber-100 flex items-center justify-center text-amber-600">
+        <ShoppingCartIcon class="h-6 w-6"/>
+      </div>
+    </div>
+
+    <h3 class="text-lg font-bold text-gray-900 mb-2">Conferma Ordine</h3>
+    <p class="text-gray-500 mb-6 text-sm">Per procedere, indica una data di consegna desiderata.</p>
+    
+    <div class="text-left mb-6 bg-gray-50 p-3 rounded-xl border border-gray-200">
+      <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Data Desiderata *</label>
+      <input 
+        type="date" 
+        v-model="orderDateInput" 
+        :min="minDateStr" 
+        :max="maxDateStr"
+        class="w-full bg-white border border-gray-300 rounded-lg p-2 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-amber-400"
+      >
+      <p class="text-[10px] text-gray-400 mt-2">
+        Minimo {{ minDays }} giorni per la produzione.
+      </p>
+    </div>
+
+    <div class="flex gap-3 justify-center">
+      <button @click="showOrderDateModal = false" class="px-4 py-2 rounded-lg text-gray-600 font-bold hover:bg-gray-100 transition-colors">
+        Annulla
+      </button>
+      <button 
+        @click="confermaOrdineConData" 
+        :disabled="!orderDateInput"
+        class="px-6 py-2 rounded-lg bg-amber-400 text-amber-950 font-bold hover:bg-amber-300 shadow-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+        Conferma e Invia
+      </button>
+    </div>
+  </div>
+</div>
 </template>
 
 <style scoped>
