@@ -39,6 +39,7 @@ export const useCatalogStore = defineStore('catalog', {
               const mod = (row.TIPO || row.MODELLO || '').trim().toUpperCase();
               const dim = (row.DIMENSIONE || 'STD').trim().toUpperCase();
               const fin = (row.FINITURA || 'STD').trim().toUpperCase();
+              const tipoFin = (row.TIPO_FINITURA || 'Altro').trim();
               const cod = (row.CODICE || '').trim().toUpperCase(); // Forza maiuscolo S001
               
               // Pulizia Prezzo
@@ -53,7 +54,7 @@ export const useCatalogStore = defineStore('catalog', {
                 if (!tree[cat]) tree[cat] = {};
                 if (!tree[cat][mod]) tree[cat][mod] = {};
                 if (!tree[cat][mod][dim]) tree[cat][mod][dim] = {};
-                tree[cat][mod][dim][fin] = { prezzo: price, cod: cod };
+                tree[cat][mod][dim][fin] = { prezzo: price, cod: cod, group: tipoFin };
               }
 
               // 2. POPOLIAMO LA MAPPA CODICI (Per i Calcoli) <--- ECCO LA MAGIA

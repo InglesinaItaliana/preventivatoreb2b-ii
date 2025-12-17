@@ -23,7 +23,6 @@ import {
   InformationCircleIcon, 
   ShoppingCartIcon,
   DocumentTextIcon,
-  CalendarIcon,
   TruckIcon,
 } from '@heroicons/vue/24/solid'
 
@@ -253,6 +252,7 @@ const copiaDuplex = ref(false);
 const fuseruolo = ref<number | '' | null>('');
 const adminExtraDesc = ref('Supplemento');
 const adminExtraPrice = ref(0);
+const customRalGriglia = ref('');
 
 const preventivo = ref<RigaPreventivo[]>([]);
 const pannello = reactive({ base: 800, altezza: 1750, righe: 1, colonne: 4, qty: 1 });
@@ -267,9 +267,12 @@ const totaleFinale = computed(() => {
 });
 
 const isStandard = computed(() => {
-  const haCurve = preventivo.value.some(r => r.curva);
+  const haLavorazioniSpeciali = preventivo.value.some(r => 
+    r.curva || 
+    (r as any).requiresValidation // Legge il flag che abbiamo salvato prima
+  );
   const haNote = noteCliente.value.trim().length > 0;
-  return !haCurve && !haNote;
+  return !haLavorazioniSpeciali && !haNote;
 });
 
 const isLocked = computed(() => {
@@ -304,6 +307,62 @@ const categorieGrigliaDisp = computed(() => ['INGLESINA', 'DUPLEX', 'MUNTIN'].fi
 const tipiGrigliaDisp = computed(() => (categoriaGriglia.value && catalog.listino[categoriaGriglia.value]) ? Object.keys(catalog.listino[categoriaGriglia.value]) : []);
 const dimensioniGrigliaDisp = computed(() => (tipoGriglia.value && catalog.listino[categoriaGriglia.value]?.[tipoGriglia.value]) ? Object.keys(catalog.listino[categoriaGriglia.value][tipoGriglia.value]) : []);
 const finitureGrigliaDisp = computed(() => (dimensioneGriglia.value && catalog.listino[categoriaGriglia.value]?.[tipoGriglia.value]?.[dimensioneGriglia.value]) ? Object.keys(catalog.listino[categoriaGriglia.value][tipoGriglia.value][dimensioneGriglia.value]) : []);
+
+const finitureGrigliaGroups = computed(() => {
+  if (categoriaGriglia.value !== 'INGLESINA' || tipoGriglia.value !== 'VARSAVIA') return null;
+  if (!dimensioneGriglia.value) return null;
+
+  const node = catalog.listino?.['INGLESINA']?.['VARSAVIA']?.[dimensioneGriglia.value];
+  if (!node) return null;
+
+  const groups: Record<string, string[]> = {};
+  
+  Object.keys(node).forEach(fin => {
+    const item = node[fin];
+    // Pulisce la stringa da spazi e la usa come chiave
+    let gName = (item as any).group ? (item as any).group.trim() : 'Altro';
+    // Rende la prima lettera maiuscola per uniformità estetica (es. "bianco" -> "Bianco")
+    gName = gName.charAt(0).toUpperCase() + gName.slice(1).toLowerCase();
+    
+    if (!groups[gName]) groups[gName] = [];
+    groups[gName]!.push(fin);
+  });
+
+  // DEFINISCI L'ORDINE QUI (Tutto minuscolo per evitare errori di confronto)
+  // Assicurati che questi nomi corrispondano a quelli nel file Excel (o quasi)
+  const priorityOrder = [
+    'bianca', 
+    'colore standard', 
+    'colore personalizzato', 
+    'rivestita', 
+    'bicolore'
+  ];
+  
+  return Object.keys(groups)
+    .sort((a, b) => {
+      const catA = a.toLowerCase();
+      const catB = b.toLowerCase();
+
+      const idxA = priorityOrder.indexOf(catA);
+      const idxB = priorityOrder.indexOf(catB);
+      
+      // Se entrambi sono nella lista prioritaria -> usa l'ordine della lista
+      if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+      
+      // Se solo A è nella lista -> A vince (viene prima)
+      if (idxA !== -1) return -1;
+      
+      // Se solo B è nella lista -> B vince (viene prima)
+      if (idxB !== -1) return 1;
+      
+      // Se nessuno dei due è nella lista -> ordine alfabetico
+      return catA.localeCompare(catB);
+    })
+    .map(g => ({
+      label: g.toUpperCase(),
+      options: (groups[g] || []).sort()
+    }));
+});
 
 const tipiCanalinoDisp = computed(() => catalog.listino.CANALINO ? Object.keys(catalog.listino.CANALINO) : []);
 const dimensioniCanalinoDisp = computed(() => (tipoCanalino.value && catalog.listino.CANALINO?.[tipoCanalino.value]) ? Object.keys(catalog.listino.CANALINO[tipoCanalino.value]) : []);
@@ -378,7 +437,7 @@ const updateShippingLine = (costo: number, nomeTariffa: string) => {
 };
 
 const aggiungi = () => {
-  // Validazione condizionale: Se è solo canalino, non controlliamo la griglia
+  // 1. Validazione condizionale standard
   const gridValid = soloCanalino.value || (tipoGriglia.value && dimensioneGriglia.value && finituraGriglia.value);
   const canalinoValid = soloCanalino.value 
     ? (tipoCanalino.value && dimensioneCanalino.value && finituraCanalino.value) 
@@ -387,9 +446,22 @@ const aggiungi = () => {
 
   if (!gridValid || !canalinoValid || !sizesValid) return;
 
+  // --- NUOVO CONTROLLO RAL PERSONALIZZATO ---
+  // Verifica che se la finitura è "RAL PERSONALIZZATO" (o simile), l'utente abbia scritto il codice
+  // NOTA: Assicurati che la stringa 'RAL PERSONALIZZATO' coincida con quella del tuo menu a tendina
+  if (!soloCanalino.value && finituraGriglia.value.toUpperCase().includes('PERSONALIZZATO') && !customRalGriglia.value.trim()) {
+    showCustomToast("Inserisci il codice del colore RAL Personalizzato.");
+    return;
+  }
+
   const grigliaObj = catalog.listino[categoriaGriglia.value]?.[tipoGriglia.value]?.[dimensioneGriglia.value]?.[finituraGriglia.value];
   const pGriglia = grigliaObj?.prezzo || 0;
-  
+  const gruppoFinitura = (grigliaObj as any)?.group || '';
+  const isVarsavia45Rivestita = 
+    tipoGriglia.value === 'VARSAVIA' && 
+    dimensioneGriglia.value === '45' && 
+    gruppoFinitura.toUpperCase() === 'RIVESTITO';
+    
   const canalinoObj = catalog.listino.CANALINO?.[tipoCanalino.value]?.[dimensioneCanalino.value]?.[finituraCanalino.value];
   const pCanalino = canalinoObj?.prezzo || 0;
   const codCanalino = canalinoObj?.cod || '';
@@ -401,23 +473,31 @@ const aggiungi = () => {
     num_orizzontali: pannello.colonne || 0, 
     num_verticali: pannello.righe || 0,
     tipo_canalino: tipoCanalino.value,
-    
-    // Parametri nuovi
     codice_canalino: codCanalino,
     isSoloCanalino: soloCanalino.value,
-    
     prezzo_unitario_griglia: pGriglia, 
     prezzo_unitario_canalino: pCanalino
-  },currentPriceList.value);
+  }, currentPriceList.value);
 
   let descStart = soloCanalino.value ? 'TELAIO' : categoriaGriglia.value;
   if (!soloCanalino.value && categoriaGriglia.value === 'DUPLEX' && fuseruolo.value) {
     descStart += ` ${fuseruolo.value}`;
   }
 
+  // Costruzione Descrizione
+  let descrizioneCompleta = '';
+  if (soloCanalino.value) {
+    descrizioneCompleta = 'TELAIO (SOLO CANALINO)';
+  } else {
+    descrizioneCompleta = `${descStart} ${tipoGriglia.value} ${dimensioneGriglia.value} - ${finituraGriglia.value}`;
+    // AGGIUNTA RAL ALLA DESCRIZIONE
+    if (finituraGriglia.value.toUpperCase().includes('PERSONALIZZATO') && customRalGriglia.value) {
+      descrizioneCompleta += ` (RAL: ${customRalGriglia.value.toUpperCase()})`;
+    }
+  }
+
   preventivo.value.push({
     id: Date.now().toString(),
-    // Se è solo canalino, forziamo la categoria a CANALINO o usiamo un placeholder
     categoria: soloCanalino.value ? 'CANALINO' : categoriaGriglia.value,
     modello: soloCanalino.value ? 'MANUALE' : tipoGriglia.value as any, 
     dimensione: soloCanalino.value ? '-' : dimensioneGriglia.value, 
@@ -427,15 +507,11 @@ const aggiungi = () => {
     righe: soloCanalino.value ? 0 : (pannello.righe || 0), 
     colonne: soloCanalino.value ? 0 : (pannello.colonne || 0), 
     quantita: pannello.qty,
-    
-    // Descrizione personalizzata per Solo Canalino
-    descrizioneCompleta: soloCanalino.value 
-        ? 'TELAIO (SOLO CANALINO)' 
-        : `${descStart} ${tipoGriglia.value} ${dimensioneGriglia.value} - ${finituraGriglia.value}`,
-        
-        infoCanalino: tipoCanalino.value ? `Canalino: ${tipoCanalino.value} ${dimensioneCanalino.value} ${finituraCanalino.value}` : '',
+    descrizioneCompleta: descrizioneCompleta,
+    infoCanalino: tipoCanalino.value ? `Canalino: ${tipoCanalino.value} ${dimensioneCanalino.value} ${finituraCanalino.value}` : '',
     prezzo_unitario: result.prezzo_unitario, 
     prezzo_totale: result.prezzo_totale,
+    requiresValidation: isVarsavia45Rivestita,
     nonEquidistanti: opzioniTelaio.nonEquidistanti, 
     curva: opzioniTelaio.curva, 
     tacca: opzioniTelaio.tacca,
@@ -443,8 +519,8 @@ const aggiungi = () => {
     fuseruolo: fuseruolo.value ? Number(fuseruolo.value) : null
   });
 
-  // Reset (opzionale: se vuoi mantenere i valori non resettare tutto)
-  // Object.assign(pannello, { base: 0, altezza: 0, righe: 0, colonne: 0, qty: 1 });
+  // Reset del campo RAL dopo l'aggiunta
+  customRalGriglia.value = '';
 };
 
 const uploadFile = async (event: Event) => {
@@ -1140,7 +1216,44 @@ onMounted(async() => {
         <div v-else>
             <select v-model="tipoGriglia" :disabled="!tipiGrigliaDisp.length || isLocked" class="w-full p-2 border rounded mt-4 bg-white text-sm disabled:opacity-60"><option value="" disabled>Seleziona Tipo</option><option v-for="m in tipiGrigliaDisp" :key="m" :value="m">{{ m }}</option></select>
             <select v-if="tipoGriglia" v-model="dimensioneGriglia" :disabled="!dimensioniGrigliaDisp.length || isLocked" class="w-full p-2 border rounded mt-4 bg-white text-sm disabled:opacity-60"><option value="" disabled>Seleziona Dimensione</option><option v-for="d in dimensioniGrigliaDisp" :key="d" :value="d">{{ d }}</option></select>
-            <select v-if="dimensioneGriglia" v-model="finituraGriglia" :disabled="!finitureGrigliaDisp.length || isLocked" class="w-full p-2 border rounded mt-4 bg-white text-sm disabled:opacity-60"><option value="" disabled>Seleziona Finitura</option><option v-for="f in finitureGrigliaDisp" :key="f" :value="f">{{ f }}</option></select>
+            <select 
+              v-if="dimensioneGriglia" 
+              v-model="finituraGriglia" 
+              :disabled="!finitureGrigliaDisp.length || isLocked" 
+              class="w-full p-2 border rounded mt-4 bg-white text-sm disabled:opacity-60"
+            >
+              <option value="" disabled>Seleziona Finitura</option>
+              
+              <template v-if="finitureGrigliaGroups">
+                <optgroup 
+                  v-for="g in finitureGrigliaGroups" 
+                  :key="g.label" 
+                  :label="g.label"
+                  class="text-gray-900 font-bold not-italic bg-gray-50"
+                >
+                  <option v-for="f in g.options" :key="f" :value="f" class="text-gray-700 font-normal bg-white">
+                    {{ f }}
+                  </option>
+                </optgroup>
+              </template>
+
+              <template v-else>
+                <option v-for="f in finitureGrigliaDisp" :key="f" :value="f">{{ f }}</option>
+              </template>
+            </select>
+
+            <div v-if="finituraGriglia && finituraGriglia.toUpperCase().includes('PERSONALIZZATO')" class="mt-3 animate-in fade-in slide-in-from-top-2 duration-300">
+              <label class="block text-xs font-bold text-gray-700 uppercase mb-1">
+                Codice Colore / RAL
+              </label>
+              <input 
+                type="text" 
+                v-model="customRalGriglia" 
+                :disabled="isLocked"
+                placeholder="Es. 9010 Opaco"
+                class="w-full border border-amber-300 rounded-lg p-2 text-sm focus:ring-2 focus:ring-amber-500 outline-none bg-amber-50 text-gray-900 font-medium"
+              />
+            </div>
             <div v-if="categoriaGriglia === 'DUPLEX'" class="mt-4 animate-slide-in">
               <label class="text-[10px] font-bold text-gray-400 uppercase mb-1 block">Fuseruolo</label>
               <input v-model="fuseruolo" :disabled="isLocked" type="number" class="w-full p-2 border border-gray-300 rounded-md bg-white text-sm focus:ring-2 focus:ring-amber-400 outline-none disabled:opacity-60" placeholder="Es. 20">

@@ -68,6 +68,7 @@ export interface RigaPreventivo {
   prezzo_unitario: number;
   prezzo_totale: number;
   
+  requiresValidation?: boolean;
   nonEquidistanti?: boolean;
   curva: boolean;
   tacca: boolean;
