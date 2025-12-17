@@ -15,6 +15,12 @@ import OrderModals from '../components/OrderModals.vue';
 import { STATUS_DETAILS } from '../types';
 import { getCustomerPricingContext } from '../logic/customerConfig';
 import {
+  Listbox,
+  ListboxButton,
+  ListboxOptions,
+  ListboxOption,
+} from '@headlessui/vue';
+import {
   RectangleStackIcon,
   LockOpenIcon,
   LockClosedIcon,
@@ -24,6 +30,8 @@ import {
   ShoppingCartIcon,
   DocumentTextIcon,
   TruckIcon,
+  ChevronUpDownIcon,
+  CheckIcon
 } from '@heroicons/vue/24/solid'
 
 const currentPriceList = ref('2026-a');
@@ -60,6 +68,8 @@ const openConfirm = (message: string, callback: () => void) => {
 const userDefaultDetraction = ref(50);
 const currentDetraction = ref(50);
 const isDetractionLocked = ref(true);
+
+const adminCustomPrice = ref<number | ''>(''); // Campo per il prezzo manuale Admin
 
 const soloCanalino = ref(false);
 const minDays = ref(14);
@@ -437,7 +447,6 @@ const updateShippingLine = (costo: number, nomeTariffa: string) => {
 };
 
 const aggiungi = () => {
-  // 1. Validazione condizionale standard
   const gridValid = soloCanalino.value || (tipoGriglia.value && dimensioneGriglia.value && finituraGriglia.value);
   const canalinoValid = soloCanalino.value 
     ? (tipoCanalino.value && dimensioneCanalino.value && finituraCanalino.value) 
@@ -446,26 +455,41 @@ const aggiungi = () => {
 
   if (!gridValid || !canalinoValid || !sizesValid) return;
 
-  // --- NUOVO CONTROLLO RAL PERSONALIZZATO ---
-  // Verifica che se la finitura è "RAL PERSONALIZZATO" (o simile), l'utente abbia scritto il codice
-  // NOTA: Assicurati che la stringa 'RAL PERSONALIZZATO' coincida con quella del tuo menu a tendina
   if (!soloCanalino.value && finituraGriglia.value.toUpperCase().includes('PERSONALIZZATO') && !customRalGriglia.value.trim()) {
     showCustomToast("Inserisci il codice del colore RAL Personalizzato.");
     return;
   }
 
+  // --- 1. DEFINIZIONE PREZZI BASE ---
   const grigliaObj = catalog.listino[categoriaGriglia.value]?.[tipoGriglia.value]?.[dimensioneGriglia.value]?.[finituraGriglia.value];
-  const pGriglia = grigliaObj?.prezzo || 0;
-  const gruppoFinitura = (grigliaObj as any)?.group || '';
-  const isVarsavia45Rivestita = 
-    tipoGriglia.value === 'VARSAVIA' && 
-    dimensioneGriglia.value === '45' && 
-    gruppoFinitura.toUpperCase() === 'RIVESTITO';
-    
+  
+  // FIX: Definiamo basePriceGriglia con LET per poterlo sovrascrivere
+  let basePriceGriglia = grigliaObj?.prezzo || 0;
+  
+  // Se l'Admin ha messo un prezzo manuale, vince su tutto
+  if (isAdmin.value && adminCustomPrice.value && Number(adminCustomPrice.value) > 0) {
+    basePriceGriglia = Number(adminCustomPrice.value);
+  }
+
   const canalinoObj = catalog.listino.CANALINO?.[tipoCanalino.value]?.[dimensioneCanalino.value]?.[finituraCanalino.value];
   const pCanalino = canalinoObj?.prezzo || 0;
   const codCanalino = canalinoObj?.cod || '';
 
+  // --- 2. LOGICA VALIDAZIONE ---
+  const gruppoFinitura = (grigliaObj as any)?.group || '';
+  
+  // FIX: Usiamo LET perché potremmo doverlo cambiare a false
+  let isVarsavia45Rivestita = 
+    tipoGriglia.value === 'VARSAVIA' && 
+    dimensioneGriglia.value === '45' && 
+    gruppoFinitura.toUpperCase().includes('RIVESTIT');
+
+  // SE l'Admin ha forzato il prezzo, la validazione NON serve più
+  if (isAdmin.value && adminCustomPrice.value) {
+    isVarsavia45Rivestita = false; 
+  }
+
+  // --- 3. CALCOLO ---
   const result = calculatePrice({
     base_mm: pannello.base, 
     altezza_mm: pannello.altezza, 
@@ -475,27 +499,27 @@ const aggiungi = () => {
     tipo_canalino: tipoCanalino.value,
     codice_canalino: codCanalino,
     isSoloCanalino: soloCanalino.value,
-    prezzo_unitario_griglia: pGriglia, 
+    prezzo_unitario_griglia: basePriceGriglia, // FIX: Qui ora basePriceGriglia è visibile
     prezzo_unitario_canalino: pCanalino
   }, currentPriceList.value);
 
+  // --- 4. DESCRIZIONE ---
   let descStart = soloCanalino.value ? 'TELAIO' : categoriaGriglia.value;
   if (!soloCanalino.value && categoriaGriglia.value === 'DUPLEX' && fuseruolo.value) {
     descStart += ` ${fuseruolo.value}`;
   }
 
-  // Costruzione Descrizione
   let descrizioneCompleta = '';
   if (soloCanalino.value) {
     descrizioneCompleta = 'TELAIO (SOLO CANALINO)';
   } else {
     descrizioneCompleta = `${descStart} ${tipoGriglia.value} ${dimensioneGriglia.value} - ${finituraGriglia.value}`;
-    // AGGIUNTA RAL ALLA DESCRIZIONE
     if (finituraGriglia.value.toUpperCase().includes('PERSONALIZZATO') && customRalGriglia.value) {
       descrizioneCompleta += ` (RAL: ${customRalGriglia.value.toUpperCase()})`;
     }
   }
 
+  // --- 5. CREAZIONE RIGA ---
   preventivo.value.push({
     id: Date.now().toString(),
     categoria: soloCanalino.value ? 'CANALINO' : categoriaGriglia.value,
@@ -509,18 +533,24 @@ const aggiungi = () => {
     quantita: pannello.qty,
     descrizioneCompleta: descrizioneCompleta,
     infoCanalino: tipoCanalino.value ? `Canalino: ${tipoCanalino.value} ${dimensioneCanalino.value} ${finituraCanalino.value}` : '',
+    
     prezzo_unitario: result.prezzo_unitario, 
     prezzo_totale: result.prezzo_totale,
-    requiresValidation: isVarsavia45Rivestita,
+    
     nonEquidistanti: opzioniTelaio.nonEquidistanti, 
     curva: opzioniTelaio.curva, 
     tacca: opzioniTelaio.tacca,
     rawCanalino: { tipo: tipoCanalino.value, dim: dimensioneCanalino.value, fin: finituraCanalino.value },
-    fuseruolo: fuseruolo.value ? Number(fuseruolo.value) : null
+    fuseruolo: fuseruolo.value ? Number(fuseruolo.value) : null,
+
+    // FIX: Campo requiresValidation inserito UNA SOLA VOLTA
+    requiresValidation: isVarsavia45Rivestita, 
+    customVarPrice: (isAdmin.value && adminCustomPrice.value) ? Number(adminCustomPrice.value) : null
   });
 
-  // Reset del campo RAL dopo l'aggiunta
+  // Reset
   customRalGriglia.value = '';
+  adminCustomPrice.value = ''; 
 };
 
 const uploadFile = async (event: Event) => {
@@ -748,7 +778,7 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
       sommarioPreventivo: sommario, 
       dataModifica: serverTimestamp(),
       dataScadenza: new Date(Date.now() + 30*24*60*60*1000),
-      elementi: preventivo.value.map(r => ({ ...r })),
+      elementi: preventivo.value.map(r => JSON.parse(JSON.stringify(r))),
       dataConsegnaPrevista: dataConsegnaPrevista.value || null
     };
     if (azione === 'ORDINA' && currentDetraction.value !== userDefaultDetraction.value) {
@@ -956,30 +986,38 @@ const modificaRiga = async (index: number) => {
   if (isLocked.value) return;
   const r = preventivo.value[index];
   
-  // FIX: Cast/Default values for refs (TS2322)
-  categoriaGriglia.value = r?.categoria as Categoria || 'INGLESINA'; await nextTick();
-  fuseruolo.value = r?.fuseruolo || ''; await nextTick();
-  tipoGriglia.value = r?.modello || ''; await nextTick();
-  dimensioneGriglia.value = r?.dimensione || ''; await nextTick();
-  finituraGriglia.value = r?.finitura || '';
+  // FIX: Controllo di sicurezza, se la riga non esiste esce
+  if (!r) return;
   
-  if (r?.rawCanalino) {
+  // Assegnazioni valori (usiamo r direttamente, ora siamo sicuri che esiste)
+  categoriaGriglia.value = r.categoria as Categoria || 'INGLESINA'; await nextTick();
+  fuseruolo.value = r.fuseruolo || ''; await nextTick();
+  tipoGriglia.value = r.modello || ''; await nextTick();
+  dimensioneGriglia.value = r.dimensione || ''; await nextTick();
+  finituraGriglia.value = r.finitura || '';
+  
+  if (r.rawCanalino) {
     tipoCanalino.value = r.rawCanalino.tipo; await nextTick();
     dimensioneCanalino.value = r.rawCanalino.dim; await nextTick();
     finituraCanalino.value = r.rawCanalino.fin;
   }
   
-  // FIX: Defaults for numeric refs
-  pannello.base = r?.base_mm || 0; 
-  pannello.altezza = r?.altezza_mm || 0;
-  pannello.righe = r?.righe || 0; 
-  pannello.colonne = r?.colonne || 0;
-  pannello.qty = r?.quantita || 1;
+  pannello.base = r.base_mm || 0; 
+  pannello.altezza = r.altezza_mm || 0;
+  pannello.righe = r.righe || 0; 
+  pannello.colonne = r.colonne || 0;
+  pannello.qty = r.quantita || 1;
   
-  // FIX: Defaults for boolean refs
-  opzioniTelaio.nonEquidistanti = r?.nonEquidistanti || false; 
-  opzioniTelaio.curva = r?.curva || false; 
-  opzioniTelaio.tacca = r?.tacca || false;
+  opzioniTelaio.nonEquidistanti = r.nonEquidistanti || false; 
+  opzioniTelaio.curva = r.curva || false; 
+  opzioniTelaio.tacca = r.tacca || false;
+  
+  // FIX: Caricamento prezzo manuale sicuro
+  if (r.customVarPrice) {
+    adminCustomPrice.value = r.customVarPrice;
+  } else {
+    adminCustomPrice.value = '';
+  }
   
   preventivo.value.splice(index, 1);
 };
@@ -1210,37 +1248,98 @@ onMounted(async() => {
       </div>
       <div v-if="showConfigurationPanels" class="grid grid-cols-1 md:grid-cols-3 gap-6">
     
-      <div class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all p-5 h-full">
+      <div class="relative z-30 bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all p-5 h-full">
         <h2 class="font-bold text-lg border-b pb-2 font-heading text-gray-800">Griglia</h2>
         <div v-if="catalog.loading" class="text-center p-4 text-sm text-gray-400">Caricamento...</div>
         <div v-else>
             <select v-model="tipoGriglia" :disabled="!tipiGrigliaDisp.length || isLocked" class="w-full p-2 border rounded mt-4 bg-white text-sm disabled:opacity-60"><option value="" disabled>Seleziona Tipo</option><option v-for="m in tipiGrigliaDisp" :key="m" :value="m">{{ m }}</option></select>
             <select v-if="tipoGriglia" v-model="dimensioneGriglia" :disabled="!dimensioniGrigliaDisp.length || isLocked" class="w-full p-2 border rounded mt-4 bg-white text-sm disabled:opacity-60"><option value="" disabled>Seleziona Dimensione</option><option v-for="d in dimensioniGrigliaDisp" :key="d" :value="d">{{ d }}</option></select>
-            <select 
-              v-if="dimensioneGriglia" 
-              v-model="finituraGriglia" 
-              :disabled="!finitureGrigliaDisp.length || isLocked" 
-              class="w-full p-2 border rounded mt-4 bg-white text-sm disabled:opacity-60"
-            >
-              <option value="" disabled>Seleziona Finitura</option>
-              
-              <template v-if="finitureGrigliaGroups">
-                <optgroup 
-                  v-for="g in finitureGrigliaGroups" 
-                  :key="g.label" 
-                  :label="g.label"
-                  class="text-gray-900 font-bold not-italic bg-gray-50"
-                >
-                  <option v-for="f in g.options" :key="f" :value="f" class="text-gray-700 font-normal bg-white">
-                    {{ f }}
-                  </option>
-                </optgroup>
-              </template>
+            <div v-if="dimensioneGriglia" class="mt-4 relative z-20"> <Listbox v-model="finituraGriglia" :disabled="!finitureGrigliaDisp.length || isLocked">
+    <div class="relative mt-1">
+      
+      <ListboxButton
+        class="relative w-full cursor-default rounded-xl bg-white py-3 pl-4 pr-10 text-left border border-gray-200 shadow-sm focus:outline-none focus-visible:border-amber-500 focus-visible:ring-2 focus-visible:ring-white/75 focus-visible:ring-offset-2 focus-visible:ring-offset-amber-300 sm:text-sm transition-all duration-200 disabled:opacity-60 disabled:bg-gray-50"
+      >
+        <span class="block truncate font-medium text-gray-700">
+          {{ finituraGriglia || 'Seleziona Finitura...' }}
+        </span>
+        <span class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
+          <ChevronUpDownIcon class="h-5 w-5 text-gray-400" aria-hidden="true" />
+        </span>
+      </ListboxButton>
 
-              <template v-else>
-                <option v-for="f in finitureGrigliaDisp" :key="f" :value="f">{{ f }}</option>
-              </template>
-            </select>
+      <transition
+        leave-active-class="transition duration-100 ease-in"
+        leave-from-class="opacity-100"
+        leave-to-class="opacity-0"
+      >
+        <ListboxOptions
+          class="absolute mt-1 max-h-80 w-full overflow-auto rounded-xl bg-white py-1 text-base shadow-lg ring-1 ring-black/5 focus:outline-none sm:text-sm z-50 scrollbar-hide"
+        >
+          <template v-if="finitureGrigliaGroups">
+            <template v-for="group in finitureGrigliaGroups" :key="group.label">
+              <div class="sticky top-0 z-10 bg-gray-50/95 backdrop-blur-sm px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-gray-500 border-b border-gray-100">
+                {{ group.label }}
+              </div>
+              
+              <ListboxOption
+                v-for="fin in group.options"
+                :key="fin"
+                :value="fin"
+                as="template"
+                v-slot="{ active, selected }"
+              >
+                <li
+                  :class="[
+                    active ? 'bg-amber-50 text-amber-900' : 'text-gray-900',
+                    'relative cursor-pointer select-none py-3 pl-10 pr-4 transition-colors duration-150'
+                  ]"
+                >
+                  <span :class="[selected ? 'font-bold' : 'font-normal', 'block truncate']">
+                    {{ fin }}
+                  </span>
+                  <span
+                    v-if="selected"
+                    class="absolute inset-y-0 left-0 flex items-center pl-3 text-amber-500"
+                  >
+                    <CheckIcon class="h-5 w-5" aria-hidden="true" />
+                  </span>
+                </li>
+              </ListboxOption>
+            </template>
+          </template>
+
+          <template v-else>
+            <ListboxOption
+              v-for="fin in finitureGrigliaDisp"
+              :key="fin"
+              :value="fin"
+              as="template"
+              v-slot="{ active, selected }"
+            >
+              <li
+                :class="[
+                  active ? 'bg-amber-50 text-amber-900' : 'text-gray-900',
+                  'relative cursor-pointer select-none py-3 pl-10 pr-4'
+                ]"
+              >
+                <span :class="[selected ? 'font-bold' : 'font-normal', 'block truncate']">
+                  {{ fin }}
+                </span>
+                <span
+                  v-if="selected"
+                  class="absolute inset-y-0 left-0 flex items-center pl-3 text-amber-600"
+                >
+                  <CheckIcon class="h-5 w-5" aria-hidden="true" />
+                </span>
+              </li>
+            </ListboxOption>
+          </template>
+        </ListboxOptions>
+      </transition>
+    </div>
+  </Listbox>
+</div>
 
             <div v-if="finituraGriglia && finituraGriglia.toUpperCase().includes('PERSONALIZZATO')" class="mt-3 animate-in fade-in slide-in-from-top-2 duration-300">
               <label class="block text-xs font-bold text-gray-700 uppercase mb-1">
@@ -1261,7 +1360,7 @@ onMounted(async() => {
         </div>
       </div>
 
-      <div class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all p-5 space-y-4 h-full">
+      <div class="relative z-20 bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all p-5 space-y-4 h-full">
         <div class="flex justify-between items-center border-b pb-2">
             <h2 class="font-bold text-lg font-heading text-gray-800">Canalino</h2>
             <label v-if="categoriaGriglia === 'DUPLEX'" class="flex items-center gap-2 text-[10px] font-bold text-black cursor-pointer px-2 py-1 rounded uppercase">
@@ -1283,7 +1382,7 @@ onMounted(async() => {
           </div>
       </div>
 
-      <div class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all p-5 space-y-4 h-full">
+      <div class="relative z-10 bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all p-5 space-y-4 h-full">
         <h2 class="font-bold text-lg border-b pb-2 font-heading text-gray-800">Telaio</h2>
           <div class="grid grid-cols-2 gap-4">
             <div><input v-model.number="pannello.base" :disabled="isLocked" type="number" class="border p-2 rounded w-full text-center text-sm focus:ring-2 focus:ring-amber-400 outline-none disabled:bg-gray-100" placeholder="Base (mm)"></div>
@@ -1323,13 +1422,28 @@ onMounted(async() => {
             </label>
           </div>
 
-          <button 
-            @click="aggiungi" 
-            :disabled="!canAdd"
-            class="w-full bg-gray-300 hover:bg-gray-200 text-black font-bold py-3 rounded-lg shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 transition-all flex justify-center items-center gap-2">
-            <PlusCircleIcon class="h-7 w-7 text-black" />         
-            AGGIUNGI
-          </button>
+          <div class="flex gap-2 items-end w-full">
+  
+  <div v-if="isAdmin" class="w-24 shrink-0 animate-in fade-in slide-in-from-right-4">
+    <label class="text-[9px] font-bold text-purple-600 uppercase mb-1 block">
+      Prezzo/m €
+    </label>
+    <input 
+      v-model="adminCustomPrice" 
+      type="number" 
+      placeholder="Auto"
+      class="w-full p-3 border-2 border-purple-200 rounded-lg text-center font-bold text-purple-700 outline-none focus:border-purple-500 bg-purple-50 placeholder-purple-200"
+    >
+  </div>
+
+  <button 
+    @click="aggiungi" 
+    :disabled="!canAdd"
+    class="flex-1 bg-gray-300 hover:bg-gray-200 text-black font-bold py-3 rounded-lg shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 transition-all flex justify-center items-center gap-2 h-[50px]">
+    <PlusCircleIcon class="h-7 w-7 text-black" />         
+    AGGIUNGI
+  </button>
+</div>
       </div>
 
     </div>
