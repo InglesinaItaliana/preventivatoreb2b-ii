@@ -57,6 +57,11 @@ const openConfirm = (message: string, callback: () => void) => {
   confirmModal.show = true;
 };
 
+// --- AGGIUNTA: STATI PER DETRAZIONE ---
+const userDefaultDetraction = ref(50);
+const currentDetraction = ref(50);
+const isDetractionLocked = ref(true);
+
 const soloCanalino = ref(false);
 const minDays = ref(14);
 const showOrderDateModal = ref(false);
@@ -570,28 +575,36 @@ const onConfirmSign = async (url: string) => {
 };
 
 const richiediConfermaOrdine = () => {
-  // 1. Validazioni preliminari (le stesse di salvaPreventivo, per non aprire il modal inutilmente)
+  // 1. Validazioni preliminari base (vuoto o senza riferimento)
   if (preventivo.value.length === 0) return showCustomToast("Preventivo vuoto.");
   if (!riferimentoCommessa.value.trim()) return showCustomToast("Il campo 'Riferimento Cantiere' è obbligatorio.");
   
-  // Controllo Allegati per lavorazioni speciali
-  const richiedeSpecifiche = preventivo.value.some(r => r.tacca || r.nonEquidistanti || r.curva);
-  if (richiedeSpecifiche && listaAllegati.value.length === 0) {
-    return showCustomToast("Non hai allegato il file con le quote specifiche. Carica un allegato per procedere.");
-  }
+  // NOTA: Abbiamo rimosso il blocco immediato sui file mancanti.
+  // Il controllo avverrà nel momento della conferma finale dentro il modale.
 
-  orderDateInput.value = ''; // Reset
+  // 2. Reset Variabili Modale
+  orderDateInput.value = ''; 
+  currentDetraction.value = userDefaultDetraction.value; // Reset al default
+  isDetractionLocked.value = true;                       // Riblocca lucchetto
+  
+  // 3. Apri Modale
   showOrderDateModal.value = true;
 };
 
 const confermaOrdineConData = async () => {
   if (!orderDateInput.value) return showCustomToast("Seleziona una data.");
-  
+
+  // --- CONTROLLO LAVORAZIONI SPECIALI (Bloccante) ---
+  const richiedeSpecifiche = preventivo.value.some(r => r.tacca || r.nonEquidistanti || r.curva);
+  if (richiedeSpecifiche && listaAllegati.value.length === 0) {
+     return showCustomToast("⛔ ERRORE: Hai inserito articoli speciali (Curve/Tacche). Devi caricare un allegato tecnico prima di confermare.");
+  }
+
   // Aggiorna il ref che verrà usato da salvaPreventivo
   dataConsegnaPrevista.value = orderDateInput.value;
   showOrderDateModal.value = false;
   
-  // Chiama la funzione originale
+  // Chiama la funzione originale per salvare
   await salvaPreventivo('ORDINA');
 };
 
@@ -662,7 +675,9 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
       elementi: preventivo.value.map(r => ({ ...r })),
       dataConsegnaPrevista: dataConsegnaPrevista.value || null
     };
-
+    if (azione === 'ORDINA' && currentDetraction.value !== userDefaultDetraction.value) {
+        docData.order_detraction_value = currentDetraction.value;
+    }
     // LOGICA ASSEGNAZIONE CLIENTE (UID)
     if (!currentDocId.value) {
         docData.dataCreazione = serverTimestamp();
@@ -727,45 +742,6 @@ watch(() => route.query, (q) => {
     delete newQuery.cmd;
     delete newQuery.ts;
     router.replace({ query: newQuery });
-  }
-});
-
-onMounted(async() => {
-  catalog.fetchCatalog();
-  
-  // Se NON è un nuovo ordine admin, carica il nome cliente dalla memoria
-  if (!isNewAdminOrder.value) {
-      const storedName = localStorage.getItem('clientName');
-      if (storedName) nomeCliente.value = storedName;
-  } else {
-      nomeCliente.value = ''; // Pulisce il nome per permettere la ricerca
-  }
-  try {
-    const s = await getDoc(doc(db, 'settings', 'general'));
-    if (s.exists()) minDays.value = s.data().minProcessingDays || 14;
-  } catch(e) { console.error(e); }
-  onAuthStateChanged(auth, async (user) => {
-    if (user) {
-      // Se non è admin creation mode, l'email è quella dell'utente corrente
-      if(!isNewAdminOrder.value) clienteEmail.value = user.email || '';
-      caricaListaStorico();
-      try {
-        const ctx = await getCustomerPricingContext(user.uid);
-        currentPriceList.value = ctx.activeList;
-        console.log("Listino applicato:", currentPriceList.value);
-        if (preventivo.value.length === 0 && !route.query.codice) {
-         updateShippingLine(ctx.deliveryCost, ctx.tariffName);
-        }
-      } catch (e) {
-        console.error("Errore caricamento contesto prezzi", e);
-      }
-    }
-  });
-
-  if(route.query.codice) { 
-    isSaving.value = true;
-    codiceRicerca.value = route.query.codice as string; 
-    setTimeout(caricaPreventivo, 1000); 
   }
 });
 
@@ -965,6 +941,60 @@ const aggiungiExtraAdmin = () => {
   adminExtraPrice.value = 0;
   adminExtraQty.value = 1;
 };
+
+// --- INIZIO DEL BLOCCO ONMOUNTED (DA METTERE ALLA FINE DELLO SCRIPT) ---
+
+onMounted(async() => {
+  catalog.fetchCatalog();
+  
+  // Se NON è un nuovo ordine admin, carica il nome cliente dalla memoria
+  if (!isNewAdminOrder.value) {
+      const storedName = localStorage.getItem('clientName');
+      if (storedName) nomeCliente.value = storedName;
+  } else {
+      nomeCliente.value = ''; 
+  }
+
+  try {
+    const s = await getDoc(doc(db, 'settings', 'general'));
+    if (s.exists()) minDays.value = s.data().minProcessingDays || 14;
+  } catch(e) { console.error(e); }
+  
+  onAuthStateChanged(auth, async (user) => {
+    if (user) {
+      if(!isNewAdminOrder.value) clienteEmail.value = user.email || '';
+      caricaListaStorico();
+      
+      try {
+        const ctx = await getCustomerPricingContext(user.uid);
+        currentPriceList.value = ctx.activeList;
+        console.log("Listino applicato:", currentPriceList.value);
+        if (preventivo.value.length === 0 && !route.query.codice) {
+         updateShippingLine(ctx.deliveryCost, ctx.tariffName);
+        }
+        
+        try {
+          const userSnap = await getDoc(doc(db, 'users', user.uid));
+          if (userSnap.exists()) {
+            const d = userSnap.data();
+            userDefaultDetraction.value = d.detraction_value !== undefined ? d.detraction_value : 50;
+          }
+        } catch (e) {
+           console.error("Errore caricamento dati utente", e);
+        }
+
+      } catch (e) {
+        console.error("Errore caricamento contesto prezzi", e);
+      }
+    }
+  });
+
+  if(route.query.codice) { 
+    isSaving.value = true;
+    codiceRicerca.value = route.query.codice as string; 
+    setTimeout(caricaPreventivo, 1000); 
+  }
+});
 
 </script>
 
@@ -1233,7 +1263,7 @@ const aggiungiExtraAdmin = () => {
                   
                   <div class="w-40 shrink-0">
                     <label class="text-[10px] uppercase font-bold text-gray-400 mb-1 flex items-center gap-1">
-                      <CalendarIcon class="h-3 w-3" /> Data Ordine
+                      Data consegna prevista
                     </label>
                     <input 
                       type="date" 
@@ -1501,40 +1531,115 @@ const aggiungiExtraAdmin = () => {
         </div>
       </div>
     </div>
-    <div v-if="showOrderDateModal" class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm transition-opacity">
-  <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 text-center transform transition-all scale-100 animate-in fade-in zoom-in duration-200">
+    <div v-if="showOrderDateModal" class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm transition-opacity overflow-y-auto">
+  <div class="bg-white rounded-[2rem] shadow-2xl max-w-lg w-full p-6 text-center transform transition-all scale-100 animate-in fade-in zoom-in duration-200 my-8">
     
     <div class="flex justify-center mb-4">
-      <div class="h-12 w-12 rounded-full bg-amber-100 flex items-center justify-center text-amber-600">
+      <div class="h-12 w-12 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 shadow-sm">
         <ShoppingCartIcon class="h-6 w-6"/>
       </div>
     </div>
 
-    <h3 class="text-lg font-bold text-gray-900 mb-2">Conferma Ordine</h3>
-    <p class="text-gray-500 mb-6 text-sm">Per procedere, indica una data di consegna desiderata.</p>
+    <h3 class="text-xl font-bold text-gray-900 mb-2">Conferma Ordine</h3>
+    <p class="text-gray-500 mb-6 text-sm">Completa i dati richiesti per inviare l'ordine.</p>
     
-    <div class="text-left mb-6 bg-gray-50 p-3 rounded-xl border border-gray-200">
-      <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Data Desiderata *</label>
+    <div class="text-left mb-4 bg-amber-50 p-4 rounded-xl border border-amber-100">
+      <label class="block text-xs font-bold text-amber-800 uppercase mb-2">Data Desiderata *</label>
       <input 
         type="date" 
         v-model="orderDateInput" 
         :min="minDateStr" 
         :max="maxDateStr"
-        class="w-full bg-white border border-gray-300 rounded-lg p-2 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-amber-400"
+        class="w-full bg-white border border-amber-200 rounded-lg p-3 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-amber-400"
       >
-      <p class="text-[10px] text-gray-400 mt-2">
+      <p class="text-[10px] text-amber-700 mt-2">
         Minimo {{ minDays }} giorni per la produzione.
       </p>
     </div>
 
+    <div class="mb-4 bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between text-left">
+      <div>
+        <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Detrazione Fiscale</label>
+        <p class="text-[10px] text-gray-500">Applicata a questa commessa</p>
+      </div>
+      
+      <div class="flex items-center gap-3">
+        <div class="relative">
+          <input 
+            type="number" 
+            v-model="currentDetraction" 
+            :disabled="isDetractionLocked"
+            class="w-20 text-center font-bold text-lg border rounded-lg py-2 outline-none transition-colors"
+            :class="isDetractionLocked ? 'bg-gray-100 text-gray-500 border-transparent' : 'bg-white text-amber-900 border-amber-300 ring-2 ring-amber-100'"
+          >
+          <span class="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">%</span>
+        </div>
+
+        <button 
+          @click="isDetractionLocked = !isDetractionLocked"
+          class="p-2 rounded-full transition-colors"
+          :class="isDetractionLocked ? 'bg-gray-100 text-gray-400 hover:bg-gray-200' : 'bg-amber-100 text-amber-600 hover:bg-amber-200'"
+        >
+          <LockClosedIcon v-if="isDetractionLocked" class="w-5 h-5" />
+          <LockOpenIcon v-else class="w-5 h-5" />
+        </button>
+      </div>
+    </div>
+
+    <div class="mb-6 p-4 rounded-xl border border-gray-200 bg-gray-50 text-left">
+      <label class="block text-xs font-bold text-gray-700 uppercase mb-2">Allegati Tecnici</label>
+      
+      <div class="flex items-center gap-2 mb-3">
+        <div class="relative w-full">
+           <input 
+            type="file" 
+            @change="uploadFile" 
+            :disabled="isUploading"
+            class="block w-full text-sm text-gray-500
+              file:mr-4 file:py-2 file:px-4
+              file:rounded-full file:border-0
+              file:text-xs file:font-semibold
+              file:bg-amber-50 file:text-amber-700
+              hover:file:bg-amber-100 cursor-pointer"
+          />
+          <div v-if="isUploading" class="absolute right-0 top-1/2 -translate-y-1/2 text-xs font-bold text-amber-500 bg-white px-2">
+            Caricamento...
+          </div>
+        </div>
+      </div>
+
+      <div v-if="listaAllegati.length > 0" class="flex flex-col gap-2 max-h-40 overflow-y-auto">
+        <div v-for="(file, index) in listaAllegati" :key="index" class="flex justify-between items-center bg-white p-2 rounded border border-gray-200 text-xs shadow-sm">
+          <div class="flex items-center gap-2 overflow-hidden">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-green-500 shrink-0" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clip-rule="evenodd" />
+            </svg>
+            <span class="truncate max-w-[200px] font-medium text-gray-700">{{ file.nome }}</span>
+          </div>
+          <button @click="rimuoviAllegato(index)" class="text-gray-400 hover:text-red-500 transition-colors p-1">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+            </svg>
+          </button>
+        </div>
+      </div>
+      <div v-else class="text-[10px] text-gray-400 italic text-center py-2">
+        Nessun allegato caricato.
+      </div>
+      
+      <p class="text-[10px] text-gray-500 mt-2 italic border-t pt-2">
+        * Obbligatorio allegare disegni per lavorazioni curve, tacche o fuori squadro.
+      </p>
+    </div>
+
     <div class="flex gap-3 justify-center">
-      <button @click="showOrderDateModal = false" class="px-4 py-2 rounded-lg text-gray-600 font-bold hover:bg-gray-100 transition-colors">
+      <button @click="showOrderDateModal = false" class="px-4 py-2 rounded-full text-gray-600 font-bold hover:bg-gray-100 transition-colors border border-transparent hover:border-gray-200">
         Annulla
       </button>
       <button 
         @click="confermaOrdineConData" 
-        :disabled="!orderDateInput"
-        class="px-6 py-2 rounded-lg bg-amber-400 text-amber-950 font-bold hover:bg-amber-300 shadow-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+        :disabled="!orderDateInput || isUploading"
+        class="px-8 py-2.5 rounded-full bg-amber-400 text-amber-950 font-bold hover:bg-amber-300 shadow-md transition-transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none">
         Conferma e Invia
       </button>
     </div>

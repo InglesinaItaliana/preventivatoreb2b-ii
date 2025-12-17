@@ -243,23 +243,51 @@ const onConfirmSign = async (url: string) => {
 // 3. Callback Invio Ordine
 const handleFinalOrderConfirmation = async () => {
   if(!selectedOrder.value) return;
+  
+  // 1. Controllo Data
   if(!userInputDate.value) return openResultModal("Attenzione", "Seleziona una data di consegna desiderata.", "ERROR");
   
+  // 2. Controllo Curve / Lavorazioni Speciali (AGGIORNATO)
+  // Verifica puntuale sui flag booleani degli elementi del preventivo
+  const elementi = selectedOrder.value.elementi || [];
+  const hasSpecialProcessing = elementi.some((el: any) => 
+    el.tacca === true || 
+    el.curva === true || 
+    el.nonEquidistanti === true
+  );
+
+  // Controlliamo se ci sono allegati NUOVI (appena caricati) o GIÀ PRESENTI (nel DB)
+  const hasNewFiles = uploadedFiles.value.length > 0;
+  const hasExistingFiles = selectedOrder.value.allegati && selectedOrder.value.allegati.length > 0;
+
+  // Se ci sono lavorazioni speciali MA non c'è nessun file -> BLOCCA
+  if (hasSpecialProcessing && !hasNewFiles && !hasExistingFiles) {
+    return openResultModal(
+      "Allegati Mancanti", 
+      "Questo ordine contiene articoli con lavorazioni speciali (Curve, Tacche o Non Equidistanti). È obbligatorio caricare i disegni tecnici prima di confermare.", 
+      "ERROR"
+    );
+  }
+
   try {
-    // 1. Prepara l'oggetto base
+    // Preparazione Payload
     const updatePayload: any = {
       stato: 'ORDER_REQ', 
       dataInvioOrdine: serverTimestamp(),
       dataConsegnaPrevista: userInputDate.value,
-      allegati: uploadedFiles.value
     };
 
-    // 2. AGGIUNTA: Se la detrazione è stata cambiata, salvala
+    // Se ho caricato NUOVI file, li uniamo a quelli esistenti
+    if (hasNewFiles) {
+       const oldFiles = selectedOrder.value.allegati || [];
+       updatePayload.allegati = [...oldFiles, ...uploadedFiles.value];
+    }
+
+    // Salvataggio Detrazione (se modificata)
     if (currentDetraction.value !== userDefaultDetraction.value) {
       updatePayload.order_detraction_value = currentDetraction.value;
     }
 
-    // 3. Esegui update con il payload dinamico
     await updateDoc(doc(db, 'preventivi', selectedOrder.value.id), updatePayload);
     
     showConfirmQuoteModal.value = false;
@@ -717,8 +745,8 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
         </div>
         <div class="mb-6 bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
           <div>
-            <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Detrazione Fiscale</label>
-            <p class="text-[10px] text-gray-500">Percentuale applicata a questa commessa</p>
+            <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Detrazione normale</label>
+            <p class="text-[10px] text-gray-500">Clicca sul lucchetto se vuoi modificarla per questa commessa</p>
           </div>
           
           <div class="flex items-center gap-3">
@@ -730,7 +758,7 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
                 class="w-20 text-center font-bold text-lg border rounded-lg py-2 outline-none transition-colors"
                 :class="isDetractionLocked ? 'bg-gray-100 text-gray-500 border-transparent' : 'bg-white text-amber-900 border-amber-300 ring-2 ring-amber-100'"
               >
-              <span class="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">%</span>
+              <span class="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400"></span>
             </div>
 
             <button 
