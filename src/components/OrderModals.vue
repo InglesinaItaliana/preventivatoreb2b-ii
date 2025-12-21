@@ -215,7 +215,7 @@ const handleProductionConfirm = () => emit('confirmProduction');
           <div><p class="text-sm text-gray-500 uppercase font-bold">Cliente</p><p class="text-xl font-bold text-gray-900">{{ clientName }}</p></div>
           <div class="text-right"><p class="text-sm text-gray-500 uppercase font-bold">Commessa</p><p class="font-medium">{{ order?.commessa || order?.codice }}</p></div>
           <div v-if="order.order_detraction_value" class="mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-blue-50 border border-blue-100 text-blue-800 text-xs font-bold">
-            <span>Detrazione Specifica: {{ order.order_detraction_value }}%</span>
+            <span>Detrazione Specifica: -{{ order.order_detraction_value }}</span>
           </div>
         </div>
 

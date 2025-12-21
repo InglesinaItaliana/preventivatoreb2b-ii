@@ -407,10 +407,20 @@ onUnmounted(() => {
 // Funzione per inserire/aggiornare la riga spedizione automaticamente
 // src/views/BuilderView.vue
 
+// --- MODIFICA: Mappa dei codici spedizione ---
+const CODICI_SPEDIZIONE: Record<string, string> = {
+  'Consegna Diretta V1': 'L001',
+  'Consegna Diretta V2': 'L002',
+  'Consegna Diretta V3': 'L003',
+  'Spedizione': 'L004'
+};
+
 const updateShippingLine = (costo: number, nomeTariffa: string) => {
   if (!nomeTariffa) return;
 
-  const descrizione = `Spedizione: ${nomeTariffa}`;
+  const descrizione = nomeTariffa;
+  // Recuperiamo il codice dalla mappa, o stringa vuota se non trovato
+  const codiceSpedizione = CODICI_SPEDIZIONE[nomeTariffa] || ''; 
   
   // Cerchiamo se c'è già una riga di spedizione (EXTRA)
   const index = preventivo.value.findIndex(r => 
@@ -418,12 +428,12 @@ const updateShippingLine = (costo: number, nomeTariffa: string) => {
   );
 
   if (index >= 0) {
-    // FIX 1: Assegniamo a una variabile e verifichiamo che esista per calmare TypeScript
     const rigaEsistente = preventivo.value[index];
     if (rigaEsistente) {
       rigaEsistente.prezzo_unitario = costo;
       rigaEsistente.prezzo_totale = costo * rigaEsistente.quantita;
       rigaEsistente.descrizioneCompleta = descrizione;
+      rigaEsistente.codice = codiceSpedizione; // <--- AGGIORNAMENTO CODICE
     }
   } else {
     // SE NON ESISTE: La creiamo nuova
@@ -438,10 +448,10 @@ const updateShippingLine = (costo: number, nomeTariffa: string) => {
       prezzo_unitario: costo,
       prezzo_totale: costo,
       curva: false, tacca: false, nonEquidistanti: false,
-      
-      // FIX 2: Aggiunti i campi obbligatori mancanti
       dimensione: '-',  
-      finitura: '-'
+      finitura: '-',
+      
+      codice: codiceSpedizione // <--- INSERIMENTO CODICE
     });
   }
 };
@@ -791,13 +801,11 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
         docData.dataCreazione = serverTimestamp();
         if (isNewAdminOrder.value) {
             // Se Admin crea per un cliente
-            docData.uid = clienteUID.value;
             docData.clienteUID = clienteUID.value;
         } else {
             // Se Cliente crea per sé
             const user = auth.currentUser;
             if (user) {
-                docData.uid = user.uid;
                 docData.clienteUID = user.uid;
                 docData.clienteEmail = user.email; 
             }
@@ -977,7 +985,7 @@ const caricaListaStorico = async () => {
       q = query(collection(db, 'preventivi'), orderBy('dataCreazione', 'desc'), limit(20));
     } else {
       // MODIFICA: Filtro per 'uid' invece che per 'clienteEmail'
-      q = query(collection(db, 'preventivi'), where('uid', '==', user.uid), orderBy('dataCreazione', 'desc'), limit(20));
+      q = query(collection(db, 'preventivi'), where('clienteUID', '==', user.uid), orderBy('dataCreazione', 'desc'), limit(20));
     }
     const s = await getDocs(q);
     storicoPreventivi.value = s.docs.map(d => ({ id: d.id, ...d.data(), stato: d.data().stato || 'DRAFT' }));
@@ -1788,7 +1796,7 @@ onMounted(async() => {
 
     <div class="mb-4 bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between text-left">
       <div>
-        <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Detrazione Fiscale</label>
+        <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Detrazione</label>
         <p class="text-[10px] text-gray-500">Applicata a questa commessa</p>
       </div>
       
@@ -1801,7 +1809,6 @@ onMounted(async() => {
             class="w-20 text-center font-bold text-lg border rounded-lg py-2 outline-none transition-colors"
             :class="isDetractionLocked ? 'bg-gray-100 text-gray-500 border-transparent' : 'bg-white text-amber-900 border-amber-300 ring-2 ring-amber-100'"
           >
-          <span class="absolute right-2 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400">%</span>
         </div>
 
         <button 

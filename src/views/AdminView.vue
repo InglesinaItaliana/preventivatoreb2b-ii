@@ -563,6 +563,35 @@ const isOrderDimmed = (p: any) => {
   return p.clienteEmail !== spedizioneAttivaCliente.value;
 };
 
+// Funzione per raggruppare gli articoli (Escludendo gli EXTRA)
+const getRiepilogoPulito = (elementi: any[]) => {
+  if (!elementi) return [];
+  
+  // 1. Filtra via Spedizioni e Extra
+  const soloArticoli = elementi.filter(el => el.categoria !== 'EXTRA');
+
+  // 2. Raggruppa per descrizione identica
+  const raggruppati: Record<string, any> = {};
+
+  soloArticoli.forEach(el => {
+    // Creiamo una chiave unica basata sulla descrizione e info aggiuntive
+    const key = (el.descrizioneCompleta || el.name) + (el.infoCanalino || '');
+    
+    if (!raggruppati[key]) {
+      raggruppati[key] = {
+        descrizione: el.descrizioneCompleta || el.name,
+        info: el.infoCanalino || '',
+        quantita: 0
+      };
+    }
+    // Somma le quantità
+    raggruppati[key].quantita += (Number(el.quantita) || Number(el.qty) || 1);
+  });
+
+  // Converti oggetto in array
+  return Object.values(raggruppati);
+};
+
 // 3. Helper per vedere se è selezionato
 const isOrderSelected = (p: any) => {
   return spedizioneAttivaCliente.value === p.clienteEmail 
@@ -863,10 +892,9 @@ onUnmounted(() => {
                           <TruckIcon class="h-3 w-3" />
                           <span>Consegna: {{ formatDateShort(p.dataConsegnaPrevista) }}</span>
                       </div>
-                      <div v-if="p.sommarioPreventivo">
-                        <div v-for="(item, idx) in p.sommarioPreventivo" :key="idx" class="text text-gray-600 font-medium">
-                          <span class="font-bold">{{ item.quantitaTotale }} x</span> {{ item.descrizione }} 
-                          <span v-if="item.canalino" class="text-gray-400 italic"> • {{ item.canalino }}</span>
+                      <div v-if="p.elementi">
+                        <div v-for="(riga, idx) in getRiepilogoPulito(p.elementi)" :key="idx" class="text text-gray-600 font-medium">
+                          <span class="font-bold">{{ riga.quantita }} x</span> {{ riga.descrizione }} 
                         </div>
                       </div>
                     </td>
@@ -962,10 +990,10 @@ onUnmounted(() => {
                                   <p class="text-xs text-gray-500">• {{ formatDate(getEffectiveDate(p)) }}</p>
                                   <span class="text-xs text-gray-500">• Rif. {{ p.commessa || 'Senza Nome' }}</span>
                                 </div>
-                                <div v-if="p.sommarioPreventivo" class="flex flex-col gap-1 mt-2 items-start">
-                                  <span v-for="(item, idx) in p.sommarioPreventivo" :key="idx" 
+                                <div v-if="p.elementi" class="flex flex-col gap-1 mt-2 items-start">
+                                  <span v-for="(riga, idx) in getRiepilogoPulito(p.elementi)" :key="idx" 
                                         class="text-[10px] bg-gray-50 px-2 py-1 rounded border text-gray-600">
-                                    <strong>{{ item.quantitaTotale }}x</strong> {{ item.descrizione }}
+                                    <strong>{{ riga.quantita }}x</strong> {{ riga.descrizione }}
                                   </span>
                                 </div>
                               </div>
@@ -1027,10 +1055,10 @@ onUnmounted(() => {
                           <span class="text-xs text-gray-500">• Rif. {{ p.commessa || 'Senza Nome' }}</span>
                           <span v-if="p.isReopened" class="text-[9px] px-2 py-0.5 rounded border uppercase font-bold bg-purple-100 text-purple-700 border-purple-200">RIAPERTO</span>
                         </div>
-                        <div v-if="p.sommarioPreventivo" class="flex flex-col gap-1 mt-2 items-start">
-                          <span v-for="(item, idx) in p.sommarioPreventivo" :key="idx" 
+                        <div v-if="p.elementi" class="flex flex-col gap-1 mt-2 items-start">
+                          <span v-for="(riga, idx) in getRiepilogoPulito(p.elementi)" :key="idx" 
                                 class="text-[10px] bg-gray-50 px-2 py-1 rounded border text-gray-600">
-                            <strong>{{ item.quantitaTotale }}x</strong> {{ item.descrizione }}
+                            <strong>{{ riga.quantita }}x</strong> {{ riga.descrizione }}
                           </span>
                         </div>
                       </div>
@@ -1057,7 +1085,7 @@ onUnmounted(() => {
                               <button @click.stop="confermaOrdinePronto(p)" class="bg-green-100 hover:bg-green-200 text-green-600 border border-green-200 font-bold text-[10px] px-12 rounded shadow-sm transition-colors h-full flex items-center" title="Conferma">SÌ</button>
                               <button @click.stop="idOrdineInConferma = null" class="bg-red-100 hover:bg-red-200 text-red-600 border border-red-200 font-bold text-[10px] px-12 rounded shadow-sm transition-colors h-full flex items-center" title="Annulla">NO</button>
                           </div>
-                          <button v-else-if="getActionData(p)" @click.stop="handleClickAzione(p)" class="text-xs font-bold px-12 py-2 rounded border transition-all shadow-sm hover:shadow whitespace-nowrap flex items-center gap-2 h-full" :class="getActionData(p)?.class" :disabled="p.stato === 'IN_PRODUZIONE' && !p.colli">
+                          <button v-else-if="getActionData(p)" @click.stop="handleClickAzione(p)" class="text-xs font-bold px-12 py-2 rounded border transition-all shadow-sm hover:shadow whitespace-nowrap flex items-center gap-2 h-full" :class="getActionData(p)?.class">
                           <component :is="getActionData(p)?.icon" class="h-4 w-4" />
                           <span>{{ getActionData(p)?.text }}</span>
                           </button>

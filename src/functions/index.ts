@@ -11,82 +11,111 @@ if (admin.apps.length === 0) {
 }
 
 // --- NUOVA FUNZIONE: SINCRONIZZAZIONE PRODOTTI ---
+// --- FUNZIONE SINCRONIZZAZIONE POTENZIATA ---
 exports.syncProductsWithFic = functions
     .region('europe-west1')
-    .runWith({ timeoutSeconds: 300, memory: '512MB' }) // Più risorse per liste lunghe
+    .runWith({ timeoutSeconds: 540, memory: '512MB' }) // Timeout aumentato per la ricerca mirata
     .https.onCall(async (data, context) => {
         if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Richiesto login');
         
-        // I codici che ci interessano (dal CSV)
+        // Codici richiesti dal CSV
         const targetCodes: string[] = (data.codes || []).map((c: string) => c.toUpperCase().trim());
         
         if (targetCodes.length === 0) {
-            return { success: false, message: "Nessun codice fornito per la sync." };
+            return { success: false, message: "Nessun codice fornito." };
         }
 
         const db = admin.firestore();
         const token = await getValidFicToken();
-        const results = { updated: 0, created: 0, skipped: 0, errors: [] as string[] };
+        const results = { updated: 0, created: 0, skipped: 0, missing_codes: [] as string[] };
 
         try {
             console.log(`[SYNC] Inizio sync per ${targetCodes.length} codici.`);
 
-            // 1. SCARICA TUTTI I PRODOTTI DA FIC (Paginazione)
-            // È più efficiente scaricare tutto e filtrare in memoria che fare 200 chiamate singole
+            // 1. SCARICA TUTTI I PRODOTTI (Strategia Massiva)
             let allFicProducts: any[] = [];
             let page = 1;
             let hasMore = true;
 
+            // Scarica a blocchi di 50
             while (hasMore) {
-                const res: any = await axios.get(`${FIC_API_URL}/c/${COMPANY_ID}/products`, {
-                    headers: { Authorization: `Bearer ${token}` },
-                    params: { page: page, per_page: 50 } // Max per page
-                });
-                
-                const fetched = res.data.data || [];
-                allFicProducts = [...allFicProducts, ...fetched];
-                
-                if (!res.data.next_page_url) {
-                    hasMore = false;
-                } else {
-                    page++;
+                try {
+                    const res: any = await axios.get(`${FIC_API_URL}/c/${COMPANY_ID}/products`, {
+                        headers: { Authorization: `Bearer ${token}` },
+                        params: { page: page, per_page: 50 } 
+                    });
+                    
+                    const fetched = res.data.data || [];
+                    allFicProducts = [...allFicProducts, ...fetched];
+                    
+                    // Se la pagina corrente ha meno di 50 elementi, è l'ultima
+                    if (fetched.length < 50 || !res.data.next_page_url) {
+                        hasMore = false;
+                    } else {
+                        page++;
+                    }
+                } catch (e) {
+                    console.warn(`[SYNC] Errore paginazione pagina ${page}`, e);
+                    hasMore = false; // Interrompe loop in caso di errore API
                 }
             }
             console.log(`[SYNC] Scaricati ${allFicProducts.length} prodotti da FiC.`);
 
-            // 2. CREA MAPPA DEI PRODOTTI FIC (Code -> Product)
+            // Mappa veloce
             const ficMap = new Map();
             allFicProducts.forEach(p => {
                 if (p.code) ficMap.set(p.code.toUpperCase().trim(), p);
             });
 
-            // 3. AGGIORNA FIRESTORE (Batch)
+            // 2. ELABORAZIONE E FALLBACK (Strategia Mirata)
             const batch = db.batch();
             let batchCount = 0;
 
             for (const code of targetCodes) {
-                const ficProduct = ficMap.get(code);
+                let ficProduct = ficMap.get(code);
+
+                // --- FALLBACK: Se non trovato nella lista massiva, cercalo specificamente ---
+                if (!ficProduct) {
+                    console.log(`[SYNC] Codice ${code} non trovato in massa. Tento ricerca mirata...`);
+                    try {
+                        // Piccola pausa per non intasare l'API (rate limit)
+                        await new Promise(r => setTimeout(r, 100)); 
+                        
+                        const lookupRes: any = await axios.get(`${FIC_API_URL}/c/${COMPANY_ID}/products`, {
+                            headers: { Authorization: `Bearer ${token}` },
+                            params: { q: `code = '${code}'` } // Query specifica
+                        });
+                        
+                        if (lookupRes.data.data && lookupRes.data.data.length > 0) {
+                            ficProduct = lookupRes.data.data[0];
+                            console.log(`[SYNC] TROVATO col fallback: ${code}`);
+                        }
+                    } catch (e) {
+                        console.warn(`[SYNC] Errore lookup fallback per ${code}`);
+                    }
+                }
+                // --------------------------------------------------------------------------
 
                 if (!ficProduct) {
-                    results.skipped++; // Codice presente nel CSV ma non su FiC
-                    // Opzionale: results.errors.push(`Codice ${code} non trovato su FiC`);
+                    results.skipped++;
+                    results.missing_codes.push(code); // Salviamo chi manca
                     continue;
                 }
 
-                const docRef = db.collection('products').doc(code); // ID Documento = Codice (es. I111)
+                // Scrittura su Firestore (con protezione campi undefined)
+                const docRef = db.collection('products').doc(code);
                 
-                // Mappiamo tutti i dati utili
                 const productData = {
-                    id: ficProduct.id, // IMPORTANTE: Questo serve per l'ordine
-                    code: ficProduct.code,
-                    name: ficProduct.name,
-                    net_price: ficProduct.net_price,
-                    gross_price: ficProduct.gross_price,
-                    category: ficProduct.category,
-                    description: ficProduct.description,
-                    uom: ficProduct.uom,
-                    default_vat: ficProduct.default_vat, // Oggetto iva completo
-                    raw_data: ficProduct, // Salviamo tutto il resto per sicurezza/modifiche future
+                    id: ficProduct.id, 
+                    code: ficProduct.code || "",
+                    name: ficProduct.name || "",
+                    net_price: ficProduct.net_price || 0,
+                    gross_price: ficProduct.gross_price || 0,
+                    category: ficProduct.category || null,       // Fix undefined
+                    description: ficProduct.description || null, // Fix undefined
+                    uom: ficProduct.uom || null,                 // Fix undefined
+                    default_vat: ficProduct.default_vat || null, 
+                    raw_data: ficProduct || {}, 
                     lastSync: admin.firestore.FieldValue.serverTimestamp()
                 };
 
@@ -94,13 +123,9 @@ exports.syncProductsWithFic = functions
                 batchCount++;
                 results.updated++;
 
-                // Commit ogni 400 operazioni (limite Firestore è 500)
                 if (batchCount >= 400) {
                     await batch.commit();
-                    batchCount = 0; // Reset counter, ma il batch object va ricreato? 
-                    // No, db.batch() crea una nuova istanza, quindi meglio fare commit e poi loop nuovo
-                    // Per semplicità qui facciamo commit unico alla fine se sono pochi, 
-                    // ma per sicurezza su grandi numeri usiamo un nuovo batch.
+                    batchCount = 0;
                 }
             }
 
@@ -108,14 +133,14 @@ exports.syncProductsWithFic = functions
                 await batch.commit();
             }
 
-            console.log(`[SYNC] Completato. Aggiornati: ${results.updated}`);
+            console.log(`[SYNC] Completato. Aggiornati: ${results.updated}, Mancanti: ${results.skipped}`);
             return results;
 
         } catch (error: any) {
             console.error("[SYNC] Errore critico:", error);
             throw new functions.https.HttpsError('internal', error.message);
         }
-    });
+});
 
 // --- CONFIGURAZIONE ---
 const FIC_API_URL = process.env.FIC_API_URL || "https://api-v2.fattureincloud.it";
@@ -303,26 +328,30 @@ exports.generaOrdineFIC = functions
 
             // 7. PREPARAZIONE RIGHE ORDINE
             const itemsList = (newData.elementi || []).map((item: any) => {
-                const desc = `Dim: ${item.base_mm}x${item.altezza_mm} mm${item.infoCanalino ? ` - ${item.infoCanalino}` : ''}`;
                 
+                // --- MODIFICA: Gestione Descrizione Intelligente ---
+                // Se è un EXTRA (Spedizione, Lavorazioni) o ha misure a 0, lasciamo la descrizione vuota
+                // altrimenti mettiamo le dimensioni come sempre.
+                let desc = "";
+                if (item.categoria !== 'EXTRA' && (item.base_mm > 0 || item.altezza_mm > 0)) {
+                    desc = `Dim: ${item.base_mm}x${item.altezza_mm} mm${item.infoCanalino ? ` - ${item.infoCanalino}` : ''}`;
+                }
+                // --------------------------------------------------
+
                 // Cerchiamo il codice prodotto
-                // Assumiamo che l'app salvi 'codice' (es. I111) nell'oggetto item. 
-                // Se il campo si chiama diversamente (es. item.codiceListino), cambialo qui.
                 const itemCode = item.codice ? item.codice.toUpperCase().trim() : null;
                 const ficProductId = itemCode ? productMap.get(itemCode) : null;
 
                 const lineItem: any = {
-                    code: itemCode || "", // Visualizzato in fattura
+                    code: itemCode || "", 
                     name: item.descrizioneCompleta || "Articolo Vetrata",
-                    description: desc,
+                    description: desc, // <--- Ora sarà vuota per la spedizione
                     qty: item.quantita || 1,
                     net_price: item.prezzo_unitario || 0,
                     category: item.categoria,
                     vat: { id: VAT_ID, value: VAT_VALUE }
                 };
 
-                // SE TROVIAMO IL PRODOTTO COLLEGATO, LO AGGIUNGIAMO!
-                // Questo è ciò che popola le statistiche "Per Prodotto" su FiC
                 if (ficProductId) {
                     lineItem.product_id = ficProductId;
                 }
@@ -640,6 +669,12 @@ exports.submitBugToNotion = functions
                     // NUOVO: Data Segnalazione (assicurati che la colonna in Notion si chiami esattamente così)
                     "Data Segnalazione": {
                         date: { start: new Date().toISOString() }
+                    },
+                    "Dettagli": { 
+                        rich_text: [
+                            // Tronchiamo a 2000 caratteri per evitare errori API sulle proprietà
+                            { text: { content: (description || "").substring(0, 2000) } }
+                        ]
                     },
                     "Contesto Tecnico": {
                         rich_text: [

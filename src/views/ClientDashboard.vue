@@ -115,7 +115,7 @@ const caricaProfilo = async (uid: string) => {
       localStorage.setItem('clientName', clientName.value);
       
       // AGGIUNTA: Carica detrazione default (fallback a 50%)
-      userDefaultDetraction.value = data.detraction_value !== undefined ? data.detraction_value : 50;
+      userDefaultDetraction.value = data.detraction_value !== undefined ? data.detraction_value : 21;
     }
   } catch (e) { console.error("Errore profilo", e); }
 };
@@ -238,6 +238,35 @@ const onConfirmSign = async (url: string) => {
     console.error(e); 
     openResultModal("Errore", "Impossibile salvare il documento firmato.", "ERROR");
   }
+};
+
+// Funzione per raggruppare gli articoli (Escludendo gli EXTRA)
+const getRiepilogoPulito = (elementi: any[]) => {
+  if (!elementi) return [];
+  
+  // 1. Filtra via Spedizioni e Extra
+  const soloArticoli = elementi.filter(el => el.categoria !== 'EXTRA');
+
+  // 2. Raggruppa per descrizione identica
+  const raggruppati: Record<string, any> = {};
+
+  soloArticoli.forEach(el => {
+    // Creiamo una chiave unica basata sulla descrizione e info aggiuntive
+    const key = (el.descrizioneCompleta || el.name) + (el.infoCanalino || '');
+    
+    if (!raggruppati[key]) {
+      raggruppati[key] = {
+        descrizione: el.descrizioneCompleta || el.name,
+        info: el.infoCanalino || '',
+        quantita: 0
+      };
+    }
+    // Somma le quantità
+    raggruppati[key].quantita += (Number(el.quantita) || Number(el.qty) || 1);
+  });
+
+  // Converti oggetto in array
+  return Object.values(raggruppati);
 };
 
 // 3. Callback Invio Ordine
@@ -491,14 +520,11 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
               </div>
               <div class="flex flex-col items-start">
                 <h3 class="font-bold text-xl text-gray-900 leading-tight">{{ p.commessa || 'Senza Nome' }}</h3>
-                <div class="mt-2 flex flex-col items-start gap-2">
-                  
-                  <div v-if="p.sommarioPreventivo" class="flex flex-col gap-1">
-                    <span v-for="(item, idx) in p.sommarioPreventivo" :key="idx" 
-                          class="text-[10px] bg-gray-50 px-2 py-1 rounded border text-gray-600">
-                      <strong>{{ item.quantitaTotale }}x</strong> {{ item.descrizione }}
-                    </span>
-                  </div>
+                <div v-if="p.elementi" class="flex flex-col gap-1 mt-2 items-start">
+                  <span v-for="(riga, idx) in getRiepilogoPulito(p.elementi)" :key="idx" 
+                        class="text-[10px] bg-gray-50 px-2 py-1 rounded border text-gray-600">
+                    <strong>{{ riga.quantita }}x</strong> {{ riga.descrizione }}
+                  </span>
                 </div>
               </div>
             </div>
@@ -688,14 +714,14 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
                   <div class="text-xs text-gray-600">Importo netto</div>
                 </div>
                 <div class="flex items-center gap-2">
-                <button 
-                  v-if="p.stato === 'DELIVERY' && p.fic_ddt_url"
-                  @click="apriDdt(p.fic_ddt_url)"
-                  class="w-full text-amber-950 bg-amber-400 hover:bg-amber-300 px-12 py-2 rounded-full font-bold text-xs shadow-sm flex justify-center items-center gap-2 transition-transform active:scale-95"
-                  >
-                  <DocumentTextIcon class="h-5 w-5" />
-                  VEDI DDT
-                </button>
+                  <button 
+  v-if="['DELIVERY', 'SHIPPED'].includes(p.stato) && p.fic_ddt_url"
+  @click="apriDdt(p.fic_ddt_url)"
+  class="w-full text-amber-950 bg-amber-400 hover:bg-amber-300 px-12 py-2 rounded-full font-bold text-xs shadow-sm flex justify-center items-center gap-2 transition-transform active:scale-95"
+>
+  <DocumentTextIcon class="h-5 w-5" />
+  VEDI DDT {{ p.fic_ddt_number ? '#' + p.fic_ddt_number : '' }}
+</button>
                 <button @click="vaiAlBuilder(p.codice)" class="border border-gray-300 text-gray-600 px-4 py-2 rounded-full font-bold text-xs hover:bg-gray-50">APRI</button>
               </div>             
             </div>
@@ -745,7 +771,7 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
         </div>
         <div class="mb-6 bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
           <div>
-            <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Detrazione normale</label>
+            <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Detrazione</label>
             <p class="text-[10px] text-gray-500">Clicca sul lucchetto se vuoi modificarla per questa commessa</p>
           </div>
           

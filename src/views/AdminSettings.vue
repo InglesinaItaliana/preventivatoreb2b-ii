@@ -772,15 +772,25 @@ async function syncProducts() {
             </div>
 
             <div v-if="syncResult" class="mt-4 p-4 rounded-xl text-sm border transition-all animate-in fade-in slide-in-from-top-2" 
-                :class="syncResult.success ? 'bg-green-50 text-green-800 border-green-100' : 'bg-red-50 text-red-800 border-red-100'">
+           :class="syncResult.success ? 'bg-green-50 text-green-800 border-green-100' : 'bg-red-50 text-red-800 border-red-100'">
               <div v-if="syncResult.success" class="flex flex-col gap-1">
                   <div class="font-bold flex items-center gap-2">
                       <CheckCircleIcon class="h-5 w-5"/> Sincronizzazione completata!
                   </div>
                   <ul class="list-disc list-inside mt-2 opacity-80">
-                      <li>Prodotti Aggiornati/Creati: <b>{{ syncResult.data.updated }}</b></li>
-                      <li>Codici non trovati su FiC (Ignorati): {{ syncResult.data.skipped }}</li>
+                      <li>Prodotti Collegati Correttamente: <b>{{ syncResult.data.updated }}</b></li>
+                      <li>Codici NON trovati su FiC: <b>{{ syncResult.data.skipped }}</b></li>
                   </ul>
+
+                  <div v-if="syncResult.data.missing_codes && syncResult.data.missing_codes.length > 0" class="mt-3 bg-white p-3 rounded border border-red-100 text-red-600">
+                      <p class="font-bold text-xs uppercase mb-1">Codici mancanti (Verifica su FiC):</p>
+                      <div class="flex flex-wrap gap-1">
+                          <span v-for="code in syncResult.data.missing_codes" :key="code" class="px-2 py-0.5 bg-red-50 rounded text-xs border border-red-100 font-mono">
+                              {{ code }}
+                          </span>
+                      </div>
+                  </div>
+
               </div>
               <p v-else class="flex items-center gap-2 font-bold">
                   <ExclamationTriangleIcon class="h-5 w-5"/> Errore: {{ syncResult.message }}
