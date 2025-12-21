@@ -64,12 +64,12 @@ export interface RigaPreventivo {
   infoCanalino?: string;
   rawCanalino?: any;
   fuseruolo?: number | null;
-  
+  codice?: string;
   prezzo_unitario: number;
   prezzo_totale: number;
   
   customVarPrice?: number | null;
-    
+
   requiresValidation?: boolean;
   nonEquidistanti?: boolean;
   curva: boolean;
@@ -222,4 +222,17 @@ export interface GlobalAdminSettings {
 export interface ClientUserExtension extends CustomerPricingSettings {
   id: string;
   // ... altri campi user
+}
+export interface FicProduct {
+  id: number;          // ID numerico di FiC (cruciale per l'ordine)
+  code: string;        // Il tuo codice (es. I111)
+  name: string;
+  net_price: number;
+  category: string;
+  description?: string;
+  tax_code?: string;   // es. 22
+  uom?: string;        // Unit of Measure
+  // Possiamo salvare tutto l'oggetto raw se serve
+  raw_data?: any;
+  lastSync: any;       // Timestamp
 }

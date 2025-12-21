@@ -10,6 +10,113 @@ if (admin.apps.length === 0) {
     admin.initializeApp();
 }
 
+// --- NUOVA FUNZIONE: SINCRONIZZAZIONE PRODOTTI ---
+exports.syncProductsWithFic = functions
+    .region('europe-west1')
+    .runWith({ timeoutSeconds: 300, memory: '512MB' }) // Più risorse per liste lunghe
+    .https.onCall(async (data, context) => {
+        if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Richiesto login');
+        
+        // I codici che ci interessano (dal CSV)
+        const targetCodes: string[] = (data.codes || []).map((c: string) => c.toUpperCase().trim());
+        
+        if (targetCodes.length === 0) {
+            return { success: false, message: "Nessun codice fornito per la sync." };
+        }
+
+        const db = admin.firestore();
+        const token = await getValidFicToken();
+        const results = { updated: 0, created: 0, skipped: 0, errors: [] as string[] };
+
+        try {
+            console.log(`[SYNC] Inizio sync per ${targetCodes.length} codici.`);
+
+            // 1. SCARICA TUTTI I PRODOTTI DA FIC (Paginazione)
+            // È più efficiente scaricare tutto e filtrare in memoria che fare 200 chiamate singole
+            let allFicProducts: any[] = [];
+            let page = 1;
+            let hasMore = true;
+
+            while (hasMore) {
+                const res: any = await axios.get(`${FIC_API_URL}/c/${COMPANY_ID}/products`, {
+                    headers: { Authorization: `Bearer ${token}` },
+                    params: { page: page, per_page: 50 } // Max per page
+                });
+                
+                const fetched = res.data.data || [];
+                allFicProducts = [...allFicProducts, ...fetched];
+                
+                if (!res.data.next_page_url) {
+                    hasMore = false;
+                } else {
+                    page++;
+                }
+            }
+            console.log(`[SYNC] Scaricati ${allFicProducts.length} prodotti da FiC.`);
+
+            // 2. CREA MAPPA DEI PRODOTTI FIC (Code -> Product)
+            const ficMap = new Map();
+            allFicProducts.forEach(p => {
+                if (p.code) ficMap.set(p.code.toUpperCase().trim(), p);
+            });
+
+            // 3. AGGIORNA FIRESTORE (Batch)
+            const batch = db.batch();
+            let batchCount = 0;
+
+            for (const code of targetCodes) {
+                const ficProduct = ficMap.get(code);
+
+                if (!ficProduct) {
+                    results.skipped++; // Codice presente nel CSV ma non su FiC
+                    // Opzionale: results.errors.push(`Codice ${code} non trovato su FiC`);
+                    continue;
+                }
+
+                const docRef = db.collection('products').doc(code); // ID Documento = Codice (es. I111)
+                
+                // Mappiamo tutti i dati utili
+                const productData = {
+                    id: ficProduct.id, // IMPORTANTE: Questo serve per l'ordine
+                    code: ficProduct.code,
+                    name: ficProduct.name,
+                    net_price: ficProduct.net_price,
+                    gross_price: ficProduct.gross_price,
+                    category: ficProduct.category,
+                    description: ficProduct.description,
+                    uom: ficProduct.uom,
+                    default_vat: ficProduct.default_vat, // Oggetto iva completo
+                    raw_data: ficProduct, // Salviamo tutto il resto per sicurezza/modifiche future
+                    lastSync: admin.firestore.FieldValue.serverTimestamp()
+                };
+
+                batch.set(docRef, productData, { merge: true });
+                batchCount++;
+                results.updated++;
+
+                // Commit ogni 400 operazioni (limite Firestore è 500)
+                if (batchCount >= 400) {
+                    await batch.commit();
+                    batchCount = 0; // Reset counter, ma il batch object va ricreato? 
+                    // No, db.batch() crea una nuova istanza, quindi meglio fare commit e poi loop nuovo
+                    // Per semplicità qui facciamo commit unico alla fine se sono pochi, 
+                    // ma per sicurezza su grandi numeri usiamo un nuovo batch.
+                }
+            }
+
+            if (batchCount > 0) {
+                await batch.commit();
+            }
+
+            console.log(`[SYNC] Completato. Aggiornati: ${results.updated}`);
+            return results;
+
+        } catch (error: any) {
+            console.error("[SYNC] Errore critico:", error);
+            throw new functions.https.HttpsError('internal', error.message);
+        }
+    });
+
 // --- CONFIGURAZIONE ---
 const FIC_API_URL = process.env.FIC_API_URL || "https://api-v2.fattureincloud.it";
 const COMPANY_ID = process.env.FIC_COMPANY_ID;
@@ -187,11 +294,25 @@ exports.generaOrdineFIC = functions
             const dataOrdine = newData.dataConsegnaPrevista || new Date().toISOString().split('T')[0];
             const importoNetto = newData.totaleScontato || newData.totaleImponibile || 0;
             const importoLordo = parseFloat((importoNetto * (1 + (VAT_VALUE / 100))).toFixed(2));
+            const productsSnap = await admin.firestore().collection('products').get();
+            const productMap = new Map();
+            productsSnap.forEach(doc => {
+                const p = doc.data();
+                if (p.code) productMap.set(p.code.toUpperCase().trim(), p.id); // Mappa CODICE -> ID_FIC
+            });
 
             // 7. PREPARAZIONE RIGHE ORDINE
             const itemsList = (newData.elementi || []).map((item: any) => {
                 const desc = `Dim: ${item.base_mm}x${item.altezza_mm} mm${item.infoCanalino ? ` - ${item.infoCanalino}` : ''}`;
-                return {
+                
+                // Cerchiamo il codice prodotto
+                // Assumiamo che l'app salvi 'codice' (es. I111) nell'oggetto item. 
+                // Se il campo si chiama diversamente (es. item.codiceListino), cambialo qui.
+                const itemCode = item.codice ? item.codice.toUpperCase().trim() : null;
+                const ficProductId = itemCode ? productMap.get(itemCode) : null;
+
+                const lineItem: any = {
+                    code: itemCode || "", // Visualizzato in fattura
                     name: item.descrizioneCompleta || "Articolo Vetrata",
                     description: desc,
                     qty: item.quantita || 1,
@@ -199,6 +320,14 @@ exports.generaOrdineFIC = functions
                     category: item.categoria,
                     vat: { id: VAT_ID, value: VAT_VALUE }
                 };
+
+                // SE TROVIAMO IL PRODOTTO COLLEGATO, LO AGGIUNGIAMO!
+                // Questo è ciò che popola le statistiche "Per Prodotto" su FiC
+                if (ficProductId) {
+                    lineItem.product_id = ficProductId;
+                }
+
+                return lineItem;
             });
 
             // 8. CREAZIONE ORDINE

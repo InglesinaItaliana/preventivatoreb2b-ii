@@ -465,7 +465,7 @@ const aggiungi = () => {
   
   // FIX: Definiamo basePriceGriglia con LET per poterlo sovrascrivere
   let basePriceGriglia = grigliaObj?.prezzo || 0;
-  
+  const codGriglia = grigliaObj?.cod || '';
   // Se l'Admin ha messo un prezzo manuale, vince su tutto
   if (isAdmin.value && adminCustomPrice.value && Number(adminCustomPrice.value) > 0) {
     basePriceGriglia = Number(adminCustomPrice.value);
@@ -502,6 +502,7 @@ const aggiungi = () => {
     prezzo_unitario_griglia: basePriceGriglia, // FIX: Qui ora basePriceGriglia è visibile
     prezzo_unitario_canalino: pCanalino
   }, currentPriceList.value);
+  const codiceFinale = soloCanalino.value ? codCanalino : codGriglia;
 
   // --- 4. DESCRIZIONE ---
   let descStart = soloCanalino.value ? 'TELAIO' : categoriaGriglia.value;
@@ -522,6 +523,7 @@ const aggiungi = () => {
   // --- 5. CREAZIONE RIGA ---
   preventivo.value.push({
     id: Date.now().toString(),
+    codice: codiceFinale,
     categoria: soloCanalino.value ? 'CANALINO' : categoriaGriglia.value,
     modello: soloCanalino.value ? 'MANUALE' : tipoGriglia.value as any, 
     dimensione: soloCanalino.value ? '-' : dimensioneGriglia.value, 
