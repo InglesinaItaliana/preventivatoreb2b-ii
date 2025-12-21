@@ -5,7 +5,6 @@ import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'fire
 import { db, auth } from '../firebase';
 import { useRouter } from 'vue-router';
 import { onAuthStateChanged } from 'firebase/auth';
-import { ACTIVE_STATUSES } from '../types';
 import ArchiveModal from '../components/ArchiveModal.vue';
 import { 
   DocumentTextIcon, 
@@ -154,11 +153,26 @@ const avviaAscoltoDati = (email: string) => {
   loading.value = true;
   ready1 = false; ready2 = false;
 
+  // 1. DEFINIAMO UNA LISTA LOCALE ESPLICITA (Max 10 stati per Firestore)
+  // Includiamo 'SHIPPED' per vedere gli ordini spediti
+  const DASHBOARD_STATUSES = [
+    'DRAFT', 
+    'PENDING_VAL', 
+    'QUOTE_READY', 
+    'ORDER_REQ', 
+    'WAITING_SIGN', 
+    'SIGNED', 
+    'IN_PRODUZIONE', 
+    'READY', 
+    'DELIVERY', 
+    'SHIPPED' // <--- ORA È INCLUSO
+  ];
+
   // Listener 1: Nuovi Preventivi (con campo clienteEmail)
   const q1 = query(
       collection(db, 'preventivi'), 
       where('clienteEmail', '==', email),
-      where('stato', 'in', ACTIVE_STATUSES) // <--- FILTRO
+      where('stato', 'in', DASHBOARD_STATUSES) // <--- FILTRO
   );
     unsub1 = onSnapshot(q1, (snap) => {
     docsNuovi = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -170,7 +184,7 @@ const avviaAscoltoDati = (email: string) => {
   unsub2 = onSnapshot(q2, (snap) => {
     docsVecchi = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     // Filtriamo in memoria per i vecchi docs se non supportano la query composta
-    docsVecchi = docsVecchi.filter(d => ACTIVE_STATUSES.includes(d.stato));
+    docsVecchi = docsVecchi.filter(d => DASHBOARD_STATUSES.includes(d.stato));
     ready2 = true; aggiornaVista();
   }, () => { ready2 = true; aggiornaVista(); });
 };
