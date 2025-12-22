@@ -13,6 +13,7 @@ export type StatoPreventivo =
   | 'IN_PRODUZIONE'     // Produzione - In Produzione
   | 'READY'             // Produzione - Ordine Pronto - NUOVO
   | 'DELIVERY'          // Spedizione - Spedizione programmata
+  | 'SHIPPED'           // Spedito con coriere
   | 'DELIVERED'         // Consegna - Consegnato (Stato Finale)
   | 'REJECTED';         // Rifiutato
 
@@ -184,6 +185,13 @@ export const STATUS_DETAILS: Record<StatoPreventivo, { label: string, badge: str
     hoverBadge: 'hover:bg-amber-300'
   },
   'DELIVERY': { 
+    label: 'SPEDIZIONI PROGRAMMATE', 
+    badge: 'bg-amber-400 text-amber-950 border-amber-500 hover:bg-amber-300', 
+    iconBg: 'bg-amber-400 text-amber-950', 
+    darkBadge: 'bg-amber-400 text-amber-950 hover:bg-amber-300',
+    hoverBadge: 'hover:bg-amber-300'
+  },
+  'SHIPPED': { 
     label: 'SPEDIZIONI PROGRAMMATE', 
     badge: 'bg-amber-400 text-amber-950 border-amber-500 hover:bg-amber-300', 
     iconBg: 'bg-amber-400 text-amber-950', 

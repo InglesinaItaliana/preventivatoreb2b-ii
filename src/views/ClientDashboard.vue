@@ -153,26 +153,10 @@ const avviaAscoltoDati = (email: string) => {
   loading.value = true;
   ready1 = false; ready2 = false;
 
-  // 1. DEFINIAMO UNA LISTA LOCALE ESPLICITA (Max 10 stati per Firestore)
-  // Includiamo 'SHIPPED' per vedere gli ordini spediti
-  const DASHBOARD_STATUSES = [
-    'DRAFT', 
-    'PENDING_VAL', 
-    'QUOTE_READY', 
-    'ORDER_REQ', 
-    'WAITING_SIGN', 
-    'SIGNED', 
-    'IN_PRODUZIONE', 
-    'READY', 
-    'DELIVERY', 
-    'SHIPPED' // <--- ORA È INCLUSO
-  ];
-
   // Listener 1: Nuovi Preventivi (con campo clienteEmail)
   const q1 = query(
       collection(db, 'preventivi'), 
       where('clienteEmail', '==', email),
-      where('stato', 'in', DASHBOARD_STATUSES) // <--- FILTRO
   );
     unsub1 = onSnapshot(q1, (snap) => {
     docsNuovi = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -184,7 +168,6 @@ const avviaAscoltoDati = (email: string) => {
   unsub2 = onSnapshot(q2, (snap) => {
     docsVecchi = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
     // Filtriamo in memoria per i vecchi docs se non supportano la query composta
-    docsVecchi = docsVecchi.filter(d => DASHBOARD_STATUSES.includes(d.stato));
     ready2 = true; aggiornaVista();
   }, () => { ready2 = true; aggiornaVista(); });
 };
@@ -693,7 +676,7 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
 </div>
               <div class="flex flex-col items-start">
                 <h3 class="font-bold text-xl text-gray-900 leading-tight">{{ p.commessa || 'Senza Nome' }}</h3>
-                <div v-if="p.dataConsegnaPrevista" class="mt-2 flex items-center gap-1.5 px-3 py-1 bg-stone-200 border border-stone-300 rounded shadow-sm">
+                <div v-if="p.dataConsegnaPrevista && p.stato !== 'SHIPPED'" class="mt-2 flex items-center gap-1.5 px-3 py-1 bg-stone-200 border border-stone-300 rounded shadow-sm">
                   <TruckIcon class="h-4 w-4" /> <span class="text-xs font-bold text-black uppercase">Prevista il {{ formatDateShort(p.dataConsegnaPrevista) }}</span>
                 </div>
                 <div v-if="p.stato === 'SHIPPED'" class="mt-2 p-3 bg-blue-50 rounded-lg border border-blue-100 w-full max-w-sm">
