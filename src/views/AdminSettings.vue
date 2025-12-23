@@ -204,48 +204,6 @@ const saveSettings = async () => {
   
   // --- LOGICA SYNC PRODOTTI ---
 const catalogStore = useCatalogStore();
-const loadingSync = ref(false);
-const syncResult = ref<any>(null);
-
-// Calcoliamo i codici univoci dal listino caricato
-const catalogCodes = computed(() => {
-    // catalogStore.codiciMap è un oggetto { "I111": prezzo, "I112": prezzo }
-    if (!catalogStore.isLoaded || !catalogStore.codiciMap) return [];
-    return Object.keys(catalogStore.codiciMap);
-});
-
-async function syncProducts() {
-    // Assicuriamoci che il catalogo sia caricato
-    if (!catalogStore.isLoaded) {
-        await catalogStore.fetchCatalog();
-    }
-
-    if (catalogCodes.value.length === 0) {
-        alert("Nessun codice trovato nel catalogo o catalogo vuoto.");
-        return;
-    }
-
-    if (!confirm(`Trovati ${catalogCodes.value.length} prodotti nel listino. Vuoi sincronizzarli con Fatture in Cloud?`)) {
-        return;
-    }
-
-    loadingSync.value = true;
-    syncResult.value = null;
-
-    try {
-        const syncFn = httpsCallable(functions, 'syncProductsWithFic');
-        // Passiamo i codici al backend
-        const res: any = await syncFn({ codes: catalogCodes.value });
-        
-        syncResult.value = { success: true, data: res.data };
-    } catch (error: any) {
-        console.error("Errore sync:", error);
-        syncResult.value = { success: false, message: error.message };
-    } finally {
-        loadingSync.value = false;
-    }
-}
-// ----------------------------
 
   onMounted(fetchData);
   onMounted(async () => {
@@ -745,57 +703,6 @@ async function syncProducts() {
 
             </div>
 
-          </div>
-          <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 mb-8">
-            <h2 class="text-xl font-bold text-slate-800 mb-4 flex items-center gap-2">
-              <CloudArrowUpIcon class="h-6 w-6 text-amber-500" />
-              Sincronizzazione Prodotti FiC
-            </h2>
-            <p class="text-slate-500 mb-6 text-sm">
-              Questa funzione scarica gli ID prodotto da Fatture in Cloud e li collega al listino interno. 
-              Serve per avere le statistiche corrette "Per Prodotto" su FiC.
-            </p>
-
-            <div class="flex items-center gap-4 p-4 bg-slate-50 rounded-xl border border-slate-200">
-              <div class="text-sm text-slate-600">
-                  Prodotti rilevati nel CSV: <b class="text-slate-900">{{ catalogCodes.length }}</b>
-              </div>
-              
-              <button 
-                @click="syncProducts" 
-                :disabled="loadingSync || catalogCodes.length === 0"
-                class="px-6 py-2 bg-amber-400 text-amber-950 font-bold rounded-lg hover:bg-amber-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-all shadow-sm"
-              >
-                <span v-if="loadingSync" class="animate-spin h-4 w-4 border-2 border-amber-900 border-t-transparent rounded-full"></span>
-                {{ loadingSync ? 'Sincronizzazione...' : 'Sincronizza Ora' }}
-              </button>
-            </div>
-
-            <div v-if="syncResult" class="mt-4 p-4 rounded-xl text-sm border transition-all animate-in fade-in slide-in-from-top-2" 
-           :class="syncResult.success ? 'bg-green-50 text-green-800 border-green-100' : 'bg-red-50 text-red-800 border-red-100'">
-              <div v-if="syncResult.success" class="flex flex-col gap-1">
-                  <div class="font-bold flex items-center gap-2">
-                      <CheckCircleIcon class="h-5 w-5"/> Sincronizzazione completata!
-                  </div>
-                  <ul class="list-disc list-inside mt-2 opacity-80">
-                      <li>Prodotti Collegati Correttamente: <b>{{ syncResult.data.updated }}</b></li>
-                      <li>Codici NON trovati su FiC: <b>{{ syncResult.data.skipped }}</b></li>
-                  </ul>
-
-                  <div v-if="syncResult.data.missing_codes && syncResult.data.missing_codes.length > 0" class="mt-3 bg-white p-3 rounded border border-red-100 text-red-600">
-                      <p class="font-bold text-xs uppercase mb-1">Codici mancanti (Verifica su FiC):</p>
-                      <div class="flex flex-wrap gap-1">
-                          <span v-for="code in syncResult.data.missing_codes" :key="code" class="px-2 py-0.5 bg-red-50 rounded text-xs border border-red-100 font-mono">
-                              {{ code }}
-                          </span>
-                      </div>
-                  </div>
-
-              </div>
-              <p v-else class="flex items-center gap-2 font-bold">
-                  <ExclamationTriangleIcon class="h-5 w-5"/> Errore: {{ syncResult.message }}
-              </p>
-            </div>
           </div>
         </div>
       </div>

@@ -696,7 +696,10 @@ const richiediConfermaOrdine = () => {
   // 1. Validazioni preliminari base (vuoto o senza riferimento)
   if (preventivo.value.length === 0) return showCustomToast("Preventivo vuoto.");
   if (!riferimentoCommessa.value.trim()) return showCustomToast("Il campo 'Riferimento Cantiere' è obbligatorio.");
-  
+  const richiedeSpecifiche = preventivo.value.some(r => r.tacca || r.nonEquidistanti || r.curva);
+  if (richiedeSpecifiche && listaAllegati.value.length === 0) {
+     return showCustomToast("⛔ ERRORE: Articoli speciali (Curve, Tacche o Non Equidistanti) presenti. Devi caricare un allegato tecnico prima di procedere.");
+  }
   // NOTA: Abbiamo rimosso il blocco immediato sui file mancanti.
   // Il controllo avverrà nel momento della conferma finale dentro il modale.
 
@@ -715,7 +718,7 @@ const confermaOrdineConData = async () => {
   // --- CONTROLLO LAVORAZIONI SPECIALI (Bloccante) ---
   const richiedeSpecifiche = preventivo.value.some(r => r.tacca || r.nonEquidistanti || r.curva);
   if (richiedeSpecifiche && listaAllegati.value.length === 0) {
-     return showCustomToast("⛔ ERRORE: Hai inserito articoli speciali (Curve/Tacche). Devi caricare un allegato tecnico prima di confermare.");
+     return showCustomToast("⛔ ERRORE: Articoli speciali (Curve, Tacche o Non Equidistanti) presenti. Devi caricare un allegato tecnico prima di confermare.");
   }
 
   // Aggiorna il ref che verrà usato da salvaPreventivo
@@ -735,7 +738,7 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
   if (richiedeSpecifiche && listaAllegati.value.length === 0) {
     // Blocca sia l'ordine diretto CHE la richiesta di validazione
     if (azione === 'ORDINA' || azione === 'RICHIEDI_VALIDAZIONE' || azione === 'CREA_ORDINE_ADMIN') {
-            return showCustomToast("Non hai allegato il file con le quote specifiche. Carica un allegato per procedere.");
+            return showCustomToast("Lavorazioni speciali presenti (Curve, Tacche o Non Equidistanti). Carica un allegato per procedere.");
     }
   }
 
@@ -1093,7 +1096,9 @@ onMounted(async() => {
         const ctx = await getCustomerPricingContext(user.uid);
         currentPriceList.value = ctx.activeList;
         console.log("Listino applicato:", currentPriceList.value);
-        if (preventivo.value.length === 0 && !route.query.codice) {
+        // MODIFICA: Inserisci la spedizione solo se NON è un nuovo ordine admin.
+        // Se è admin, aspetta la selezione del cliente (gestita dal watcher di clienteUID).
+        if (!isNewAdminOrder.value && preventivo.value.length === 0 && !route.query.codice) {
          updateShippingLine(ctx.deliveryCost, ctx.tariffName);
         }
         
@@ -1288,7 +1293,7 @@ onMounted(async() => {
         >
           <template v-if="finitureGrigliaGroups">
             <template v-for="group in finitureGrigliaGroups" :key="group.label">
-              <div class="sticky top-0 z-10 bg-gray-50/95 backdrop-blur-sm px-4 py-2 text-[10px] font-bold uppercase tracking-wider text-gray-500 border-b border-gray-100">
+              <div class="sticky top-0 z-10 bg-gray-50/95 backdrop-blur-sm px-4 py-2 text-bold font-bold uppercase tracking-wider text-gray-500 border-b border-gray-100">
                 {{ group.label }}
               </div>
               
@@ -1301,7 +1306,7 @@ onMounted(async() => {
               >
                 <li
                   :class="[
-                    active ? 'bg-amber-50 text-amber-900' : 'text-gray-900',
+                    active ? 'bg-amber-400 text-amber-900' : 'text-gray-900',
                     'relative cursor-pointer select-none py-3 pl-10 pr-4 transition-colors duration-150'
                   ]"
                 >

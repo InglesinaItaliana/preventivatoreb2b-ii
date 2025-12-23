@@ -444,6 +444,7 @@ const preventiviPerStato = computed(() => {
     if(st === 'RICHIESTA_ORDINE') st = 'ORDER_REQ';
     if(st === 'ATTESA_FIRMA') st = 'WAITING_SIGN';
     if(st === 'WAITING_FAST') st = 'WAITING_SIGN';
+    if(st === 'SHIPPED') st = 'DELIVERY'; // <--- AGGIUNGI QUESTA RIGA
 
     if (!gruppi[st]) {
       gruppi[st] = [];
@@ -639,7 +640,7 @@ const toggleSpedizione = (preventivo: any) => {
 
 // Funzione per raggruppare gli ordini DELIVERY per DDT
 const raggruppaPerDdt = (lista: any[]) => {
-  const gruppi: Record<string, { id: string, number?: string, items: any[], url?: string, data?: string }> = {};
+  const gruppi: Record<string, { id: string, number?: string, items: any[], url?: string, data?: string, corriere?: string }> = {};
   
   lista.forEach(p => {
     // Usa l'ID del DDT o un placeholder se mancante
@@ -650,8 +651,9 @@ const raggruppaPerDdt = (lista: any[]) => {
         id, 
         number: p.fic_ddt_number,
         items: [], 
-        url: p.fic_ddt_url, // URL del PDF (assumiamo sia uguale per tutti nel gruppo)
-        data: p.dataConsegnaPrevista 
+        url: p.fic_ddt_url, 
+        data: p.dataConsegnaPrevista,
+        corriere: p.corriere // <--- AGGIUNTO
       };
     }
     gruppi[id].items.push(p);
@@ -967,7 +969,13 @@ onUnmounted(() => {
                     </div>
                     <div>
                       <h3 class="font-bold text-gray-800 text-sm">
-                        {{ ddt.id === 'Senza DDT' ? 'ORDINI DA SPEDIRE (NO DDT)' : `DDT #${ddt.number}` }}
+                        <span v-if="ddt.id === 'Senza DDT'">ORDINI DA SPEDIRE (NO DDT)</span>
+                        <span v-else>
+                           DDT n° {{ ddt.number }} 
+                           <span class="font-bold text-gray-800">
+                             {{ ddt.corriere ? `spedito con ${ddt.corriere}` : 'spedizione interna' }}
+                           </span>
+                        </span>
                       </h3>
                     </div>
                   </div>
@@ -981,8 +989,8 @@ onUnmounted(() => {
                        class="bg-white p-4 rounded-lg shadow-sm border border-gray-200 transition-all hover:shadow-md relative group">
                        <div class="flex flex-col md:flex-row justify-between items-center gap-4">
                           <div class="flex items-center gap-4 w-full md:w-auto">
-                              <div class="h-10 w-10 rounded-full flex items-center justify-center" :class="getStatusStyling(p.stato).iconBg">
-                                <component :is="getStatusStyling(p.stato).icon" class="h-6 w-6" />
+                              <div class="h-10 w-10 rounded-full flex items-center justify-center bg-stone-200 text-stone-600">
+                                <CubeIcon class="h-6 w-6" /> 
                               </div>
                               <div>
                                 <div class="flex items-center gap-2">

@@ -401,7 +401,7 @@ const getStatusLabel = (stato: string) => {
     'DRAFT': 'BOZZA', 'PENDING_VAL': 'PREVENTIVO IN ATTESA QUOTAZIONE', 'QUOTE_READY': 'PREVENTIVO VALIDATO',
     'ORDER_REQ': 'ORDINE IN ATTESA DI ACCETTAZIONE', 
     'WAITING_FAST': 'ORDINE DA ACCETTARE', 'WAITING_SIGN': 'ORDINE DA FIRMARE',
-    'SIGNED': 'ORDINE PRESO IN CARICO', 'IN_PRODUZIONE': 'ORDINE IN CODA DI PRODUZIONE', 'READY': 'ORDINE PRONTO', 'DELIVERY': 'SPEDIZIONE PROGRAMMATA', 'REJECTED': 'ANNULLATO'
+    'SIGNED': 'ORDINE PRESO IN CARICO', 'IN_PRODUZIONE': 'ORDINE IN CODA DI PRODUZIONE', 'READY': 'ORDINE PRONTO', 'DELIVERY': 'SPEDIZIONE PROGRAMMATA', 'REJECTED': 'ANNULLATO', 'SHIPPED': 'SPEDIZIONE AFFIDATA AL CORRIERE'
   };
   return map[stato] || stato;
 };
@@ -579,13 +579,15 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
                 <div v-if="p.dataConsegnaPrevista" class="mt-2 flex items-center gap-1.5 px-3 py-1 bg-stone-200 border border-stone-300 rounded shadow-sm">
                     <TruckIcon class="h-4 w-4" /> <span class="text-xs font-bold text-black uppercase">Prevista il {{ formatDateShort(p.dataConsegnaPrevista) }}</span>
                 </div>
-                <div class="mt-2 flex flex-col items-start gap-2">
-                  
-                  <div v-if="p.sommarioPreventivo" class="flex flex-col gap-1">
-                    <span v-for="(item, idx) in p.sommarioPreventivo" :key="idx" 
-                          class="text-[10px] bg-gray-50 px-2 py-1 rounded border text-gray-600">
-                      <strong>{{ item.quantitaTotale }}x</strong> {{ item.descrizione }}
-                    </span>
+                  <div class="mt-2 flex flex-col items-start gap-2">
+                    <div class="mt-2 flex flex-col items-start gap-2">
+                    
+                      <div v-if="p.elementi" class="flex flex-col gap-1 mt-2 items-start">
+                        <span v-for="(riga, idx) in getRiepilogoPulito(p.elementi)" :key="idx" 
+                              class="text-[10px] bg-gray-50 px-2 py-1 rounded border text-gray-600">
+                          <strong>{{ riga.quantita }}x</strong> {{ riga.descrizione }}
+                        </span>
+                      </div>
                   </div>
                 </div>
               </div>
@@ -636,10 +638,10 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
                 </div>
                 <div class="mt-2 flex flex-col items-start gap-2">
                   
-                  <div v-if="p.sommarioPreventivo" class="flex flex-col gap-1">
-                    <span v-for="(item, idx) in p.sommarioPreventivo" :key="idx" 
+                  <div v-if="p.elementi" class="flex flex-col gap-1 mt-2 items-start">
+                    <span v-for="(riga, idx) in getRiepilogoPulito(p.elementi)" :key="idx" 
                           class="text-[10px] bg-gray-50 px-2 py-1 rounded border text-gray-600">
-                      <strong>{{ item.quantitaTotale }}x</strong> {{ item.descrizione }}
+                      <strong>{{ riga.quantita }}x</strong> {{ riga.descrizione }}
                     </span>
                   </div>
                 </div>
@@ -679,21 +681,21 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
                 <div v-if="p.dataConsegnaPrevista && p.stato !== 'SHIPPED'" class="mt-2 flex items-center gap-1.5 px-3 py-1 bg-stone-200 border border-stone-300 rounded shadow-sm">
                   <TruckIcon class="h-4 w-4" /> <span class="text-xs font-bold text-black uppercase">Prevista il {{ formatDateShort(p.dataConsegnaPrevista) }}</span>
                 </div>
-                <div v-if="p.stato === 'SHIPPED'" class="mt-2 p-3 bg-blue-50 rounded-lg border border-blue-100 w-full max-w-sm">
-                  <div class="flex items-center gap-2 text-blue-800 font-bold text-xs uppercase mb-1">
+                <div v-if="p.stato === 'SHIPPED'" class="mt-2 p-3 bg-stone-200 border border-stone-300 rounded-lg w-full max-w-sm">
+                  <div class="flex items-center gap-2 text-stone-800 font-bold text-xs uppercase mb-1">
                     <TruckIcon class="h-4 w-4" />
                     <span>Spedito con {{ p.corriere || 'Corriere' }}</span>
                   </div>
-                  <div v-if="p.trackingCode" class="text-xs text-blue-600 font-mono select-all">
+                  <div v-if="p.trackingCode" class="text-xs text-stone-600 font-mono select-all">
                     Tracking: {{ p.trackingCode }}
                   </div>
                 </div>
                 <div class="mt-2 flex flex-col items-start gap-2">
                   
-                  <div v-if="p.sommarioPreventivo" class="flex flex-col gap-1">
-                    <span v-for="(item, idx) in p.sommarioPreventivo" :key="idx" 
+                  <div v-if="p.elementi" class="flex flex-col gap-1 mt-2 items-start">
+                    <span v-for="(riga, idx) in getRiepilogoPulito(p.elementi)" :key="idx" 
                           class="text-[10px] bg-gray-50 px-2 py-1 rounded border text-gray-600">
-                      <strong>{{ item.quantitaTotale }}x</strong> {{ item.descrizione }}
+                      <strong>{{ riga.quantita }}x</strong> {{ riga.descrizione }}
                     </span>
                   </div>
                 </div>
