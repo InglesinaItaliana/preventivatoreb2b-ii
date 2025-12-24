@@ -2,17 +2,22 @@ import { createApp } from 'vue';
 import { createPinia } from 'pinia';
 import './style.css';
 import App from './App.vue';
-
-// FIX: Puntiamo esplicitamente al file index dentro la cartella router
 import router from './router/index'; 
+import { auth } from './firebase'; // <--- Importiamo Auth
+import { onAuthStateChanged } from 'firebase/auth'; // <--- Importiamo il listener
 
-const pinia = createPinia();
-const app = createApp(App);
+let app: any;
 
-app.use(pinia);
-app.use(router);
+// "Ascolta" Firebase: appena decide se l'utente c'è o no, monta l'app.
+// Questo succede SOLO la prima volta al caricamento/refresh.
+onAuthStateChanged(auth, () => {
+  if (!app) {
+    const pinia = createPinia();
+    app = createApp(App);
 
-// Abbiamo rimosso il console.log di debug che causava l'errore "implicit any"
-// Ora che il router è configurato non serve più.
-
-app.mount('#app');
+    app.use(pinia);
+    app.use(router);
+    
+    app.mount('#app');
+  }
+});

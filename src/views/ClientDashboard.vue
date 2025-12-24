@@ -690,7 +690,7 @@ onUnmounted(() => { if (unsub1) unsub1(); if (unsub2) unsub2(); });
                     Tracking: {{ p.trackingCode }}
                   </div>
                 </div>
-                <div class="mt-2 flex flex-col items-start gap-2">
+                <div class="flex flex-col items-start gap-2">
                   
                   <div v-if="p.elementi" class="flex flex-col gap-1 mt-2 items-start">
                     <span v-for="(riga, idx) in getRiepilogoPulito(p.elementi)" :key="idx" 

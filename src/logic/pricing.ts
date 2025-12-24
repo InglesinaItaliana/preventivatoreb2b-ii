@@ -82,6 +82,7 @@ function calculateLogic2026(input: PricingInput, catalog: any) {
   const perimetraleCodes: any = {
     'ALLUMINIO':   { S: 'S003', M: 'S004', L: 'S005', XL: 'S006' },
     'BORDO CALDO': { S: 'S007', M: 'S008', L: 'S009', XL: 'S010' },
+    'FIBRA':       { S: 'S011', M: 'S012', L: 'S013', XL: 'S014' },
   };
   const tipoCanalinoKey = input.tipo_canalino ? input.tipo_canalino.toUpperCase() : '';
   

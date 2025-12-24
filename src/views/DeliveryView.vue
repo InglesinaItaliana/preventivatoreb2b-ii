@@ -1,9 +1,9 @@
 <script setup lang="ts">
   import { ref, onMounted, computed, reactive, watch } from 'vue';
   import { 
-    collection, query, where, getDocs, orderBy, onSnapshot, 
-    addDoc, updateDoc, doc, serverTimestamp, writeBatch 
-  } from 'firebase/firestore';
+  collection, query, where, getDocs, getDoc, orderBy, onSnapshot, // <--- Aggiunto getDoc
+  addDoc, updateDoc, doc, serverTimestamp, writeBatch 
+} from 'firebase/firestore';
   import { db, auth, storage } from '../firebase';
   import DeliveryModal from '../components/DeliveryModal.vue';
   import { 
@@ -46,12 +46,85 @@
   const activeTrip = ref<Trip | null>(null); // Per autista o per visualizzazione admin
   const tripOrders = ref<Order[]>([]); // Ordini del viaggio attivo
   const drivers = ref<any[]>([]);
-  
+  const clientDataMap = reactive<Record<string, any>>({});
   const confirmModal = reactive({
   show: false,
   message: '',
   onConfirm: () => {}
 });
+
+const fetchClientAddresses = async () => {
+  console.log("🚀 AVVIO RICERCA INDIRIZZI CLIENTI...");
+  
+  const uids = new Set<string>();
+  const emails = new Set<string>();
+
+  // Raccogliamo tutti gli ID e le Email dal viaggio
+  tripOrders.value.forEach(o => {
+     if (o.clienteUID) uids.add(o.clienteUID);
+     if (o.clienteEmail) emails.add(o.clienteEmail);
+  });
+
+  console.log(`🔍 Trovati ${uids.size} UID e ${emails.size} Email da cercare.`);
+
+  // 1. TENTATIVO TRAMITE UID
+  const uidPromises = [...uids].map(async (uid) => {
+    if (clientDataMap[uid]) return;
+    try {
+      // Nota: Funziona solo se l'ID del documento è ESATTAMENTE l'UID
+      const userSnap = await getDoc(doc(db, 'users', uid));
+      if (userSnap.exists()) {
+        const data = userSnap.data();
+        const addr = data.indirizzo 
+           ? `${data.indirizzo}, ${data.citta || ''} (${data.provincia || ''})`
+           : 'Indirizzo non presente nel profilo';
+           
+        clientDataMap[uid] = { address: addr, found: true };
+        console.log(`✅ Cliente trovato per UID: ${uid}`);
+      } else {
+        console.warn(`⚠️ Nessun documento user trovato con ID: ${uid}`);
+      }
+    } catch (e) {
+      console.error(`❌ Errore accesso DB users (UID ${uid}). VERIFICA REGOLE FIRESTORE!`, e);
+    }
+  });
+
+  await Promise.all(uidPromises);
+
+  // 2. TENTATIVO TRAMITE EMAIL (Fallback)
+  const emailPromises = [...emails].map(async (email) => {
+      const key = `EMAIL_${email}`;
+      if (clientDataMap[key]) return;
+
+      try {
+        const q = query(collection(db, 'users'), where('email', '==', email));
+        const snap = await getDocs(q);
+        
+        if (!snap.empty) {
+           const data = snap.docs[0]!.data();
+           const addr = data.indirizzo 
+               ? `${data.indirizzo}, ${data.citta || ''} (${data.provincia || ''})`
+               : 'Indirizzo non presente nel profilo';
+           
+           // Salviamo sia con chiave Email che con chiave UID (se lo troviamo) per sicurezza
+           clientDataMap[key] = { address: addr, found: true };
+           if (data.id || snap.docs[0]!.id) {
+               clientDataMap[snap.docs[0]!.id] = { address: addr, found: true };
+           }
+           console.log(`✅ Cliente trovato per EMAIL: ${email} -> ${addr}`);
+        } else {
+            console.warn(`⚠️ Nessun utente trovato con email: ${email}`);
+        }
+      } catch (e: any) {
+          console.error(`❌ Errore ricerca EMAIL ${email}:`, e);
+          if (e.message.includes('index')) {
+              alert("Manca l'indice su Firestore! Guarda la console per il link da cliccare.");
+          }
+      }
+  });
+
+  await Promise.all(emailPromises);
+};
 
   // Form Creazione Viaggio (Dispatcher)
   const newTrip = reactive({
@@ -117,32 +190,35 @@
     return groups;
   });
   
-  // --- FUNZIONI DI RIORDINAMENTO (SEQUENZA) ---
   const moveStop = async (index: number, direction: 'UP' | 'DOWN') => {
-  if (!activeTrip.value || !tripOrders.value) return;
+  if (!activeTrip.value) return;
   
+  const groups = groupedTripStops.value;
   const newIndex = direction === 'UP' ? index - 1 : index + 1;
   
-  // Controlli limiti array
-  if (newIndex < 0 || newIndex >= tripOrders.value.length) return;
+  if (newIndex < 0 || newIndex >= groups.length) return;
 
-  // 1. Scambia nell'array locale
-  // AGGIUNTI I PUNTI ESCLAMATIVI (!) PER CORREGGERE L'ERRORE TYPESCRIPT
-  const temp = tripOrders.value[index]!; 
-  tripOrders.value[index] = tripOrders.value[newIndex]!;
-  tripOrders.value[newIndex] = temp;
+  const currentGroup = groups[index];
+  const targetGroup = groups[newIndex];
 
-  // 2. Aggiorna Firestore
-  const newStopsIds = tripOrders.value.map(o => o.id);
+  // Ricostruiamo la lista piatta di ID scambiando i blocchi
+  const newStopsIds: string[] = [];
   
-  try {
-    await updateDoc(doc(db, 'trips', activeTrip.value.id), {
-       stops: newStopsIds
-    });
-    // Aggiorniamo anche l'oggetto locale activeTrip per coerenza
-    if (activeTrip.value) {
-        activeTrip.value.stops = newStopsIds;
+  groups.forEach((g, i) => {
+    if (i === index) {
+      newStopsIds.push(...targetGroup.ids); // Metti qui quello scambiato
+    } else if (i === newIndex) {
+      newStopsIds.push(...currentGroup.ids); // Metti qui quello corrente
+    } else {
+      newStopsIds.push(...g.ids); // Mantieni gli altri
     }
+  });
+
+  try {
+    // Aggiorna Firestore
+    await updateDoc(doc(db, 'trips', activeTrip.value.id), { stops: newStopsIds });
+    // Aggiorna locale (opzionale se hai onSnapshot attivo, ma rende l'UI reattiva subito)
+    if (activeTrip.value) activeTrip.value.stops = newStopsIds;
   } catch (e) {
     console.error("Errore riordino:", e);
     alert("Errore salvataggio sequenza");
@@ -185,20 +261,32 @@ watch(viewMode, (newMode: 'DISPATCHER' | 'DRIVER') => {
 });
 
 // --- FUNZIONE PER SPIARE IL VIAGGIO (Opzionale) ---
-const inspectTrip = (trip: Trip) => {
-    // Impostiamo manualmente il viaggio attivo e andiamo in modalità driver
-    // Nota: serve una piccola modifica a loadMyTrip per non sovrascriverlo subito
+const inspectTrip = async (trip: Trip) => {
+    // 1. Impostiamo il viaggio attivo
     activeTrip.value = trip;
-    // Carichiamo gli ordini di quel viaggio specifico
-    const promises = trip.stops.map(oid => 
-       getDocs(query(collection(db, 'preventivi'), where('__name__', '==', oid)))
-    );
-    Promise.all(promises).then(results => {
+    
+    try {
+        // 2. Carichiamo gli ordini di quel viaggio
+        const promises = trip.stops.map(oid => 
+           getDocs(query(collection(db, 'preventivi'), where('__name__', '==', oid)))
+        );
+        
+        const results = await Promise.all(promises);
+        
         tripOrders.value = results
            .map(r => !r.empty ? { id: r.docs[0]!.id, ...r.docs[0]!.data() } : null)
            .filter(o => o !== null) as Order[];
+
+        // 3. AGGIUNTA FONDAMENTALE: Scarichiamo gli indirizzi anche qui!
+        await fetchClientAddresses(); 
+
+        // 4. Cambiamo vista
         viewMode.value = 'DRIVER';
-    });
+        
+    } catch (e) {
+        console.error("Errore ispezione viaggio:", e);
+        alert("Impossibile caricare i dettagli del viaggio.");
+    }
 };
 
   const createTrip = async () => {
@@ -239,32 +327,36 @@ const inspectTrip = (trip: Trip) => {
   };
   
   // --- LOGICA DRIVER (ESECUZIONE) ---
-  const loadMyTrip = async () => {
-  if (!currentUser.value) return;
+  // --- LOGICA DRIVER (ESECUZIONE) ---
+const loadMyTrip = async () => {
+  if (!currentUser.value || !currentUser.value.email) return;
+
+  // CORREZIONE: Usiamo l'email minuscola, non l'UID
+  const myEmail = currentUser.value.email.toLowerCase().trim();
   
   const q = query(
     collection(db, 'trips'),
-    where('driverId', '==', currentUser.value.uid), 
+    where('driverId', '==', myEmail), // <--- ORA CERCA L'EMAIL CORRETTA
     where('status', '==', 'OPEN')
   );
   
   onSnapshot(q, async (snap) => {
+    // ... (il resto della funzione rimane identico) ...
     if (!snap.empty) {
       const docData = snap.docs[0]!.data();
-      // FIX: Usiamo una variabile locale per rassicurare TypeScript che non è null
       const currentTrip = { id: snap.docs[0]!.id, ...docData } as Trip;
       activeTrip.value = currentTrip;
       
-      // Ora usiamo currentTrip invece di activeTrip.value
       if (currentTrip.stops && currentTrip.stops.length > 0) {
+        // ... caricamento ordini ...
         const promises = currentTrip.stops.map(oid => 
            getDocs(query(collection(db, 'preventivi'), where('__name__', '==', oid)))
         );
         const results = await Promise.all(promises);
-        
         tripOrders.value = results
            .map(r => !r.empty ? { id: r.docs[0]!.id, ...r.docs[0]!.data() } : null)
            .filter(o => o !== null) as Order[];
+           await fetchClientAddresses();
       } else {
         tripOrders.value = [];
       }
@@ -276,63 +368,97 @@ const inspectTrip = (trip: Trip) => {
 };
   
 // GENERATORE LINK GOOGLE MAPS
+// GENERATORE LINK GOOGLE MAPS (Versione Corretta)
 const openNavigator = () => {
-  if (tripOrders.value.length === 0) return;
+  // 1. Usiamo groupedTripStops perché contiene gli indirizzi CORRETTI (presi da users)
+  // Non usare tripOrders perché lì l'indirizzo spesso manca!
+  const stops = groupedTripStops.value;
+
+  if (stops.length === 0) return;
+
+  // 2. Definisci l'origine (La tua sede)
+  const origin = "Via Cav. Angelo Manzoni 18, Sant'Angelo Lodigiano";
+
+  // 3. L'ultima tappa è la DESTINAZIONE finale
+  const lastStop = stops[stops.length - 1];
   
-  // Ordine: Origine (Sede) -> Tappe -> Destinazione (Ultima tappa)
-  const origin = "Via Cav. Angelo Manzoni 18, Sant'Angelo Lodigiano"; // TUA SEDE
-  
-  // FIX ERRORE TS: Estraiamo l'ultima tappa in modo sicuro
-  const lastStop = tripOrders.value[tripOrders.value.length - 1];
-  const destination = lastStop?.indirizzoConsegna || ''; // Fallback stringa vuota
-  
-  const waypoints = tripOrders.value
-    .slice(0, -1) // Tutti tranne l'ultimo (che è la destinazione)
-    .map(o => encodeURIComponent(o.indirizzoConsegna))
+  // Se l'indirizzo manca o è generico, usiamo almeno la città
+  let destination = lastStop.indirizzo;
+  if (!destination || destination.includes('mancante')) {
+      // Fallback estremo se ancora non c'è l'indirizzo
+      destination = `${lastStop.primaryOrder.citta} ${lastStop.primaryOrder.provincia}`;
+  }
+
+  // 4. Tutte le altre tappe prima dell'ultima sono WAYPOINTS (Tappe intermedie)
+  const waypoints = stops
+    .slice(0, -1) // Prendi tutti tranne l'ultimo
+    .map(s => {
+        let addr = s.indirizzo;
+        if (!addr || addr.includes('mancante')) {
+             addr = `${s.primaryOrder.citta} ${s.primaryOrder.provincia}`;
+        }
+        return encodeURIComponent(addr);
+    })
     .join('|');
-    
-  // FIX URL: Sintassi corretta per Google Maps Universal Link
-  let url = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}`;
-  
+
+  // 5. Costruisci l'URL Universale per Google Maps
+  // Usiamo l'API 'dir' (Directions) che supporta bene origine, destinazione e tappe
+  let url = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&travelmode=driving`;
+
   if (waypoints) {
       url += `&waypoints=${waypoints}`;
   }
-  
+
+  // Apre Google Maps (App su mobile o Sito su Desktop)
   window.open(url, '_blank');
 };
   
-  const openDeliveryModal = (order: Order) => {
-    selectedOrderForDelivery.value = {
-      ...order,
-      // Adatta alla modale esistente
-      idsToUpdate: [order.id],
-      commessa: order.commessa,
-      cliente: order.cliente,
-      colli: order.colli,
-      sommarioPreventivo: order.sommarioPreventivo || []
-    };
-    showDeliveryModal.value = true;
+const openDeliveryModal = (stopGroup: any) => {
+  const mergedContent = stopGroup.orders.flatMap((o: any) => o.sommarioPreventivo || []);
+
+  selectedOrderForDelivery.value = {
+    ...stopGroup.primaryOrder,
+    
+    cliente: stopGroup.cliente,
+    commessa: stopGroup.commessa,
+    
+    // CORREZIONE QUI: Passiamo il numero, non la stringa!
+    colli: stopGroup.totalColli, 
+    
+    sommarioPreventivo: mergedContent, 
+    idsToUpdate: stopGroup.ids
   };
+
+  showDeliveryModal.value = true;
+};
   
-  const handleConfirmDelivery = async (signatureBase64: string) => {
+const handleConfirmDelivery = async (signatureBase64: string) => {
   if (!selectedOrderForDelivery.value) return;
   
   try {
-     const orderId = selectedOrderForDelivery.value.id;
+     const ids = selectedOrderForDelivery.value.idsToUpdate;
+     const timestamp = serverTimestamp();
 
-     // 1. Upload della Firma su Firebase Storage
-     const firmaRef = storageRef(storage, `firme_consegne/TRIP_${Date.now()}_${orderId}.png`);
+     // 1. Upload Firma (Unica per tutto il gruppo)
+     const mainId = ids[0];
+     const firmaRef = storageRef(storage, `firme_consegne/TRIP_${Date.now()}_${mainId}.png`);
      await uploadString(firmaRef, signatureBase64, 'data_url');
      const signatureUrl = await getDownloadURL(firmaRef);
 
-     // 2. Aggiorna lo stato dell'ordine con la firma
-     await updateDoc(doc(db, 'preventivi', orderId), {
-         stato: 'DELIVERED',
-         firmaConsegna: signatureUrl,
-         dataConsegnaEffettiva: serverTimestamp()
+     // 2. Batch Update (Aggiorna TUTTI gli ordini del DDT)
+     const batch = writeBatch(db);
+     ids.forEach((id: string) => {
+        const ref = doc(db, 'preventivi', id);
+        batch.update(ref, {
+           stato: 'DELIVERED',
+           firmaConsegna: signatureUrl,
+           dataConsegnaEffettiva: timestamp
+        });
      });
      
+     await batch.commit();
      showDeliveryModal.value = false;
+
   } catch(e) { 
       console.error("Errore consegna:", e); 
       alert("Errore durante il salvataggio della consegna.");
@@ -352,7 +478,73 @@ const closeTrip = async () => {
   };
   confirmModal.show = true;
 };
-  
+
+const groupedTripStops = computed(() => {
+  const groups: any[] = [];
+  const processedKeys = new Set<string>();
+
+  tripOrders.value.forEach(order => {
+    const key = order.fic_ddt_id ? `DDT_${order.fic_ddt_id}` : `ORD_${order.id}`;
+
+    if (processedKeys.has(key)) return;
+    processedKeys.add(key);
+
+    // --- LOGICA INDIRIZZO SUPER ROBUSTA ---
+    // 1. Proviamo con UID
+    let profileData = order.clienteUID ? clientDataMap[order.clienteUID] : null;
+    
+    // 2. Se fallisce, proviamo con Email
+    if (!profileData && order.clienteEmail) {
+        profileData = clientDataMap[`EMAIL_${order.clienteEmail}`];
+    }
+    
+    // 3. Fallback finale a cascata
+    const finalAddress = 
+        profileData?.address || // Dal profilo (UID o Email)
+        order.indirizzoConsegna || 
+        order.indirizzo || 
+        order.via ||
+        // Se abbiamo città/provincia nell'ordine usiamo almeno quelle
+        (order.citta ? `${order.citta} (${order.provincia || ''})` : null) ||
+        'Indirizzo mancante (Profilo non trovato)';
+    // ---------------------------------------
+
+    let totColli = 0;
+    let groupOrders: any[] = [];
+    let firstOrder: any = order;
+
+    if (order.fic_ddt_id) {
+      groupOrders = tripOrders.value.filter(o => o.fic_ddt_id === order.fic_ddt_id);
+      firstOrder = groupOrders[0]!;
+      totColli = groupOrders.reduce((s, o) => s + (Number(o.colli)||1), 0);
+    } else {
+      groupOrders = [order];
+      totColli = Number(order.colli) || 1;
+    }
+
+    groups.push({
+      type: order.fic_ddt_id ? 'DDT' : 'ORDER',
+      key,
+      
+      cliente: firstOrder.cliente || 'Cliente',
+      indirizzo: finalAddress, // <--- ORA È POPOLATO
+      commessa: order.fic_ddt_id ? `DDT #${firstOrder.fic_ddt_number || '?'}` : `Commessa ${firstOrder.commessa}`,
+      
+      primaryOrder: firstOrder,
+      orders: groupOrders,
+      ids: groupOrders.map(o => o.id),
+      status: groupOrders.every(o => o.stato === 'DELIVERED') ? 'DELIVERED' : 'OPEN',
+      
+      totalColli: totColli,
+      infoColli: order.fic_ddt_id 
+          ? `${groupOrders.length} Ordini • ${totColli} Colli`
+          : `1 Ordine • ${totColli} Colli`
+    });
+  });
+
+  return groups;
+});
+
 // --- HELPER RAGGRUPPAMENTO SPEDIZIONI (DDT vs ORDINI) ---
 const getShipments = (list: Order[]) => {
   const groups: any[] = [];
@@ -417,260 +609,319 @@ const isSelected = (ids: string[]) => {
   return ids.length > 0 && ids.every(id => newTrip.selectedOrderIds.includes(id));
 };
 
-  </script>
-  
-  <template>
-    <div class="min-h-screen bg-[#F0F4F8] font-sans pb-24 text-slate-700">
-      
-      <header class="bg-white sticky top-0 z-50 border-b border-slate-200 px-6 py-4 flex justify-between items-center shadow-sm">
-        <div>
-           <h1 class="text-2xl font-heading font-black text-slate-900">Logistica</h1>
-           <p class="text-xs text-slate-500 font-bold uppercase tracking-wider">
-             {{ viewMode === 'DISPATCHER' ? 'Pianificazione Viaggi' : 'Il mio Viaggio' }}
-           </p>
-        </div>
-        
-        <div v-if="isAdmin" class="flex bg-slate-100 p-1 rounded-lg">
-           <button @click="viewMode = 'DRIVER'" class="px-3 py-1 text-xs font-bold rounded-md transition-colors" :class="viewMode === 'DRIVER' ? 'bg-white shadow text-slate-900' : 'text-slate-400'">Driver</button>
-           <button @click="viewMode = 'DISPATCHER'" class="px-3 py-1 text-xs font-bold rounded-md transition-colors" :class="viewMode === 'DISPATCHER' ? 'bg-white shadow text-slate-900' : 'text-slate-400'">Admin</button>
-        </div>
-      </header>
-  
-      <main class="max-w-6xl mx-auto p-6">
-        
-        <div v-if="viewMode === 'DISPATCHER'" class="grid grid-cols-1 lg:grid-cols-3 gap-8">
-           
-           <div class="lg:col-span-2 space-y-6">
-              <h2 class="text-lg font-black text-slate-900 flex items-center gap-2">
-                  <InboxStackIcon class="w-6 h-6 text-amber-500"/> Ordini da Pianificare
-              </h2>
+</script>
+<template>
+  <div class="min-h-screen bg-gray-50/90 p-6 font-sans text-gray-700">
+    <div class="max-w-7xl mx-auto">
+    <header class="flex justify-between items-center mb-8">
+      <div class="flex items-center gap-4">
+          <div>
+            <p class="text-lg font-medium text-gray-800 leading-none">Inglesina Italiana Srl</p>
+            <div class="relative inline-block">
+              <h1 class="relative z-10 text-6xl font-bold font-heading text-gray-900">P.O.P.S. Spedizioni</h1>
+              <div class="absolute bottom-6 left-0 w-full h-8 bg-amber-400 rounded-sm -z-0 animate-marker"></div>
+              <br>
+
               
-              <div v-if="poolOrders.length === 0" class="text-center py-10 bg-white rounded-2xl border border-dashed border-slate-300">
-                  <p class="text-slate-400 font-medium">Nessun ordine in attesa di spedizione interna.</p>
+            </div>
+            <p class="text-xs text-slate-500 font-bold uppercase tracking-widest mt-0.5">
+              
+              {{ viewMode === 'DISPATCHER' ? 'Pianificazione' : 'Il mio Viaggio' }}
+            </p>
+          </div>
+        
+         
+      </div>
+      
+      <div v-if="isAdmin" class="flex bg-slate-100 p-1.5 rounded-xl border border-slate-200">
+         <button @click="viewMode = 'DRIVER'" class="px-4 py-1.5 text-xs font-bold rounded-lg transition-all duration-200" :class="viewMode === 'DRIVER' ? 'bg-white shadow-sm text-slate-900 ring-1 ring-black/5' : 'text-slate-400 hover:text-slate-600'">Driver</button>
+         <button @click="viewMode = 'DISPATCHER'" class="px-4 py-1.5 text-xs font-bold rounded-lg transition-all duration-200" :class="viewMode === 'DISPATCHER' ? 'bg-white shadow-sm text-slate-900 ring-1 ring-black/5' : 'text-slate-400 hover:text-slate-600'">Admin</button>
+      </div>
+    </header>
+    </div>
+
+    <main class="max-w-6xl mx-auto p-4 md:p-6 lg:p-8">
+      
+      <div v-if="viewMode === 'DISPATCHER'" class="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+         
+         <div class="lg:col-span-2 space-y-6">
+            <div class="flex items-center justify-between">
+                <h2 class="text-lg font-black text-slate-900 flex items-center gap-2">
+                    <div class="p-2 bg-amber-100 rounded-lg text-amber-600"><InboxStackIcon class="w-5 h-5"/></div>
+                    Da Pianificare
+                </h2>
+                <span class="text-xs font-bold bg-slate-200 text-slate-600 px-2 py-1 rounded-md">{{ poolOrders.length }} Ordini</span>
+            </div>
+            
+            <div v-if="poolOrders.length === 0" class="text-center py-16 bg-white rounded-3xl border-2 border-dashed border-slate-200">
+                <div class="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <InboxStackIcon class="w-8 h-8 text-slate-300"/>
+                </div>
+                <p class="text-slate-400 font-bold">Tutto spedito!</p>
+                <p class="text-slate-400 text-xs">Nessun ordine in attesa.</p>
+            </div>
+
+            <div v-for="(province, regione) in groupedPool" :key="regione" class="bg-white rounded-[2rem] p-1 shadow-sm border border-slate-100 overflow-hidden">
+                <div class="bg-slate-50/50 px-6 py-4 border-b border-slate-100">
+                    <h3 class="text-xs font-black text-slate-400 uppercase tracking-widest">{{ regione }}</h3>
+                </div>
+                
+                <div class="p-4 space-y-6">
+                    <div v-for="(list, prov) in province" :key="prov">
+                        <div class="flex items-center gap-3 mb-3 pl-2">
+                            <span class="bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow-sm">{{ prov }}</span>
+                            <div class="h-px bg-slate-100 flex-1"></div>
+                        </div>
+                        
+                        <div class="space-y-2">
+                            <div 
+                              v-for="shipment in getShipments(list)" 
+                              :key="shipment.key"
+                              @click="toggleSelection(shipment.ids)"
+                              class="flex items-center p-4 rounded-2xl border transition-all duration-200 cursor-pointer group relative overflow-hidden"
+                              :class="isSelected(shipment.ids) ? 'bg-amber-50 border-amber-400 shadow-md transform scale-[1.01]' : 'bg-white border-slate-100 hover:border-slate-300 hover:shadow-sm'"
+                            >
+                              <div class="absolute left-0 top-0 bottom-0 w-1 transition-colors" :class="isSelected(shipment.ids) ? 'bg-amber-500' : 'bg-transparent'"></div>
+
+                              <div class="w-6 h-6 rounded-full border-2 flex items-center justify-center mr-4 transition-all shrink-0 ml-2"
+                                    :class="isSelected(shipment.ids) ? 'border-amber-500 bg-amber-500 scale-110' : 'border-slate-200 group-hover:border-slate-300'">
+                                    <CheckCircleIcon v-if="isSelected(shipment.ids)" class="w-4 h-4 text-white" />
+                              </div>
+                              
+                              <div class="flex-1 min-w-0">
+                                  <div class="flex justify-between items-center mb-1">
+                                      <h4 class="font-bold text-slate-900 truncate text-sm">{{ shipment.cliente }}</h4>
+                                      <span v-if="shipment.isDdt" class="ml-2 text-[9px] font-black bg-slate-900 text-white px-1.5 py-0.5 rounded uppercase tracking-wider shrink-0 shadow-sm">DDT</span>
+                                  </div>
+                                  <div class="flex items-center gap-2 text-xs text-slate-500">
+                                      <span class="truncate">{{ shipment.citta }}</span>
+                                      <span class="w-1 h-1 rounded-full bg-slate-300"></span>
+                                      <span class="font-medium text-slate-600">{{ shipment.colli }} Colli</span>
+                                  </div>
+                              </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+         </div>
+
+         <div class="lg:col-span-1">
+             <div class="bg-white rounded-[2rem] p-6 shadow-xl shadow-slate-200/50 sticky top-28 border border-slate-100 ring-1 ring-slate-900/5">
+                 <h2 class="text-lg font-black text-slate-900 mb-6 flex items-center gap-2">
+                     <div class="p-2 bg-slate-100 rounded-lg"><TruckIcon class="w-5 h-5 text-slate-800"/></div>
+                     Nuovo Viaggio
+                 </h2>
+                 
+                 <div class="mb-8">
+                     <div class="flex justify-between items-end mb-4">
+                         <h3 class="text-[10px] font-black text-slate-400 uppercase tracking-widest">In Corso</h3>
+                         <span class="text-[10px] font-bold bg-green-100 text-green-700 px-1.5 py-0.5 rounded">{{ allTrips.length }} attivi</span>
+                     </div>
+
+                     <div v-if="allTrips.length === 0" class="text-sm text-slate-400 italic text-center py-4 bg-slate-50 rounded-xl border border-dashed border-slate-200">Nessun viaggio attivo.</div>
+
+                     <div class="space-y-2 max-h-60 overflow-y-auto pr-1 custom-scrollbar">
+                         <div v-for="trip in allTrips" :key="trip.id" class="bg-slate-50 p-3 rounded-xl border border-slate-100 flex justify-between items-center group hover:bg-white hover:shadow-md transition-all">
+                             <div>
+                                 <div class="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                                     <div class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                                     {{ trip.driverName }}
+                                 </div>
+                                 <div class="text-[10px] text-slate-500 mt-0.5 pl-3.5">
+                                     {{ new Date(trip.date).toLocaleDateString('it-IT') }} • {{ trip.stops.length }} Stop
+                                 </div>
+                             </div>
+                             <button @click="inspectTrip(trip)" class="bg-white text-slate-600 border border-slate-200 hover:border-slate-900 hover:text-slate-900 p-1.5 rounded-lg transition-colors">
+                               <MapIcon class="w-4 h-4"/>
+                             </button>
+                         </div>
+                     </div>
+                 </div>
+
+                 <div class="space-y-5 pt-6 border-t border-slate-100">
+                     <div class="space-y-1">
+                         <label class="text-[10px] font-bold text-slate-400 uppercase ml-1">Data Partenza</label>
+                         <input v-model="newTrip.date" type="date" class="w-full bg-slate-50 border-transparent focus:border-amber-400 focus:ring-0 rounded-xl px-4 py-3 font-bold text-slate-700 transition-colors">
+                     </div>
+                     
+                     <div class="space-y-1">
+                         <label class="text-[10px] font-bold text-slate-400 uppercase ml-1">Autista Assegnato</label>
+                         <div class="relative">
+                             <select v-model="newTrip.driverId" class="w-full bg-slate-50 border-transparent focus:border-amber-400 focus:ring-0 rounded-xl px-4 py-3 font-bold text-slate-700 appearance-none transition-colors cursor-pointer">
+                                 <option value="" disabled>Seleziona Autista</option>
+                                 <option v-for="d in drivers" :key="d.id" :value="d.id">{{ d.firstName }} {{ d.lastName }}</option>
+                             </select>
+                             <ChevronDownIcon class="w-4 h-4 text-slate-400 absolute right-4 top-3.5 pointer-events-none"/>
+                         </div>
+                     </div>
+
+                     <div class="bg-amber-50 rounded-xl p-4 border border-amber-100 flex items-center justify-between">
+                         <span class="text-xs font-bold text-amber-900 uppercase">Ordini<br>Selezionati</span>
+                         <span class="text-3xl font-black text-amber-500">{{ newTrip.selectedOrderIds.length }}</span>
+                     </div>
+
+                     <button 
+                        @click="createTrip"
+                        :disabled="!newTrip.driverId || newTrip.selectedOrderIds.length === 0"
+                        class="w-full py-4 rounded-xl bg-slate-900 text-white font-bold shadow-lg shadow-slate-900/20 hover:bg-black hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none transition-all flex justify-center items-center gap-2"
+                     >
+                        <PlusIcon class="w-5 h-5"/> Crea Viaggio
+                     </button>
+                 </div>
+             </div>
+         </div>
+      </div>
+
+      <div v-if="viewMode === 'DRIVER'" class="max-w-md mx-auto">
+          
+          <div v-if="!activeTrip" class="text-center py-20 animate-in fade-in slide-in-from-bottom-4 duration-700">
+              <div class="w-24 h-24 bg-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-xl shadow-slate-200/50">
+                  <TruckIcon class="w-10 h-10 text-slate-300"/>
               </div>
-  
-              <div v-for="(province, regione) in groupedPool" :key="regione" class="bg-white rounded-3xl p-6 shadow-sm border border-slate-100">
-                  <h3 class="text-xs font-black text-slate-400 uppercase tracking-widest mb-4">{{ regione }}</h3>
-                  
-                  <div v-for="(list, prov) in province" :key="prov" class="mb-6 last:mb-0">
-                      <div class="flex items-center gap-2 mb-3">
-                          <span class="bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded">{{ prov }}</span>
-                          <div class="h-px bg-slate-100 flex-1"></div>
+              <h2 class="text-xl font-black text-slate-900 mb-2">Nessun Viaggio</h2>
+              <p class="text-slate-500 text-sm max-w-[200px] mx-auto">Tutto tranquillo oggi. Controlla più tardi o contatta la logistica.</p>
+          </div>
+
+          <div v-else class="animate-in fade-in slide-in-from-bottom-4 duration-500">
+              
+              <div class="bg-slate-900 rounded-[2.5rem] p-8 text-white shadow-2xl shadow-slate-900/20 mb-10 relative overflow-hidden group">
+                  <div class="absolute -right-10 -top-10 w-40 h-40 bg-slate-800 rounded-full blur-3xl opacity-50 group-hover:bg-slate-700 transition-colors duration-500"></div>
+                  <div class="absolute -left-10 -bottom-10 w-40 h-40 bg-amber-600 rounded-full blur-3xl opacity-20"></div>
+
+                  <div class="relative z-10">
+                      <div class="flex justify-between items-start mb-6">
+                          <div>
+                              <p class="text-[10px] text-amber-400 font-bold uppercase tracking-widest mb-1">Viaggio Attivo</p>
+                              <h2 class="text-3xl font-black tracking-tight">{{ new Date(activeTrip.date).toLocaleDateString('it-IT', { day: 'numeric', month: 'long'}) }}</h2>
+                              <p class="text-slate-400 text-sm font-medium mt-1">{{ activeTrip?.driverName }} al volante</p>
+                          </div>
+                          <div class="bg-white/10 backdrop-blur-md border border-white/10 px-3 py-1.5 rounded-xl text-center">
+                              <span class="block text-lg font-black text-white">{{ groupedTripStops.filter(g => g.status !== 'DELIVERED').length }}</span>
+                              <span class="block text-[8px] font-bold text-slate-400 uppercase tracking-wider">Stop Rimasti</span>
+                          </div>
                       </div>
                       
-                      <div class="space-y-3">
-                        <div 
-                          v-for="shipment in getShipments(list)" 
-                          :key="shipment.key"
-                          @click="toggleSelection(shipment.ids)"
-                          class="flex items-center p-4 rounded-2xl border transition-all cursor-pointer group hover:shadow-md"
-                          :class="isSelected(shipment.ids) ? 'bg-amber-50 border-amber-400' : 'bg-slate-50 border-transparent hover:bg-white'"
-                        >
-                          <div class="w-5 h-5 rounded-full border-2 flex items-center justify-center mr-4 transition-colors shrink-0"
-                                :class="isSelected(shipment.ids) ? 'border-amber-500 bg-amber-500' : 'border-slate-300 group-hover:border-amber-400'">
-                                <CheckCircleIcon v-if="isSelected(shipment.ids)" class="w-4 h-4 text-white" />
-                          </div>
-                          
-                          <div class="flex-1 min-w-0">
-                              <div class="flex justify-between items-center mb-0.5">
-                                  <h4 class="font-bold text-slate-900 truncate">{{ shipment.cliente }}</h4>
-                                  <span v-if="shipment.isDdt" class="ml-2 text-[9px] font-black bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded uppercase tracking-wider shrink-0">DDT</span>
-                              </div>
-                              <p class="text-xs text-slate-500 truncate">{{ shipment.citta }} ({{ shipment.provincia }})</p>
-                              <p class="text-[10px] text-slate-400 mt-1 font-medium">{{ shipment.info }} • Colli: {{ shipment.colli }}</p>
-                          </div>
+                      <button @click="openNavigator" class="w-full bg-amber-400 hover:bg-amber-300 text-amber-950 font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-lg shadow-amber-900/20">
+                          <MapIcon class="w-5 h-5"/> Avvia Navigatore
+                      </button>
+                  </div>
+              </div>
+
+              <div class="relative pl-4 pb-20">
+                <div class="absolute left-11 -translate-x-1/2 top-6 bottom-0 w-4 bg-amber-400 rounded-full opacity-80"></div>
+                  <div v-for="(stop, index) in groupedTripStops" :key="stop.key" class="relative pb-10 last:pb-0 group">
+                      
+                      <div class="absolute left-0 top-0 z-10 transition-transform duration-300 group-hover:scale-110">
+                           <div v-if="stop.status === 'DELIVERED'" class="w-14 h-14 rounded-full bg-green-100 border-4 border-white shadow-sm flex items-center justify-center">
+                               <CheckCircleIcon class="w-6 h-6 text-green-600" />
+                           </div>
+                           
+                           <div v-else-if="index === 0 || groupedTripStops[index-1]?.status === 'DELIVERED'" class="w-14 h-14 rounded-full bg-slate-900 border-4 border-white shadow-lg flex items-center justify-center relative">
+                               <div class="absolute inset-0 rounded-full border border-slate-900/10 animate-ping opacity-20"></div>
+                               <span class="font-black text-white text-lg">{{ index + 1 }}</span>
+                           </div>
+                           
+                           <div v-else class="w-14 h-14 rounded-full bg-white border-4 border-slate-50 shadow-sm flex items-center justify-center text-slate-300 font-bold text-lg">
+                               {{ index + 1 }}
+                           </div>
+                      </div>
+
+                      <div class="ml-20 bg-white rounded-[2rem] p-5 border transition-all duration-300"
+                        :class="[
+                          stop.status === 'DELIVERED' ? 'border-green-100 opacity-60 grayscale-[0.5]' : 'border-slate-100 shadow-lg shadow-slate-200/50 hover:shadow-xl hover:scale-[1.02] hover:border-amber-200',
+                          (index === 0 || groupedTripStops[index-1]?.status === 'DELIVERED') && stop.status !== 'DELIVERED' ? 'ring-2 ring-amber-400/20' : ''
+                        ]">
+                        
+                        <div class="flex justify-between items-start mb-2">
+                            <h3 class="font-black text-slate-900 text-lg leading-tight truncate pr-2">{{ stop.cliente }}</h3>
+                            
+                            <div v-if="stop.status !== 'DELIVERED' && activeTrip && activeTrip.status === 'OPEN'" class="flex flex-col gap-1 -mr-2">
+                                <button @click.stop="moveStop(index, 'UP')" :disabled="index === 0" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-50 disabled:opacity-0 transition-colors"><ChevronUpIcon class="w-4 h-4"/></button>
+                                <button @click.stop="moveStop(index, 'DOWN')" :disabled="index === groupedTripStops.length - 1" class="p-1.5 rounded-lg text-slate-400 hover:text-slate-900 hover:bg-slate-50 disabled:opacity-0 transition-colors"><ChevronDownIcon class="w-4 h-4"/></button>
+                            </div>
+                        </div>
+                        
+                        <p class="text-sm text-slate-500 font-medium flex items-start gap-1.5 mb-4 leading-relaxed">
+                            <MapPinIcon class="w-4 h-4 shrink-0 mt-0.5 text-slate-400"/> 
+                            {{ stop.indirizzo }}
+                        </p>
+                        
+                        <div class="flex items-center flex-wrap gap-2 mb-4">
+                           <span v-if="stop.type === 'DDT'" class="text-[10px] font-black bg-slate-900 text-white px-2 py-1 rounded-lg uppercase tracking-wider shadow-sm">DDT</span>
+                           <span class="text-xs font-bold bg-slate-100 text-slate-600 px-2.5 py-1 rounded-lg border border-slate-200">{{ stop.commessa }}</span>
+                           <span class="text-xs font-medium text-slate-400 px-1">{{ stop.infoColli }}</span>
+                        </div>
+
+                        <div v-if="stop.status !== 'DELIVERED'">
+                            <button 
+                                @click="openDeliveryModal(stop)"
+                                class="w-full bg-slate-50 hover:bg-slate-900 hover:text-white text-slate-900 text-sm font-bold py-3.5 rounded-xl transition-all duration-300 border border-slate-200 hover:border-slate-900 flex items-center justify-center gap-2 group/btn"
+                            >
+                                <span>Firma Consegna</span>
+                                <ChevronDownIcon class="w-4 h-4 -rotate-90 group-hover/btn:translate-x-1 transition-transform"/>
+                            </button>
+                        </div>
+                        <div v-else class="mt-2 text-xs font-bold text-green-600 flex items-center gap-1.5 bg-green-50 p-2 rounded-lg w-fit">
+                            <CheckCircleIcon class="w-4 h-4"/> Consegnato alle {{ stop.orders[0].dataConsegnaEffettiva ? new Date(stop.orders[0].dataConsegnaEffettiva.toDate()).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : '' }}
                         </div>
                     </div>
                   </div>
               </div>
-           </div>
-  
-           <div class="lg:col-span-1">
-               <div class="bg-white rounded-[2rem] p-6 shadow-xl sticky top-24 border border-slate-100">
-                   <h2 class="text-lg font-black text-slate-900 mb-6 flex items-center gap-2">
-                       <TruckIcon class="w-6 h-6 text-slate-800"/> Nuovo Viaggio
-                   </h2>
-                   <div class="mt-8">
-   <h3 class="text-sm font-black text-slate-400 uppercase tracking-widest mb-4">Viaggi in Corso ({{ allTrips.length }})</h3>
-   
-   <div v-if="allTrips.length === 0" class="text-sm text-slate-400 italic">Nessun viaggio attivo.</div>
 
-   <div class="space-y-3">
-       <div 
-         v-for="trip in allTrips" 
-         :key="trip.id"
-         class="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex justify-between items-center group hover:border-amber-200 transition-all"
-       >
-           <div>
-               <div class="font-bold text-slate-900 flex items-center gap-2">
-                   <TruckIcon class="w-4 h-4 text-slate-400"/>
-                   {{ trip.driverName }}
-               </div>
-               <div class="text-xs text-slate-500 mt-0.5">
-                   {{ new Date(trip.date).toLocaleDateString('it-IT') }} • {{ trip.stops.length }} Stop
-               </div>
-           </div>
-           
-           <button 
-             @click="inspectTrip(trip)"
-             class="bg-slate-50 text-slate-600 hover:bg-slate-900 hover:text-white px-3 py-1.5 rounded-lg text-xs font-bold transition-colors"
-           >
-             Vedi
-           </button>
-       </div>
-   </div>
-</div>
-                   <div class="space-y-4">
-                       <div>
-                           <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Data Partenza</label>
-                           <input v-model="newTrip.date" type="date" class="w-full bg-slate-50 border-none rounded-xl p-3 font-bold text-slate-700">
-                       </div>
-                       
-                       <div>
-                           <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Autista</label>
-                           <select v-model="newTrip.driverId" class="w-full bg-slate-50 border-none rounded-xl p-3 font-bold text-slate-700">
-                               <option value="" disabled>Seleziona Autista</option>
-                               <option v-for="d in drivers" :key="d.id" :value="d.id">{{ d.firstName }} {{ d.lastName }}</option>
-                           </select>
-                       </div>
-  
-                       <div class="bg-amber-50 rounded-xl p-4 border border-amber-100">
-                           <div class="text-center">
-                               <span class="block text-3xl font-black text-amber-500">{{ newTrip.selectedOrderIds.length }}</span>
-                               <span class="text-xs font-bold text-amber-800 uppercase">Ordini Selezionati</span>
-                           </div>
-                       </div>
-  
-                       <button 
-                          @click="createTrip"
-                          :disabled="!newTrip.driverId || newTrip.selectedOrderIds.length === 0"
-                          class="w-full py-4 rounded-xl bg-slate-900 text-white font-bold shadow-lg hover:bg-black disabled:opacity-50 disabled:cursor-not-allowed transition-all flex justify-center items-center gap-2"
-                       >
-                          <PlusIcon class="w-5 h-5"/> Crea Viaggio
-                       </button>
-                   </div>
-               </div>
-           </div>
-        </div>
-  
-        <div v-if="viewMode === 'DRIVER'" class="max-w-md mx-auto">
-            
-            <div v-if="!activeTrip" class="text-center py-20">
-                <div class="w-20 h-20 bg-white rounded-full flex items-center justify-center mx-auto mb-4 shadow-sm">
-                    <TruckIcon class="w-10 h-10 text-slate-300"/>
-                </div>
-                <h2 class="text-xl font-bold text-slate-900">Nessun Viaggio Attivo</h2>
-                <p class="text-slate-500 text-sm mt-2">Non hai viaggi pianificati per oggi o il viaggio è chiuso.</p>
-            </div>
-  
-            <div v-else>
-                <div class="bg-slate-900 rounded-[2rem] p-6 text-white shadow-xl mb-6 relative overflow-hidden">
-                    <div class="relative z-10">
-                        <div class="flex justify-between items-start mb-4">
-                            <div>
-                                <p class="text-xs text-slate-400 font-bold uppercase tracking-widest">Viaggio del</p>
-                                <h2 class="text-2xl font-black">{{ new Date(activeTrip.date).toLocaleDateString('it-IT') }}</h2>
-                            </div>
-                            <div class="bg-amber-400 text-black text-xs font-black px-2 py-1 rounded">
-                                {{ tripOrders.filter(o => o.stato !== 'DELIVERED').length }} / {{ tripOrders.length }} STOP
-                            </div>
-                        </div>
-                        
-                        <button @click="openNavigator" class="w-full bg-white/10 hover:bg-white/20 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 transition-colors border border-white/10 backdrop-blur-sm">
-                            <MapIcon class="w-5 h-5 text-amber-400"/> Avvia Navigatore Giro
-                        </button>
-                    </div>
-                    <div class="absolute -right-6 -bottom-10 w-32 h-32 bg-amber-500 rounded-full blur-3xl opacity-20"></div>
-                </div>
-  
-                <div class="space-y-0 relative pl-4">
-                    <div class="absolute left-[27px] top-4 bottom-4 w-0.5 bg-slate-200"></div>
-  
-                    <div v-for="(stop, index) in tripOrders" :key="stop.id" class="relative pb-8 last:pb-0">
-                        
-                        <div class="absolute left-0 top-0 w-6 h-6 rounded-full border-2 z-10 flex items-center justify-center bg-white"
-                             :class="stop.stato === 'DELIVERED' ? 'border-green-500' : (index === 0 || tripOrders[index-1]?.stato === 'DELIVERED' ? 'border-amber-500 scale-110' : 'border-slate-300')">
-                             <div v-if="stop.stato === 'DELIVERED'" class="w-2.5 h-2.5 bg-green-500 rounded-full"></div>
-                             <div v-else-if="index === 0 || tripOrders[index-1]?.stato === 'DELIVERED'" class="w-2.5 h-2.5 bg-amber-500 rounded-full animate-pulse"></div>
-                        </div>
-  
-                        <div class="ml-10 bg-white rounded-2xl p-4 shadow-sm border transition-all"
-                          :class="stop.stato === 'DELIVERED' ? 'border-green-100 opacity-60' : 'border-slate-100'">
-                          
-                          <div class="flex justify-between items-start">
-                              <h3 class="font-bold text-slate-900 truncate pr-2">{{ stop.cliente }}</h3>
-                              
-                              <div class="flex items-center gap-2">
-                                  <div v-if="stop.stato !== 'DELIVERED' && activeTrip?.status === 'OPEN'" class="flex flex-col gap-1">
-                                      <button 
-                                        @click.stop="moveStop(index, 'UP')" 
-                                        :disabled="index === 0"
-                                        class="p-1 rounded bg-slate-100 hover:bg-amber-100 disabled:opacity-20 disabled:cursor-not-allowed"
-                                      >
-                                        <ChevronUpIcon class="w-3 h-3 text-slate-600"/>
-                                      </button>
-                                      <button 
-                                        @click.stop="moveStop(index, 'DOWN')" 
-                                        :disabled="index === tripOrders.length - 1"
-                                        class="p-1 rounded bg-slate-100 hover:bg-amber-100 disabled:opacity-20 disabled:cursor-not-allowed"
-                                      >
-                                        <ChevronDownIcon class="w-3 h-3 text-slate-600"/>
-                                      </button>
-                                  </div>
-
-                                  <span class="text-[10px] font-bold bg-slate-100 px-1.5 py-0.5 rounded text-slate-500 whitespace-nowrap">
-                                      STOP {{ index + 1 }}
-                                  </span>
-                              </div>
-                          </div>
-                          
-                          <p class="text-sm text-slate-500 mt-1 flex items-start gap-1">
-                              <MapPinIcon class="w-4 h-4 shrink-0 mt-0.5 text-slate-400"/> 
-                              {{ stop.indirizzoConsegna }}
-                          </p>
-
-                          <div v-if="stop.stato !== 'DELIVERED'" class="mt-4 flex gap-2">
-                              <button 
-                                  @click="openDeliveryModal(stop)"
-                                  class="flex-1 bg-slate-900 text-white text-xs font-bold py-2.5 rounded-xl hover:bg-black transition-colors"
-                              >
-                                  Consegna
-                              </button>
-                          </div>
-                          <div v-else class="mt-2 text-xs font-bold text-green-600 flex items-center gap-1">
-                              <CheckCircleIcon class="w-4 h-4"/> Consegnato
-                          </div>
+              <div v-if="groupedTripStops.length > 0 && groupedTripStops.every(g => g.status === 'DELIVERED')" class="mt-8 pb-10 animate-in zoom-in duration-300">
+                  <div class="bg-green-500/10 p-6 rounded-[2rem] text-center border border-green-500/20 mb-4">
+                      <div class="w-16 h-16 bg-green-500 text-white rounded-full flex items-center justify-center mx-auto mb-3 shadow-lg shadow-green-500/30">
+                          <CheckCircleIcon class="w-8 h-8"/>
                       </div>
-                    </div>
-                </div>
-  
-                <div v-if="tripOrders.length > 0 && tripOrders.every(o => o.stato === 'DELIVERED')" class="mt-8">
-                    <button @click="closeTrip" class="w-full py-4 bg-green-500 text-white font-bold rounded-2xl shadow-lg shadow-green-200">
-                        Termina Giro e Chiudi Viaggio
-                    </button>
-                </div>
-  
-            </div>
+                      <h3 class="text-green-800 font-black text-xl mb-1">Giro Completato!</h3>
+                      <p class="text-green-700/80 text-sm">Tutte le consegne sono state effettuate.</p>
+                  </div>
+                  
+                  <button @click="closeTrip" class="w-full py-4 bg-slate-900 text-white font-bold rounded-2xl shadow-xl shadow-slate-900/20 hover:bg-black active:scale-[0.98] transition-all">
+                      Termina e Chiudi Viaggio
+                  </button>
+              </div>
+
+          </div>
+      </div>
+
+    </main>
+
+    <DeliveryModal 
+      :show="showDeliveryModal" 
+      :order="selectedOrderForDelivery" 
+      @close="showDeliveryModal = false"
+      @confirm="handleConfirmDelivery"
+    />
+
+    <div v-if="confirmModal.show" class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+      <div class="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-8 text-center transform transition-all scale-100">
+        <div class="w-12 h-12 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto mb-4">
+            <SparklesIcon class="w-6 h-6"/>
         </div>
-  
-      </main>
-  
-      <DeliveryModal 
-        :show="showDeliveryModal" 
-        :order="selectedOrderForDelivery" 
-        @close="showDeliveryModal = false"
-        @confirm="handleConfirmDelivery"
-      />
-  
-    </div>
-    <div v-if="confirmModal.show" class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm">
-      <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 text-center">
-        <h3 class="text-lg font-bold text-gray-900 mb-2">Conferma Azione</h3>
-        <p class="text-gray-500 mb-6 text-sm">{{ confirmModal.message }}</p>
-        <div class="flex gap-3 justify-center">
-          <button @click="confirmModal.show = false" class="px-4 py-2 rounded-lg text-gray-600 font-bold hover:bg-gray-100">Annulla</button>
-          <button @click="confirmModal.onConfirm" class="px-6 py-2 rounded-lg bg-green-600 text-white font-bold hover:bg-green-500 shadow-md">Conferma</button>
+        <h3 class="text-xl font-black text-slate-900 mb-2">Conferma</h3>
+        <p class="text-slate-500 mb-8 text-sm leading-relaxed">{{ confirmModal.message }}</p>
+        <div class="grid grid-cols-2 gap-3">
+          <button @click="confirmModal.show = false" class="px-4 py-3 rounded-xl text-slate-600 font-bold hover:bg-slate-50 transition-colors">Annulla</button>
+          <button @click="confirmModal.onConfirm" class="px-4 py-3 rounded-xl bg-slate-900 text-white font-bold hover:bg-black shadow-lg shadow-slate-900/10 transition-transform active:scale-95">Procedi</button>
         </div>
       </div>
     </div>
-  </template>
+
+  </div>
+</template>
+
+<style scoped>
+/* Scrollbar personalizzata per la lista viaggi admin */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 20px;
+}
+</style>  

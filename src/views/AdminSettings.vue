@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { ref, onMounted, reactive, computed } from 'vue';
-  import { collection, getDocs, addDoc, updateDoc, doc, serverTimestamp, query, orderBy, setDoc, getDoc } from 'firebase/firestore';  import { httpsCallable } from 'firebase/functions';
+  import { collection, getDocs, updateDoc, doc, serverTimestamp, query, orderBy, setDoc, getDoc } from 'firebase/firestore';  import { httpsCallable } from 'firebase/functions';
   import { db, functions } from '../firebase';
   import Papa from 'papaparse';
   import { useCatalogStore } from '../Data/catalog'; // <--- AGGIUNGI QUESTO
@@ -78,10 +78,33 @@ const globalPricing = reactive<{
   // Selezione Clienti
   const selectedClientIds = ref<string[]>([]);
   
-  // Form Membro
-  const memberForm = reactive({
-    firstName: '', lastName: '', email: '', role: 'COMMERCIALE', phone: '', active: true, color: 'bg-blue-500'
-  });
+
+// Form Membro
+const memberForm = reactive({
+  firstName: '',
+  lastName: '',
+  email: '',
+  role: 'PRODUZIONE' as 'ADMIN' | 'PRODUZIONE' | 'COMMERCIALE' | 'LOGISTICA',
+  phone: '',
+  password: '', // Campo Password
+  active: true, // <--- RIPRISTINATO (Risolve l'errore TS)
+  color: 'bg-blue-500' // <--- RIPRISTINATO (Serve per l'avatar)
+});
+
+const resetMemberForm = () => {
+  memberForm.firstName = '';
+  memberForm.lastName = '';
+  memberForm.email = '';
+  memberForm.role = 'PRODUZIONE';
+  memberForm.phone = '';
+  memberForm.password = '';
+  memberForm.active = true; // <--- Reset active
+  // memberForm.color non serve resettarlo qui se lo gestisci in openAddMember, 
+  // ma per sicurezza puoi rimettere un default o lasciarlo stare.
+  currentMemberId.value = null;
+  isEditing.value = false;
+};
+
   const currentMemberId = ref<string | null>(null);
   
   // Form Cliente
@@ -247,19 +270,62 @@ const catalogStore = useCatalogStore();
     showMemberModal.value = true;
   };
   
+
   const saveMember = async () => {
-    if (!memberForm.firstName || !memberForm.lastName || !memberForm.email) return showCustomToast("Dati mancanti");
-    try {
-      const payload = { ...memberForm, lastUpdate: serverTimestamp() };
-      if (isEditing.value && currentMemberId.value) {
-        await updateDoc(doc(db, 'team', currentMemberId.value), payload);
-      } else {
-        await addDoc(collection(db, 'team'), { ...payload, createdAt: serverTimestamp() });
+  if (!memberForm.firstName || !memberForm.lastName || !memberForm.email) {
+    return showCustomToast("Dati mancanti (Nome, Cognome, Email)");
+  }
+
+  // Se è un NUOVO utente, la password è obbligatoria
+  if (!isEditing.value && !memberForm.password) {
+    return showCustomToast("Inserisci una password per il nuovo utente.");
+  }
+  
+  // Se la password c'è ma è troppo corta
+  if (!isEditing.value && memberForm.password.length < 6) {
+    return showCustomToast("La password deve essere di almeno 6 caratteri.");
+  }
+
+  try {
+    if (isEditing.value) {
+      // --- MODIFICA (Resta su Firestore diretto) ---
+      // Nota: Non modifichiamo la password qui, solo i dati anagrafici
+      if (currentMemberId.value) {
+         await updateDoc(doc(db, 'team', currentMemberId.value), {
+            firstName: memberForm.firstName,
+            lastName: memberForm.lastName,
+            role: memberForm.role,
+            phone: memberForm.phone,
+            lastUpdate: serverTimestamp()
+         });
+         showCustomToast("Membro aggiornato correttamente");
       }
-      showMemberModal.value = false;
-      fetchData(); 
-    } catch (e) { showCustomToast("Errore salvataggio"); }
-  };
+    } else {
+      // --- CREAZIONE (Chiama Cloud Function) ---
+      showCustomToast("Creazione utente in corso..."); // Feedback visivo
+      
+      const createFn = httpsCallable(functions, 'createTeamMember');
+      await createFn({
+        email: memberForm.email,
+        password: memberForm.password,
+        firstName: memberForm.firstName,
+        lastName: memberForm.lastName,
+        role: memberForm.role,
+        phone: memberForm.phone
+      });
+
+      showCustomToast("Utente e Accesso creati con successo!");
+    }
+
+    showMemberModal.value = false;
+    fetchData(); // Ricarica la lista
+    resetMemberForm();
+    
+  } catch (e: any) { 
+    console.error(e);
+    showCustomToast("Errore: " + (e.message || "Impossibile salvare")); 
+  }
+};
   
   // --- AZIONI CLIENTI ---
   const handleCsvUpload = (event: Event) => {
@@ -750,16 +816,18 @@ const catalogStore = useCatalogStore();
                  </div>
               </div>
   
-              <div v-if="!isEditing"> <label class="block text-xs font-bold text-slate-400 uppercase mb-2">Colore Avatar</label>
-                 <div class="flex gap-2 flex-wrap">
-                    <div 
-                    v-for="c in avatarColors" 
-                    :key="c"
-                    @click="memberForm.color = c"
-                    class="w-8 h-8 rounded-full cursor-pointer transition-transform hover:scale-110 ring-2 ring-offset-2"
-                    :class="[c, memberForm.color === c ? 'ring-slate-400' : 'ring-transparent']"
-                    ></div>
-                 </div>
+              <div v-if="!isEditing" class="animate-in fade-in slide-in-from-top-2">
+                <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Password Iniziale *</label>
+                <div class="relative">
+                  <KeyIcon class="w-5 h-5 text-slate-400 absolute left-3 top-3" />
+                  <input 
+                    v-model="memberForm.password" 
+                    type="text" 
+                    class="w-full bg-slate-50 border-none rounded-xl py-3 pl-10 font-bold text-slate-700 focus:ring-2 focus:ring-amber-400" 
+                    placeholder="Es. Inglesina2025!"
+                  >
+                </div>
+                <p class="text-[10px] text-slate-400 mt-1 pl-1">Minimo 6 caratteri. Comunica questa password all'utente.</p>
               </div>
   
               <div class="flex items-center gap-3 bg-slate-50 p-3 rounded-xl mt-4 cursor-pointer" @click="memberForm.active = !memberForm.active">

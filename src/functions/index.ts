@@ -160,6 +160,57 @@ const DELIVERY_TARIFF_CODES = [
 const VAT_ID = 0;   
 const VAT_VALUE = 22; 
 
+export const createTeamMember = functions
+  .region('europe-west1') 
+  .https.onCall(async (data, context) => {
+    // 1. Verifica che chi chiama sia loggato (e idealmente Admin)
+    if (!context.auth) {
+      throw new functions.https.HttpsError(
+        "unauthenticated",
+        "Devi essere loggato per creare un membro del team."
+      );
+    }
+  
+    const { email, password, firstName, lastName, role, phone } = data;
+  
+    if (!email || !password || !role) {
+      throw new functions.https.HttpsError("invalid-argument", "Dati mancanti.");
+    }
+  
+    try {
+      // 2. Crea l'utente in Firebase Authentication
+      const userRecord = await admin.auth().createUser({
+        email: email,
+        password: password, // La password scelta dall'Admin
+        displayName: `${firstName} ${lastName}`,
+        disabled: false,
+      });
+  
+      // 3. Crea il documento nel Database 'team' (usando l'email come ID per coerenza con le tue regole)
+      await admin.firestore().collection("team").doc(email.toLowerCase().trim()).set({
+        uid: userRecord.uid,
+        email: email.toLowerCase().trim(),
+        firstName,
+        lastName,
+        role,
+        phone: phone || "",
+        active: true,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        createdBy: context.auth.uid
+      });
+  
+      return { success: true, message: `Utente ${email} creato con successo.` };
+  
+    } catch (error: any) {
+      console.error("Errore creazione team member:", error);
+      // Se l'utente esiste già in Auth ma non nel DB, potremmo gestire l'errore qui
+      if (error.code === 'auth/email-already-exists') {
+         throw new functions.https.HttpsError("already-exists", "L'email è già in uso.");
+      }
+      throw new functions.https.HttpsError("internal", "Impossibile creare l'utente: " + error.message);
+    }
+  });
+
 // --- HELPER DATE ---
 function calcolaScadenza(giorni: number, tipo: string): string {
     const data = new Date();

@@ -39,7 +39,7 @@
   }
 };
 
-  const handleLogin = async () => {
+const handleLogin = async () => {
     if (!username.value || !password.value) {
       errorMsg.value = "Inserisci le credenziali per accedere.";
       return;
@@ -53,39 +53,56 @@
       const userCredential = await signInWithEmailAndPassword(auth, username.value, password.value);
       const user = userCredential.user;
   
-      // 2. Controllo Ruoli Speciali (Admin/Produzione)
+      // 2. Controllo Super Admin (Accesso di emergenza)
       if (user.email === 'info@inglesinaitaliana.it') {
         router.push('/admin');
         return;
       }
-      if (user.email === 'lavorazioni.inglesinaitaliana@gmail.com') {
-        router.push('/production');
-        return;
+
+      // --- NUOVO: 3. Controllo TEAM (Database) ---
+      // Verifichiamo se l'utente esiste nella collezione 'team'
+      const emailKey = user.email?.toLowerCase().trim();
+      if (emailKey) {
+        const teamDocRef = doc(db, 'team', emailKey);
+        const teamDoc = await getDoc(teamDocRef);
+
+        if (teamDoc.exists()) {
+          const role = teamDoc.data().role; // 'ADMIN', 'PRODUZIONE', 'LOGISTICA'
+          
+          // Reindirizzamento in base al ruolo
+          if (role === 'PRODUZIONE') {
+            router.push('/production');
+          } else if (role === 'LOGISTICA') {
+            router.push('/delivery');
+          } else {
+            // ADMIN, COMMERCIALE o altri
+            router.push('/admin');
+          }
+          return; // Login completato per il team
+        }
       }
   
-      // 3. Controllo Cliente Standard
+      // 4. Controllo CLIENTE Standard (Users)
       const userDocRef = doc(db, 'users', user.uid);
       const userDoc = await getDoc(userDocRef);
   
       if (userDoc.exists()) {
         const userData = userDoc.data();
         
-        // Controllo 1: Cambio Password Obbligatorio
+        // Controllo: Cambio Password Obbligatorio
         if (userData.mustChangePassword) {
-          // Salviamo il nome per personalizzare il saluto nell'onboarding
           localStorage.setItem('tempClientName', userData.ragioneSociale || 'Cliente');
           router.push('/onboarding');
           return;
         }
   
-        // Accesso consentito -> Dashboard
-        localStorage.setItem('clientName', userData.ragioneSociale || user.email);
+        // Accesso consentito -> Dashboard Cliente
+        localStorage.setItem('clientName', userData.ragioneSociale || user.email || 'Cliente');
         localStorage.setItem('clientEmail', user.email || '');
         router.push('/dashboard');
   
       } else {
-        // Profilo Non Esiste -> BLOCCO ACCESSO
-        // Logout immediato perché l'utente tecnicamente si è loggato su Auth ma non è autorizzato su Firestore
+        // Profilo Non Esiste né in Team né in Users -> BLOCCO
         await signOut(auth);
         errorMsg.value = "Utenza non configurata. Contattaci su info@inglesinaitaliana.it";
       }
@@ -103,7 +120,8 @@
       loading.value = false;
     }
   };
-  </script>
+  
+</script>
   
   <template>
     <div class="min-h-screen flex font-sans text-gray-800 bg-white overflow-hidden">
@@ -120,15 +138,14 @@
             Portale Partner B2B
           </div>
           <h2 class="text-4xl font-heading font-bold leading-tight">
-            La sintesi perfetta di <br>
-            <span class="text-yellow-400">Tradizione</span> e <span class="text-white">Modernità</span>.
+            Inglesina italiana.<br>
+            <span class="text-yellow-400">Stile </span><span class="text-white">senza tempo</span>.
           </h2>
         </div>
   
         <div class="relative z-10 space-y-6 max-w-md">
           <p class="text-gray-300 text-lg leading-relaxed font-light">
-            Elementi di arredo unici, altamente personalizzabili e dalla indiscussa versatilità. 
-            Le nostre Inglesine sono inserite all'interno del vetro camera.
+            Scrivici a info@inglesinaitaliana.it se vuoi ottenere l'accesso.
           </p>
           
           <div class="pt-6 border-t border-white/10">
@@ -200,8 +217,6 @@
             </svg>
             <span class="text-sm text-green-700 font-medium">{{ infoMsg }}</span>
           </div>
-          <div v-if="errorMsg" class="p-3 rounded-md bg-red-50 border border-red-100 flex items-center gap-2">
-            </div>
             <div v-if="errorMsg" class="p-3 rounded-md bg-red-50 border border-red-100 flex items-center gap-2">
               <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 text-red-500" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clip-rule="evenodd" /></svg>
               <span class="text-sm text-red-600 font-medium">{{ errorMsg }}</span>

@@ -31,7 +31,9 @@ import {
   DocumentTextIcon,
   TruckIcon,
   ChevronUpDownIcon,
-  CheckIcon
+  CheckIcon,
+  MinusIcon,
+  PlusIcon
 } from '@heroicons/vue/24/solid'
 
 const currentPriceList = ref('2026-a');
@@ -1773,119 +1775,142 @@ onMounted(async() => {
         </div>
       </div>
     </div>
-    <div v-if="showOrderDateModal" class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm transition-opacity overflow-y-auto">
-  <div class="bg-white rounded-[2rem] shadow-2xl max-w-lg w-full p-6 text-center transform transition-all scale-100 animate-in fade-in zoom-in duration-200 my-8">
-    
-    <div class="flex justify-center mb-4">
-      <div class="h-12 w-12 rounded-full bg-amber-100 flex items-center justify-center text-amber-600 shadow-sm">
-        <ShoppingCartIcon class="h-6 w-6"/>
-      </div>
-    </div>
+    <div v-if="showOrderDateModal" class="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-4 sm:p-6 bg-gray-900/60 backdrop-blur-sm transition-opacity overflow-y-auto">
+      <div class="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden animate-in fade-in zoom-in duration-200 border border-gray-100 flex flex-col max-h-[90vh]">
+        
+        <div class="bg-gradient-to-r from-amber-50 to-white p-6 pb-4 border-b border-amber-100 flex items-start gap-4">
+          <div class="h-12 w-12 rounded-2xl bg-amber-400 text-amber-950 flex items-center justify-center shadow-lg shadow-amber-200 shrink-0">
+            <ShoppingCartIcon class="h-6 w-6"/>
+          </div>
+          <div>
+            <h3 class="text-xl font-bold font-heading text-gray-900 leading-tight">Conferma e Invia</h3>
+            <p class="text-sm text-gray-500 mt-1">Verifica i dati finali prima di procedere con l'ordine di produzione.</p>
+          </div>
+        </div>
+        
+        <div class="p-6 space-y-6 overflow-y-auto custom-scrollbar">
+          
+          <div class="space-y-2">
+            <label class="text-xs font-bold text-gray-400 uppercase tracking-wider ml-1">Data Consegna Richiesta</label>
+            <div class="relative group">
+              <input 
+                type="date" 
+                v-model="orderDateInput" 
+                :min="minDateStr" 
+                :max="maxDateStr"
+                class="w-full bg-gray-50 border border-gray-200 text-gray-800 text-sm font-bold rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-amber-400 focus:bg-white transition-all cursor-pointer shadow-sm group-hover:border-amber-300"
+              >
+              <div class="text-[10px] text-amber-600 font-medium mt-1.5 flex items-center gap-1 bg-amber-50 inline-block px-2 py-0.5 rounded-md border border-amber-100">
+                <InformationCircleIcon class="w-3 h-3"/> Produzione minima: {{ minDays }} giorni lavorativi
+              </div>
+            </div>
+          </div>
 
-    <h3 class="text-xl font-bold text-gray-900 mb-2">Conferma Ordine</h3>
-    <p class="text-gray-500 mb-6 text-sm">Completa i dati richiesti per inviare l'ordine.</p>
-    
-    <div class="text-left mb-4 bg-amber-50 p-4 rounded-xl border border-amber-100">
-      <label class="block text-xs font-bold text-amber-800 uppercase mb-2">Data Desiderata *</label>
-      <input 
-        type="date" 
-        v-model="orderDateInput" 
-        :min="minDateStr" 
-        :max="maxDateStr"
-        class="w-full bg-white border border-amber-200 rounded-lg p-3 font-bold text-gray-800 outline-none focus:ring-2 focus:ring-amber-400"
-      >
-      <p class="text-[10px] text-amber-700 mt-2">
-        Minimo {{ minDays }} giorni per la produzione.
-      </p>
-    </div>
+          <div class="space-y-2">
+            <label class="text-xs font-bold text-gray-400 uppercase tracking-wider ml-1">Detrazione</label>
+            <div class="bg-gray-50 rounded-xl p-1.5 border border-gray-200 flex items-center justify-between shadow-sm">
+              
+              <button 
+                @click="!isDetractionLocked && currentDetraction > 0 ? currentDetraction-- : null"
+                :disabled="isDetractionLocked || currentDetraction <= 0"
+                class="w-10 h-10 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-500 shadow-sm hover:bg-gray-100 hover:text-red-500 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <MinusIcon class="w-5 h-5"/>
+              </button>
 
-    <div class="mb-4 bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between text-left">
-      <div>
-        <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Detrazione</label>
-        <p class="text-[10px] text-gray-500">Applicata a questa commessa</p>
-      </div>
-      
-      <div class="flex items-center gap-3">
-        <div class="relative">
-          <input 
-            type="number" 
-            v-model="currentDetraction" 
-            :disabled="isDetractionLocked"
-            class="w-20 text-center font-bold text-lg border rounded-lg py-2 outline-none transition-colors"
-            :class="isDetractionLocked ? 'bg-gray-100 text-gray-500 border-transparent' : 'bg-white text-amber-900 border-amber-300 ring-2 ring-amber-100'"
+              <div class="flex flex-col items-center w-full px-2 relative">
+                <input 
+                  type="number" 
+                  v-model="currentDetraction" 
+                  :disabled="isDetractionLocked"
+                  class="w-full text-center bg-transparent text-xl font-bold text-gray-800 outline-none focus:outline-none focus:ring-0 border-none p-0 appearance-none m-0"
+                >
+                <span class="text-[9px] font-bold text-gray-400 uppercase tracking-widest mt-0.5">Valore</span>
+              </div>
+
+              <button 
+                @click="!isDetractionLocked && currentDetraction < 100 ? currentDetraction++ : null"
+                :disabled="isDetractionLocked || currentDetraction >= 100"
+                class="w-10 h-10 flex items-center justify-center rounded-lg bg-white border border-gray-200 text-gray-500 shadow-sm hover:bg-gray-100 hover:text-green-600 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <PlusIcon class="w-5 h-5"/>
+              </button>
+
+              <div class="w-px h-8 bg-gray-200 mx-2"></div>
+              
+              <button 
+                @click="isDetractionLocked = !isDetractionLocked"
+                class="w-10 h-10 flex items-center justify-center rounded-lg transition-colors shrink-0"
+                :class="isDetractionLocked ? 'bg-gray-200 text-gray-500' : 'bg-amber-400 text-amber-950 shadow-md'"
+                title="Sblocca modifica"
+              >
+                <LockClosedIcon v-if="isDetractionLocked" class="w-5 h-5" />
+                <LockOpenIcon v-else class="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          <div class="space-y-2">
+            <div class="flex justify-between items-end">
+              <label class="text-xs font-bold text-gray-400 uppercase tracking-wider ml-1">Allegati Tecnici</label>
+              <span v-if="listaAllegati.length === 0" class="text-[10px] text-red-400 font-bold">* Richiesti per curve/tacche</span>
+            </div>
+
+            <div class="border-2 border-dashed border-gray-300 rounded-xl bg-gray-50/50 hover:bg-amber-50 hover:border-amber-300 transition-colors relative group p-4 text-center cursor-pointer">
+              <input 
+                type="file" 
+                @change="uploadFile" 
+                :disabled="isUploading"
+                class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+              />
+              <div class="flex flex-col items-center gap-2 pointer-events-none">
+                <div class="p-2 bg-white rounded-full shadow-sm text-amber-500 group-hover:scale-110 transition-transform">
+                  <DocumentTextIcon class="w-6 h-6"/>
+                </div>
+                <p class="text-xs font-bold text-gray-600 group-hover:text-amber-700">
+                  {{ isUploading ? 'Caricamento in corso...' : 'Clicca o trascina qui i file' }}
+                </p>
+              </div>
+            </div>
+
+            <div v-if="listaAllegati.length > 0" class="flex flex-col gap-2 mt-2 max-h-32 overflow-y-auto custom-scrollbar pr-1">
+              <div v-for="(file, index) in listaAllegati" :key="index" class="flex justify-between items-center bg-white p-2.5 rounded-lg border border-gray-100 shadow-sm hover:border-blue-200 transition-colors">
+                <div class="flex items-center gap-3 overflow-hidden">
+                  <div class="h-8 w-8 rounded bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 font-bold text-xs uppercase">
+                    {{ file.tipo || 'DOC' }}
+                  </div>
+                  <span class="truncate text-sm font-medium text-gray-700">{{ file.nome }}</span>
+                </div>
+                <button @click="rimuoviAllegato(index)" class="text-gray-300 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-md transition-all">
+                  <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+                  </svg>
+                </button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <div class="p-4 bg-gray-50 border-t border-gray-200 flex gap-3 justify-end">
+          <button 
+            @click="showOrderDateModal = false" 
+            class="px-5 py-2.5 rounded-xl text-gray-500 font-bold hover:bg-white hover:text-gray-700 hover:shadow-sm border border-transparent hover:border-gray-200 transition-all text-sm"
           >
-        </div>
-
-        <button 
-          @click="isDetractionLocked = !isDetractionLocked"
-          class="p-2 rounded-full transition-colors"
-          :class="isDetractionLocked ? 'bg-gray-100 text-gray-400 hover:bg-gray-200' : 'bg-amber-100 text-amber-600 hover:bg-amber-200'"
-        >
-          <LockClosedIcon v-if="isDetractionLocked" class="w-5 h-5" />
-          <LockOpenIcon v-else class="w-5 h-5" />
-        </button>
-      </div>
-    </div>
-
-    <div class="mb-6 p-4 rounded-xl border border-gray-200 bg-gray-50 text-left">
-      <label class="block text-xs font-bold text-gray-700 uppercase mb-2">Allegati Tecnici</label>
-      
-      <div class="flex items-center gap-2 mb-3">
-        <div class="relative w-full">
-           <input 
-            type="file" 
-            @change="uploadFile" 
-            :disabled="isUploading"
-            class="block w-full text-sm text-gray-500
-              file:mr-4 file:py-2 file:px-4
-              file:rounded-full file:border-0
-              file:text-xs file:font-semibold
-              file:bg-amber-50 file:text-amber-700
-              hover:file:bg-amber-100 cursor-pointer"
-          />
-          <div v-if="isUploading" class="absolute right-0 top-1/2 -translate-y-1/2 text-xs font-bold text-amber-500 bg-white px-2">
-            Caricamento...
-          </div>
-        </div>
-      </div>
-
-      <div v-if="listaAllegati.length > 0" class="flex flex-col gap-2 max-h-40 overflow-y-auto">
-        <div v-for="(file, index) in listaAllegati" :key="index" class="flex justify-between items-center bg-white p-2 rounded border border-gray-200 text-xs shadow-sm">
-          <div class="flex items-center gap-2 overflow-hidden">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-green-500 shrink-0" viewBox="0 0 20 20" fill="currentColor">
-              <path fill-rule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4zm2 6a1 1 0 011-1h6a1 1 0 110 2H7a1 1 0 01-1-1zm1 3a1 1 0 100 2h6a1 1 0 100-2H7z" clip-rule="evenodd" />
-            </svg>
-            <span class="truncate max-w-[200px] font-medium text-gray-700">{{ file.nome }}</span>
-          </div>
-          <button @click="rimuoviAllegato(index)" class="text-gray-400 hover:text-red-500 transition-colors p-1">
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-              <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
-            </svg>
+            Annulla
+          </button>
+          <button 
+            @click="confermaOrdineConData" 
+            :disabled="!orderDateInput || isUploading"
+            class="px-8 py-2.5 rounded-xl bg-amber-400 text-amber-950 font-bold shadow-md hover:bg-amber-300 hover:shadow-lg active:translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none flex items-center gap-2 text-sm"
+          >
+            <span>Conferma Ordine</span>
+            <CheckIcon class="w-5 h-5"/>
           </button>
         </div>
-      </div>
-      <div v-else class="text-[10px] text-gray-400 italic text-center py-2">
-        Nessun allegato caricato.
-      </div>
-      
-      <p class="text-[10px] text-gray-500 mt-2 italic border-t pt-2">
-        * Obbligatorio allegare disegni per lavorazioni curve, tacche o fuori squadro.
-      </p>
-    </div>
 
-    <div class="flex gap-3 justify-center">
-      <button @click="showOrderDateModal = false" class="px-4 py-2 rounded-full text-gray-600 font-bold hover:bg-gray-100 transition-colors border border-transparent hover:border-gray-200">
-        Annulla
-      </button>
-      <button 
-        @click="confermaOrdineConData" 
-        :disabled="!orderDateInput || isUploading"
-        class="px-8 py-2.5 rounded-full bg-amber-400 text-amber-950 font-bold hover:bg-amber-300 shadow-md transition-transform active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none">
-        Conferma e Invia
-      </button>
+      </div>
     </div>
-  </div>
-</div>
 </template>
 
 <style scoped>
@@ -1902,5 +1927,32 @@ onMounted(async() => {
 .card-dati-commessa {
   /* Imposta un margine di 24px sopra l'elemento quando viene portato in vista */
   scroll-margin-top: 24px; 
+}
+/* Rimuove frecce input number standard (Chrome, Safari, Edge, Opera) */
+input[type=number]::-webkit-inner-spin-button, 
+input[type=number]::-webkit-outer-spin-button { 
+  -webkit-appearance: none; 
+  margin: 0; 
+}
+
+/* Rimuove frecce input number per Firefox e Standard */
+input[type=number] {
+  -moz-appearance: textfield; /* Per Firefox vecchie versioni */
+  appearance: textfield;      /* Proprietà standard moderna */
+}
+
+/* Scrollbar personalizzata per le aree interne */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #f1f1f1; 
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #d1d5db; 
+  border-radius: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af; 
 }
 </style>

@@ -1,7 +1,8 @@
 <script setup lang="ts">
   import { ref, reactive, computed, onMounted } from 'vue';
   import { useRoute, useRouter } from 'vue-router';
-  import { auth, functions } from '../firebase'; 
+  import { auth, functions, db } from '../firebase'; 
+  import { doc, getDoc } from 'firebase/firestore';  // <--- AGGIUNGI QUESTA RIGA
   import { httpsCallable } from 'firebase/functions';
   import { onAuthStateChanged } from 'firebase/auth';
   import { 
@@ -30,18 +31,48 @@
   // Stato Reattivo
   const currentUserEmail = ref<string | null>(null);
   const isAuthReady = ref(false);
+  const role = ref<string | null>(null); // <--- NUOVO STATO RUOLO
   
   // Ascolta i cambiamenti di stato dell'autenticazione
   onMounted(() => {
-    onAuthStateChanged(auth, (user) => {
-      currentUserEmail.value = user?.email || null;
-      isAuthReady.value = true;
-    });
+  onAuthStateChanged(auth, async (user) => {
+    currentUserEmail.value = user?.email || null;
+    isAuthReady.value = true;
+
+    if (user?.email) {
+      // 1. FIX: Se è il Super Admin, forza il ruolo ADMIN immediatamente
+      if (user.email === 'info@inglesinaitaliana.it') {
+        role.value = 'ADMIN';
+        return; // Interrompi qui, non serve cercare nel DB
+      }
+
+      // 2. Altrimenti cerca nel DB Team
+      try {
+        const emailKey = user.email.toLowerCase().trim();
+        const teamSnap = await getDoc(doc(db, 'team', emailKey));
+        if (teamSnap.exists()) {
+          role.value = teamSnap.data().role;
+        }
+      } catch (e) {
+        console.error("Errore recupero ruolo", e);
+      }
+    }
   });
+});
   
   // Calcola se è admin
-  const isAdmin = computed(() => currentUserEmail.value === 'info@inglesinaitaliana.it');
   
+  const visibleLinks = computed(() => {
+    if (role.value === 'ADMIN') return adminLinks; // L'Admin vede tutto
+    if (role.value === 'PRODUZIONE') {
+      return adminLinks.filter(l => l.route === '/production' || l.route === '/delivery');
+    }
+    if (role.value === 'LOGISTICA') return adminLinks.filter(l => l.route === '/delivery');
+    return []; // I clienti o ruoli sconosciuti non vedono link admin
+  });
+
+  const isTeamMember = computed(() => !!role.value);
+
   // Navigazione Menu Admin
   const adminLinks = [
     { label: 'Admin Dashboard', route: '/admin', icon: ChartBarIcon, color: 'text-indigo-600', bg: 'bg-indigo-50' },
@@ -142,7 +173,7 @@
   
           <div class="px-5 py-2 text-[10px] font-extrabold text-gray-400 uppercase tracking-widest">Azioni Rapide</div>
           
-          <button v-if="!isAdmin" @click="avviaNuovoPreventivo" class="flex items-center gap-4 w-full px-3 py-3 rounded-2xl hover:bg-amber-50 transition-colors group relative overflow-hidden">
+          <button v-if="!isTeamMember" @click="avviaNuovoPreventivo" class="flex items-center gap-4 w-full px-3 py-3 rounded-2xl hover:bg-amber-50 transition-colors group relative overflow-hidden">
             <div class="absolute inset-0 bg-amber-100/50 scale-x-0 group-hover:scale-x-100 transition-transform origin-left duration-500 ease-out rounded-2xl"></div>
             <div class="relative bg-amber-400/20 p-2 rounded-xl group-hover:bg-amber-400 group-hover:text-white transition-colors duration-300">
               <PlusCircleIcon class="h-5 w-5 text-amber-600 group-hover:text-white transition-colors" />
@@ -164,16 +195,16 @@
             </div>
           </button>
   
-          <template v-if="isAdmin">
+          <template v-if="visibleLinks.length > 0">
             <div class="h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent my-3 mx-4"></div>
             <div class="px-5 py-1 text-[10px] font-extrabold text-gray-400 uppercase tracking-widest flex items-center gap-2">
               <SparklesIcon class="w-3 h-3 text-amber-400" />
-              Amministrazione
+              {{ role === 'ADMIN' ? 'Amministrazione' : 'Menu Team' }}
             </div>
-            
+
             <div class="grid grid-cols-1 gap-1 p-1">
               <button 
-                v-for="link in adminLinks" 
+                v-for="link in visibleLinks" 
                 :key="link.route"
                 @click="navigateTo(link.route)"
                 class="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl hover:bg-gray-50 transition-all group"

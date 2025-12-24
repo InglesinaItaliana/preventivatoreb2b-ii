@@ -1,7 +1,14 @@
 <script setup lang="ts">
-import { RouterView } from 'vue-router'
-import { onMounted } from 'vue';
+import { RouterView, useRoute } from 'vue-router'
+import { onMounted, computed } from 'vue';
 import GlobalBugReporter from './components/GlobalBugReporter.vue'; // <--- Importa
+
+const route = useRoute();
+const showFab = computed(() => {
+  // Nascondi se il path è la root '/' oppure se il nome della rotta è 'login'
+  return route.path !== '/' && route.name !== 'login';
+});
+
 onMounted(() => {
   // 1. Imposta il NOME DELLA TAB (Titolo)
   document.title = 'P.O.P.S. Inglesina Italiana';
@@ -38,8 +45,7 @@ onMounted(() => {
       <RouterView />
     </div>
 
-    <GlobalBugReporter />
-
+    <GlobalBugReporter v-if="showFab" />
   </div>
 </template>
 

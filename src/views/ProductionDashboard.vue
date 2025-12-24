@@ -291,7 +291,10 @@ onUnmounted(() => { if (unsubscribe) unsubscribe(); });
         <div class="flex items-center gap-4">
           <div>
             <p class="text-lg font-medium text-gray-800 leading-none">Inglesina Italiana Srl</p>
-            <h1 class="text-5xl font-bold font-heading text-gray-900">Dashboard Produzione</h1>
+            <div class="relative inline-block">
+              <h1 class="relative z-10 text-6xl font-bold font-heading text-gray-900">P.O.P.S. Produzione</h1>
+              <div class="absolute bottom-2 left-0 w-full h-8 bg-amber-400 rounded-sm -z-0 animate-marker"></div>
+            </div>
           </div>
         </div>
         <div class="flex items-center gap-3">
