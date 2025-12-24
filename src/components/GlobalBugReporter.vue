@@ -11,6 +11,8 @@
     PaperAirplaneIcon,
     AdjustmentsHorizontalIcon, 
     ComputerDesktopIcon,
+    CheckCircleIcon,          
+    ExclamationTriangleIcon,
     PlusIcon,
     CalculatorIcon,
     ChartBarIcon,
@@ -84,6 +86,17 @@
     { label: 'Impostazioni', route: '/admin/settings', icon: AdjustmentsHorizontalIcon, color: 'text-gray-600', bg: 'bg-gray-100' },
   ];
   
+  const resultModal = ref({
+  show: false,
+  title: '',
+  message: '',
+  type: 'SUCCESS' as 'SUCCESS' | 'ERROR'
+});
+
+const openResultModal = (title: string, message: string, type: 'SUCCESS' | 'ERROR' = 'SUCCESS') => {
+  resultModal.value = { show: true, title, message, type };
+};
+
   const form = reactive({
     title: '',
     description: '',
@@ -123,34 +136,38 @@
   };
   
   const submitBug = async () => {
-    if (!form.title || !form.description) return alert("Compila titolo e descrizione.");
-    
-    isSending.value = true;
-    
-    try {
-      const submitFn = httpsCallable(functions, 'submitBugToNotion');
-      await submitFn({
-        title: form.title,
-        description: form.description,
-        category: form.category,
-        pageUrl: window.location.href,
-        userEmail: currentUserEmail.value || 'sconosciuto',
-        technicalContext: getTechnicalContext()
-      });
+  if (!form.title || !form.description) return openResultModal("Attenzione", "Compila titolo e descrizione.", "ERROR");
   
-      alert("Segnalazione inviata con successo! Grazie.");
-      isOpen.value = false;
-      form.title = '';
-      form.description = '';
-      form.category = 'Errore Funzionale';
+  isSending.value = true;
   
-    } catch (e) {
-      console.error(e);
-      alert("Errore durante l'invio. Riprova più tardi.");
-    } finally {
-      isSending.value = false;
-    }
-  };
+  try {
+    const submitFn = httpsCallable(functions, 'submitBugToNotion');
+    await submitFn({
+      title: form.title,
+      description: form.description,
+      category: form.category,
+      pageUrl: window.location.href,
+      userEmail: currentUserEmail.value || 'sconosciuto',
+      technicalContext: getTechnicalContext()
+    });
+
+    // --- MODIFICA QUI ---
+    isOpen.value = false; // Chiudi prima il form
+    openResultModal("Segnalazione Inviata", "Grazie! Il tuo feedback è stato inoltrato al team di sviluppo.", "SUCCESS");
+    
+    // Reset form
+    form.title = '';
+    form.description = '';
+    form.category = 'Errore Funzionale';
+
+  } catch (e) {
+    console.error(e);
+    // --- MODIFICA QUI ---
+    openResultModal("Errore Invio", "Si è verificato un problema. Riprova più tardi.", "ERROR");
+  } finally {
+    isSending.value = false;
+  }
+};
   </script>
   
   <template>
@@ -215,12 +232,35 @@
                 <span class="text-xs font-bold text-gray-600 group-hover:text-gray-900 transition-colors">{{ link.label }}</span>
               </button>
             </div>
+            <div v-if="resultModal.show" class="fixed inset-0 z-[11000] overflow-y-auto bg-gray-900/50 backdrop-blur-sm transition-opacity duration-300 flex items-center justify-center p-4">
+              <div class="bg-white rounded-[2rem] shadow-2xl max-w-sm w-full transform transition-all scale-100 p-6 text-center animate-in fade-in zoom-in duration-200">
+                
+                <div class="mx-auto flex items-center justify-center h-16 w-16 rounded-full mb-4"
+                    :class="resultModal.type === 'SUCCESS' ? 'bg-amber-100' : 'bg-red-100'">
+                  <CheckCircleIcon v-if="resultModal.type === 'SUCCESS'" class="h-10 w-10 text-amber-500" />
+                  <ExclamationTriangleIcon v-else class="h-10 w-10 text-red-500" />
+                </div>
+
+                <h3 class="text-xl font-bold text-gray-900 mb-2">{{ resultModal.title }}</h3>
+                <p class="text-gray-500 mb-6 text-sm leading-relaxed">{{ resultModal.message }}</p>
+
+                <button 
+                  @click="resultModal.show = false" 
+                  class="w-full py-3 rounded-xl font-bold text-white shadow-md transition-transform active:scale-95 outline-none focus:ring-2 focus:ring-offset-2"
+                  :class="resultModal.type === 'SUCCESS' ? 'bg-amber-400 hover:bg-amber-300 focus:ring-amber-500 text-amber-950' : 'bg-red-500 hover:bg-red-600 focus:ring-red-500'"
+                >
+                  Ho capito
+                </button>
+              </div>
+            </div>
+
           </template>
   
         </div>
       </Transition>
   
       <button 
+        id="global-fab-btn"
         @click="toggleMenu"
         class="pointer-events-auto h-16 w-16 shadow-[0_8px_30px_rgb(251,191,36,0.4)] flex items-center justify-center relative overflow-hidden group z-50 transition-all duration-500 cubic-bezier(0.34, 1.56, 0.64, 1)"
         :class="[

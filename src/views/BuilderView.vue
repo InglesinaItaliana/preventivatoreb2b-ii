@@ -14,6 +14,8 @@ import { onAuthStateChanged } from 'firebase/auth';
 import OrderModals from '../components/OrderModals.vue';
 import { STATUS_DETAILS } from '../types';
 import { getCustomerPricingContext } from '../logic/customerConfig';
+import { TourGuideClient } from "@sjmc11/tourguidejs/src/Tour";
+import "@sjmc11/tourguidejs/dist/css/tour.min.css";
 import {
   Listbox,
   ListboxButton,
@@ -23,6 +25,7 @@ import {
 import {
   RectangleStackIcon,
   LockOpenIcon,
+  QuestionMarkCircleIcon,
   LockClosedIcon,
   PlusCircleIcon,
   ChevronLeftIcon,
@@ -404,6 +407,9 @@ const canAdd = computed(() => {
 
 onUnmounted(() => {
   if (unsubscribeSnapshot) unsubscribeSnapshot();
+  if (builderTour) {
+    try { builderTour.exit(); } catch(e) {}
+  }
 });
 
 // Funzione per inserire/aggiornare la riga spedizione automaticamente
@@ -901,23 +907,41 @@ const caricaPreventivo = async () => {
 
   isSaving.value = true;
   try {
-    let q;
+    // COSTRUIAMO LA QUERY DINAMICAMENTE
+    const constraints = [];
+    
+    // 1. Filtro base (Codice o Commessa)
     if (inputRicerca.value) {
-        q = query(collection(db, 'preventivi'), where('commessa', '==', inputRicerca.value));
+        constraints.push(where('commessa', '==', inputRicerca.value));
     } else {
-        q = query(collection(db, 'preventivi'), where('codice', '==', termine.trim().toUpperCase()));
+        constraints.push(where('codice', '==', termine.trim().toUpperCase()));
     }
 
+    // 2. 🔥 SECURITY FIX: Se sono un Cliente, devo cercare SOLO tra i MIEI preventivi
+    if (!isAdmin.value && auth.currentUser) {
+        constraints.push(where('clienteUID', '==', auth.currentUser.uid));
+    }
+
+    // 3. Eseguiamo la query
+    const q = query(collection(db, 'preventivi'), ...constraints);
+
     const snap = await getDocs(q);
-    if (snap.empty) return showCustomToast("Commessa non trovata.");
     
-    // FIX: Safe access to docs[0] (TS2532)
+    if (snap.empty) {
+        console.warn("Preventivo non trovato o permessi insufficienti.");
+        showCustomToast("Commessa non trovata o accesso negato.");
+        return;
+    }
+    
     const docSnapshot = snap.docs[0];
-    if (!docSnapshot) return;
-    const d = docSnapshot.data();
-    currentDocId.value = docSnapshot.id;
     
-    // Aggiorniamo i dati locali
+    // ✅ FIX: Controllo esplicito richiesto da TypeScript
+    if (!docSnapshot) return; 
+
+    const d = docSnapshot.data();
+    currentDocId.value = docSnapshot.id; //
+    
+    // ... IL RESTO DEL CODICE RIMANE UGUALE ...
     codiceRicerca.value = d.codice;
     nomeCliente.value = d.cliente;
     ficOrderUrl.value = d.fic_order_url || '';
@@ -927,8 +951,9 @@ const caricaPreventivo = async () => {
     noteCliente.value = d.noteCliente || '';
     scontoApplicato.value = d.scontoPercentuale || 0;
     listaAllegati.value = d.allegati || [];
-    dataConsegnaPrevista.value = d.dataConsegnaPrevista || ''; // Recupera dal DB o stringa vuota
+    dataConsegnaPrevista.value = d.dataConsegnaPrevista || '';
 
+    // Mappatura elementi (invariata)
     preventivo.value = d.elementi.map((el: any) => ({
       ...el,
       nonEquidistanti: el.nonEquidistanti || false,
@@ -937,26 +962,15 @@ const caricaPreventivo = async () => {
       colonne: Number(el.colonne) || 0
     }));
 
-    // ATTIVA L'ASCOLTO IN TEMPO REALE PER EVITARE CONFLITTI
-    if (unsubscribeSnapshot) unsubscribeSnapshot(); // Pulisci precedente se esiste
+    // Listener Realtime (invariato)
+    if (unsubscribeSnapshot) unsubscribeSnapshot();
     
-    // Assicurati che currentDocId.value non sia null
     if (currentDocId.value) {
-        let isFirstSnapshot = true; // <--- FIX: Flag per ignorare il caricamento iniziale
-
+        let isFirstSnapshot = true;
         unsubscribeSnapshot = onSnapshot(doc(db, 'preventivi', currentDocId.value!), (docSnapRealtime: DocumentSnapshot) => {
-            // 1. Se è il primo snapshot (inizializzazione), lo ignoriamo
-            if (isFirstSnapshot) {
-                isFirstSnapshot = false;
-                return;
-            }
-
-            // 2. Se il cambiamento è locale (lo sto facendo io ora), ignoralo
+            if (isFirstSnapshot) { isFirstSnapshot = false; return; }
             if (docSnapRealtime.metadata.hasPendingWrites) return;
-
             const newData = docSnapRealtime.data();
-            
-            // 3. Se i dati cambiano da fuori mentre non sto salvando, avvisa.
             if (newData && !isSaving.value) {
                showCustomToast("⚠️ ATTENZIONE: Questo preventivo è stato modificato da un altro utente! Ricarica la pagina.");
             }
@@ -964,17 +978,14 @@ const caricaPreventivo = async () => {
     }
 
   } catch(e) { 
-    console.error(e); 
+    console.error("Errore caricamento:", e); 
     showCustomToast("Errore durante la ricerca.");
   } finally { 
     isSaving.value = false;
-    isDataLoaded.value = true; // <--- NUOVO: Sblocca la visualizzazione dei pannelli (se lo stato lo permette)
-    // --- NUOVA LOGICA DI SCROLL AUTOMATICO ---
-    // Se abbiamo caricato un documento (quindi currentDocId esiste), scrolliamo alla fascia nera
+    isDataLoaded.value = true;
     if (currentDocId.value) {
-      await nextTick(); // Aspettiamo che il DOM si aggiorni e mostri gli elementi
+      await nextTick();
       if (summarySectionRef.value) {
-        // Scrolla in modo che la fascia nera sia al centro o in alto
         summarySectionRef.value.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
     }
@@ -1071,7 +1082,56 @@ const aggiungiExtraAdmin = () => {
   adminExtraQty.value = 1;
 };
 
-// --- INIZIO DEL BLOCCO ONMOUNTED (DA METTERE ALLA FINE DELLO SCRIPT) ---
+let builderTour: TourGuideClient | null = null;
+
+const startBuilderTour = () => {
+  if (!builderTour) {
+    builderTour = new TourGuideClient({
+      exitOnClickOutside: false,
+      closeButton: false,
+      backdropColor: 'rgba(15, 23, 42, 0.85)',
+      rememberStep: false, // Importante per resettare il tour
+    steps: [
+      {
+        target: '#tour-builder-back',
+        title: 'Torna alla Dashboard',
+        content: 'Usa questo pulsante per uscire. <b>Attenzione:</b> se non hai salvato, le modifiche alla bozza andranno perse.',
+      },
+      {
+        target: '#tour-builder-ref',
+        title: 'Dati Commessa',
+        content: 'Inserisci qui il <b>Riferimento Cantiere</b> (es. "Rossi Cucina"). È l\'unico dato obbligatorio per iniziare.',
+      },
+      {
+        target: '#tour-builder-config',
+        title: 'Configura Prodotto',
+        content: 'Scegli il modello di griglia, la dimensione e la finitura. Se ti serve solo il telaio vuoto, spunta "Solo Canalino" nel pannello successivo.',
+      },
+      {
+        target: '#tour-builder-dims',
+        title: 'Misure e Opzioni',
+        content: 'Inserisci base, altezza e suddivisione. Qui trovi anche le opzioni speciali come <b>Curva</b>, <b>Tacca</b> o <b>Non Equidistanti</b>.',
+      },
+      {
+        target: '#tour-builder-add',
+        title: 'Aggiungi Articolo',
+        content: 'Una volta configurato l\'articolo, clicca qui per aggiungerlo al preventivo in basso.',
+      },
+      {
+        target: '#tour-builder-list',
+        title: 'Revisione Articoli',
+        content: 'Qui vedrai la lista dei tuoi articoli. Potrai modificarli o eliminarli usando le icone a destra della riga.',
+      },
+      {
+        target: '#tour-builder-actions',
+        title: 'Totale e Invio',
+        content: 'Controlla il prezzo in tempo reale. Quando sei pronto, clicca su <b>SALVA COME PREVENTIVO</b> per salvarlo internamente oppure su <b>ORDINA</b> per inviarlo come ordine.',
+      }
+      ]
+    });
+  }
+  builderTour.start();
+};
 
 onMounted(async() => {
   catalog.fetchCatalog();
@@ -1135,6 +1195,7 @@ onMounted(async() => {
         <div class="relative flex flex-col md:flex-row justify-between items-end mb-2 gap-4">
         
           <button 
+          id="tour-builder-back"
           @click="vaiDashboard" 
           class="fixed top-8 left-20 z-50 bg-white/90 backdrop-blur border border-gray-200 text-gray-500 hover:text-amber-500 shadow-md transition-all p-2 rounded-full hover:shadow-lg hover:scale-110 active:scale-95" 
           title="Torna alla Dashboard"
@@ -1151,11 +1212,19 @@ onMounted(async() => {
             <div v-else>
                 <p class="text-lg font-medium text-gray-800 leading-none">{{ nomeCliente }}</p>
             </div>
-            <div class="relative inline-block">
-              <h1 class="relative z-10 text-6xl font-bold font-heading text-gray-900">P.O.P.S. Commesse</h1>
-              <div class="absolute bottom-2 left-0 w-full h-8 bg-amber-400 rounded-sm -z-0 animate-marker"></div>
+            <div class="flex items-center gap-4 w-full">
+              <div class="relative inline-block">
+                <h1 class="relative z-10 text-6xl font-bold font-heading text-gray-900">P.O.P.S. Commesse</h1>
+                <div class="absolute bottom-2 left-0 w-full h-8 bg-amber-400 rounded-sm -z-0 animate-marker"></div>
+              </div>
+              
+              <button 
+                @click="startBuilderTour" 
+                class="bg-white hover:bg-amber-50 text-gray-500 hover:text-amber-600 border border-gray-200 px-3 py-1.5 rounded-full text-xs font-bold shadow-sm flex items-center gap-1 transition-all mt-2 ml-auto"
+              >
+                <QuestionMarkCircleIcon class="h-5 w-5 text-amber-500" /> GUIDA
+              </button>
             </div>
-            <br><br>
             <div v-if="isNewAdminOrder && !currentDocId" class="mb-4 relative z-50 mb-4">
                 <label class="text-xs font-bold text-gray-500 uppercase mb-1 flex items-center gap-1">
                 </label>
@@ -1193,6 +1262,7 @@ onMounted(async() => {
       </div>
       
       <div 
+        id="tour-builder-ref"
         class="bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all p-5 card-dati-commessa"
         ref="riferimentoCommessaInput"
         >
@@ -1265,7 +1335,7 @@ onMounted(async() => {
       </div>
       <div v-if="showConfigurationPanels" class="grid grid-cols-1 md:grid-cols-3 gap-6">
     
-      <div class="relative z-30 bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all p-5 h-full">
+      <div id="tour-builder-config" class="relative z-30 bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all p-5 h-full">
         <h2 class="font-bold text-lg border-b pb-2 font-heading text-gray-800">Griglia</h2>
         <div v-if="catalog.loading" class="text-center p-4 text-sm text-gray-400">Caricamento...</div>
         <div v-else>
@@ -1399,7 +1469,7 @@ onMounted(async() => {
           </div>
       </div>
 
-      <div class="relative z-10 bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all p-5 space-y-4 h-full">
+      <div id="tour-builder-dims" class="relative z-10 bg-white/50 backdrop-blur-sm backdrop-saturate-150 p-5 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all p-5 space-y-4 h-full">
         <h2 class="font-bold text-lg border-b pb-2 font-heading text-gray-800">Telaio</h2>
           <div class="grid grid-cols-2 gap-4">
             <div><input v-model.number="pannello.base" :disabled="isLocked" type="number" class="border p-2 rounded w-full text-center text-sm focus:ring-2 focus:ring-amber-400 outline-none disabled:bg-gray-100" placeholder="Base (mm)"></div>
@@ -1454,6 +1524,7 @@ onMounted(async() => {
   </div>
 
   <button 
+    id="tour-builder-add"
     @click="aggiungi" 
     :disabled="!canAdd"
     class="flex-1 bg-gray-300 hover:bg-gray-200 text-black font-bold py-3 rounded-lg shadow-sm disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-gray-200 disabled:text-gray-400 transition-all flex justify-center items-center gap-2 h-[50px]">
@@ -1464,7 +1535,7 @@ onMounted(async() => {
       </div>
 
     </div>
-    <div ref="summarySectionRef" class="lg:col-span-2 bg-white/50 backdrop-blur-sm backdrop-saturate-150 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all flex flex-col min-h-[600px] overflow-hidden scroll-mt-24">
+    <div id="tour-builder-actions" ref="summarySectionRef" class="lg:col-span-2 bg-white/50 backdrop-blur-sm backdrop-saturate-150 rounded-xl shadow-lg border border-white/80 hover:shadow-xl transition-all flex flex-col min-h-[600px] overflow-hidden scroll-mt-24">
       <div v-if="isSaving" class="p-6 bg-gray-900/80 backdrop-blur-md text-white flex justify-center items-center h-[120px]">
           <span class="text-sm font-medium text-gray-400">Caricamento stato preventivo...</span>
           <svg class="animate-spin h-5 w-5 text-amber-400 ml-3" viewBox="0 0 24 24">
@@ -1602,7 +1673,7 @@ onMounted(async() => {
           </div>
         </div>
 
-        <div class="p-5 border-b border-gray-200/60 flex justify-between items-center bg-gray-50/60 backdrop-blur-sm">
+        <div id="tour-builder-list" class="p-5 border-b border-gray-200/60 flex justify-between items-center bg-gray-50/60 backdrop-blur-sm">
           <h2 class="font-bold text-lg font-heading text-gray-800">Dettaglio Elementi</h2>
           <span class="bg-white border border-gray-200 text-gray-600 px-3 py-1 rounded-full text-xs font-bold">{{ preventivo.length }} Articoli</span>
         </div>
