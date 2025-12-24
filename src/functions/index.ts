@@ -10,6 +10,80 @@ if (admin.apps.length === 0) {
     admin.initializeApp();
 }
 
+// --- NUOVA FUNZIONE: SYNC RUOLI (Database -> Auth Claims) ---
+// Ogni volta che si scrive nella collezione 'team', aggiorna i Custom Claims dell'utente
+exports.syncTeamRoleToAuth = functions
+    .region('europe-west1')
+    .firestore
+    .document('team/{email}') // L'ID del documento è l'email
+    .onWrite(async (change, context) => {
+        const email = context.params.email;
+        const newData = change.after.exists ? change.after.data() : null;
+        
+        try {
+            // 1. Trova l'utente Auth tramite email
+            // Nota: Usiamo l'email perché nel tuo sistema l'ID del doc team è l'email
+            const userRecord = await admin.auth().getUserByEmail(email);
+            
+            if (!newData) {
+                // CASO CANCELLAZIONE: Se il doc viene cancellato, rimuovi i claims
+                await admin.auth().setCustomUserClaims(userRecord.uid, null);
+                console.log(`[ROLE SYNC] Rimossi ruoli per ${email}`);
+                return;
+            }
+
+            const role = newData.role; // 'ADMIN', 'PRODUZIONE', 'LOGISTICA'
+            
+            // 2. Imposta il Custom Claim
+            // Salviamo 'role' dentro il token
+            await admin.auth().setCustomUserClaims(userRecord.uid, { role: role });
+            
+            console.log(`[ROLE SYNC] Assegnato ruolo '${role}' a ${email}`);
+            
+            // Opzionale: Forza il refresh del token lato client (non fattibile da qui, ma utile saperlo)
+            
+        } catch (e: any) {
+            if (e.code === 'auth/user-not-found') {
+                console.warn(`[ROLE SYNC] Utente Auth non trovato per ${email}. Il documento team esiste ma l'utente no.`);
+            } else {
+                console.error(`[ROLE SYNC] Errore sincronizzazione ${email}:`, e);
+            }
+        }
+    });
+
+// --- HELPER DI MIGRAZIONE (DA ESEGUIRE UNA VOLTA SOLA) ---
+// Chiama questa funzione dal client o dalla shell per aggiornare TUTTI gli utenti esistenti
+exports.migrateAllTeamClaims = functions
+    .region('europe-west1')
+    .https.onCall(async (data, context) => {
+        if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Richiesto login');
+        
+        // Verifica che chi chiama sia un super-admin o l'email hardcodata per sicurezza iniziale
+        // (Opzionale, ma consigliato per evitare abusi)
+        
+        const db = admin.firestore();
+        const teamSnap = await db.collection('team').get();
+        let count = 0;
+
+        for (const doc of teamSnap.docs) {
+            const d = doc.data();
+            const email = d.email;
+            const role = d.role;
+            
+            if (email && role) {
+                try {
+                    const user = await admin.auth().getUserByEmail(email);
+                    await admin.auth().setCustomUserClaims(user.uid, { role: role });
+                    count++;
+                } catch (e) {
+                    console.error(`Errore migrazione ${email}`, e);
+                }
+            }
+        }
+        return { success: true, updated: count };
+    });
+
+
 // --- NUOVA FUNZIONE: SINCRONIZZAZIONE PRODOTTI ---
 // --- FUNZIONE SINCRONIZZAZIONE POTENZIATA ---
 exports.syncProductsWithFic = functions

@@ -2,71 +2,63 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // --- HELPER PER LEGGERE IL RUOLO DAL TUO DB TEAM ---
+    // --- FUNZIONI HELPER BASATE SU CUSTOM CLAIMS (Nessuna lettura DB!) ---
     
-    // Recupera il documento dalla collezione 'team' usando l'email dell'utente loggato
-    function getTeamMember() {
-      return get(/databases/$(database)/documents/team/$(request.auth.token.email.lower())).data;
-    }
-
-    // Verifica se esiste un documento attivo nel team per questa email
-    function isTeamMember() {
-      return request.auth != null && exists(/databases/$(database)/documents/team/$(request.auth.token.email.lower()));
-    }
-
-    // 1. ADMIN
+    // Verifica se l'utente ha il claim 'role' impostato su ADMIN
     function isAdmin() {
-      return isTeamMember() && getTeamMember().role == 'ADMIN';
+      return request.auth != null && request.auth.token.role == 'ADMIN';
     }
 
-    // 2. PRODUZIONE (Vede Dashboard Produzione + Delivery)
+    // Verifica PRODUZIONE
     function isProduction() {
-      return isTeamMember() && getTeamMember().role == 'PRODUZIONE';
+      return request.auth != null && request.auth.token.role == 'PRODUZIONE';
     }
     
-    // 3. LOGISTICA (Vede Delivery)
+    // Verifica LOGISTICA
     function isLogistics() {
-      return isTeamMember() && getTeamMember().role == 'LOGISTICA';
+      return request.auth != null && request.auth.token.role == 'LOGISTICA';
     }
 
-    // Helper per il cliente proprietario
+    // Helper per il cliente proprietario (invariato)
     function isOwner(resource) {
       return request.auth != null && resource.data.clienteUID == request.auth.uid;
     }
 
     // --- REGOLE COLLEZIONI ---
 
-    // Collezione TEAM (Solo gli Admin possono gestire il team)
+    // Collezione TEAM 
     match /team/{memberId} {
-      allow read: if request.auth != null; // Tutti i loggati possono leggere (utile per visualizzare nomi)
+      // Lettura permessa a chiunque sia loggato (per info UI)
+      allow read: if request.auth != null;
+      // Scrittura SOLO Admin
       allow write: if isAdmin();
     }
 
     // Collezione UTENTI (Clienti)
     match /users/{userId} {
-      allow read: if isAdmin() || (request.auth != null && request.auth.uid == userId);
-      allow write: if isAdmin() || (request.auth != null && request.auth.uid == userId);
+      allow read, write: if isAdmin() || (request.auth != null && request.auth.uid == userId);
     }
 
     // Collezione PREVENTIVI / ORDINI
     match /preventivi/{docId} {
-      // CHI LEGGE: Admin, Produzione, Logistica (per le consegne) e il Cliente proprietario
+      // CHI LEGGE: Admin, Prod, Logistica, Proprietario
       allow read: if isAdmin() || isProduction() || isLogistics() || isOwner(resource);
       
       // CHI SCRIVE:
-      // Admin: Tutto
-      // Produzione: Aggiorna stati (es. Pronto)
-      // Logistica: Aggiorna stati (es. Consegnato)
-      // Cliente: Crea e modifica bozze
       allow create: if request.auth != null;
       allow update: if isAdmin() || isProduction() || isLogistics() || isOwner(resource);
-      allow delete: if isAdmin(); // Solo admin cancella
+      allow delete: if isAdmin();
     }
 
     // IMPOSTAZIONI
     match /settings/{docId} {
       allow read: if request.auth != null;
       allow write: if isAdmin();
+    }
+    
+    // Configurazione (es. fic, notion) - Protezione extra
+    match /config/{docId} {
+      allow read, write: if false; // Solo backend (Cloud Functions) accede qui
     }
 
     match /{document=**} {
