@@ -8,6 +8,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Create .env file for Functions
+        run: |
+          echo "${{ secrets.ENV_FILE }}" > src/functions/.env
+
+      - name: Install Functions Dependencies
+        run: cd src/functions && npm ci
       
       - name: Install Dependencies
         run: npm ci
