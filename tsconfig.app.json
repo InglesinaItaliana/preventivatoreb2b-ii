@@ -10,7 +10,17 @@
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true,
-    "noUncheckedSideEffectImports": true
+    "noUncheckedSideEffectImports": true,
+
+    /* Ignora controlli librerie */
+    "skipLibCheck": true,
+
+    /* FIX DEFINITIVO: Mappa la libreria rotta sul file shim creato */
+    "baseUrl": ".",
+    "paths": {
+      "@sjmc11/tourguidejs": ["./src/shims-tourguide.d.ts"]
+    }
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.vue"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.vue"],
+  "exclude": ["src/functions", "node_modules"]
 }

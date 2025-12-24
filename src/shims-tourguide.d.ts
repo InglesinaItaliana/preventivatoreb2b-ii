@@ -1,0 +1,1 @@
+declare module '@sjmc11/tourguidejs';

@@ -4,12 +4,12 @@ import {
   collection, 
   query, 
   orderBy, 
-  getDocs, 
   limit, 
   updateDoc, 
   doc, 
   onSnapshot, 
-  where // <--- AGGIUNGI QUESTO
+  where,
+  getCountFromServer
 } from 'firebase/firestore';
 import { db } from '../firebase';
 import { useRouter } from 'vue-router';
@@ -50,7 +50,6 @@ const showCustomToast = (message: string) => {
 };
 const router = useRouter();
 const listaPreventivi = ref<any[]>([]);
-const anagraficaClienti = ref<Record<string, string>>({});
 const loading = ref(true);
 
 const showModals = ref(false);
@@ -83,30 +82,7 @@ const filtroPeriodo = ref<'TUTTO' | 'CORRENTE' | 'SCORSO'>('TUTTO');
 const showArchive = ref(false); // Stato per il modale archivio
 
 // Calcolo conteggi
-const categoryCounts = computed(() => {
-  const counts = { PREVENTIVI: 0, ORDINI: 0, PRODUZIONE: 0, SPEDIZIONI: 0 };
-  const now = new Date();
-  
-  listaPreventivi.value.forEach(p => {
-    if (filtroPeriodo.value !== 'TUTTO' && p.dataCreazione?.seconds) {
-      const d = new Date(p.dataCreazione.seconds * 1000);
-      if (filtroPeriodo.value === 'CORRENTE' && (d.getMonth() !== now.getMonth() || d.getFullYear() !== now.getFullYear())) return;
-      if (filtroPeriodo.value === 'SCORSO') {
-        const last = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-        if (d.getMonth() !== last.getMonth() || d.getFullYear() !== last.getFullYear()) return;
-      }
-    }
-    
-    const st = p.stato || 'DRAFT';
-    
-    // LOGICA AGGIORNATA PER CONTEGGI
-    if (['PENDING_VAL', 'QUOTE_READY'].includes(st)) counts.PREVENTIVI++;
-    else if (['ORDER_REQ', 'WAITING_SIGN'].includes(st)) counts.ORDINI++;
-    else if (['SIGNED', 'IN_PRODUZIONE'].includes(st)) counts.PRODUZIONE++;
-    else if (['READY', 'DELIVERY', 'SHIPPED'].includes(st)) counts.SPEDIZIONI++;
-  });
-  return counts;
-});
+const categoryCounts = ref({ PREVENTIVI: 0, ORDINI: 0, PRODUZIONE: 0, SPEDIZIONI: 0 });
 
 // Funzione per salvare il numero di colli su Firestore
 const saveColli = async (orderId: string, colli: number) => {
@@ -243,17 +219,17 @@ const clientiEspansi = ref<string[]>([]);
   let unsubscribe: null | (() => void) = null;
 
 // --- 1. CARICAMENTO ANAGRAFICA ---
-const caricaAnagrafica = async () => {
-  try {
-    const snap = await getDocs(collection(db, 'users'));
-    const mappa: Record<string, string> = {};
-    snap.docs.forEach(doc => {
-      const d = doc.data();
-      if (d.email && d.ragioneSociale) mappa[d.email] = d.ragioneSociale;
-    });
-    anagraficaClienti.value = mappa;
-  } catch (e) { console.error("Errore anagrafica", e); }
-};
+//const caricaAnagrafica = async () => {
+//  try {
+//    const snap = await getDocs(collection(db, 'users'));
+//    const mappa: Record<string, string> = {};
+//    snap.docs.forEach(doc => {
+//      const d = doc.data();
+//      if (d.email && d.ragioneSociale) mappa[d.email] = d.ragioneSociale;
+//    });
+//    anagraficaClienti.value = mappa;
+//  } catch (e) { console.error("Errore anagrafica", e); }
+//};
 
 // --- 2. CARICAMENTO PREVENTIVI (REAL TIME OTTIMIZZATO) ---
 const caricaTutti = () => {
@@ -261,9 +237,9 @@ const caricaTutti = () => {
 
   const q = query(
     collection(db, 'preventivi'), 
-    where('stato', 'in', ACTIVE_STATUSES), // <--- FILTRO FONDAMENTALE
+    where('stato', 'in', ACTIVE_STATUSES),
     orderBy('dataCreazione', 'desc'), 
-    limit(300)
+    limit(50) // <--- MODIFICA DA 300 A 50 (O ANCHE MENO)
   );
 
   unsubscribe = onSnapshot(q, (snapshot) => {
@@ -313,7 +289,7 @@ const caricaTutti = () => {
 // --- AZIONI RAPIDE ADMIN ---
 const confermaProduzione = (preventivo: any) => {
   selectedOrder.value = preventivo;
-  selectedClientName.value = anagraficaClienti.value[preventivo.clienteEmail] || preventivo.cliente || 'Cliente';
+  selectedClientName.value = preventivo.cliente || 'Cliente';
   modalMode.value = 'PRODUCTION';
   showModals.value = true;
 };
@@ -365,40 +341,67 @@ const confermaOrdinePronto = async (p: any) => {
 };
 
 // --- HIGHLIGHTS ---
-const globalStats = computed(() => {
-  const stats = { da_validare: 0, richieste_ord: 0, in_produzione: 0, signed : 0, productisready: 0 };
-  const now = new Date();
-  const currentMonth = now.getMonth();
-  const currentYear = now.getFullYear();
+const globalStats = ref({ da_validare: 0, richieste_ord: 0, in_produzione: 0, signed: 0, productisready: 0 });
 
-  listaPreventivi.value.forEach(p => {
-    
-    if (filtroPeriodo.value !== 'TUTTO' && p.dataCreazione?.seconds) {
-      const d = new Date(p.dataCreazione.seconds * 1000);
-      if (filtroPeriodo.value === 'CORRENTE') {
-        if (d.getMonth() !== currentMonth || d.getFullYear() !== currentYear) return;
-      }
-      if (filtroPeriodo.value === 'SCORSO') {
-        const lastMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-        if (d.getMonth() !== lastMonthDate.getMonth() || d.getFullYear() !== lastMonthDate.getFullYear()) return;
-      }
-    }
+// 2. Funzione ottimizzata che conta i documenti SENZA scaricarli (Costo ridotto: 1 lettura ogni 1000 doc)
+const fetchServerCounts = async () => {
+  try {
+    const coll = collection(db, 'preventivi');
 
-    const st = p.stato;
-    if (st === 'PENDING_VAL') stats.da_validare++;
-    if (st === 'ORDER_REQ') stats.richieste_ord++;
-    if (st === 'SIGNED') stats.signed++; 
-    if (st === 'READY') stats.productisready++; 
-  });
+    // Definiamo le query per i Badge delle Categorie
+    const qPrev = query(coll, where('stato', 'in', ['PENDING_VAL', 'QUOTE_READY']));
+    const qOrd = query(coll, where('stato', 'in', ['ORDER_REQ', 'WAITING_SIGN']));
+    const qProd = query(coll, where('stato', 'in', ['SIGNED', 'IN_PRODUZIONE']));
+    const qSped = query(coll, where('stato', 'in', ['READY', 'DELIVERY', 'SHIPPED']));
 
-  return stats;
-});
+    // Definiamo le query per le Statistiche in alto (Highlights)
+    const qDaValidare = query(coll, where('stato', '==', 'PENDING_VAL'));
+    const qRichiesteOrd = query(coll, where('stato', '==', 'ORDER_REQ'));
+    const qSigned = query(coll, where('stato', '==', 'SIGNED')); // Da mettere in produzione
+    const qReady = query(coll, where('stato', '==', 'READY'));   // Da mettere in consegna
+
+    // Eseguiamo tutte le 8 query in parallelo per velocità
+    const [
+      snapPrev, snapOrd, snapProd, snapSped,
+      snapDaValidare, snapRichieste, snapSigned, snapReady
+    ] = await Promise.all([
+      getCountFromServer(qPrev),
+      getCountFromServer(qOrd),
+      getCountFromServer(qProd),
+      getCountFromServer(qSped),
+      getCountFromServer(qDaValidare),
+      getCountFromServer(qRichiesteOrd),
+      getCountFromServer(qSigned),
+      getCountFromServer(qReady)
+    ]);
+
+    // Aggiorniamo l'interfaccia
+    categoryCounts.value = {
+      PREVENTIVI: snapPrev.data().count,
+      ORDINI: snapOrd.data().count,
+      PRODUZIONE: snapProd.data().count,
+      SPEDIZIONI: snapSped.data().count
+    };
+
+    globalStats.value = {
+      da_validare: snapDaValidare.data().count,
+      richieste_ord: snapRichieste.data().count,
+      signed: snapSigned.data().count,
+      productisready: snapReady.data().count,
+      in_produzione: 0 // Opzionale
+    };
+
+    console.log("Conteggi server-side aggiornati con risparmio letture.");
+  } catch (e) {
+    console.error("Errore conteggio server:", e);
+  }
+};
 
 // --- RAGGRUPPAMENTO PER CLIENTE ---
 const clientiRaggruppati = computed(() => {
   const gruppi: Record<string, any> = {};
     preventiviFiltrati.value.forEach(p => {
-    const nomeReale = anagraficaClienti.value[p.clienteEmail] || p.cliente || 'Sconosciuto';
+      const nomeReale = p.cliente || p.clienteEmail || 'Sconosciuto';
 
     if (!gruppi[nomeReale]) {
       gruppi[nomeReale] = {
@@ -700,8 +703,9 @@ const mostraDaSpedire = () => {
 };
 
 onMounted(() => {
-  caricaAnagrafica();
+  //caricaAnagrafica();
   caricaTutti();
+  fetchServerCounts(); // <--- AGGIUNGI QUESTO
 });
 
 onUnmounted(() => {
@@ -1132,7 +1136,7 @@ onUnmounted(() => {
           </div>
           <div class="min-w-0"> <div class="text-[10px] text-blue-300 font-bold uppercase tracking-wider">Spedizione per</div>
             <div class="font-bold text-base md:text-lg leading-none truncate max-w-[150px] md:max-w-[200px]">
-              {{ anagraficaClienti[spedizioneAttivaCliente] || spedizioneAttivaCliente }}
+              {{ ordiniInSpedizione[0]?.cliente || spedizioneAttivaCliente }}
             </div>
           </div>
         </div>

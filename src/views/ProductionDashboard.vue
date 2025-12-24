@@ -133,7 +133,7 @@ const caricaAnagrafica = async () => {
 const caricaTutti = () => {
   if (unsubscribe) unsubscribe();
   // Carichiamo tutto, poi filtriamo localmente. 
-  const q = query(collection(db, 'preventivi'), orderBy('dataCreazione', 'desc'), limit(300));
+  const q = query(collection(db, 'preventivi'), orderBy('dataCreazione', 'desc'), limit(100));
   
   unsubscribe = onSnapshot(q, (snapshot) => {
     listaPreventivi.value = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));

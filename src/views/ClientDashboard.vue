@@ -632,16 +632,13 @@
                   <div v-if="p.dataConsegnaPrevista" class="mt-2 flex items-center gap-1.5 px-3 py-1 bg-stone-200 border border-stone-300 rounded shadow-sm">
                       <TruckIcon class="h-4 w-4" /> <span class="text-xs font-bold text-black uppercase">Prevista il {{ formatDateShort(p.dataConsegnaPrevista) }}</span>
                   </div>
-                    <div class="mt-2 flex flex-col items-start gap-2">
-                      <div class="mt-2 flex flex-col items-start gap-2">
-                      
+                      <div class="flex flex-col items-start gap-2">
                         <div v-if="p.elementi" class="flex flex-col gap-1 mt-2 items-start">
                           <span v-for="(riga, idx) in getRiepilogoPulito(p.elementi)" :key="idx" 
                                 class="text-[10px] bg-gray-50 px-2 py-1 rounded border text-gray-600">
                             <strong>{{ riga.quantita }}x</strong> {{ riga.descrizione }}
                           </span>
                         </div>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -689,7 +686,7 @@
                   <div v-if="p.dataConsegnaPrevista" class="mt-2 flex items-center gap-1.5 px-3 py-1 bg-stone-200 border border-stone-300 rounded shadow-sm">
                     <TruckIcon class="h-4 w-4" /> <span class="text-xs font-bold text-black uppercase">Prevista il {{ formatDateShort(p.dataConsegnaPrevista) }}</span>
                   </div>
-                  <div class="mt-2 flex flex-col items-start gap-2">
+                  <div class="flex flex-col items-start gap-2">
                     
                     <div v-if="p.elementi" class="flex flex-col gap-1 mt-2 items-start">
                       <span v-for="(riga, idx) in getRiepilogoPulito(p.elementi)" :key="idx" 
