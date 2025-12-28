@@ -1,13 +1,14 @@
 <script setup lang="ts">
   import { ref, onMounted, onUnmounted, computed, nextTick } from 'vue';
-  import { collection, query, where, updateDoc, doc, serverTimestamp, getDoc, onSnapshot, deleteField } from 'firebase/firestore';
+  import { collection, query, where, updateDoc, doc, serverTimestamp, getDoc, onSnapshot, deleteField,writeBatch } from 'firebase/firestore';
   import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-  import { db, auth } from '../firebase';
+  import { db, auth, functions } from '../firebase';
   import { useRouter } from 'vue-router';
   import { onAuthStateChanged } from 'firebase/auth';
   import ArchiveModal from '../components/ArchiveModal.vue';
   import { TourGuideClient } from "@sjmc11/tourguidejs/src/Tour"; // Importazione JS
   import "@sjmc11/tourguidejs/dist/css/tour.min.css"; // Importazione CSS Stile
+  import { httpsCallable } from 'firebase/functions';
   import { 
     DocumentTextIcon, 
     CheckCircleIcon,
@@ -53,6 +54,41 @@
     type: 'SUCCESS' as 'SUCCESS' | 'ERROR'
   });
   
+  // --- FUNZIONE CONFERMA RICEZIONE MERCE (CLIENTE) ---
+const confermaRicezione = async (order: any) => {
+  if (!confirm("Confermi di aver ricevuto la merce? Gli ordini verranno spostati nel tuo Archivio.")) return;
+  
+  try {
+    const batch = writeBatch(db);
+    
+    // 1. Cerchiamo se ci sono altri ordini legati allo stesso DDT (per archiviarli insieme)
+    let ordersToUpdate = [order];
+    if (order.fic_ddt_id) {
+       // Filtra dalla lista locale tutti gli ordini SPEDITI con lo stesso ID DDT
+       ordersToUpdate = listaMieiPreventivi.value.filter(o => 
+          o.fic_ddt_id === order.fic_ddt_id && o.stato === 'SHIPPED'
+       );
+    }
+
+    // 2. Prepariamo l'aggiornamento per tutti gli ordini trovati
+    ordersToUpdate.forEach(o => {
+        const ref = doc(db, 'preventivi', o.id);
+        batch.update(ref, { 
+            stato: 'DELIVERED',
+            dataConsegnaEffettiva: serverTimestamp()
+        });
+    });
+
+    // 3. Eseguiamo
+    await batch.commit();
+    openResultModal("Consegna Confermata", "Grazie! La merce è stata segnata come consegnata e l'ordine è stato spostato nel tuo Archivio.", "SUCCESS");
+
+  } catch (e) {
+    console.error(e);
+    openResultModal("Errore", "Impossibile aggiornare lo stato. Riprova o contatta l'assistenza.", "ERROR");
+  }
+};
+
   const openResultModal = (title: string, message: string, type: 'SUCCESS' | 'ERROR' = 'SUCCESS') => {
     resultModal.value = { show: true, title, message, type };
   };
@@ -62,7 +98,7 @@
   const showConfirmQuoteModal = ref(false); 
   const userInputDate = ref('');
   const minDays = ref(14);
-  
+  const currentUserUid = ref('');
   const minDateStr = computed(() => {
     const d = new Date();
     d.setDate(d.getDate() + minDays.value);
@@ -426,9 +462,27 @@
     router.push(route);
   };
   
-  const apriDdt = (url: string) => {
-    window.open(url, '_blank');
-  };
+  const apriDdt = async (ficId: string | number, fallbackUrl?: string) => {
+    try {
+        // Mostra un feedback visivo se possibile, o usa un cursore wait
+        document.body.style.cursor = 'wait';
+        
+        const getUrl = httpsCallable(functions, 'getFreshFicUrl');
+        const res: any = await getUrl({ fic_id: ficId });
+        
+        if (res.data.url) {
+            window.open(res.data.url, '_blank');
+        } else if (fallbackUrl) {
+             window.open(fallbackUrl, '_blank');
+        }
+    } catch (e) {
+        console.error("Errore apertura DDT:", e);
+        if (fallbackUrl) window.open(fallbackUrl, '_blank');
+        else openResultModal("Errore", "Impossibile recuperare il documento.", "ERROR");
+    } finally {
+        document.body.style.cursor = 'default';
+    }
+};
   
   const getStatusStyling = (stato: string) => {
     const styles: Record<string, any> = {
@@ -472,6 +526,7 @@
     onAuthStateChanged(auth, (user) => {
       if (user && user.email) {
         currentUserEmail.value = user.email;
+        currentUserUid.value = user.uid;
         if (clientName.value === 'Cliente') clientName.value = user.email?.split('@')[0] || 'Utente';
         caricaProfilo(user.uid);
         avviaAscoltoDati(user.uid);
@@ -764,13 +819,21 @@
                   </div>
                   <div class="flex items-center gap-2">
                     <button 
-    v-if="['DELIVERY', 'SHIPPED'].includes(p.stato) && p.fic_ddt_url"
-    @click="apriDdt(p.fic_ddt_url)"
-    class="w-full text-amber-950 bg-amber-400 hover:bg-amber-300 px-12 py-2 rounded-full font-bold text-xs shadow-sm flex justify-center items-center gap-2 transition-transform active:scale-95"
-  >
-    <DocumentTextIcon class="h-5 w-5" />
-    VEDI DDT {{ p.fic_ddt_number ? '#' + p.fic_ddt_number : '' }}
-  </button>
+                      v-if="p.stato === 'SHIPPED'" 
+                      @click="confermaRicezione(p)"
+                      class="w-full text-white bg-green-500 hover:bg-green-600 border border-green-600 px-4 py-2 rounded-full font-bold text-xs shadow-sm flex justify-center items-center gap-2 transition-transform active:scale-95 whitespace-nowrap"
+                    >
+                      <CheckCircleIcon class="h-5 w-5 text-white" />
+                      CONFERMA RICEZIONE
+                    </button>
+                    <button 
+                    v-if="['DELIVERY', 'SHIPPED'].includes(p.stato) && p.fic_ddt_id"
+                    @click="apriDdt(p.fic_ddt_id, p.fic_ddt_url)"
+                      class="w-full text-amber-950 bg-amber-400 hover:bg-amber-300 px-12 py-2 rounded-full font-bold text-xs shadow-sm flex justify-center items-center gap-2 transition-transform active:scale-95"
+                    >
+                      <DocumentTextIcon class="h-5 w-5" />
+                      VEDI DDT {{ p.fic_ddt_number ? '#' + p.fic_ddt_number : '' }}
+                    </button>   
                   <button @click="vaiAlBuilder(p.codice)" class="border border-gray-300 text-gray-600 px-4 py-2 rounded-full font-bold text-xs hover:bg-gray-50">APRI</button>
                 </div>             
               </div>
@@ -924,5 +987,9 @@
         </button>
       </div>
     </div>
-    <ArchiveModal :show="showArchive" :clientEmail="currentUserEmail" @close="showArchive = false" />
+    <ArchiveModal 
+      :show="showArchive" 
+      :clientUid="currentUserUid" 
+      @close="showArchive = false" 
+    />
   </template>

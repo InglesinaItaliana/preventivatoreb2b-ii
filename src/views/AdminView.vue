@@ -474,8 +474,31 @@ const getUiConfig = (stato: string) => {
   const config = STATUS_DETAILS[stato as keyof typeof STATUS_DETAILS] || STATUS_DETAILS['DRAFT'];
   return { ...config, icon: iconMap[stato] || DocumentTextIcon };
 };
-const apriDdt = (url: string) => {
-  window.open(url, '_blank');
+const apriDdt = async (ficId: string | number, fallbackUrl?: string) => {
+  if (!ficId || String(ficId) === 'Senza DDT') {
+     if(fallbackUrl) window.open(fallbackUrl, '_blank');
+     return;
+  }
+
+  try {
+    showCustomToast("🔄 Recupero documento aggiornato...");
+    const getUrl = httpsCallable(functions, 'getFreshFicUrl');
+    const res: any = await getUrl({ fic_id: ficId });
+    
+    if (res.data.url) {
+      window.open(res.data.url, '_blank');
+    } else {
+      throw new Error("URL non trovato");
+    }
+  } catch (e) {
+    console.error(e);
+    // Se fallisce, proviamo comunque con il vecchio URL se c'è
+    if (fallbackUrl) {
+       window.open(fallbackUrl, '_blank');
+    } else {
+       showCustomToast("❌ Impossibile aprire il documento");
+    }
+  }
 };
 
 const getActionData = (p: any) => {
@@ -498,8 +521,8 @@ const getActionData = (p: any) => {
       text: 'VEDI DDT', 
       class: 'text-amber-950 border-amber-500 bg-amber-400  hover:bg-amber-300 rounded-full', 
       // Apre il PDF del DDT se disponibile, altrimenti apre l'editor
-      action: () => p.fic_ddt_url ? window.open(p.fic_ddt_url, '_blank') : apriEditor(p.codice), 
-      icon: DocumentTextIcon 
+      action: () => apriDdt(p.fic_ddt_id, p.fic_ddt_url), 
+      icon: DocumentTextIcon
     };
     return null;
 };
@@ -983,7 +1006,7 @@ onUnmounted(() => {
                       </h3>
                     </div>
                   </div>
-                  <button v-if="ddt.url" @click="apriDdt(ddt.url!)" class="text-xs bg-amber-400 border border-amber-500 hover:bg-amber-300 hover:text-amber-950 px-4 py-2 rounded-full font-bold transition-all shadow-sm flex items-center gap-2">
+                  <button v-if="ddt.url" @click="apriDdt(ddt.id, ddt.url)" class="text-xs bg-amber-400 border border-amber-500 hover:bg-amber-300 hover:text-amber-950 px-4 py-2 rounded-full font-bold transition-all shadow-sm flex items-center gap-2">
                     APRI DDT
                   </button>
                 </div>

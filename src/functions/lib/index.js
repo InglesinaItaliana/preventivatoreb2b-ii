@@ -226,6 +226,31 @@ exports.syncProductsWithFic = functions
         throw new functions.https.HttpsError('internal', error.message);
     }
 });
+// ... (altre importazioni e codice esistente)
+// --- FUNZIONE RECUPERO URL AGGIORNATO (FIX "Accesso scaduto") ---
+exports.getFreshFicUrl = functions
+    .region('europe-west1')
+    .https.onCall(async (data, context) => {
+    if (!context.auth)
+        throw new functions.https.HttpsError('unauthenticated', 'Richiesto login');
+    const { fic_id } = data;
+    if (!fic_id)
+        throw new functions.https.HttpsError('invalid-argument', 'ID documento mancante');
+    try {
+        // 1. Ottieni un token valido (usa la tua funzione esistente)
+        const token = await getValidFicToken();
+        // 2. Chiedi a FiC i dettagli del documento
+        const response = await axios_1.default.get(`${FIC_API_URL}/c/${COMPANY_ID}/issued_documents/${fic_id}`, {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        // 3. Restituisci il nuovo URL
+        return { url: response.data.data.url };
+    }
+    catch (error) {
+        console.error("Errore recupero URL aggiornato:", error.message);
+        throw new functions.https.HttpsError('internal', 'Impossibile recuperare il documento aggiornato.');
+    }
+});
 // --- CONFIGURAZIONE ---
 const FIC_API_URL = process.env.FIC_API_URL || "https://api-v2.fattureincloud.it";
 const COMPANY_ID = process.env.FIC_COMPANY_ID;

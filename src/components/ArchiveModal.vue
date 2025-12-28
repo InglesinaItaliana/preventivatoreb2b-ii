@@ -10,7 +10,7 @@ import { useRouter } from 'vue-router';
 const props = defineProps<{
   show: boolean;
   isAdmin?: boolean;
-  clientEmail?: string; // Se presente, filtra per cliente (usato nella dashboard cliente)
+  clientUid?: string; // Se presente, filtra per cliente (usato nella dashboard cliente)
 }>();
 
 const emit = defineEmits(['close']);
@@ -22,6 +22,7 @@ const loaded = ref(false);
 
 const loadArchive = async () => {
   loading.value = true;
+  archivedOrders.value = []; // Pulisci la lista vecchia per feedback visivo
   try {
     let q;
     const coll = collection(db, 'preventivi');
@@ -30,12 +31,12 @@ const loadArchive = async () => {
     const constraints = [
       where('stato', 'in', ARCHIVE_STATUSES),
       orderBy('dataCreazione', 'desc'),
-      limit(50) // Limitiamo a 50 per performance iniziale
+      limit(50)
     ];
 
-    if (!props.isAdmin && props.clientEmail) {
-      // Filtro per cliente specifico (Dashboard Cliente)
-      constraints.unshift(where('clienteEmail', '==', props.clientEmail));
+    if (!props.isAdmin && props.clientUid) {
+      // --- MODIFICA QUI: Usa clienteUID invece di clienteEmail ---
+      constraints.unshift(where('clienteUID', '==', props.clientUid));
     }
 
     q = query(coll, ...constraints);
@@ -50,9 +51,9 @@ const loadArchive = async () => {
   }
 };
 
-// Carica solo quando il modale si apre
+// Modifica il watch per forzare il ricaricamento
 watch(() => props.show, (isOpen) => {
-  if (isOpen && !loaded.value) {
+  if (isOpen) {
     loadArchive();
   }
 });

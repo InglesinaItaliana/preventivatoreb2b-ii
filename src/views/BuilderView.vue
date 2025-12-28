@@ -270,7 +270,13 @@ const adminExtraPrice = ref(0);
 const customRalGriglia = ref('');
 
 const preventivo = ref<RigaPreventivo[]>([]);
-const pannello = reactive({ base: 800, altezza: 1750, righe: 1, colonne: 4, qty: 1 });
+  const pannello = reactive({
+  base: null as number | null,
+  altezza: null as number | null,
+  righe: null as number | null,
+  colonne: null as number | null,
+  qty: null as number | null
+});
 const opzioniTelaio = reactive({ nonEquidistanti: false, curva: false, tacca: false });
 
 const isAdmin = computed(() => route.query?.admin === 'true');
@@ -509,9 +515,9 @@ const aggiungi = () => {
 
   // --- 3. CALCOLO ---
   const result = calculatePrice({
-    base_mm: pannello.base, 
-    altezza_mm: pannello.altezza, 
-    qty: pannello.qty,
+    base_mm: pannello.base || 0, 
+    altezza_mm: pannello.altezza || 0, 
+    qty: pannello.qty || 1,
     num_orizzontali: pannello.colonne || 0, 
     num_verticali: pannello.righe || 0,
     tipo_canalino: tipoCanalino.value,
@@ -546,11 +552,11 @@ const aggiungi = () => {
     modello: soloCanalino.value ? 'MANUALE' : tipoGriglia.value as any, 
     dimensione: soloCanalino.value ? '-' : dimensioneGriglia.value, 
     finitura: soloCanalino.value ? '-' : finituraGriglia.value,
-    base_mm: pannello.base, 
-    altezza_mm: pannello.altezza, 
+    base_mm: pannello.base || 0, 
+    altezza_mm: pannello.altezza || 0, 
     righe: soloCanalino.value ? 0 : (pannello.righe || 0), 
     colonne: soloCanalino.value ? 0 : (pannello.colonne || 0), 
-    quantita: pannello.qty,
+    quantita: pannello.qty || 1,
     descrizioneCompleta: descrizioneCompleta,
     infoCanalino: tipoCanalino.value ? `Canalino: ${tipoCanalino.value} ${dimensioneCanalino.value} ${finituraCanalino.value}` : '',
     
@@ -652,6 +658,13 @@ const nuovaCommessa = () => {
     
     copiaDuplex.value = false;
     fuseruolo.value = '';
+    Object.assign(pannello, { 
+    base: null, 
+    altezza: null, 
+    righe: null, 
+    colonne: null, 
+    qty: null 
+  });
   };
 
   if (preventivo.value.length > 0) {
@@ -1028,11 +1041,11 @@ const modificaRiga = async (index: number) => {
     finituraCanalino.value = r.rawCanalino.fin;
   }
   
-  pannello.base = r.base_mm || 0; 
-  pannello.altezza = r.altezza_mm || 0;
-  pannello.righe = r.righe || 0; 
-  pannello.colonne = r.colonne || 0;
-  pannello.qty = r.quantita || 1;
+  pannello.base = r.base_mm || null; 
+  pannello.altezza = r.altezza_mm || null;
+  pannello.righe = r.righe || null; 
+  pannello.colonne = r.colonne || null;
+  pannello.qty = r.quantita || null;
   
   opzioniTelaio.nonEquidistanti = r.nonEquidistanti || false; 
   opzioniTelaio.curva = r.curva || false; 
