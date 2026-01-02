@@ -1,0 +1,5 @@
+* [33m15ca077[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m)[m t
+* [33mbad48de[m[33m ([m[1;31morigin/fix-ddt-url[m[33m, [m[1;32mfix-ddt-url[m[33m)[m bottone conferma ricezione, resettati campi
+* [33m3a7e6ec[m Aggiunti segreti per functions
+* [33m08fbce2[m Aggiunto deploy automatico manuale
+* [33md65e0ac[m miglioramente chiamate firestore db

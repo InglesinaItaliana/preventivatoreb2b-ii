@@ -36,7 +36,7 @@
     tracking: ''
   });
   
-  const corrieriList = ['BRT', 'GLS', 'TNT', 'DHL', 'SDA', 'UPS', 'FEDEX'];
+  const corrieriList = ['BRT', 'VALLIN', 'GLS', 'TNT', 'DHL', 'SDA', 'UPS', 'FEDEX'];
   
   watch(() => props.orders, (newOrders: any[]) => {
     if (newOrders.length > 0) {

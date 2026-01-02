@@ -130,7 +130,7 @@ const handleCreaDdt = async (datiDdt: any) => {
           showCustomToast(`✅ DDT Creato con successo! ID: ${response.data.fic_id}`);
             annullaSpedizione(); // Pulisce la selezione
             showDdtModal.value = false;
-            // Qui potresti ricaricare i dati o aggiornare lo stato locale
+            fetchServerCounts();
         } else {
             throw new Error(response.data.message || 'Errore sconosciuto');
         }
@@ -303,6 +303,7 @@ const onConfirmProduction = async () => {
     
     showModals.value = false;
     showCustomToast("✅ Ordine inviato in produzione!");
+    fetchServerCounts();
   } catch (e) { console.error(e); showCustomToast("Errore aggiornamento stato."); }
 };
 
@@ -317,6 +318,7 @@ const ordinePronto = async (preventivo: any) => {
       // Aggiorniamo localmente per reattività immediata
       const index = listaPreventivi.value.findIndex(x => x.id === preventivo.id);
       if (index !== -1) listaPreventivi.value[index].stato = 'READY';
+      fetchServerCounts();
   } catch (e) {
       console.error(e);
       showCustomToast("Errore aggiornamento.");

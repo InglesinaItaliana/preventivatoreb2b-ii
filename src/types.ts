@@ -216,7 +216,17 @@ export const STATUS_DETAILS: Record<StatoPreventivo, { label: string, badge: str
 // --- NUOVI TIPI PER GESTIONE LISTINI E CLIENTI ---
 
 export interface CustomerPricingSettings {
-  delivery_tariff_code: 'Consegna Diretta V1' | 'Consegna Diretta V2' | 'Consegna Diretta V3' | 'Spedizione';
+  delivery_tariff_code:
+    | 'Consegna Diretta V1' 
+    | 'Consegna Diretta V2' 
+    | 'Consegna Diretta V3' 
+    | 'Consegna Diretta V4' 
+    | 'Consegna Diretta V5' 
+    | 'Consegna Diretta V6' 
+    | 'Consegna Diretta V7' 
+    | 'Consegna Diretta V8' 
+    | 'Ritiro in sede' 
+    | 'Spedizione';
   detraction_value: number; // Intero
   price_list_mode: 'default' | '2025-a' | '2025-x' | '2026-a';
 }

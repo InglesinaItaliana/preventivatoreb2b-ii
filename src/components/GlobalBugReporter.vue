@@ -14,6 +14,7 @@
     CheckCircleIcon,          
     ExclamationTriangleIcon,
     PlusIcon,
+    ShieldExclamationIcon,
     CalculatorIcon,
     ChartBarIcon,
     TruckIcon,
@@ -72,18 +73,20 @@
     if (role.value === 'LOGISTICA') return adminLinks.filter(l => l.route === '/delivery');
     return []; // I clienti o ruoli sconosciuti non vedono link admin
   });
+  const standardLinks = computed(() => visibleLinks.value.filter(l => !['/stack', '/calcoli'].includes(l.route)));
+const constructionLinks = computed(() => visibleLinks.value.filter(l => ['/stack', '/calcoli'].includes(l.route)));
 
   const isTeamMember = computed(() => !!role.value);
 
   // Navigazione Menu Admin
   const adminLinks = [
-    { label: 'Admin Dashboard', route: '/admin', icon: ChartBarIcon, color: 'text-indigo-600', bg: 'bg-indigo-50' },
-    { label: 'Crea per Cliente', route: '/preventivatore?admin=true&new=true', icon: UserPlusIcon, color: 'text-blue-600', bg: 'bg-blue-50' },
-    { label: 'Calcoli Lavorazioni', route: '/calcoli', icon: CalculatorIcon, color: 'text-emerald-600', bg: 'bg-emerald-50' }, 
-    { label: 'Produzione', route: '/production', icon: CogIcon, color: 'text-slate-600', bg: 'bg-slate-50' },
-    { label: 'Spedizioni', route: '/delivery', icon: TruckIcon, color: 'text-cyan-600', bg: 'bg-cyan-50' },
-    { label: 'Stack Viewer', route: '/stack', icon: CubeIcon, color: 'text-violet-600', bg: 'bg-violet-50' },
-    { label: 'Impostazioni', route: '/admin/settings', icon: AdjustmentsHorizontalIcon, color: 'text-gray-600', bg: 'bg-gray-100' },
+    { label: 'Dashboard', route: '/admin', icon: ChartBarIcon, color: 'text-amber-400', bg: 'bg-amber-50' },
+    { label: 'Crea per Cliente', route: '/preventivatore?admin=true&new=true', icon: UserPlusIcon, color: 'text-amber-400', bg: 'bg-amber-50' },
+    { label: 'Calcoli Lavorazioni', route: '/calcoli', icon: CalculatorIcon, color: 'text-amber-400', bg: 'bg-amber-50' }, 
+    { label: 'Produzione', route: '/production', icon: CogIcon, color: 'text-amber-400', bg: 'bg-amber-50' },
+    { label: 'Spedizioni', route: '/delivery', icon: TruckIcon, color: 'text-amber-400', bg: 'bg-amber-50' },
+    { label: 'Stack Viewer', route: '/stack', icon: CubeIcon, color: 'text-amber-400', bg: 'bg-amber-50' },
+    { label: 'Impostazioni', route: '/admin/settings', icon: AdjustmentsHorizontalIcon, color: 'text-amber-400', bg: 'bg-amber-50' },
   ];
   
   const resultModal = ref({
@@ -220,17 +223,40 @@ const openResultModal = (title: string, message: string, type: 'SUCCESS' | 'ERRO
             </div>
 
             <div class="grid grid-cols-1 gap-1 p-1">
+  
               <button 
-                v-for="link in visibleLinks" 
+                v-for="link in standardLinks" 
                 :key="link.route"
                 @click="navigateTo(link.route)"
-                class="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl hover:bg-gray-50 transition-all group"
-              >
+                class="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl hover:bg-yellow-50/50 transition-all group border border-dashed border-transparent hover:border-yellow-200"
+                >
                 <div :class="[link.bg, 'p-1.5 rounded-lg transition-transform duration-300 group-hover:scale-110 shadow-sm']">
                   <component :is="link.icon" :class="[link.color, 'h-4 w-4']" />
                 </div>
                 <span class="text-xs font-bold text-gray-600 group-hover:text-gray-900 transition-colors">{{ link.label }}</span>
               </button>
+
+              <template v-if="constructionLinks.length > 0">
+                <div class="h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent my-3 mx-4"></div>
+
+                <div class="px-5 py-1 text-[10px] font-extrabold text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                          <ShieldExclamationIcon class="w-3 h-3 text-amber-400" />
+                          UNDER CONSTRUCTION
+                        </div>
+
+                <button 
+                  v-for="link in constructionLinks" 
+                  :key="link.route"
+                  @click="navigateTo(link.route)"
+                  class="flex items-center gap-3 w-full px-3 py-2.5 rounded-xl hover:bg-yellow-50/50 transition-all group border border-dashed border-transparent hover:border-yellow-200"
+                >
+                  <div :class="[link.bg, 'p-1.5 rounded-lg transition-transform duration-300 group-hover:scale-110 shadow-sm opacity-70 group-hover:opacity-100']">
+                    <component :is="link.icon" :class="[link.color, 'h-4 w-4']" />
+                  </div>
+                  <span class="text-xs font-bold text-gray-500 group-hover:text-gray-800 transition-colors">{{ link.label }}</span>
+                </button>
+              </template>
+
             </div>
             <div v-if="resultModal.show" class="fixed inset-0 z-[11000] overflow-y-auto bg-gray-900/50 backdrop-blur-sm transition-opacity duration-300 flex items-center justify-center p-4">
               <div class="bg-white rounded-[2rem] shadow-2xl max-w-sm w-full transform transition-all scale-100 p-6 text-center animate-in fade-in zoom-in duration-200">

@@ -716,7 +716,7 @@ const onConfirmSign = async (url: string) => {
 const richiediConfermaOrdine = () => {
   // 1. Validazioni preliminari base (vuoto o senza riferimento)
   if (preventivo.value.length === 0) return showCustomToast("Preventivo vuoto.");
-  if (!riferimentoCommessa.value.trim()) return showCustomToast("Il campo 'Riferimento Cantiere' è obbligatorio.");
+  if (!riferimentoCommessa.value.trim()) return showCustomToast("Il campo 'Riferimento Cantiere' è necessario.");
   const richiedeSpecifiche = preventivo.value.some(r => r.tacca || r.nonEquidistanti || r.curva);
   if (richiedeSpecifiche && listaAllegati.value.length === 0) {
      return showCustomToast("⛔ ERRORE: Articoli speciali (Curve, Tacche o Non Equidistanti) presenti. Devi caricare un allegato tecnico prima di procedere.");
@@ -752,7 +752,7 @@ const confermaOrdineConData = async () => {
 
 const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADMIN_VALIDA' | 'ADMIN_RIFIUTA' | 'ADMIN_FIRMA' | 'FORCE_EDIT' | 'CREA_PREVENTIVO_ADMIN' | 'CREA_ORDINE_ADMIN') => {
   if (preventivo.value.length === 0) return showCustomToast("Preventivo vuoto.");
-  if (!riferimentoCommessa.value.trim()) return showCustomToast("Il campo 'Riferimento Cantiere' è obbligatorio.");
+  if (!riferimentoCommessa.value.trim()) return showCustomToast("Il campo 'Riferimento Cantiere' è necessario.");
   
   const richiedeSpecifiche = preventivo.value.some(r => r.tacca || r.nonEquidistanti || r.curva);
   // --- INIZIO MODIFICA: Controllo Allegati per lavorazioni speciali ---
@@ -1113,7 +1113,7 @@ const startBuilderTour = () => {
       {
         target: '#tour-builder-ref',
         title: 'Dati Commessa',
-        content: 'Inserisci qui il <b>Riferimento Cantiere</b> (es. "Rossi Cucina"). È l\'unico dato obbligatorio per iniziare.',
+        content: 'Inserisci qui il <b>Riferimento Cantiere</b> (es. "Rossi Cucina"). È l\'unico dato necessario per iniziare.',
       },
       {
         target: '#tour-builder-config',
@@ -1123,7 +1123,7 @@ const startBuilderTour = () => {
       {
         target: '#tour-builder-dims',
         title: 'Misure e Opzioni',
-        content: 'Inserisci base, altezza e suddivisione. Qui trovi anche le opzioni speciali come <b>Curva</b>, <b>Tacca</b> o <b>Non Equidistanti</b>.',
+        content: 'Inserisci base, altezza e suddivisione. Qui trovi anche le opzioni speciali come <b>Curva</b>, <b>Tacca</b> o <b>se le suddivisioni sono Non Equidistanti</b>.',
       },
       {
         target: '#tour-builder-add',
@@ -1491,10 +1491,10 @@ onMounted(async() => {
 
           <div class="grid grid-cols-3 gap-2">
             <div>
-              <input v-model.number="pannello.righe" :disabled="isLocked" type="number" class="border p-2 rounded w-full text-center text-sm disabled:bg-gray-100" placeholder="Vert">
+              <input v-model.number="pannello.righe" :disabled="isLocked" type="number" class="border p-2 rounded w-full text-center text-sm disabled:bg-gray-100" placeholder="n°Vert">
             </div>
             <div>
-              <input v-model.number="pannello.colonne" :disabled="isLocked" type="number" class="border p-2 rounded w-full text-center text-sm disabled:bg-gray-100" placeholder="Oriz">
+              <input v-model.number="pannello.colonne" :disabled="isLocked" type="number" class="border p-2 rounded w-full text-center text-sm disabled:bg-gray-100" placeholder="n°Oriz">
             </div>
             <div>
               <input v-model.number="pannello.qty" :disabled="isLocked" type="number" class="border p-2 rounded w-full text-center text-sm disabled:bg-gray-100" placeholder="Q.tà">
@@ -1891,7 +1891,7 @@ onMounted(async() => {
           </div>
 
           <div class="space-y-2">
-            <label class="text-xs font-bold text-gray-400 uppercase tracking-wider ml-1">Detrazione</label>
+            <label class="text-xs font-bold text-gray-400 uppercase tracking-wider ml-1">Detrazione (sigillatura + spessore canalini)</label>
             <div class="bg-gray-50 rounded-xl p-1.5 border border-gray-200 flex items-center justify-between shadow-sm">
               
               <button 

@@ -274,8 +274,8 @@ const inspectTrip = async (trip: Trip) => {
         const results = await Promise.all(promises);
         
         tripOrders.value = results
-           .map(r => !r.empty ? { id: r.docs[0]!.id, ...r.docs[0]!.data() } : null)
-           .filter(o => o !== null) as Order[];
+        .map(r => !r.empty ? { ...r.docs[0]!.data(), id: r.docs[0]!.id } : null) // <--- PRIMA i dati, POI l'ID
+          .filter(o => o !== null) as Order[];
 
         // 3. AGGIUNTA FONDAMENTALE: Scarichiamo gli indirizzi anche qui!
         await fetchClientAddresses(); 
@@ -354,7 +354,7 @@ const loadMyTrip = async () => {
         );
         const results = await Promise.all(promises);
         tripOrders.value = results
-           .map(r => !r.empty ? { id: r.docs[0]!.id, ...r.docs[0]!.data() } : null)
+        .map(r => !r.empty ? { ...r.docs[0]!.data(), id: r.docs[0]!.id } : null) // <--- PRIMA i dati, POI l'ID
            .filter(o => o !== null) as Order[];
            await fetchClientAddresses();
       } else {
@@ -434,7 +434,8 @@ const openDeliveryModal = (stopGroup: any) => {
   
 const handleConfirmDelivery = async (signatureBase64: string) => {
   if (!selectedOrderForDelivery.value) return;
-  
+  const ids = selectedOrderForDelivery.value.idsToUpdate;
+  console.log("🛠️ ID ORDINI DA AGGIORNARE:", ids);
   try {
      const ids = selectedOrderForDelivery.value.idsToUpdate;
      const timestamp = serverTimestamp();
@@ -457,6 +458,21 @@ const handleConfirmDelivery = async (signatureBase64: string) => {
      });
      
      await batch.commit();
+     // --- AGGIUNTA: AGGIORNAMENTO LOCALE IMMEDIATO ---
+     // Aggiorniamo l'array in memoria così la vista cambia subito senza ricaricare
+     tripOrders.value = tripOrders.value.map(order => {
+        if (ids.includes(order.id)) {
+            return {
+                ...order,
+                stato: 'DELIVERED',
+                firmaConsegna: signatureUrl,
+                // Creiamo un oggetto compatibile col metodo .toDate() usato nel template
+                dataConsegnaEffettiva: { toDate: () => new Date() } 
+            };
+        }
+        return order;
+     });
+     // -----------------------------------------------
      showDeliveryModal.value = false;
 
   } catch(e) { 

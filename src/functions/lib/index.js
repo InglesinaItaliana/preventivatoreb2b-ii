@@ -111,6 +111,78 @@ exports.migrateAllTeamClaims = functions
     }
     return { success: true, updated: count };
 });
+// --- FUNZIONE UNA TANTUM: AGGIORNAMENTO INDIRIZZI DA FIC ---
+exports.syncAddressesFromFiC = functions
+    .region('europe-west1')
+    .runWith({ timeoutSeconds: 540 })
+    .https.onCall(async (data, context) => {
+    if (!context.auth)
+        throw new functions.https.HttpsError('unauthenticated', 'Richiesto login');
+    const db = admin.firestore();
+    const results = { total: 0, updated: 0, skipped: 0, errors: 0 };
+    try {
+        const token = await getValidFicToken();
+        const usersSnap = await db.collection('users').get();
+        results.total = usersSnap.size;
+        console.log(`[ADDR SYNC] Inizio per ${results.total} utenti...`);
+        for (const doc of usersSnap.docs) {
+            const userData = doc.data();
+            const piva = userData.piva;
+            // Salta se manca P.IVA o se ha già indirizzo E cap
+            if (!piva || (userData.indirizzo && userData.cap)) {
+                results.skipped++;
+                continue;
+            }
+            try {
+                // Recupera l'oggetto DETTAGLIATO (con address_street e postal_code)
+                const ficClient = await fetchFicClientByVat(piva, token);
+                if (ficClient) {
+                    const updates = {};
+                    // --- MAPPATURA RICHIESTA ---
+                    // Indirizzo -> address_street
+                    if (!userData.indirizzo && ficClient.address_street) {
+                        updates.indirizzo = ficClient.address_street;
+                    }
+                    // CAP -> address_postal_code
+                    if (!userData.cap && ficClient.address_postal_code) {
+                        updates.cap = ficClient.address_postal_code;
+                    }
+                    // Extra utili
+                    if (!userData.citta && ficClient.address_city) {
+                        updates.citta = ficClient.address_city;
+                    }
+                    if (!userData.provincia && ficClient.address_province) {
+                        updates.provincia = ficClient.address_province;
+                    }
+                    if (Object.keys(updates).length > 0) {
+                        await doc.ref.update(updates);
+                        results.updated++;
+                        console.log(`[ADDR SYNC] ✅ Aggiornato ${userData.ragioneSociale}`);
+                    }
+                    else {
+                        // Se entra qui, significa che anche su FiC i campi sono vuoti
+                        console.log(`[ADDR SYNC] ⚠️ Trovato ${piva} ma dati indirizzo vuoti su FiC.`);
+                    }
+                }
+                else {
+                    console.log(`[ADDR SYNC] ❌ P.IVA ${piva} non trovata su FiC.`);
+                }
+                // Pausa anti-rate-limit
+                await new Promise(r => setTimeout(r, 200));
+            }
+            catch (innerErr) {
+                console.error(`Errore utente ${doc.id}`, innerErr);
+                results.errors++;
+            }
+        }
+        console.log(`[ADDR SYNC] Terminato.`, results);
+        return results;
+    }
+    catch (error) {
+        console.error("Errore critico sync:", error);
+        throw new functions.https.HttpsError('internal', error.message);
+    }
+});
 // --- NUOVA FUNZIONE: SINCRONIZZAZIONE PRODOTTI ---
 // --- FUNZIONE SINCRONIZZAZIONE POTENZIATA ---
 exports.syncProductsWithFic = functions
@@ -477,6 +549,20 @@ exports.generaOrdineFIC = functions
             }
             return lineItem;
         });
+        // Fix Sconto: Calcolo discrepanza tra somma righe e totale atteso
+        const sumItemsNet = itemsList.reduce((acc, cur) => acc + (cur.net_price * cur.qty), 0);
+        // Se la somma delle righe supera l'importo netto atteso (con tolleranza 0.05), aggiungi riga sconto
+        if (sumItemsNet > importoNetto + 0.05) {
+            const discountValue = parseFloat((sumItemsNet - importoNetto).toFixed(2));
+            console.log(`[FIC] Rilevato sconto globale. Aggiungo riga correttiva di -${discountValue}€`);
+            itemsList.push({
+                code: "SCONTO",
+                name: "Sconto Commerciale",
+                qty: 1,
+                net_price: -discountValue,
+                vat: { id: VAT_ID, value: VAT_VALUE }
+            });
+        }
         // 8. CREAZIONE ORDINE
         const orderPayload = {
             data: {
@@ -596,25 +682,34 @@ exports.creaDdtCumulativo = functions
             finalItems.push(bestShippingItem);
         }
         // =================================================================================
-        // 3. RECUPERO DETTAGLI CLIENTE (Fallback come prima)
+        // 3. RECUPERO DETTAGLI CLIENTE (Strategia Ibrida: ID o P.IVA)
         let detailedClient = null;
+        // A. Tentativo per ID (se presente nel join)
         if (joinedData.entity && joinedData.entity.id) {
             try {
                 const clientDetailRes = await axios_1.default.get(`${FIC_API_URL}/c/${COMPANY_ID}/entities/clients/${joinedData.entity.id}`, {
                     headers: { Authorization: `Bearer ${accessToken}` },
-                    params: { fieldset: 'detailed' }
+                    params: { fieldset: 'detailed' } // Fondamentale per avere via e CAP
                 });
                 detailedClient = clientDetailRes.data.data;
             }
             catch (err) {
-                console.warn("[FIC] Impossibile recuperare dettagli cliente, userò dati base.");
+                console.warn("[FIC] Recupero cliente per ID fallito, tento fallback P.IVA...");
             }
         }
+        // B. Tentativo per P.IVA (Se ID mancante o fetch fallita)
+        // Utilizziamo l'helper 'fetchFicClientByVat' che ora è robusto e scarica i dettagli
+        if (!detailedClient && joinedData.entity && joinedData.entity.vat_number) {
+            console.log(`[DDT] Tento recupero indirizzo tramite P.IVA: ${joinedData.entity.vat_number}`);
+            detailedClient = await fetchFicClientByVat(joinedData.entity.vat_number, accessToken);
+        }
+        // C. Costruzione Dati Entity (con Indirizzo Garantito)
         const entityData = detailedClient ? {
             id: detailedClient.id,
             name: detailedClient.name,
             vat_number: detailedClient.vat_number || "",
             tax_code: detailedClient.tax_code || "",
+            // Mappatura esplicita campi indirizzo
             address_street: detailedClient.address_street || "",
             address_postal_code: detailedClient.address_postal_code || "",
             address_city: detailedClient.address_city || "",
@@ -815,19 +910,49 @@ const mailTransport = nodemailer.createTransport({
         pass: process.env.GMAIL_PASSWORD
     }
 });
-// --- HELPER: RECUPERA CLIENTE DA FIC ---
+// --- HELPER: RECUPERA CLIENTE DA FIC (ROBUST & DETAILED) ---
 async function fetchFicClientByVat(vatNumber, token) {
+    if (!vatNumber)
+        return null;
+    const cleanVat = vatNumber.trim().toUpperCase();
+    const vatNoIT = cleanVat.replace(/^IT/, '');
+    const vatWithIT = 'IT' + vatNoIT;
+    // Helper per la chiamata di ricerca base
+    const searchClient = async (v) => {
+        try {
+            const res = await axios_1.default.get(`${FIC_API_URL}/c/${COMPANY_ID}/entities/clients`, {
+                headers: { Authorization: `Bearer ${token}` },
+                params: { q: `vat_number = '${v}'` }
+            });
+            return res.data.data || [];
+        }
+        catch (e) {
+            console.warn(`[FIC SEARCH FAIL] ${v}`, e.message);
+            return [];
+        }
+    };
+    // 1. Tenta la ricerca con diverse varianti della P.IVA
+    let results = await searchClient(cleanVat);
+    if (results.length === 0 && cleanVat !== vatNoIT) {
+        results = await searchClient(vatNoIT);
+    }
+    if (results.length === 0 && cleanVat !== vatWithIT) {
+        results = await searchClient(vatWithIT);
+    }
+    if (results.length === 0)
+        return null;
+    // 2. TROVATO! Ora recuperiamo il DETTAGLIO (Cruciale per indirizzo e CAP)
+    const basicClient = results[0];
     try {
-        const res = await axios_1.default.get(`${FIC_API_URL}/c/${COMPANY_ID}/entities/clients`, {
+        const detailRes = await axios_1.default.get(`${FIC_API_URL}/c/${COMPANY_ID}/entities/clients/${basicClient.id}`, {
             headers: { Authorization: `Bearer ${token}` },
-            // CORREZIONE: Usa 'q' invece di 'filter' per le API di Fatture in Cloud
-            params: { q: `vat_number = '${vatNumber}'` }
+            params: { fieldset: 'detailed' } // <--- QUESTO POPOLA address_street e address_postal_code
         });
-        return res.data.data && res.data.data.length > 0 ? res.data.data[0] : null;
+        return detailRes.data.data;
     }
     catch (e) {
-        console.error(`Errore FiC lookup ${vatNumber}`, e);
-        return null;
+        console.warn(`[FIC DETAIL FAIL] ID ${basicClient.id}`, e.message);
+        return basicClient; // Fallback al base se il dettaglio fallisce
     }
 }
 // --- FUNZIONE 1: IMPORTAZIONE MASSIVA (O SINGOLA) ---

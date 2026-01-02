@@ -40,11 +40,33 @@ const globalPricing = reactive<{
     delivery_tariffs: Record<string, number>;
     active_global_default: string;
   }>({
-    delivery_tariffs: { 'Consegna Diretta V1': 0, 'Consegna Diretta V2': 0, 'Consegna Diretta V3': 0, 'Spedizione': 0 },
+    delivery_tariffs: { 
+        'Consegna Diretta V1': 0, 
+        'Consegna Diretta V2': 0, 
+        'Consegna Diretta V3': 0,
+        'Consegna Diretta V4': 0,
+        'Consegna Diretta V5': 0,
+        'Consegna Diretta V6': 0,
+        'Consegna Diretta V7': 0,
+        'Consegna Diretta V8': 0,
+        'Ritiro in sede': 0,
+        'Spedizione': 0 
+    },
     active_global_default: '2026-a'
   });
 
-  const deliveryOptions = ['Consegna Diretta V1', 'Consegna Diretta V2', 'Consegna Diretta V3', 'Spedizione'];
+  const deliveryOptions = [
+    'Consegna Diretta V1', 
+    'Consegna Diretta V2', 
+    'Consegna Diretta V3', 
+    'Consegna Diretta V4', 
+    'Consegna Diretta V5', 
+    'Consegna Diretta V6', 
+    'Consegna Diretta V7', 
+    'Consegna Diretta V8', 
+    'Ritiro in sede', 
+    'Spedizione'
+  ];
   const pricelistOptions = ['default', '2025-a', '2025x', '2026-a'];
 
   // --- STATO MODALE CLIENTE ---
