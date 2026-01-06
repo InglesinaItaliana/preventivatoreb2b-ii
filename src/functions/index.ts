@@ -10,6 +10,75 @@ if (admin.apps.length === 0) {
     admin.initializeApp();
 }
 
+// ... (codice esistente)
+
+// --- FUNZIONE 4: ANNULLA E CANCELLA ORDINE ---
+// Imposta stato a REJECTED ed elimina il documento su FiC se esistente
+// Bloccata se l'ordine è già READY o successivo
+exports.cancelOrder = functions
+    .region('europe-west1')
+    .https.onCall(async (data, context) => {
+        if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Richiesto login');
+        
+        const orderId = data.orderId;
+        if (!orderId) throw new functions.https.HttpsError('invalid-argument', 'ID ordine mancante');
+
+        const db = admin.firestore();
+        const docRef = db.collection('preventivi').doc(orderId);
+
+        try {
+            const docSnap = await docRef.get();
+            if (!docSnap.exists) throw new functions.https.HttpsError('not-found', 'Ordine non trovato');
+            
+            const orderData = docSnap.data();
+            const statoAttuale = orderData?.stato || 'DRAFT';
+
+            // 1. VERIFICA VINCOLO DI STATO
+            // Non si può annullare se è READY, DELIVERY, SHIPPED, DELIVERED
+            const statiBloccati = ['READY', 'DELIVERY', 'SHIPPED', 'DELIVERED'];
+            if (statiBloccati.includes(statoAttuale)) {
+                throw new functions.https.HttpsError(
+                    'failed-precondition', 
+                    `Impossibile annullare l'ordine: lo stato '${statoAttuale}' è troppo avanzato (Pronto o Spedito).`
+                );
+            }
+
+            const ficId = orderData?.fic_order_id;
+
+            // 2. ELIMINAZIONE SU FATTURE IN CLOUD (Se esiste)
+            if (ficId) {
+                try {
+                    const token = await getValidFicToken();
+                    console.log(`[CANCEL] Eliminazione ordine FiC ID: ${ficId}...`);
+                    
+                    await axios.delete(`${FIC_API_URL}/c/${COMPANY_ID}/issued_documents/${ficId}`, {
+                        headers: { Authorization: `Bearer ${token}` }
+                    });
+                    console.log(`[CANCEL] Ordine FiC eliminato correttamente.`);
+                } catch (ficError: any) {
+                    console.error("[CANCEL] Errore eliminazione FiC (procedo comunque all'annullamento locale):", ficError.message);
+                    // Non blocchiamo: se l'ordine non esiste più su FiC, va bene lo stesso.
+                }
+            }
+
+            // 3. AGGIORNAMENTO STATO FIRESTORE -> REJECTED
+            await docRef.update({
+                stato: 'REJECTED',
+                fic_order_id: admin.firestore.FieldValue.delete(),
+                fic_order_url: admin.firestore.FieldValue.delete(),
+                // Manteniamo traccia di chi ha annullato
+                annullatoDa: context.auth.token.email || context.auth.uid,
+                dataAnnullamento: admin.firestore.FieldValue.serverTimestamp()
+            });
+
+            return { success: true, message: "Ordine annullato correttamente." };
+
+        } catch (e: any) {
+            console.error("[CANCEL] Errore critico:", e);
+            throw new functions.https.HttpsError('internal', e.message);
+        }
+    });
+    
 // --- NUOVA FUNZIONE: SYNC RUOLI (Database -> Auth Claims) ---
 // Ogni volta che si scrive nella collezione 'team', aggiorna i Custom Claims dell'utente
 exports.syncTeamRoleToAuth = functions

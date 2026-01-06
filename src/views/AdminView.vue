@@ -32,8 +32,9 @@ import {
   ShoppingCartIcon,
   UserIcon,
   CubeIcon,
-  TruckIcon,      // NUOVO: Per Spedizioni
-  ArchiveBoxIcon  // NUOVO: Per Archivio
+  TruckIcon,
+  ArchiveBoxIcon,
+  TrashIcon
 } from '@heroicons/vue/24/solid'
 
 // --- TOAST NOTIFICATION ---
@@ -105,6 +106,37 @@ const saveColli = async (orderId: string, colli: number) => {
 // Funzione chiamata dal click su "CREA DDT" nella Sticky Bar
 const avviaCreazioneDdt = () => {
     showDdtModal.value = true;
+};
+
+const handleCancelOrder = async (p: any) => {
+  if (!confirm(`Sei sicuro di voler ANNULLARE l'ordine di ${p.cliente}? Il documento su Fatture in Cloud verrà eliminato.`)) {
+    return;
+  }
+
+  try {
+    showCustomToast("⏳ Annullamento in corso...");
+    const cancelFn = httpsCallable(functions, 'cancelOrder');
+    await cancelFn({ orderId: p.id });
+    
+    // Aggiornamento ottimistico locale
+    const index = listaPreventivi.value.findIndex(x => x.id === p.id);
+    if (index !== -1) {
+      listaPreventivi.value[index].stato = 'REJECTED';
+    }
+    
+    showCustomToast("✅ Ordine Annullato con successo.");
+    fetchServerCounts(); // Aggiorna i contatori
+  } catch (e: any) {
+    console.error(e);
+    showCustomToast(`❌ Errore: ${e.message}`);
+  }
+};
+
+// Helper per decidere se mostrare il pulsante "Annulla"
+const canCancel = (stato: string) => {
+  // Nascondi se è già annullato, consegnato, o se è "PRONTO" in poi
+  const forbidden = ['READY', 'DELIVERY', 'SHIPPED', 'DELIVERED', 'REJECTED'];
+  return !forbidden.includes(stato);
 };
 
 // Funzione chiamata dalla conferma della Modale
@@ -931,6 +963,13 @@ onUnmounted(() => {
                     </td>
                     <td class="align-middle px-4 py-3 text-right">
                       <div class="flex justify-end items-center gap-2 w-64">
+                        <button 
+                          v-if="canCancel(p.stato)"
+                          @click.stop="handleCancelOrder(p)"
+                          class="text-red-400 hover:text-red-600 hover:bg-red-50 p-2 rounded-full transition-colors"
+                          title="Annulla e Cancella Ordine">
+                          <TrashIcon class="h-5 w-5" />
+                        </button>
                         <button
                         v-if="getActionData(p)"
                         @click.stop="getActionData(p)?.action()"
@@ -1066,7 +1105,14 @@ onUnmounted(() => {
                     <TruckIcon class="h-4 w-4" />
                   </div>
                 </div>
-
+                <div v-else-if="canCancel(p.stato)"
+                    @click.stop="handleCancelOrder(p)"
+                    class="absolute -top-3 -right-3 z-20 cursor-pointer transition-transform hover:scale-110"
+                    title="Annulla e Cancella Ordine">
+                    <div class="h-8 w-8 rounded-full border border-red-200 bg-white text-red-500 flex items-center justify-center shadow-sm hover:bg-red-50 hover:border-red-400 hover:text-red-600">
+                      <TrashIcon class="h-4 w-4" />
+                    </div>
+                </div>
                 <div class="flex flex-col md:flex-row justify-between items-center gap-4">
                    <div class="flex items-center gap-4 w-full md:w-auto">
                     <div class="h-12 w-12 rounded-full flex flex-col items-center justify-center shrink-0 border border-black/5 shadow-sm overflow-hidden bg-amber-400" 
