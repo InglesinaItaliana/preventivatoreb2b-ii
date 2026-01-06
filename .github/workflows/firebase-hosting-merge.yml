@@ -2,26 +2,42 @@ name: Deploy to Firebase Hosting on merge
 on:
   push:
     branches:
-      - main  # Assicurati che il tuo branch principale si chiami 'main'
+      - main
 jobs:
   build_and_deploy:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
+      # 1. Configurazione Variabili d'ambiente per le Functions
       - name: Create .env file for Functions
         run: |
           echo "${{ secrets.ENV_FILE }}" > src/functions/.env
 
+      # 2. Installazione dipendenze Functions
       - name: Install Functions Dependencies
         run: cd src/functions && npm ci
-      
+
+      # 3. Installazione dipendenze Frontend
       - name: Install Dependencies
         run: npm ci
-        
+
+      # 4. Build Frontend (Vue)
+        # Questo corrisponde al tuo "npm run build"
       - name: Build
         run: npm run build
 
+      # --- NUOVO STEP AGGIUNTO: Deploy delle Functions ---
+      # Richiede che tu abbia il FIREBASE_TOKEN nei secrets di GitHub (non solo il Service Account)
+      - name: Deploy Cloud Functions
+        uses: w9jds/firebase-action@master
+        with:
+          args: deploy --only functions
+        env:
+          FIREBASE_TOKEN: ${{ secrets.FIREBASE_TOKEN }}
+
+      # 5. Deploy Hosting (già presente)
+        # Questo corrisponde al tuo "firebase deploy --only hosting"
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: '${{ secrets.GITHUB_TOKEN }}'
