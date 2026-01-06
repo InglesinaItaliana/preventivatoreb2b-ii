@@ -103,7 +103,10 @@ export interface PreventivoDocumento {
   
   dataCreazione: any;
   dataScadenza: any;
+
+  datiLegali?: DatiLegali; // <--- NUOVO CAMPO OPZIONALE
 }
+
 export interface DatiLegali {
   accettazioneTermini: boolean;   // Checkbox 1
   accettazioneClausole: boolean;  // Checkbox 2
@@ -112,11 +115,6 @@ export interface DatiLegali {
   dataFirma: any; // Timestamp
   firmatarioEmail: string;
   firmatarioUid: string;
-}
-
-export interface PreventivoDocumento {
-  // ... campi esistenti ...
-  datiLegali?: DatiLegali; // <--- NUOVO CAMPO OPZIONALE
 }
 
 // --- CONFIGURAZIONE CONDIVISA COLORI E TESTI ---

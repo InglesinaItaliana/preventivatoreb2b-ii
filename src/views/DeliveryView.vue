@@ -796,7 +796,7 @@ const isSelected = (ids: string[]) => {
                   <TruckIcon class="w-10 h-10 text-slate-300"/>
               </div>
               <h2 class="text-xl font-black text-slate-900 mb-2">Nessun Viaggio</h2>
-              <p class="text-slate-500 text-sm max-w-[200px] mx-auto">Tutto tranquillo oggi. Controlla più tardi o contatta la logistica.</p>
+              <p class="text-slate-500 text-sm max-w-[200px] mx-auto">Tutto tranquillo oggi.</p>
           </div>
 
           <div v-else class="animate-in fade-in slide-in-from-bottom-4 duration-500">

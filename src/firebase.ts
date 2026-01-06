@@ -1,6 +1,6 @@
 import { initializeApp } from 'firebase/app';
-// 1. Aggiungi 'enableIndexedDbPersistence' agli import
-import { initializeFirestore, enableIndexedDbPersistence } from 'firebase/firestore';
+// 1. Aggiornati import per la nuova gestione della cache
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { getAuth } from 'firebase/auth';
 import { getFunctions } from "firebase/functions";
@@ -16,21 +16,12 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 
+// 2. Nuova configurazione con localCache invece di enableIndexedDbPersistence
 const db = initializeFirestore(app, {
     experimentalForceLongPolling: true,
-});
-
-// 2. ABILITA LA PERSISTENZA OFFLINE
-// Questo va chiamato subito dopo aver inizializzato 'db'
-enableIndexedDbPersistence(db).catch((err) => {
-    if (err.code == 'failed-precondition') {
-        // Probabilmente più schede aperte insieme.
-        // La persistenza funzionerà solo nella prima scheda.
-        console.warn('Persistenza fallita: Più tab aperti.');
-    } else if (err.code == 'unimplemented') {
-        // Il browser non supporta la persistenza (es. certi browser in private mode)
-        console.warn('Persistenza non supportata dal browser.');
-    }
+    localCache: persistentLocalCache({
+        tabManager: persistentMultipleTabManager()
+    })
 });
   
 const auth = getAuth(app);

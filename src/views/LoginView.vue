@@ -71,7 +71,7 @@ const handleLogin = async () => {
           
           // Reindirizzamento in base al ruolo
           if (role === 'PRODUZIONE') {
-            router.push('/production');
+            router.push('/delivery');
           } else if (role === 'LOGISTICA') {
             router.push('/delivery');
           } else {

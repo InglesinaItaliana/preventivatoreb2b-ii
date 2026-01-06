@@ -214,7 +214,7 @@ const saveSettings = async () => {
           firstName: data.firstName || '',
           lastName: data.lastName || '',
           email: data.email || '',
-          role: data.role || 'COMMERCIALE',
+          role: data.role || 'PRODUZIONE',
           phone: data.phone || '',
           active: data.active ?? true,
           color: data.color || 'bg-gray-400'
@@ -286,7 +286,7 @@ const catalogStore = useCatalogStore();
     // Assegna colore casuale all'apertura del modale di creazione
     const randomColor = avatarColors[Math.floor(Math.random() * avatarColors.length)];
     Object.assign(memberForm, { 
-      firstName: '', lastName: '', email: '', role: 'COMMERCIALE', phone: '', 
+      firstName: '', lastName: '', email: '', role: 'PRODUZIONE', phone: '', 
       active: true, color: randomColor 
     });
     showMemberModal.value = true;
@@ -818,7 +818,7 @@ const catalogStore = useCatalogStore();
               </div>
               
               <div>
-                 <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Email Aziendale</label>
+                 <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Email</label>
                  <input v-model="memberForm.email" type="email" class="w-full bg-slate-50 border-none rounded-xl p-3 text-sm font-bold focus:ring-2 focus:ring-amber-200">
               </div>
   
