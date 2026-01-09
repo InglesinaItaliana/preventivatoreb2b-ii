@@ -44,12 +44,6 @@ const openDocument = () => {
   }
 };
 
-const openConditions = () => {
-    // Placeholder per il file condizioni
-    // window.open('LINK_CONDIZIONI', '_blank');
-    emit('error', 'File condizioni non ancora disponibile');
-};
-
 const handleSignConfirm = () => {
   emit('confirmSign', '');
 };
@@ -186,9 +180,13 @@ const handleProductionConfirm = () => emit('confirmProduction');
                         <span class="text-xs text-gray-700 group-hover:text-black transition-colors font-medium leading-tight">Accetto Condizioni Generali di Vendita.</span>
                     </label>
                     
-                    <button @click="openConditions" class="bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-2 whitespace-nowrap">
-                        <EyeIcon class="w-4 h-4"/> APRI CGV
-                    </button>
+                    <a 
+                      href="https://docs.google.com/document/d/18BxnxPPvEBqd9XbhmJF0p3nB_U0iY8b6oZMevokI_B4/edit?usp=sharing" 
+                      target="_blank" 
+                      class="bg-blue-50 hover:bg-blue-100 text-blue-600 border border-blue-200 px-3 py-1.5 rounded-lg text-xs font-bold transition-colors flex items-center gap-2 whitespace-nowrap text-decoration-none"
+                    >
+                      <EyeIcon class="w-4 h-4"/> APRI CGV
+                    </a>
                 </div>
 
             </div>
