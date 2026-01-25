@@ -27,14 +27,16 @@ jobs:
       - name: Build
         run: npm run build
 
-      # --- NUOVO STEP AGGIUNTO: Deploy delle Functions ---
-      # Richiede che tu abbia il FIREBASE_TOKEN nei secrets di GitHub (non solo il Service Account)
+      # --- NUOVO STEP AGGIUNTO: Deploy delle Functions (Metodo Ufficiale) ---
+      - name: Install Firebase CLI
+        run: npm install -g firebase-tools
+
       - name: Deploy Cloud Functions
-        uses: w9jds/firebase-action@master
-        with:
-          args: deploy --only functions
-        env:
-          GCP_SA_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_PREVENTIVATOREB2B_II }}
+        run: |
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT_PREVENTIVATOREB2B_II }}' > sa-key.json
+          export GOOGLE_APPLICATION_CREDENTIALS=sa-key.json
+          firebase deploy --only functions --project preventivatoreb2b-ii
+          rm sa-key.json
 
       # 5. Deploy Hosting (già presente)
         # Questo corrisponde al tuo "firebase deploy --only hosting"
