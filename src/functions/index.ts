@@ -622,7 +622,12 @@ exports.generaOrdineFIC = functions
             const dataScadenza = calcolaScadenza(defaultPaymentTerms, defaultPaymentType);
             const dataOrdine = newData.dataConsegnaPrevista || new Date().toISOString().split('T')[0];
             const importoNetto = newData.totaleScontato || newData.totaleImponibile || 0;
-            const importoLordo = parseFloat((importoNetto * (1 + (VAT_VALUE / 100))).toFixed(2));
+            // --- FIX MATEMATICO FATTURE IN CLOUD ---
+            // 1. Calcolo IVA arrotondata al centesimo (usando Math.round per evitare problemi di virgola mobile in JS)
+            const ivaCalcolata = Math.round(importoNetto * (VAT_VALUE / 100) * 100) / 100;
+            // 2. Somma Netto + IVA (esattamente come fa FiC)
+            const importoLordo = parseFloat((importoNetto + ivaCalcolata).toFixed(2));
+            // ---------------------------------------
             const productsSnap = await admin.firestore().collection('products').get();
             const productMap = new Map();
             productsSnap.forEach(doc => {
@@ -686,8 +691,8 @@ exports.generaOrdineFIC = functions
                     entity: {
                         id: ficId, 
                         name: detailedClient.name,
-                        vat_number: detailedClient.vat_number || "", // Meglio stringa vuota anche qui per sicurezza
-                        tax_code: detailedClient.tax_code || "",     // <--- Stringa vuota
+                        vat_number: detailedClient.vat_number || "", 
+                        tax_code: detailedClient.tax_code || "",     
                         address_street: detailedClient.address_street || "",
                         address_postal_code: detailedClient.address_postal_code || "",
                         address_city: detailedClient.address_city || "",
@@ -699,7 +704,7 @@ exports.generaOrdineFIC = functions
                     items_list: itemsList,
                     payments_list: [
                         {
-                            amount: importoLordo,
+                            amount: importoLordo, // <--- Reinserito
                             due_date: dataScadenza, 
                             status: "not_paid"
                         }

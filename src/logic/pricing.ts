@@ -76,6 +76,16 @@ function calculateLogic2026(input: PricingInput, catalog: any) {
   else if ((input.num_verticali > 1 && !input.num_orizzontali) || (!input.num_verticali && input.num_orizzontali > 1)) complessita = 2; // PARALLELE
   else if ((input.num_verticali === 1 && !input.num_orizzontali) || (!input.num_verticali && input.num_orizzontali === 1)) complessita = 3; // SINGOLA
 
+  // --- OVERRIDE: GRIGLIA SOLO ORIZZONTALE SENZA CANALINO ---
+  // Se non c'è canalino (campo vuoto o "NESSUNO") e ci sono solo orizzontali (1 o più), forziamo la logica standard (no maggiorazione)
+  const senzaCanalino = !input.tipo_canalino || input.tipo_canalino.toUpperCase() === 'NESSUNO';
+  const soloOrizzontali = input.num_verticali === 0 && input.num_orizzontali >= 1;
+
+  if (senzaCanalino && soloOrizzontali) {
+    complessita = 1;
+  }
+  // ----------------------------------------------------------
+  
   // Recupero Costi Accessori
   const costo_setup = metri_griglia < 2.0 ? getSupplementoPrice(catalog, 'S001') : getSupplementoPrice(catalog, 'S002');
   
