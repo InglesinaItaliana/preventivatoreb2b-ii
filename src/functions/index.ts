@@ -464,17 +464,6 @@ export const createTeamMember = functions
     }
   });
 
-// --- HELPER DATE ---
-function calcolaScadenza(giorni: number, tipo: string): string {
-    const data = new Date();
-    data.setDate(data.getDate() + (giorni || 0));
-    if (tipo === 'end_of_month') {
-        data.setMonth(data.getMonth() + 1);
-        data.setDate(0); 
-    }
-    return data.toISOString().split('T')[0] || ''; 
-}
-
 // --- FUNZIONE RINNOVO TOKEN (ACCESS TOKEN MANAGER) ---
 async function getValidFicToken(): Promise<string> {
     const db = admin.firestore();
@@ -615,18 +604,14 @@ exports.generaOrdineFIC = functions
             
             // 5. ESTRAZIONE DATI PAGAMENTO (Dai dettagli completi)
             const defaultPaymentMethodId = detailedClient.default_payment_method?.id || null;
-            const defaultPaymentTerms = detailedClient.default_payment_terms || 0;
-            const defaultPaymentType = detailedClient.default_payment_terms_type || 'standard';
 
             // 6. CALCOLI ECONOMICI
-            const dataScadenza = calcolaScadenza(defaultPaymentTerms, defaultPaymentType);
+            //const dataScadenza = calcolaScadenza(defaultPaymentTerms, defaultPaymentType);
             const dataOrdine = newData.dataConsegnaPrevista || new Date().toISOString().split('T')[0];
             const importoNetto = newData.totaleScontato || newData.totaleImponibile || 0;
             // --- FIX MATEMATICO FATTURE IN CLOUD ---
             // 1. Calcolo IVA arrotondata al centesimo (usando Math.round per evitare problemi di virgola mobile in JS)
-            const ivaCalcolata = Math.round(importoNetto * (VAT_VALUE / 100) * 100) / 100;
             // 2. Somma Netto + IVA (esattamente come fa FiC)
-            const importoLordo = parseFloat((importoNetto + ivaCalcolata).toFixed(2));
             // ---------------------------------------
             const productsSnap = await admin.firestore().collection('products').get();
             const productMap = new Map();
@@ -683,11 +668,10 @@ exports.generaOrdineFIC = functions
                     vat: { id: VAT_ID, value: VAT_VALUE }
                 });
             }
-            // 8. CREAZIONE ORDINE
+            // 8. PREPARAZIONE PAYLOAD BASE (Senza payments_list inizialmente)
             const orderPayload: any = {
                 data: {
                     type: "order",
-                    // 🔥 Mappatura Completa Entity
                     entity: {
                         id: ficId, 
                         name: detailedClient.name,
@@ -702,29 +686,59 @@ exports.generaOrdineFIC = functions
                     date: dataOrdine,
                     visible_subject: newData.commessa || `Rif: ${newData.codice}`,
                     items_list: itemsList,
-                    payments_list: [
-                        {
-                            amount: importoLordo, // <--- Reinserito
-                            due_date: dataScadenza, 
-                            status: "not_paid"
-                        }
-                    ],
-                    // 🔥 Flag Richiesti
                     stock: false,
                     show_payments: false,
                     show_payment_method: false
                 }
             };
 
+            // Impostiamo il metodo di pagamento globale se presente
             if (defaultPaymentMethodId) {
                 orderPayload.data.payment_method = { id: defaultPaymentMethodId };
-                orderPayload.data.payments_list[0].payment_method = { id: defaultPaymentMethodId };
             }
 
-            // 9. INVIO A FATTURE IN CLOUD
-            const orderRes: any = await axios.post(`${FIC_API_URL}/c/${COMPANY_ID}/issued_documents`, orderPayload, {
-                headers: { Authorization: `Bearer ${accessToken}` }
-            });
+            // 9. INVIO A FATTURE IN CLOUD CON LOGICA "RETRY" (Anti-errore 422)
+            let orderRes: any;
+            try {
+                console.log("[FIC] Tentativo 1: Creazione ordine (calcolo automatico)...");
+                orderRes = await axios.post(`${FIC_API_URL}/c/${COMPANY_ID}/issued_documents`, orderPayload, {
+                    headers: { Authorization: `Bearer ${accessToken}` }
+                });
+
+            } catch (firstError: any) {
+                // Verifichiamo se è l'errore specifico "Il totale dei pagamenti non corrisponde..."
+                const errorData = firstError.response?.data;
+                const isPaymentMismatch = firstError.response?.status === 422 && 
+                                          errorData?.extra?.totals?.amount_gross;
+
+                if (isPaymentMismatch) {
+                    // 🔥 QUI STA IL TRUCCO:
+                    // Non calcoliamo nulla. Leggiamo il numero che FIC ci ha appena detto essere quello giusto.
+                    const ficCalculatedTotal = errorData.extra.totals.amount_gross;
+                    
+                    console.warn(`[FIC] Tentativo 1 fallito. FIC richiede totale: ${ficCalculatedTotal}€. Applico fix e riprovo.`);
+
+                    // Modifichiamo il payload aggiungendo la lista pagamenti forzata con il LORO numero
+                    orderPayload.data.payments_list = [
+                        {
+                            amount: ficCalculatedTotal, // Usiamo il valore esatto restituito dall'errore
+                            due_date: dataOrdine,       // Usiamo la data ordine come scadenza
+                            status: 'not_paid',
+                            payment_method: defaultPaymentMethodId ? { id: defaultPaymentMethodId } : null
+                        }
+                    ];
+
+                    // TENTATIVO 2: Invio con i dati corretti forniti da FIC stesso
+                    console.log("[FIC] Tentativo 2: Creazione ordine con totale forzato...");
+                    orderRes = await axios.post(`${FIC_API_URL}/c/${COMPANY_ID}/issued_documents`, orderPayload, {
+                        headers: { Authorization: `Bearer ${accessToken}` }
+                    });
+                    
+                } else {
+                    // Se è un errore diverso (es. autenticazione, server down), lo lanciamo e basta
+                    throw firstError;
+                }
+            }
 
             console.log(`✅ [FIC] ORDINE CREATO SUCCESSO! ID FIC: ${orderRes.data.data.id}`);
 
