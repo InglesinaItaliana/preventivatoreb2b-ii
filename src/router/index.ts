@@ -65,6 +65,19 @@ const router = createRouter({
       name: 'admin-settings',
       component: () => import('../views/AdminSettings.vue'),
       meta: { requiresAuth: true }
+    },
+    // ── SIDERA ──────────────────────────────────────────────────────────────
+    {
+      path: '/sidera',
+      component: () => import('../views/sidera/SideraLayout.vue'),
+      meta: { requiresAuth: true },
+      children: [
+        { path: '',           name: 'sidera-home',    component: () => import('../views/sidera/HomeView.vue') },
+        { path: 'tasks',      name: 'sidera-tasks',   component: () => import('../views/sidera/TasksView.vue') },
+        { path: 'projects',   name: 'sidera-projects',component: () => import('../views/sidera/ProjectsView.vue') },
+        { path: 'projects/:id', name: 'sidera-project', component: () => import('../views/sidera/ProjectBoard.vue') },
+        { path: 'chat',       name: 'sidera-chat',    component: () => import('../views/sidera/ChatView.vue') },
+      ]
     }
   ]
 });
