@@ -52,16 +52,16 @@ onMounted(() => {
 
   function setSpheres(c: string) {
     const { r, g, b } = h2r(c)
+    const vals = [
+      `rgba(${r},${g},${b},.52)`,
+      `rgba(${Math.round(r*.5)},${Math.round(g*.5)},${Math.round(b*.65)},.58)`,
+      `rgba(${Math.round(r*.32)},${Math.round(g*.4)},${Math.round(b*.72)},.48)`,
+      `rgba(${Math.round(r*.82)},${Math.round(g*.72)},${Math.round(b*.48)},.44)`,
+    ]
     ;['hv-s1','hv-s2','hv-s3','hv-s4'].forEach((id, i) => {
       const el = document.getElementById(id)
       if (!el) return
-      const vals = [
-        `rgba(${r},${g},${b},.52)`,
-        `rgba(${Math.round(r*.5)},${Math.round(g*.5)},${Math.round(b*.65)},.58)`,
-        `rgba(${Math.round(r*.32)},${Math.round(g*.4)},${Math.round(b*.72)},.48)`,
-        `rgba(${Math.round(r*.82)},${Math.round(g*.72)},${Math.round(b*.48)},.44)`,
-      ]
-      el.style.background = vals[i]
+      el.style.background = vals[i] ?? ''
     })
   }
 
@@ -82,7 +82,7 @@ onMounted(() => {
     const hs = document.getElementById(m.hsEl); if (hs) { hs.style.fill = m.color; hs.style.fillOpacity = '.28'; hs.style.opacity = '1' }
     m.edges.forEach((e: any, i: number) => {
       const gid = `hv-g${i}`
-      let g = document.getElementById(gid)
+      let g: Element | null = document.getElementById(gid)
       if (!g) {
         g = document.createElementNS('http://www.w3.org/2000/svg', 'linearGradient')
         g.setAttribute('id', gid); g.setAttribute('gradientUnits', 'userSpaceOnUse')
@@ -291,11 +291,11 @@ onUnmounted(() => {
 
       <div class="hv-brand">
         <h1 class="hv-title">
-          <span class="hv-ltr">S</span><span class="hv-dot">·</span>
-          <span class="hv-ltr">I</span><span class="hv-dot">·</span>
-          <span class="hv-ltr">D</span><span class="hv-dot">·</span>
-          <span class="hv-ltr">E</span><span class="hv-dot">·</span>
-          <span class="hv-ltr">R</span><span class="hv-dot">·</span>
+          <span class="hv-ltr">S</span><span class="hv-dot">•</span>
+          <span class="hv-ltr">I</span><span class="hv-dot">•</span>
+          <span class="hv-ltr">D</span><span class="hv-dot">•</span>
+          <span class="hv-ltr">E</span><span class="hv-dot">•</span>
+          <span class="hv-ltr">R</span><span class="hv-dot">•</span>
           <span class="hv-ltr">A</span>
         </h1>
         <div class="hv-module-display" id="hv-mod-display">
@@ -386,14 +386,17 @@ onUnmounted(() => {
 }
 .hv-ltr { display: inline-block; }
 .hv-dot {
+  font-family: 'Outfit', sans-serif;
   display: inline-flex;
   align-items: center;
-  font-size: 0.4em;
-  opacity: 0.38;
-  padding: 0 0.3em;
+  font-size: 0.32em;
+  opacity: 0.55;
+  padding: 0 0.45em;
   line-height: 1;
   position: relative;
-  top: 0.04em;
+  top: -0.18em;
+  -webkit-text-fill-color: currentColor;
+  color: #D4C498;
 }
 
 .hv-module-display {

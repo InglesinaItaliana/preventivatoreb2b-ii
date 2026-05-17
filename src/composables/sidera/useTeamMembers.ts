@@ -20,8 +20,17 @@ export function avatarColor(email: string): string {
 export function avatarInitial(email: string, members?: TeamMember[]): string {
   if (members) {
     const m = members.find(x => x.email === email)
+    if (m?.firstName && m?.lastName) {
+      return (m.firstName.charAt(0) + m.lastName.charAt(0)).toUpperCase()
+    }
+    if (m?.name) {
+      const parts = m.name.trim().split(/\s+/)
+      if (parts.length >= 2 && parts[0] && parts[1]) {
+        return (parts[0].charAt(0) + parts[1].charAt(0)).toUpperCase()
+      }
+      return m.name.charAt(0).toUpperCase()
+    }
     if (m?.firstName) return m.firstName.charAt(0).toUpperCase()
-    if (m?.name) return m.name.charAt(0).toUpperCase()
   }
   return (email.charAt(0) || '?').toUpperCase()
 }

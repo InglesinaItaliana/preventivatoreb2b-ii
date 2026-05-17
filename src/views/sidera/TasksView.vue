@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { ClockIcon, PlusIcon, CheckIcon, XMarkIcon, ArrowUturnLeftIcon, PencilIcon, TrashIcon } from '@heroicons/vue/24/outline'
+import MaterialIcon from '../../components/MaterialIcon.vue'
 import { useAllTasks, type Task }    from '../../composables/sidera/useAllTasks'
 import { useProjects }    from '../../composables/sidera/useProjects'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
@@ -219,7 +219,7 @@ function parseDateInput(s: string): Date {
         </p>
       </div>
       <button v-if="isAdmin" class="s-btn" @click="openModal">
-        <PlusIcon class="btn-icon" />Nuova azione
+        <MaterialIcon name="add" :size="16" />Nuova azione
       </button>
     </div>
 
@@ -248,7 +248,7 @@ function parseDateInput(s: string): Date {
 
       <div v-for="t in completedTasks" :key="t.id" class="task-row task-row--done">
         <button class="undo-btn" title="Riapri task" @click="doUncomplete(t)">
-          <ArrowUturnLeftIcon style="width:13px;height:13px" />
+          <MaterialIcon name="undo" :size="15" />
         </button>
         <div class="row-title row-title--done">{{ t.title }}</div>
         <span
@@ -263,7 +263,7 @@ function parseDateInput(s: string): Date {
             class="assignee-avatar"
             :title="email"
             :style="{ background: avatarColor(email) + '20', border: '1.5px solid ' + avatarColor(email) + '60', color: avatarColor(email) }"
-          >{{ avatarInitial(email) }}</div>
+          >{{ avatarInitial(email, members) }}</div>
         </div>
       </div>
     </template>
@@ -292,7 +292,7 @@ function parseDateInput(s: string): Date {
           >
             <!-- Checkbox -->
             <div class="checkbox" @click="doComplete(t)">
-              <CheckIcon v-if="pendingComplete.has(t.id)" class="check-icon" />
+              <MaterialIcon v-if="pendingComplete.has(t.id)" name="check" :size="12" :weight="700" class="check-icon" />
             </div>
 
             <!-- Title -->
@@ -319,20 +319,20 @@ function parseDateInput(s: string): Date {
                 class="assignee-avatar"
                 :title="email"
                 :style="{ background: avatarColor(email) + '20', border: '1.5px solid ' + avatarColor(email) + '60', color: avatarColor(email) }"
-              >{{ avatarInitial(email) }}</div>
+              >{{ avatarInitial(email, members) }}</div>
               <div v-if="t.assignees.length > 3" class="assignee-avatar assignee-avatar--more">+{{ t.assignees.length - 3 }}</div>
               <div v-if="!t.assignees.length" class="assignee-avatar assignee-avatar--empty" title="Non assegnata">–</div>
             </div>
 
             <!-- Due date -->
             <div class="row-due" :style="{ color: isLate(t.dueDate) ? '#C8521A' : 'var(--s-text-dim)' }">
-              <ClockIcon v-if="t.dueDate" class="clock-icon" />
+              <MaterialIcon v-if="t.dueDate" name="schedule" :filled="isLate(t.dueDate)" :size="13" class="clock-icon" />
               {{ formatDue(t.dueDate) }}
             </div>
 
             <!-- Edit button (visible on hover, admin only) -->
             <button v-if="isAdmin" class="row-edit-btn" title="Modifica" @click.stop="openEditModal(t)">
-              <PencilIcon style="width:12px;height:12px" />
+              <MaterialIcon name="edit" :size="14" />
             </button>
           </div>
         </template>
@@ -345,7 +345,7 @@ function parseDateInput(s: string): Date {
         <div class="modal">
           <div class="modal-header">
             <span class="modal-title">{{ editingTask ? 'Modifica azione' : 'Nuova azione' }}</span>
-            <button class="modal-close" @click="closeModal"><XMarkIcon style="width:16px;height:16px" /></button>
+            <button class="modal-close" @click="closeModal"><MaterialIcon name="close" :size="18" /></button>
           </div>
 
           <div class="modal-body">
@@ -374,7 +374,7 @@ function parseDateInput(s: string): Date {
                 :style="form.assignees.includes(m.email) ? { background: avatarColor(m.email) + '20', borderColor: avatarColor(m.email) + '80', color: avatarColor(m.email) } : {}"
                 @click="toggleAssignee(m.email)"
               >
-                <span class="chip-avatar" :style="{ background: avatarColor(m.email), color: '#fff' }">{{ avatarInitial(m.email) }}</span>
+                <span class="chip-avatar" :style="{ background: avatarColor(m.email), color: '#fff' }">{{ avatarInitial(m.email, members) }}</span>
                 {{ displayName(m.email, members) }}
               </div>
             </div>
@@ -411,7 +411,7 @@ function parseDateInput(s: string): Date {
               :disabled="deleting"
               @click="doDelete"
             >
-              <TrashIcon style="width:13px;height:13px" />
+              <MaterialIcon name="delete" :size="15" />
               {{ deleting ? '…' : 'Elimina' }}
             </button>
             <div style="margin-left:auto;display:flex;gap:8px">
@@ -635,14 +635,15 @@ function parseDateInput(s: string): Date {
 .avatars-stack { display: flex; gap: 2px; align-items: center; flex-shrink: 0; }
 
 .assignee-avatar {
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
+  font-size: 9.5px;
   font-weight: 700;
+  letter-spacing: 0.02em;
   flex-shrink: 0;
 }
 
@@ -689,10 +690,10 @@ function parseDateInput(s: string): Date {
 .assignee-chip.is-selected { font-weight: 600; }
 
 .chip-avatar {
-  width: 18px; height: 18px;
+  width: 20px; height: 20px;
   border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  font-size: 9px; font-weight: 700; flex-shrink: 0;
+  font-size: 8.5px; font-weight: 700; flex-shrink: 0;
 }
 
 .row-due {

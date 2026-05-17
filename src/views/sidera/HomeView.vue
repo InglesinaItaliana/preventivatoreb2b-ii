@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { ClockIcon, CheckIcon, ArrowTopRightOnSquareIcon } from '@heroicons/vue/24/outline'
+import MaterialIcon from '../../components/MaterialIcon.vue'
 import { usePopsMetrics }  from '../../composables/sidera/usePopsMetrics'
 import { useAllTasks }     from '../../composables/sidera/useAllTasks'
 import { useProjects }     from '../../composables/sidera/useProjects'
@@ -169,7 +169,7 @@ function urgenzaLabel(giorni: number) {
         @click="doComplete(t)"
       >
         <div class="checkbox" :class="{ 'is-checked': pendingDone.has(t.id) }">
-          <CheckIcon v-if="pendingDone.has(t.id)" class="check-icon" />
+          <MaterialIcon v-if="pendingDone.has(t.id)" name="check" :size="12" :weight="700" class="check-icon" />
         </div>
         <div class="azione-title">{{ t.title }}</div>
         <span
@@ -178,7 +178,7 @@ function urgenzaLabel(giorni: number) {
         >{{ prioLabel[t.priority] }}</span>
         <div v-for="email in t.assignees.slice(0,3)" :key="email" class="az-avatar"
           :style="{ background: avatarColor(email) + '20', border: '1.5px solid ' + avatarColor(email) + '60', color: avatarColor(email) }"
-        >{{ avatarInitial(email) }}</div>
+        >{{ avatarInitial(email, members) }}</div>
       </div>
     </section>
 
@@ -211,7 +211,7 @@ function urgenzaLabel(giorni: number) {
               <div class="prog-fill" :style="{ width: pct(p) + '%', background: p.color }" />
             </div>
             <div class="proj-mini-info">
-              <ClockIcon class="clock-icon" />
+              <MaterialIcon name="schedule" :size="13" class="clock-icon" />
               {{ p.doneCount }}/{{ p.taskCount }} azioni
               <template v-if="p.dueDate"> · {{ formatDue(p.dueDate) }}</template>
             </div>
@@ -296,7 +296,7 @@ function urgenzaLabel(giorni: number) {
           <div
             class="feed-avatar"
             :style="{ background: avatarColor(e.actor) + '18', border: '1.5px solid ' + avatarColor(e.actor) + '40', color: avatarColor(e.actor) }"
-          >{{ avatarInitial(e.actor) }}</div>
+          >{{ avatarInitial(e.actor, members) }}</div>
           <div>
             <div class="feed-text">
               <span class="feed-who">{{ displayName(e.actor, members) }}</span>
@@ -411,9 +411,9 @@ function urgenzaLabel(giorni: number) {
 }
 
 .az-avatar {
-  width: 24px; height: 24px; border-radius: 50%;
+  width: 26px; height: 26px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  font-size: 10px; font-weight: 700; flex-shrink: 0;
+  font-size: 9.5px; font-weight: 700; letter-spacing: 0.02em; flex-shrink: 0;
 }
 
 /* ── Progetti mini ── */
@@ -539,7 +539,7 @@ function urgenzaLabel(giorni: number) {
 .feed-avatar {
   width: 28px; height: 28px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  font-size: 10px; font-weight: 700; flex-shrink: 0;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.02em; flex-shrink: 0;
 }
 
 .feed-text { font-size: 12px; line-height: 1.6; color: var(--s-text-mid); }

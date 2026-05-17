@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref } from 'vue'
-import { HashtagIcon, PaperAirplaneIcon, ClipboardDocumentCheckIcon } from '@heroicons/vue/24/outline'
+import MaterialIcon from '../../components/MaterialIcon.vue'
 
 const channel = ref('generale')
 
@@ -48,7 +48,7 @@ const currentLabel = () => channels.find(c => c.id === channel.value)?.label ?? 
         :class="{ 'is-active': channel === c.id }"
         @click="channel = c.id"
       >
-        <HashtagIcon style="width:12px;height:12px;flex-shrink:0" />
+        <MaterialIcon name="tag" :size="13" :filled="channel === c.id" />
         {{ c.label }}
         <span v-if="c.dot && channel !== c.id" class="unread-dot" />
       </div>
@@ -57,7 +57,7 @@ const currentLabel = () => channels.find(c => c.id === channel.value)?.label ?? 
     <!-- Messages area -->
     <div class="cv-main">
       <div class="cv-header">
-        <HashtagIcon style="width:14px;height:14px;color:var(--s-text-dim)" />
+        <MaterialIcon name="tag" :size="16" />
         {{ currentLabel() }}
       </div>
 
@@ -74,7 +74,7 @@ const currentLabel = () => channels.find(c => c.id === channel.value)?.label ?? 
             </div>
             <div class="msg-text">{{ m.text }}</div>
             <div v-if="m.task" class="task-link">
-              <ClipboardDocumentCheckIcon style="width:14px;height:14px;color:var(--s-green);flex-shrink:0" />
+              <MaterialIcon name="checklist" :size="16" filled style="color:var(--s-green)" />
               <div>
                 <div class="task-link-title">Task creata</div>
                 <div class="task-link-meta">Aggiornamento listino · Assegnata a Eva · Venerdì 16 mag</div>
@@ -90,7 +90,7 @@ const currentLabel = () => channels.find(c => c.id === channel.value)?.label ?? 
             class="msg-input"
             :placeholder="`Scrivi in #${currentLabel()}...`"
           />
-          <PaperAirplaneIcon style="width:14px;height:14px;color:var(--s-text-dim);cursor:pointer;flex-shrink:0" />
+          <MaterialIcon name="send" :size="16" style="color:var(--s-text-dim);cursor:pointer" />
         </div>
       </div>
     </div>

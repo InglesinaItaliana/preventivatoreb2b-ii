@@ -3,17 +3,7 @@ import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { signOut } from 'firebase/auth'
 import { auth } from '../../firebase'
-import {
-  HomeIcon,
-  ClipboardDocumentCheckIcon,
-  Squares2X2Icon,
-  ChatBubbleLeftRightIcon,
-  ArrowTopRightOnSquareIcon,
-  ArrowLeftOnRectangleIcon,
-  InboxIcon,
-  UserGroupIcon,
-  TruckIcon,
-} from '@heroicons/vue/24/outline'
+import MaterialIcon from '../../components/MaterialIcon.vue'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
 import { useTeamMembers, displayName, avatarColor } from '../../composables/sidera/useTeamMembers'
 import { useChats } from '../../composables/pulsar/useChats'
@@ -39,44 +29,44 @@ const modules = [
     name: 'QUASAR',   accent: '#98C0D0',
     vx: 340, vy: 68,  vr: 10,
     items: [
-      { path: '/sidera', exact: true, label: 'Cruscotto', icon: HomeIcon },
+      { path: '/sidera', exact: true, label: 'Cruscotto', icon: 'home' },
     ],
   },
   {
     name: 'NEBULA',   accent: '#C46030',
     vx: 155, vy: 400, vr: 10,
     items: [
-      { path: '/sidera/nebula', exact: false, label: 'Team', icon: UserGroupIcon },
+      { path: '/sidera/nebula', exact: false, label: 'Team', icon: 'group' },
     ],
   },
   {
     name: 'CEPHEID',  accent: '#D4A020',
     vx: 525, vy: 400, vr: 10,
     items: [
-      { path: '/sidera/tasks',    exact: false, label: 'Azioni',   icon: ClipboardDocumentCheckIcon },
-      { path: '/sidera/projects', exact: false, label: 'Progetti', icon: Squares2X2Icon },
+      { path: '/sidera/tasks',    exact: false, label: 'Azioni',   icon: 'checklist' },
+      { path: '/sidera/projects', exact: false, label: 'Progetti', icon: 'grid_view' },
     ],
   },
   {
     name: 'PULSAR',   accent: '#3AAF98',
     vx: 405, vy: 252, vr: 8,
     items: [
-      { path: '/pulsar', exact: false, label: 'Messaggi', icon: ChatBubbleLeftRightIcon, excludePaths: ['/pulsar/pending'] },
-      { path: '/pulsar/pending', exact: false, label: 'Pendenze', icon: InboxIcon },
+      { path: '/pulsar', exact: false, label: 'Messaggi', icon: 'forum', excludePaths: ['/pulsar/pending'] },
+      { path: '/pulsar/pending', exact: false, label: 'Pendenze', icon: 'inbox' },
     ],
   },
   {
     name: 'NOVA',     accent: '#8FAB35',
     vx: 275, vy: 252, vr: 8,
     items: [
-      { path: '/sidera/nova/spedizioni', exact: false, label: 'Spedizioni', icon: TruckIcon },
+      { path: '/sidera/nova/spedizioni', exact: false, label: 'Spedizioni', icon: 'local_shipping' },
     ] as any[],
   },
   {
     name: 'MAGNETAR', accent: '#B06842',
     vx: 340, vy: 364, vr: 8,
     items: [
-      { href: 'https://b2b.inglesinaitaliana.it', label: 'POPS', icon: ArrowTopRightOnSquareIcon },
+      { href: 'https://b2b.inglesinaitaliana.it', label: 'POPS', icon: 'open_in_new' },
     ] as any[],
   },
 ]
@@ -232,7 +222,7 @@ const roleLabel: Record<string, string> = {
               rel="noopener noreferrer"
               class="s-nav-item"
             >
-              <component :is="item.icon" class="s-nav-icon" />
+              <MaterialIcon :name="item.icon" :size="18" class="s-nav-icon" />
               {{ item.label }}
             </a>
             <RouterLink
@@ -241,8 +231,11 @@ const roleLabel: Record<string, string> = {
               class="s-nav-item"
               :style="activeStyle(item.path, item.exact, mod.accent, item.excludePaths)"
             >
-              <component
-                :is="item.icon"
+              <MaterialIcon
+                :name="item.icon"
+                :size="18"
+                :filled="isActive(item.path, item.exact, item.excludePaths)"
+                :weight="isActive(item.path, item.exact, item.excludePaths) ? 500 : 400"
                 class="s-nav-icon"
                 :style="activeIconStyle(item.path, item.exact, mod.accent, item.excludePaths)"
               />
@@ -266,7 +259,7 @@ const roleLabel: Record<string, string> = {
           <div class="s-user-role">{{ roleLabel[currentUser?.role ?? ''] ?? 'Membro' }}</div>
         </div>
         <button class="s-logout-btn" title="Esci" @click="logout">
-          <ArrowLeftOnRectangleIcon style="width:14px;height:14px" />
+          <MaterialIcon name="logout" :size="16" />
         </button>
       </div>
     </aside>
@@ -373,7 +366,7 @@ const roleLabel: Record<string, string> = {
 
 .s-nav-item:hover { background: var(--s-border); color: var(--s-text-mid); }
 
-.s-nav-icon { width: 15px; height: 15px; flex-shrink: 0; transition: color 0.15s; }
+.s-nav-icon { font-size: 18px; flex-shrink: 0; transition: color 0.15s, font-variation-settings 0.2s; }
 
 .s-nav-empty { padding: 4px 12px 6px; }
 

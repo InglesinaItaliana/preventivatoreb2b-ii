@@ -1,10 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import {
-  ArrowLeftIcon, PlusIcon, XMarkIcon, TrashIcon,
-  ViewColumnsIcon, Bars3BottomLeftIcon, CalendarIcon, DocumentTextIcon,
-} from '@heroicons/vue/24/outline'
+import MaterialIcon from '../../components/MaterialIcon.vue'
 import { doc, getDoc } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useProjectTasks, type ProjectTask } from '../../composables/sidera/useProjectTasks'
@@ -143,10 +140,10 @@ const prioColor: Record<string, string> = { alta: '#C8521A', media: '#D4A020', b
 const allTasksFlat = computed(() => tasks.value)
 
 const views = [
-  { id: 'board', label: 'Board',      icon: ViewColumnsIcon },
-  { id: 'list',  label: 'Lista',      icon: Bars3BottomLeftIcon },
-  { id: 'cal',   label: 'Calendario', icon: CalendarIcon },
-  { id: 'notes', label: 'Note',       icon: DocumentTextIcon },
+  { id: 'board', label: 'Board',      icon: 'view_kanban' },
+  { id: 'list',  label: 'Lista',      icon: 'list' },
+  { id: 'cal',   label: 'Calendario', icon: 'calendar_month' },
+  { id: 'notes', label: 'Note',       icon: 'description' },
 ]
 
 // ── Edit task modal ──────────────────────────────────────────────────────────
@@ -174,7 +171,7 @@ function openEditTask(t: ProjectTask) {
   editForm.value = {
     title:     t.title,
     priority:  t.priority,
-    dueDate:   t.dueDate ? t.dueDate.toISOString().split('T')[0] : '',
+    dueDate:   t.dueDate ? (t.dueDate.toISOString().split('T')[0] ?? '') : '',
     assignees: [...t.assignees],
   }
   showEdit.value = true
@@ -189,7 +186,7 @@ function toggleEditAssignee(email: string) {
 }
 
 function parseDateInput(s: string): Date {
-  const [y, m, d] = s.split('-').map(Number)
+  const [y, m, d] = s.split('-').map(Number) as [number, number, number]
   return new Date(y, m - 1, d)
 }
 
@@ -229,7 +226,7 @@ async function deleteCurrentTask() {
     <div class="bv-header">
       <div class="bv-breadcrumb">
         <button class="bv-back" @click="router.push('/sidera/projects')">
-          <ArrowLeftIcon style="width:13px;height:13px" />Progetti
+          <MaterialIcon name="arrow_back" :size="15" />Progetti
         </button>
         <span class="bv-sep">/</span>
         <span class="bv-crumb">{{ project?.name ?? '…' }}</span>
@@ -243,7 +240,7 @@ async function deleteCurrentTask() {
           :style="{ color: project.color, background: project.color + '12' }"
         >{{ pct }}% completato</span>
         <button v-if="isAdmin && !projLoading" class="bv-delete-btn" title="Elimina progetto" @click="handleDeleteProject">
-          <TrashIcon style="width:13px;height:13px" />
+          <MaterialIcon name="delete" :size="15" />
         </button>
       </div>
       <div class="bv-tabs">
@@ -254,7 +251,7 @@ async function deleteCurrentTask() {
           :class="{ 'is-active': tab === v.id }"
           @click="tab = v.id"
         >
-          <component :is="v.icon" style="width:12px;height:12px" />{{ v.label }}
+          <MaterialIcon :name="v.icon" :size="14" :filled="tab === v.id" :weight="tab === v.id ? 600 : 400" />{{ v.label }}
         </button>
       </div>
     </div>
@@ -275,7 +272,7 @@ async function deleteCurrentTask() {
                 <span class="col-count">{{ tasksInCol(col.id).length }}</span>
               </div>
               <button v-if="isAdmin" class="col-add-btn" @click="startAdd(col.id)">
-                <PlusIcon style="width:12px;height:12px" />
+                <MaterialIcon name="add" :size="14" />
               </button>
             </div>
 
@@ -297,7 +294,7 @@ async function deleteCurrentTask() {
                     class="card-avatar"
                     :title="email"
                     :style="{ background: avatarColor(email) + '20', border: '1.5px solid ' + avatarColor(email) + '50', color: avatarColor(email) }"
-                  >{{ avatarInitial(email) }}</div>
+                  >{{ avatarInitial(email, members) }}</div>
                   <div v-if="t.assignees.length > 3" class="card-avatar card-avatar--more">+{{ t.assignees.length - 3 }}</div>
                   <div v-if="!t.assignees.length" class="card-avatar card-avatar--empty">–</div>
                 </div>
@@ -353,7 +350,7 @@ async function deleteCurrentTask() {
                   Aggiungi
                 </button>
                 <button class="add-cancel" @click="cancelAdd">
-                  <XMarkIcon style="width:11px;height:11px" />
+                  <MaterialIcon name="close" :size="13" />
                 </button>
               </div>
             </div>
@@ -363,7 +360,7 @@ async function deleteCurrentTask() {
               class="add-task"
               @click="startAdd(col.id)"
             >
-              <PlusIcon style="width:11px;height:11px" />Aggiungi azione
+              <MaterialIcon name="add" :size="13" />Aggiungi azione
             </div>
           </div>
 
@@ -407,7 +404,7 @@ async function deleteCurrentTask() {
         <div class="modal">
           <div class="modal-header">
             <span class="modal-title">Modifica azione</span>
-            <button class="modal-close" @click="closeEdit"><XMarkIcon style="width:16px;height:16px" /></button>
+            <button class="modal-close" @click="closeEdit"><MaterialIcon name="close" :size="18" /></button>
           </div>
 
           <div class="modal-body">
@@ -429,7 +426,7 @@ async function deleteCurrentTask() {
                 :style="editForm.assignees.includes(m.email) ? { background: avatarColor(m.email) + '20', borderColor: avatarColor(m.email) + '80', color: avatarColor(m.email) } : {}"
                 @click="toggleEditAssignee(m.email)"
               >
-                <span class="chip-avatar" :style="{ background: avatarColor(m.email), color: '#fff' }">{{ avatarInitial(m.email) }}</span>
+                <span class="chip-avatar" :style="{ background: avatarColor(m.email), color: '#fff' }">{{ avatarInitial(m.email, members) }}</span>
                 {{ displayName(m.email, members) }}
               </div>
             </div>
@@ -461,7 +458,7 @@ async function deleteCurrentTask() {
 
           <div class="modal-footer">
             <button class="btn-danger" :disabled="editDeleting" @click="deleteCurrentTask">
-              <TrashIcon style="width:13px;height:13px" />
+              <MaterialIcon name="delete" :size="15" />
               {{ editDeleting ? '…' : 'Elimina' }}
             </button>
             <div style="margin-left:auto;display:flex;gap:8px">
@@ -625,9 +622,9 @@ async function deleteCurrentTask() {
 .card-footer { display: flex; align-items: center; gap: 6px; }
 
 .card-avatar {
-  width: 22px; height: 22px; border-radius: 50%;
+  width: 24px; height: 24px; border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  font-size: 9px; font-weight: 700; flex-shrink: 0;
+  font-size: 8.5px; font-weight: 700; letter-spacing: 0.02em; flex-shrink: 0;
 }
 
 .avatars-stack { display: flex; gap: 2px; align-items: center; }
@@ -878,7 +875,7 @@ async function deleteCurrentTask() {
 .chip-avatar {
   width: 20px; height: 20px; border-radius: 50%;
   display: inline-flex; align-items: center; justify-content: center;
-  font-size: 9px; font-weight: 700;
+  font-size: 8.5px; font-weight: 700; letter-spacing: 0.02em;
 }
 
 .prio-picker { display: flex; gap: 6px; }
