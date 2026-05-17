@@ -1,18 +1,36 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { PlusIcon, EllipsisHorizontalIcon, ClockIcon, XMarkIcon } from '@heroicons/vue/24/outline'
-import { useProjects } from '../../composables/sidera/useProjects'
+import { PlusIcon, EllipsisHorizontalIcon, ClockIcon, XMarkIcon, TrashIcon, PencilIcon } from '@heroicons/vue/24/outline'
+import { useProjects, type Project } from '../../composables/sidera/useProjects'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
 
 const router = useRouter()
-const { projects, loading, createProject } = useProjects()
+const { projects, loading, createProject, toggleActive, deleteProject, updateProject } = useProjects()
 const { currentUser } = useCurrentUser()
 const isAdmin = computed(() => currentUser.value?.role === 'ADMIN' || currentUser.value?.email === 'info@inglesinaitaliana.it')
 
-// ── Modal ───────────────────────────────────────────────────────────────────
-const showModal = ref(false)
-const saving    = ref(false)
+// ── Project context menu ─────────────────────────────────────────────────────
+const menuOpen = ref<string | null>(null)
+
+function openMenu(id: string, e: Event) {
+  e.stopPropagation()
+  menuOpen.value = menuOpen.value === id ? null : id
+}
+
+function closeMenu() { menuOpen.value = null }
+
+async function confirmDelete(id: string, e: Event) {
+  e.stopPropagation()
+  if (!confirm('Eliminare il progetto e tutte le sue azioni? L\'operazione è irreversibile.')) return
+  menuOpen.value = null
+  await deleteProject(id)
+}
+
+// ── Modal create/edit ────────────────────────────────────────────────────────
+const showModal      = ref(false)
+const saving         = ref(false)
+const editingProject = ref<Project | null>(null)
 const form = ref({ name: '', description: '', color: '#2F6B4A', dueDate: '' })
 
 const colorPresets = [
@@ -20,7 +38,25 @@ const colorPresets = [
   '#8A4A6B', '#6B4A8A', '#4A7A6B',
 ]
 
-function openModal() { form.value = { name: '', description: '', color: '#2F6B4A', dueDate: '' }; showModal.value = true }
+function openModal() {
+  editingProject.value = null
+  form.value = { name: '', description: '', color: '#2F6B4A', dueDate: '' }
+  showModal.value = true
+}
+
+function openEditModal(p: Project, e: Event) {
+  e.stopPropagation()
+  menuOpen.value = null
+  editingProject.value = p
+  form.value = {
+    name:        p.name,
+    description: p.description,
+    color:       p.color,
+    dueDate:     p.dueDate ? p.dueDate.toISOString().split('T')[0] : '',
+  }
+  showModal.value = true
+}
+
 function closeModal() { showModal.value = false }
 
 async function submit() {
@@ -28,7 +64,16 @@ async function submit() {
   saving.value = true
   try {
     const dueDate = form.value.dueDate ? parseDateInput(form.value.dueDate) : null
-    await createProject({ name: form.value.name.trim(), description: form.value.description.trim(), color: form.value.color, dueDate })
+    if (editingProject.value) {
+      await updateProject(editingProject.value.id, {
+        name:        form.value.name.trim(),
+        description: form.value.description.trim(),
+        color:       form.value.color,
+        dueDate,
+      })
+    } else {
+      await createProject({ name: form.value.name.trim(), description: form.value.description.trim(), color: form.value.color, dueDate })
+    }
     closeModal()
   } finally {
     saving.value = false
@@ -41,7 +86,9 @@ function parseDateInput(s: string): Date {
 }
 
 // ── Computed ─────────────────────────────────────────────────────────────────
-const activeProjects = computed(() => projects.value.filter(p => !p.archived))
+const activeProjects = computed(() => projects.value.filter(p => !p.archived && p.active !== false))
+const adminProjects  = computed(() => projects.value.filter(p => !p.archived))
+const visibleProjects = computed(() => isAdmin.value ? adminProjects.value : activeProjects.value)
 
 function pct(p: { taskCount: number; doneCount: number }) {
   if (!p.taskCount) return 0
@@ -55,12 +102,13 @@ function formatDue(d: Date | null) {
 </script>
 
 <template>
-  <div class="pv s-fade-in">
+  <div class="pv s-fade-in" @click="closeMenu">
     <!-- Header -->
     <div class="pv-header">
       <div>
         <h1 class="pv-title">Progetti</h1>
         <p class="pv-subtitle">{{ activeProjects.length }} attivi</p>
+
       </div>
       <button v-if="isAdmin" class="s-btn" @click="openModal">
         <PlusIcon class="btn-icon" />Nuovo progetto
@@ -73,7 +121,7 @@ function formatDue(d: Date | null) {
     </div>
 
     <!-- Empty state -->
-    <div v-else-if="!activeProjects.length" class="empty-state">
+    <div v-else-if="!visibleProjects.length" class="empty-state">
       <div class="empty-icon">◧</div>
       <p>Nessun progetto ancora.<br>Creane uno con il pulsante in alto.</p>
     </div>
@@ -81,9 +129,10 @@ function formatDue(d: Date | null) {
     <!-- Grid -->
     <div v-else class="pv-grid">
       <div
-        v-for="p in activeProjects"
+        v-for="p in visibleProjects"
         :key="p.id"
         class="proj-card"
+        :class="{ 'proj-card--inactive': !p.active }"
         @click="router.push('/sidera/projects/' + p.id)"
       >
         <div class="proj-stripe" :style="{ background: p.color }" />
@@ -91,7 +140,26 @@ function formatDue(d: Date | null) {
         <div class="proj-inner">
           <div class="proj-top">
             <div class="proj-name">{{ p.name }}</div>
-            <EllipsisHorizontalIcon class="proj-more" @click.stop />
+            <div class="proj-top-actions">
+              <span v-if="!p.active" class="badge-inactive">Inattivo</span>
+              <button
+                v-if="isAdmin"
+                class="proj-toggle-btn"
+                :title="p.active ? 'Disattiva progetto' : 'Attiva progetto'"
+                @click.stop="toggleActive(p.id, !p.active)"
+              >{{ p.active ? '⏸' : '▶' }}</button>
+              <div class="proj-menu-wrap" @click.stop>
+                <EllipsisHorizontalIcon class="proj-more" @click="openMenu(p.id, $event)" />
+                <div v-if="menuOpen === p.id" class="proj-dropdown">
+                  <button class="proj-dropdown-item" @click="openEditModal(p, $event)">
+                    <PencilIcon style="width:12px;height:12px" />Modifica progetto
+                  </button>
+                  <button class="proj-dropdown-item proj-dropdown-item--danger" @click="confirmDelete(p.id, $event)">
+                    <TrashIcon style="width:12px;height:12px" />Elimina progetto
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
           <p class="proj-desc">{{ p.description || '—' }}</p>
 
@@ -122,7 +190,7 @@ function formatDue(d: Date | null) {
       <div v-if="showModal" class="modal-backdrop" @click.self="closeModal">
         <div class="modal">
           <div class="modal-header">
-            <span class="modal-title">Nuovo progetto</span>
+            <span class="modal-title">{{ editingProject ? 'Modifica progetto' : 'Nuovo progetto' }}</span>
             <button class="modal-close" @click="closeModal"><XMarkIcon style="width:16px;height:16px" /></button>
           </div>
 
@@ -161,7 +229,7 @@ function formatDue(d: Date | null) {
           <div class="modal-footer">
             <button class="btn-ghost" @click="closeModal">Annulla</button>
             <button class="s-btn" :disabled="!form.name.trim() || saving" @click="submit">
-              {{ saving ? 'Salvataggio…' : 'Crea progetto' }}
+              {{ saving ? 'Salvataggio…' : editingProject ? 'Salva' : 'Crea progetto' }}
             </button>
           </div>
         </div>
@@ -190,8 +258,8 @@ function formatDue(d: Date | null) {
 .pv-title {
   font-family: 'Cormorant Garamond', serif;
   font-size: 30px;
-  font-weight: 400;
-  font-style: italic;
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 .pv-subtitle { font-size: 12px; color: var(--s-text-dim); margin-top: 4px; }
@@ -201,7 +269,7 @@ function formatDue(d: Date | null) {
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  background: var(--s-green);
+  background: var(--module-accent);
   color: #fff;
   border: none;
   border-radius: 8px;
@@ -209,11 +277,11 @@ function formatDue(d: Date | null) {
   font-weight: 500;
   cursor: pointer;
   font-family: 'Outfit', sans-serif;
-  transition: background 0.15s;
+  transition: filter 0.15s;
   letter-spacing: 0.01em;
 }
 
-.s-btn:hover:not(:disabled) { background: var(--s-green-light); }
+.s-btn:hover:not(:disabled) { filter: brightness(1.18); }
 .s-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 .btn-icon { width: 14px; height: 14px; }
 
@@ -280,6 +348,8 @@ function formatDue(d: Date | null) {
 
 .proj-inner { padding: 20px; padding-top: 22px; }
 
+.proj-card--inactive { opacity: 0.55; }
+
 .proj-top {
   display: flex;
   justify-content: space-between;
@@ -288,8 +358,74 @@ function formatDue(d: Date | null) {
   margin-top: 6px;
 }
 
-.proj-name { font-size: 15px; font-weight: 500; }
+.proj-name { font-size: 15px; font-weight: 500; flex: 1; }
+
+.proj-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.badge-inactive {
+  font-size: 9px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--s-border);
+  color: var(--s-text-dim);
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.proj-toggle-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 2px 4px;
+  border-radius: 4px;
+  color: var(--s-text-dim);
+  transition: background 0.15s, color 0.15s;
+}
+
+.proj-toggle-btn:hover { background: var(--s-border); color: var(--s-text); }
+
 .proj-more { width: 14px; height: 14px; color: var(--s-text-dim); cursor: pointer; }
+
+.proj-menu-wrap { position: relative; }
+
+.proj-dropdown {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  background: var(--s-surface);
+  border: 1px solid var(--s-border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.14);
+  z-index: 50;
+  min-width: 160px;
+  padding: 4px;
+}
+
+.proj-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 10px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  font-family: 'Outfit', sans-serif;
+  border-radius: 6px;
+  text-align: left;
+  transition: background 0.12s;
+}
+
+.proj-dropdown-item--danger { color: #C8521A; }
+.proj-dropdown-item--danger:hover { background: rgba(200, 82, 26, 0.08); }
 
 .proj-desc { font-size: 12px; color: var(--s-text-mid); margin-bottom: 18px; line-height: 1.6; }
 
@@ -385,7 +521,7 @@ function formatDue(d: Date | null) {
   transition: border-color 0.15s;
 }
 
-.field-input:focus { border-color: var(--s-green); }
+.field-input:focus { border-color: var(--module-accent); }
 .field-input::placeholder { color: var(--s-text-dim); }
 
 .field-textarea { resize: vertical; min-height: 72px; }

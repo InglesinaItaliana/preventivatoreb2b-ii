@@ -1,5 +1,5 @@
 import { ref, computed, onUnmounted } from 'vue'
-import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore'
+import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDocs, writeBatch, serverTimestamp } from 'firebase/firestore'
 import { db, auth } from '../../firebase'
 
 export interface Project {
@@ -14,6 +14,7 @@ export interface Project {
   createdBy: string
   createdAt: Date
   archived: boolean
+  active: boolean
 }
 
 export const DEFAULT_STATES = [
@@ -52,6 +53,7 @@ export function useProjects() {
         createdBy:   data.createdBy   ?? '',
         createdAt:   toDate(data.createdAt) ?? new Date(),
         archived:    data.archived    ?? false,
+        active:      data.active      ?? true,
       }
     })
     loading.value = false
@@ -79,14 +81,34 @@ export function useProjects() {
       taskCount:   0,
       doneCount:   0,
       archived:    false,
+      active:      true,
       createdBy:   auth.currentUser?.uid ?? '',
       createdAt:   serverTimestamp(),
     })
   }
 
+  async function toggleActive(projectId: string, active: boolean) {
+    await updateDoc(doc(db, 'projects', projectId), { active })
+  }
+
+  async function deleteProject(id: string) {
+    const batch = writeBatch(db)
+    const tasksSnap = await getDocs(collection(db, 'projects', id, 'tasks'))
+    for (const d of tasksSnap.docs) batch.delete(d.ref)
+    batch.delete(doc(db, 'projects', id))
+    await batch.commit()
+  }
+
+  async function updateProject(
+    projectId: string,
+    data: Partial<{ name: string; description: string; color: string; dueDate: Date | null }>,
+  ) {
+    await updateDoc(doc(db, 'projects', projectId), data)
+  }
+
   const activeProjects = computed(() =>
-    projects.value.filter(p => !p.archived)
+    projects.value.filter(p => !p.archived && p.active !== false)
   )
 
-  return { projects, activeProjects, loading, createProject }
+  return { projects, activeProjects, loading, createProject, toggleActive, deleteProject, updateProject }
 }

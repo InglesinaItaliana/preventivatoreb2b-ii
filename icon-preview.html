@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Icon Concepts — SIDERA & PULSAR</title>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Cormorant+Garamond:wght@400;600&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Outfit', sans-serif;
+      background: #0E1117;
+      color: #E8E5DF;
+      min-height: 100vh;
+      padding: 48px 32px;
+    }
+
+    h1 {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 28px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+
+    .subtitle {
+      font-size: 13px;
+      color: #6A6560;
+      margin-bottom: 48px;
+    }
+
+    .module-title {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+      margin-bottom: 24px;
+    }
+
+    .module-title.sidera { color: #4DB87A; }
+    .module-title.pulsar { color: #00D2FF; }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      margin-bottom: 56px;
+      max-width: 780px;
+    }
+
+    .card {
+      background: #161B22;
+      border: 1px solid #2A2E35;
+      border-radius: 14px;
+      padding: 32px 24px 24px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+      transition: border-color 0.2s;
+      cursor: pointer;
+    }
+
+    .card:hover { border-color: #3A3E45; }
+
+    .icon-showcase {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .icon-showcase svg {
+      flex-shrink: 0;
+    }
+
+    .logo-text {
+      font-family: 'Cormorant Garamond', serif;
+      font-size: 22px;
+      font-weight: 600;
+      letter-spacing: 0.06em;
+    }
+
+    .logo-text.sidera { color: #E8E5DF; }
+    .logo-text.pulsar { color: #E8E5DF; }
+
+    .card-label {
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      color: #9B9590;
+    }
+
+    .card-desc {
+      font-size: 11px;
+      color: #555;
+      text-align: center;
+      line-height: 1.5;
+    }
+
+    hr {
+      border: none;
+      border-top: 1px solid #2A2E35;
+      margin-bottom: 48px;
+      max-width: 780px;
+    }
+
+    /* icon sizes in card */
+    .icon-lg svg { width: 36px; height: 36px; }
+    .icon-md svg { width: 28px; height: 28px; }
+  </style>
+</head>
+<body>
+
+  <h1>Icone personalizzate</h1>
+  <p class="subtitle">Anteprima dei concept — clicca per scegliere</p>
+
+  <!-- ── SIDERA ── -->
+  <p class="module-title sidera">SIDERA — galassia / universo</p>
+  <div class="grid">
+
+    <!-- S1: Spirale galattica -->
+    <div class="card">
+      <div class="icon-showcase icon-lg">
+        <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- Core -->
+          <circle cx="16" cy="16" r="2.5" fill="#4DB87A"/>
+          <!-- Glow ring -->
+          <circle cx="16" cy="16" r="4.5" stroke="#4DB87A" stroke-width="0.5" opacity="0.35"/>
+          <!-- Arm 1 — upper right -->
+          <path d="M17.5 13.5 Q21 8 27 8 Q30 12 27 17" stroke="#4DB87A" stroke-width="1.6" stroke-linecap="round"/>
+          <!-- Arm 2 — lower left -->
+          <path d="M14.5 18.5 Q11 24 5 24 Q2 20 5 15" stroke="#4DB87A" stroke-width="1.6" stroke-linecap="round"/>
+          <!-- Distant stars -->
+          <circle cx="27" cy="8" r="0.9" fill="#4DB87A" opacity="0.65"/>
+          <circle cx="5" cy="24" r="0.9" fill="#4DB87A" opacity="0.65"/>
+          <circle cx="9" cy="7" r="0.5" fill="#4DB87A" opacity="0.4"/>
+          <circle cx="23" cy="25" r="0.5" fill="#4DB87A" opacity="0.4"/>
+        </svg>
+        <span class="logo-text sidera">SIDERA</span>
+      </div>
+      <span class="card-label">Spirale Galattica</span>
+      <span class="card-desc">Due bracci spiralati attorno a un nucleo luminoso</span>
+    </div>
+
+    <!-- S2: Costellazione -->
+    <div class="card">
+      <div class="icon-showcase icon-lg">
+        <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- Connection lines -->
+          <line x1="16" y1="4" x2="26" y2="13" stroke="#4DB87A" stroke-width="0.8" opacity="0.45" stroke-linecap="round"/>
+          <line x1="26" y1="13" x2="22" y2="26" stroke="#4DB87A" stroke-width="0.8" opacity="0.45" stroke-linecap="round"/>
+          <line x1="22" y1="26" x2="10" y2="26" stroke="#4DB87A" stroke-width="0.8" opacity="0.45" stroke-linecap="round"/>
+          <line x1="10" y1="26" x2="6" y2="13" stroke="#4DB87A" stroke-width="0.8" opacity="0.45" stroke-linecap="round"/>
+          <line x1="6" y1="13" x2="16" y2="4" stroke="#4DB87A" stroke-width="0.8" opacity="0.45" stroke-linecap="round"/>
+          <line x1="16" y1="4" x2="16" y2="17" stroke="#4DB87A" stroke-width="0.7" opacity="0.3" stroke-linecap="round"/>
+          <line x1="26" y1="13" x2="16" y2="17" stroke="#4DB87A" stroke-width="0.7" opacity="0.3" stroke-linecap="round"/>
+          <line x1="6" y1="13" x2="16" y2="17" stroke="#4DB87A" stroke-width="0.7" opacity="0.3" stroke-linecap="round"/>
+          <!-- Stars -->
+          <circle cx="16" cy="4" r="2.2" fill="#4DB87A"/>
+          <circle cx="26" cy="13" r="1.6" fill="#4DB87A" opacity="0.85"/>
+          <circle cx="22" cy="26" r="1.4" fill="#4DB87A" opacity="0.75"/>
+          <circle cx="10" cy="26" r="1.2" fill="#4DB87A" opacity="0.65"/>
+          <circle cx="6" cy="13" r="1.4" fill="#4DB87A" opacity="0.75"/>
+          <circle cx="16" cy="17" r="1.9" fill="#4DB87A"/>
+        </svg>
+        <span class="logo-text sidera">SIDERA</span>
+      </div>
+      <span class="card-label">Costellazione</span>
+      <span class="card-desc">Mappa stellare con stelle connesse da linee</span>
+    </div>
+
+    <!-- S3: Pianeta con anello -->
+    <div class="card">
+      <div class="icon-showcase icon-lg">
+        <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- Ring back half (behind planet) -->
+          <path d="M 3 16 A 13 5 0 0 1 29 16" stroke="#4DB87A" stroke-width="1.2" opacity="0.3" stroke-linecap="round"/>
+          <!-- Planet circle -->
+          <circle cx="16" cy="16" r="7.5" stroke="#4DB87A" stroke-width="1.5"/>
+          <!-- Planet core dot -->
+          <circle cx="16" cy="16" r="2" fill="#4DB87A" opacity="0.6"/>
+          <!-- Ring front half (in front of planet) -->
+          <path d="M 3 16 A 13 5 0 0 0 29 16" stroke="#4DB87A" stroke-width="1.2" stroke-linecap="round"/>
+        </svg>
+        <span class="logo-text sidera">SIDERA</span>
+      </div>
+      <span class="card-label">Pianeta Anellato</span>
+      <span class="card-desc">Sfera con anello tipo Saturno — simbolo universale dello spazio</span>
+    </div>
+
+  </div>
+
+  <hr/>
+
+  <!-- ── PULSAR ── -->
+  <p class="module-title pulsar">PULSAR — stella di neutroni / segnale radio</p>
+  <div class="grid">
+
+    <!-- P1: Radio beacon -->
+    <div class="card">
+      <div class="icon-showcase icon-lg">
+        <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- Emission beams -->
+          <line x1="16" y1="12.5" x2="16" y2="2" stroke="#00D2FF" stroke-width="2" stroke-linecap="round"/>
+          <line x1="16" y1="19.5" x2="16" y2="30" stroke="#00D2FF" stroke-width="2" stroke-linecap="round"/>
+          <!-- Left arcs -->
+          <path d="M11.5 10 A6.5 6.5 0 0 0 11.5 22" stroke="#00D2FF" stroke-width="1.1" stroke-linecap="round" opacity="0.55"/>
+          <path d="M8 7 A11 11 0 0 0 8 25" stroke="#00D2FF" stroke-width="0.8" stroke-linecap="round" opacity="0.28"/>
+          <!-- Right arcs -->
+          <path d="M20.5 10 A6.5 6.5 0 0 1 20.5 22" stroke="#00D2FF" stroke-width="1.1" stroke-linecap="round" opacity="0.55"/>
+          <path d="M24 7 A11 11 0 0 1 24 25" stroke="#00D2FF" stroke-width="0.8" stroke-linecap="round" opacity="0.28"/>
+          <!-- Core -->
+          <circle cx="16" cy="16" r="3.5" fill="#00D2FF"/>
+        </svg>
+        <span class="logo-text pulsar">PULSAR</span>
+      </div>
+      <span class="card-label">Faro Radio</span>
+      <span class="card-desc">Fasci di emissione con archi del campo magnetico</span>
+    </div>
+
+    <!-- P2: Pulse rings -->
+    <div class="card">
+      <div class="icon-showcase icon-lg">
+        <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- Concentric rings -->
+          <circle cx="16" cy="16" r="13.5" stroke="#00D2FF" stroke-width="0.6" opacity="0.18"/>
+          <circle cx="16" cy="16" r="10" stroke="#00D2FF" stroke-width="0.8" opacity="0.32"/>
+          <circle cx="16" cy="16" r="6.5" stroke="#00D2FF" stroke-width="1" opacity="0.52"/>
+          <circle cx="16" cy="16" r="3.5" stroke="#00D2FF" stroke-width="1.2" opacity="0.72"/>
+          <!-- Core -->
+          <circle cx="16" cy="16" r="2" fill="#00D2FF"/>
+        </svg>
+        <span class="logo-text pulsar">PULSAR</span>
+      </div>
+      <span class="card-label">Anelli d'Impulso</span>
+      <span class="card-desc">Onde radio che si propagano verso l'esterno</span>
+    </div>
+
+    <!-- P3: Spinning star -->
+    <div class="card">
+      <div class="icon-showcase icon-lg">
+        <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- 4-pointed star -->
+          <path d="M16 2 L17.8 14.2 L30 16 L17.8 17.8 L16 30 L14.2 17.8 L2 16 L14.2 14.2 Z" fill="#00D2FF"/>
+          <!-- Motion arcs suggesting rotation -->
+          <path d="M22 5 A12 12 0 0 1 27 10" stroke="#00D2FF" stroke-width="1" stroke-linecap="round" opacity="0.38"/>
+          <path d="M10 27 A12 12 0 0 1 5 22" stroke="#00D2FF" stroke-width="1" stroke-linecap="round" opacity="0.38"/>
+        </svg>
+        <span class="logo-text pulsar">PULSAR</span>
+      </div>
+      <span class="card-label">Stella Rotante</span>
+      <span class="card-desc">Stella a 4 punte (tipo ✦ ma custom) con archi di rotazione</span>
+    </div>
+
+  </div>
+
+</body>
+</html>

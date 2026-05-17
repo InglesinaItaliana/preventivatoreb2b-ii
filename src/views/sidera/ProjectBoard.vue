@@ -2,14 +2,15 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import {
-  ArrowLeftIcon, PlusIcon, XMarkIcon,
+  ArrowLeftIcon, PlusIcon, XMarkIcon, TrashIcon,
   ViewColumnsIcon, Bars3BottomLeftIcon, CalendarIcon, DocumentTextIcon,
 } from '@heroicons/vue/24/outline'
 import { doc, getDoc } from 'firebase/firestore'
 import { db } from '../../firebase'
-import { useProjectTasks } from '../../composables/sidera/useProjectTasks'
-import { useCurrentUser }   from '../../composables/sidera/useCurrentUser'
-import { avatarColor, avatarInitial } from '../../composables/sidera/useTeamMembers'
+import { useProjectTasks, type ProjectTask } from '../../composables/sidera/useProjectTasks'
+import { useProjects }     from '../../composables/sidera/useProjects'
+import { useCurrentUser }  from '../../composables/sidera/useCurrentUser'
+import { useTeamMembers, avatarColor, avatarInitial, displayName } from '../../composables/sidera/useTeamMembers'
 
 const route  = useRoute()
 const router = useRouter()
@@ -44,9 +45,17 @@ onMounted(async () => {
 })
 
 // ── Tasks ─────────────────────────────────────────────────────────────────
-const { tasks, loading: tasksLoading, createTask, completeTask, updateTaskStatus } = useProjectTasks(projectId)
+const { tasks, loading: tasksLoading, createTask, completeTask, updateTaskStatus, updateTask, deleteTask } = useProjectTasks(projectId)
+const { deleteProject } = useProjects()
 const { currentUser } = useCurrentUser()
+const { members } = useTeamMembers()
 const isAdmin = computed(() => currentUser.value?.role === 'ADMIN' || currentUser.value?.email === 'info@inglesinaitaliana.it')
+
+async function handleDeleteProject() {
+  if (!confirm(`Eliminare il progetto "${project.value?.name}" e tutte le sue azioni? L'operazione è irreversibile.`)) return
+  await deleteProject(projectId)
+  router.push('/sidera/projects')
+}
 
 // ── Kanban ────────────────────────────────────────────────────────────────
 const sortedStates = computed(() =>
@@ -129,7 +138,7 @@ const pct = computed(() => {
   return Math.round((project.value.doneCount / project.value.taskCount) * 100)
 })
 
-const prioColor: Record<string, string> = { alta: '#C8521A', media: '#2F6B4A', bassa: '#7A8FA6' }
+const prioColor: Record<string, string> = { alta: '#C8521A', media: '#D4A020', bassa: '#7A8FA6' }
 
 const allTasksFlat = computed(() => tasks.value)
 
@@ -139,6 +148,79 @@ const views = [
   { id: 'cal',   label: 'Calendario', icon: CalendarIcon },
   { id: 'notes', label: 'Note',       icon: DocumentTextIcon },
 ]
+
+// ── Edit task modal ──────────────────────────────────────────────────────────
+const editingTask = ref<ProjectTask | null>(null)
+const showEdit    = ref(false)
+const editSaving  = ref(false)
+const editDeleting = ref(false)
+
+const prioOptions = [
+  { id: 'alta',  label: 'Alta',  color: '#C8521A' },
+  { id: 'media', label: 'Media', color: '#D4A020' },
+  { id: 'bassa', label: 'Bassa', color: '#7A8FA6' },
+] as const
+
+const editForm = ref({
+  title:     '',
+  priority:  'media' as 'alta' | 'media' | 'bassa',
+  dueDate:   '',
+  assignees: [] as string[],
+})
+
+function openEditTask(t: ProjectTask) {
+  if (!isAdmin.value) return
+  editingTask.value = t
+  editForm.value = {
+    title:     t.title,
+    priority:  t.priority,
+    dueDate:   t.dueDate ? t.dueDate.toISOString().split('T')[0] : '',
+    assignees: [...t.assignees],
+  }
+  showEdit.value = true
+}
+
+function closeEdit() { showEdit.value = false; editingTask.value = null }
+
+function toggleEditAssignee(email: string) {
+  const idx = editForm.value.assignees.indexOf(email)
+  if (idx === -1) editForm.value.assignees.push(email)
+  else editForm.value.assignees.splice(idx, 1)
+}
+
+function parseDateInput(s: string): Date {
+  const [y, m, d] = s.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+
+async function saveEdit() {
+  if (!editingTask.value || !editForm.value.title.trim() || editSaving.value) return
+  editSaving.value = true
+  try {
+    const dueDate = editForm.value.dueDate ? parseDateInput(editForm.value.dueDate) : null
+    await updateTask(editingTask.value.id, {
+      title:     editForm.value.title.trim(),
+      priority:  editForm.value.priority,
+      dueDate,
+      assignees: editForm.value.assignees,
+    })
+    closeEdit()
+  } finally {
+    editSaving.value = false
+  }
+}
+
+async function deleteCurrentTask() {
+  if (!editingTask.value || editDeleting.value) return
+  if (!confirm('Eliminare questa azione?')) return
+  editDeleting.value = true
+  try {
+    await deleteTask(editingTask.value.id, !!editingTask.value.completedAt)
+    closeEdit()
+  } finally {
+    editDeleting.value = false
+  }
+}
 </script>
 
 <template>
@@ -160,6 +242,9 @@ const views = [
           class="bv-pct"
           :style="{ color: project.color, background: project.color + '12' }"
         >{{ pct }}% completato</span>
+        <button v-if="isAdmin && !projLoading" class="bv-delete-btn" title="Elimina progetto" @click="handleDeleteProject">
+          <TrashIcon style="width:13px;height:13px" />
+        </button>
       </div>
       <div class="bv-tabs">
         <button
@@ -200,17 +285,22 @@ const views = [
               class="kanban-card"
               :class="{ 'is-done': isTaskDone(t) }"
               :style="{ borderLeftColor: prioColor[t.priority] }"
+              @click="openEditTask(t)"
             >
               <div class="card-title">{{ t.title }}</div>
               <div class="card-footer">
-                <!-- Assignee avatar -->
-                <div
-                  v-if="t.assignee"
-                  class="card-avatar"
-                  :title="t.assignee"
-                  :style="{ background: avatarColor(t.assignee) + '20', border: '1.5px solid ' + avatarColor(t.assignee) + '50', color: avatarColor(t.assignee) }"
-                >{{ avatarInitial(t.assignee) }}</div>
-                <div v-else class="card-avatar card-avatar--empty">–</div>
+                <!-- Assignees avatars stack -->
+                <div class="avatars-stack">
+                  <div
+                    v-for="email in t.assignees.slice(0, 3)"
+                    :key="email"
+                    class="card-avatar"
+                    :title="email"
+                    :style="{ background: avatarColor(email) + '20', border: '1.5px solid ' + avatarColor(email) + '50', color: avatarColor(email) }"
+                  >{{ avatarInitial(email) }}</div>
+                  <div v-if="t.assignees.length > 3" class="card-avatar card-avatar--more">+{{ t.assignees.length - 3 }}</div>
+                  <div v-if="!t.assignees.length" class="card-avatar card-avatar--empty">–</div>
+                </div>
 
                 <div class="card-right">
                   <div class="card-prio" :style="{ background: prioColor[t.priority] }" />
@@ -310,6 +400,80 @@ const views = [
         </div>
       </template>
     </div>
+
+    <!-- ── MODAL Modifica azione ─────────────────────────────────────────── -->
+    <Teleport to="body">
+      <div v-if="showEdit" class="modal-backdrop" @click.self="closeEdit">
+        <div class="modal">
+          <div class="modal-header">
+            <span class="modal-title">Modifica azione</span>
+            <button class="modal-close" @click="closeEdit"><XMarkIcon style="width:16px;height:16px" /></button>
+          </div>
+
+          <div class="modal-body">
+            <label class="field-label">Titolo *</label>
+            <input
+              v-model="editForm.title"
+              class="field-input"
+              placeholder="Descrivi l'azione"
+              @keydown.enter="saveEdit"
+            />
+
+            <label class="field-label" style="margin-top:16px">Assegna a</label>
+            <div class="assignees-chips">
+              <div
+                v-for="m in members"
+                :key="m.email"
+                class="assignee-chip"
+                :class="{ 'is-selected': editForm.assignees.includes(m.email) }"
+                :style="editForm.assignees.includes(m.email) ? { background: avatarColor(m.email) + '20', borderColor: avatarColor(m.email) + '80', color: avatarColor(m.email) } : {}"
+                @click="toggleEditAssignee(m.email)"
+              >
+                <span class="chip-avatar" :style="{ background: avatarColor(m.email), color: '#fff' }">{{ avatarInitial(m.email) }}</span>
+                {{ displayName(m.email, members) }}
+              </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px">
+              <div>
+                <label class="field-label">Priorità</label>
+                <div class="prio-picker">
+                  <button
+                    v-for="p in prioOptions"
+                    :key="p.id"
+                    class="prio-opt"
+                    :class="{ 'is-sel': editForm.priority === p.id }"
+                    :style="editForm.priority === p.id ? { borderColor: p.color, color: p.color } : {}"
+                    type="button"
+                    @click="editForm.priority = p.id"
+                  >
+                    <span class="prio-dot-x" :style="{ background: p.color }" />
+                    {{ p.label }}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label class="field-label">Scadenza</label>
+                <input v-model="editForm.dueDate" type="date" class="field-input field-date" />
+              </div>
+            </div>
+          </div>
+
+          <div class="modal-footer">
+            <button class="btn-danger" :disabled="editDeleting" @click="deleteCurrentTask">
+              <TrashIcon style="width:13px;height:13px" />
+              {{ editDeleting ? '…' : 'Elimina' }}
+            </button>
+            <div style="margin-left:auto;display:flex;gap:8px">
+              <button class="btn-ghost" @click="closeEdit">Annulla</button>
+              <button class="s-btn" :disabled="!editForm.title.trim() || editSaving" @click="saveEdit">
+                {{ editSaving ? 'Salvataggio…' : 'Salva' }}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -357,6 +521,21 @@ const views = [
 .bv-title { font-family: 'Cormorant Garamond', serif; font-size: 26px; font-weight: 500; }
 
 .bv-pct { font-size: 11px; font-weight: 600; padding: 3px 10px; border-radius: 20px; }
+
+.bv-delete-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--s-text-dim);
+  display: flex;
+  align-items: center;
+  padding: 4px;
+  border-radius: 5px;
+  margin-left: auto;
+  transition: color 0.15s, background 0.15s;
+}
+
+.bv-delete-btn:hover { color: #C8521A; background: rgba(200, 82, 26, 0.08); }
 
 .bv-tabs {
   display: flex; gap: 2px;
@@ -451,11 +630,20 @@ const views = [
   font-size: 9px; font-weight: 700; flex-shrink: 0;
 }
 
+.avatars-stack { display: flex; gap: 2px; align-items: center; }
+
 .card-avatar--empty {
   background: var(--s-surface-up) !important;
   border: 1.5px dashed var(--s-border-mid) !important;
   color: var(--s-text-dim) !important;
   font-size: 11px; font-weight: 400;
+}
+
+.card-avatar--more {
+  background: var(--s-border) !important;
+  border: 1.5px solid var(--s-border-mid) !important;
+  color: var(--s-text-dim) !important;
+  font-size: 8px; font-weight: 700;
 }
 
 .card-right { display: flex; align-items: center; gap: 5px; margin-left: auto; }
@@ -600,4 +788,176 @@ const views = [
 }
 
 .placeholder-icon { font-size: 36px; opacity: 0.3; }
+
+/* ── Modal ─────────────────────────────────────────────────────────────────── */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+}
+
+.modal {
+  background: var(--s-surface);
+  border: 1px solid var(--s-border);
+  border-radius: 14px;
+  width: 460px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.18);
+  font-family: 'Outfit', sans-serif;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px 0;
+}
+
+.modal-title { font-size: 15px; font-weight: 600; color: var(--s-text); }
+
+.modal-close {
+  background: none; border: none; cursor: pointer;
+  color: var(--s-text-dim); padding: 2px;
+  border-radius: 4px; transition: color 0.15s;
+}
+
+.modal-close:hover { color: var(--s-text); }
+
+.modal-body { padding: 20px 24px; }
+
+.field-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--s-text-dim);
+  margin-bottom: 6px;
+}
+
+.field-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--s-surface-up);
+  border: 1px solid var(--s-border);
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 13px;
+  font-family: 'Outfit', sans-serif;
+  color: var(--s-text);
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.field-input:focus { border-color: var(--module-accent); }
+.field-input::placeholder { color: var(--s-text-dim); }
+
+.field-date { cursor: pointer; color-scheme: light; }
+
+.assignees-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.assignee-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px 4px 4px;
+  border: 1px solid var(--s-border);
+  border-radius: 999px;
+  font-size: 12px;
+  cursor: pointer;
+  background: var(--s-surface-up);
+  color: var(--s-text-mid);
+  transition: all 0.12s;
+  user-select: none;
+}
+
+.assignee-chip:hover { border-color: var(--s-border-mid); }
+.chip-avatar {
+  width: 20px; height: 20px; border-radius: 50%;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 9px; font-weight: 700;
+}
+
+.prio-picker { display: flex; gap: 6px; }
+
+.prio-opt {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 6px 10px;
+  background: var(--s-surface-up);
+  border: 1px solid var(--s-border);
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 12px;
+  font-family: 'Outfit', sans-serif;
+  color: var(--s-text-dim);
+  transition: all 0.12s;
+}
+
+.prio-opt:hover { color: var(--s-text); }
+.prio-dot-x { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+
+.modal-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 24px 20px;
+  border-top: 1px solid var(--s-border);
+  padding-top: 16px;
+}
+
+.btn-ghost {
+  padding: 8px 16px;
+  background: none;
+  border: 1px solid var(--s-border);
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  color: var(--s-text-mid);
+  font-family: 'Outfit', sans-serif;
+  transition: all 0.15s;
+}
+
+.btn-ghost:hover { border-color: var(--s-border-mid); color: var(--s-text); }
+
+.s-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: var(--module-accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: 'Outfit', sans-serif;
+  transition: filter 0.15s;
+}
+
+.s-btn:hover:not(:disabled) { filter: brightness(1.18); }
+.s-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.btn-danger {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 14px;
+  background: rgba(200, 82, 26, 0.08);
+  border: 1px solid rgba(200, 82, 26, 0.3);
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  color: #C8521A;
+  font-family: 'Outfit', sans-serif;
+  transition: all 0.15s;
+}
+
+.btn-danger:hover:not(:disabled) { background: rgba(200, 82, 26, 0.16); border-color: #C8521A; }
+.btn-danger:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>

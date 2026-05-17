@@ -29,12 +29,18 @@ service cloud.firestore {
 
     // --- REGOLE COLLEZIONI ---
 
-    // Collezione TEAM 
+    // Collezione TEAM
     match /team/{memberId} {
       // Lettura permessa a chiunque sia loggato (per info UI)
       allow read: if request.auth != null;
       // Scrittura SOLO Admin
       allow write: if isAdmin();
+      // Eccezione: ogni membro può aggiornare SOLO il proprio campo fcmTokens
+      // (necessario per registrare il token FCM dal browser/PWA)
+      allow update: if request.auth != null
+        && request.auth.token.email != null
+        && request.auth.token.email.lower() == memberId
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fcmTokens']);
     }
 
     // Collezione UTENTI (Clienti)
@@ -87,6 +93,51 @@ service cloud.firestore {
     match /{path=**}/tasks/{tid} {
       allow read: if request.auth != null;
       allow write: if isAdmin();
+    }
+
+    // ── PULSAR: standalone tasks (creati da chat/pendenze senza progetto) ────
+    match /tasks/{tid} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null
+                    && request.resource.data.createdBy == request.auth.uid;
+      allow update: if request.auth != null;
+      allow delete: if isAdmin() || (resource.data.createdBy == request.auth.uid);
+    }
+
+    // ── PULSAR: Chats e Messages ────────────────────────────────────────────
+    match /chats/{chatId} {
+      allow read: if request.auth != null &&
+        request.auth.token.email in resource.data.members;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null &&
+        request.auth.token.email in resource.data.members;
+      allow delete: if request.auth != null &&
+        (request.auth.token.email == resource.data.createdBy || isAdmin());
+
+      match /messages/{msgId} {
+        allow read: if request.auth != null;
+        allow create: if request.auth != null;
+        // L'autore può modificare il proprio messaggio. I membri della chat
+        // possono inoltre aggiornare ESCLUSIVAMENTE answeredAt e taskId (per
+        // marcare una domanda risposta o linkare un task creato da un altro).
+        allow update: if request.auth != null && (
+          request.auth.token.email == resource.data.from
+          || (
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['answeredAt', 'taskId'])
+            && request.auth.token.email in get(/databases/$(database)/documents/chats/$(chatId)).data.members
+          )
+        );
+      }
+    }
+
+    // Necessario per collectionGroup('messages') usato in PulsarHashtagView
+    match /{path=**}/messages/{msgId} {
+      allow read: if request.auth != null;
+    }
+
+    match /chatHashtags/{tag} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null;
     }
 
     match /{document=**} {

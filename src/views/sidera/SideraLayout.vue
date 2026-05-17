@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { signOut } from 'firebase/auth'
 import { auth } from '../../firebase'
@@ -7,33 +8,167 @@ import {
   ClipboardDocumentCheckIcon,
   Squares2X2Icon,
   ChatBubbleLeftRightIcon,
-  ArchiveBoxIcon,
   ArrowTopRightOnSquareIcon,
   ArrowLeftOnRectangleIcon,
+  InboxIcon,
+  UserGroupIcon,
+  TruckIcon,
 } from '@heroicons/vue/24/outline'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
 import { useTeamMembers, displayName, avatarColor } from '../../composables/sidera/useTeamMembers'
+import { useChats } from '../../composables/pulsar/useChats'
+import { useNotifications } from '../../composables/pulsar/useNotifications'
 
-const route = useRoute()
+const route  = useRoute()
 const router = useRouter()
 const { currentUser } = useCurrentUser()
 const { members } = useTeamMembers()
+const { chats } = useChats()
+const { requestPermission, notify, setupForegroundMessages } = useNotifications()
 
 async function logout() {
   await signOut(auth)
   router.push('/')
 }
 
-const navItems = [
-  { path: '/sidera',          exact: true,  label: 'Il Mio Giorno', icon: HomeIcon },
-  { path: '/sidera/tasks',    exact: false, label: 'Azioni',        icon: ClipboardDocumentCheckIcon },
-  { path: '/sidera/projects', exact: false, label: 'Progetti',      icon: Squares2X2Icon },
-  { path: '/sidera/chat',     exact: false, label: 'Chat',          icon: ChatBubbleLeftRightIcon },
+// Vertici Schlegel: posizioni nel viewBox 680×480
+// V1 QUASAR(340,68) V2 NEBULA(155,400) V3 CEPHEID(525,400)
+// V4 PULSAR(405,252) V5 NOVA(275,252) V6 MAGNETAR(340,364)
+const modules = [
+  {
+    name: 'QUASAR',   accent: '#98C0D0',
+    vx: 340, vy: 68,  vr: 10,
+    items: [
+      { path: '/sidera', exact: true, label: 'Cruscotto', icon: HomeIcon },
+    ],
+  },
+  {
+    name: 'NEBULA',   accent: '#C46030',
+    vx: 155, vy: 400, vr: 10,
+    items: [
+      { path: '/sidera/nebula', exact: false, label: 'Team', icon: UserGroupIcon },
+    ],
+  },
+  {
+    name: 'CEPHEID',  accent: '#D4A020',
+    vx: 525, vy: 400, vr: 10,
+    items: [
+      { path: '/sidera/tasks',    exact: false, label: 'Azioni',   icon: ClipboardDocumentCheckIcon },
+      { path: '/sidera/projects', exact: false, label: 'Progetti', icon: Squares2X2Icon },
+    ],
+  },
+  {
+    name: 'PULSAR',   accent: '#3AAF98',
+    vx: 405, vy: 252, vr: 8,
+    items: [
+      { path: '/pulsar', exact: false, label: 'Messaggi', icon: ChatBubbleLeftRightIcon, excludePaths: ['/pulsar/pending'] },
+      { path: '/pulsar/pending', exact: false, label: 'Pendenze', icon: InboxIcon },
+    ],
+  },
+  {
+    name: 'NOVA',     accent: '#8FAB35',
+    vx: 275, vy: 252, vr: 8,
+    items: [
+      { path: '/sidera/nova/spedizioni', exact: false, label: 'Spedizioni', icon: TruckIcon },
+    ] as any[],
+  },
+  {
+    name: 'MAGNETAR', accent: '#B06842',
+    vx: 340, vy: 364, vr: 8,
+    items: [
+      { href: 'https://b2b.inglesinaitaliana.it', label: 'POPS', icon: ArrowTopRightOnSquareIcon },
+    ] as any[],
+  },
 ]
 
-function isActive(path: string, exact: boolean) {
+const activeModule = computed(() =>
+  modules.find(m => {
+    if (m.name === 'QUASAR')
+      return route.path === '/sidera' || route.path === '/sidera/hub'
+    return m.items.some((item: any) =>
+      item.exact ? route.path === item.path : route.path.startsWith(item.path)
+    )
+  }) ?? null
+)
+
+const SIDERA_COLOR      = '#D4C498'
+const SIDERA_COLOR_DIM  = '#D4C49880'
+
+const isHub = computed(() => route.path === '/sidera/hub')
+
+function vertexRadius(mod: typeof modules[0]) {
+  if (isHub.value) return mod.vr
+  return activeModule.value?.name === mod.name ? mod.vr * 1.5 : mod.vr
+}
+
+function vertexStyle(mod: typeof modules[0]) {
+  if (isHub.value) {
+    return { fill: mod.accent, stroke: mod.accent }
+  }
+  const active = activeModule.value?.name === mod.name
+  return {
+    fill:   active ? mod.accent : SIDERA_COLOR_DIM,
+    stroke: active ? mod.accent : SIDERA_COLOR_DIM,
+  }
+}
+
+const edgeStroke = computed(() => isHub.value ? SIDERA_COLOR : SIDERA_COLOR_DIM)
+
+const edgeTransition = 'stroke 0.5s ease'
+
+function isActive(path: string, exact: boolean, excludePaths?: string[]) {
+  if (excludePaths?.some(ep => route.path.startsWith(ep))) return false
   return exact ? route.path === path : route.path.startsWith(path)
 }
+
+function activeStyle(path: string, exact: boolean, accent: string, excludePaths?: string[]) {
+  if (!isActive(path, exact, excludePaths)) return {}
+  return { background: accent + '1A', color: accent }
+}
+
+function activeIconStyle(path: string, exact: boolean, accent: string, excludePaths?: string[]) {
+  if (!isActive(path, exact, excludePaths)) return {}
+  return { color: accent }
+}
+
+function sectionActive(mod: typeof modules[0]) {
+  return activeModule.value?.name === mod.name
+}
+
+// ── Notifiche browser ────────────────────────────────────────────────────────
+const initialized   = ref(false)
+const lastSeenTimes = new Map<string, number>()
+
+onMounted(async () => {
+  await requestPermission()
+  await setupForegroundMessages()
+})
+
+watch(chats, (newChats) => {
+  if (!initialized.value) {
+    for (const c of newChats) {
+      lastSeenTimes.set(c.id, c.lastMessageAt?.getTime() ?? 0)
+    }
+    initialized.value = true
+    return
+  }
+
+  const myEmail = auth.currentUser?.email ?? ''
+
+  for (const chat of newChats) {
+    const prev    = lastSeenTimes.get(chat.id) ?? 0
+    const current = chat.lastMessageAt?.getTime() ?? 0
+
+    if (current > prev) {
+      lastSeenTimes.set(chat.id, current)
+      const chatIsOpen = route.path === `/pulsar/chat/${chat.id}`
+      if (!chatIsOpen) {
+        const chatName = chat.name || chat.members.find((m: string) => m !== myEmail) || 'Chat'
+        notify(`Nuovo messaggio in ${chatName}`, chat.lastMessage)
+      }
+    }
+  }
+}, { deep: true })
 
 const roleLabel: Record<string, string> = {
   ADMIN:      'Admin',
@@ -43,48 +178,82 @@ const roleLabel: Record<string, string> = {
 </script>
 
 <template>
-  <div class="s-shell">
+  <div class="s-shell" :style="{ '--module-accent': activeModule?.accent ?? 'var(--s-green)', '--module-accent-light': (activeModule?.accent ?? 'var(--s-green)') + 'DD' }">
     <!-- ── SIDEBAR ── -->
     <aside class="s-sidebar">
-      <div class="s-logo">
-        <span class="s-logo-wordmark">SIDERA</span>
-        <span class="s-logo-star">✦</span>
+      <div class="s-logo" style="cursor: pointer" @click="router.push('/sidera/hub')">
+        <!-- Schlegel diagram ottaedro — 6 vertici, 12 lati -->
+        <svg class="s-logo-icon" width="116" height="82" viewBox="0 0 680 480" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <!-- outer edges -->
+          <line x1="340" y1="68"  x2="155" y2="400" :stroke="edgeStroke" :style="{ transition: edgeTransition }" stroke-width="1.5"/>
+          <line x1="155" y1="400" x2="525" y2="400" :stroke="edgeStroke" :style="{ transition: edgeTransition }" stroke-width="1.5"/>
+          <line x1="525" y1="400" x2="340" y2="68"  :stroke="edgeStroke" :style="{ transition: edgeTransition }" stroke-width="1.5"/>
+          <!-- inner edges -->
+          <line x1="275" y1="252" x2="405" y2="252" :stroke="edgeStroke" :style="{ transition: edgeTransition }" stroke-width="1.5"/>
+          <line x1="405" y1="252" x2="340" y2="364" :stroke="edgeStroke" :style="{ transition: edgeTransition }" stroke-width="1.5"/>
+          <line x1="340" y1="364" x2="275" y2="252" :stroke="edgeStroke" :style="{ transition: edgeTransition }" stroke-width="1.5"/>
+          <!-- cross edges -->
+          <line x1="340" y1="68"  x2="405" y2="252" :stroke="edgeStroke" :style="{ transition: edgeTransition }" stroke-width="1.5"/>
+          <line x1="340" y1="68"  x2="275" y2="252" :stroke="edgeStroke" :style="{ transition: edgeTransition }" stroke-width="1.5"/>
+          <line x1="155" y1="400" x2="275" y2="252" :stroke="edgeStroke" :style="{ transition: edgeTransition }" stroke-width="1.5"/>
+          <line x1="155" y1="400" x2="340" y2="364" :stroke="edgeStroke" :style="{ transition: edgeTransition }" stroke-width="1.5"/>
+          <line x1="525" y1="400" x2="405" y2="252" :stroke="edgeStroke" :style="{ transition: edgeTransition }" stroke-width="1.5"/>
+          <line x1="525" y1="400" x2="340" y2="364" :stroke="edgeStroke" :style="{ transition: edgeTransition }" stroke-width="1.5"/>
+          <!-- vertici reattivi: colorati in base al modulo attivo -->
+          <circle v-for="mod in modules" :key="mod.name"
+            :cx="mod.vx" :cy="mod.vy"
+            :r="vertexRadius(mod)"
+            v-bind="vertexStyle(mod)"
+            stroke-width="1.4"
+          />
+        </svg>
+
+        <span class="s-logo-wordmark">
+          <span class="s-ltr">S</span><span class="s-dot">·</span>
+          <span class="s-ltr">I</span><span class="s-dot">·</span>
+          <span class="s-ltr">D</span><span class="s-dot">·</span>
+          <span class="s-ltr">E</span><span class="s-dot">·</span>
+          <span class="s-ltr">R</span><span class="s-dot">·</span>
+          <span class="s-ltr">A</span>
+        </span>
       </div>
 
       <nav class="s-nav">
-        <p class="s-section-label">Workspace</p>
-        <RouterLink
-          v-for="item in navItems"
-          :key="item.path"
-          :to="item.path"
-          class="s-nav-item"
-          :class="{ 'is-active': isActive(item.path, item.exact) }"
-        >
-          <component :is="item.icon" class="s-nav-icon" />
-          {{ item.label }}
-        </RouterLink>
-
-        <div class="s-sep" />
-        <p class="s-section-label">In arrivo</p>
-        <div class="s-nav-item s-nav-item--disabled">
-          <ArchiveBoxIcon class="s-nav-icon" />
-          Archivio
-          <span class="s-badge-soon">PRESTO</span>
-        </div>
+        <template v-for="mod in modules" :key="mod.name">
+          <p
+            class="s-section-label"
+            :style="{ color: sectionActive(mod) ? mod.accent : undefined }"
+          >{{ mod.name }}</p>
+          <template v-for="item in mod.items" :key="item.path ?? item.href">
+            <a
+              v-if="item.href"
+              :href="item.href"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="s-nav-item"
+            >
+              <component :is="item.icon" class="s-nav-icon" />
+              {{ item.label }}
+            </a>
+            <RouterLink
+              v-else
+              :to="item.path"
+              class="s-nav-item"
+              :style="activeStyle(item.path, item.exact, mod.accent, item.excludePaths)"
+            >
+              <component
+                :is="item.icon"
+                class="s-nav-icon"
+                :style="activeIconStyle(item.path, item.exact, mod.accent, item.excludePaths)"
+              />
+              {{ item.label }}
+            </RouterLink>
+          </template>
+          <div v-if="mod.items.length === 0" class="s-nav-empty">
+            <span class="s-soon" :style="{ borderColor: mod.accent + '44', color: mod.accent + 'AA' }">In arrivo</span>
+          </div>
+        </template>
       </nav>
-
-      <!-- POPS link -->
-      <div class="s-pops-section">
-        <a
-          href="https://b2b.inglesinaitaliana.it"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="s-pops-link"
-        >
-          <span class="s-pops-wordmark">POPS</span>
-          <ArrowTopRightOnSquareIcon class="s-pops-icon" />
-        </a>
-      </div>
 
       <!-- User -->
       <div class="s-user">
@@ -121,10 +290,17 @@ const roleLabel: Record<string, string> = {
 
 /* ─── Sidebar ─── */
 .s-sidebar {
+  /* token locali dark per la sidebar */
+  --s-sidebar:  #05090F;
+  --s-border:   rgba(255,255,255,0.07);
+  --s-text:     rgba(255,255,255,0.82);
+  --s-text-mid: rgba(255,255,255,0.46);
+  --s-text-dim: rgba(255,255,255,0.24);
+
   width: 220px;
   flex-shrink: 0;
-  background: var(--s-sidebar);
-  border-right: 1px solid var(--s-border);
+  background: #05090F;
+  border-right: 1px solid rgba(255,255,255,0.07);
   display: flex;
   flex-direction: column;
   padding: 20px 12px;
@@ -132,25 +308,37 @@ const roleLabel: Record<string, string> = {
 
 .s-logo {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
-  padding: 4px 12px 26px;
+  gap: 6px;
+  padding: 4px 12px 28px;
 }
 
 .s-logo-wordmark {
   font-family: 'Cormorant Garamond', serif;
-  font-size: 22px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
+  font-weight: 500;
+  font-size: 30px;
   color: var(--s-text);
+  line-height: 1;
+  letter-spacing: 0.04em;
+  display: inline-flex;
+  align-items: center;
 }
 
-.s-logo-star {
-  color: var(--s-green);
-  font-size: 10px;
-  margin-top: 1px;
-  font-weight: 700;
+.s-ltr { display: inline-block; }
+
+.s-dot {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.4em;
+  opacity: 0.35;
+  padding: 0 0.28em;
+  line-height: 1;
+  position: relative;
+  top: 0.04em;
 }
+
+.s-logo-icon { flex-shrink: 0; }
 
 .s-nav { flex: 1; }
 
@@ -161,7 +349,9 @@ const roleLabel: Record<string, string> = {
   text-transform: uppercase;
   color: var(--s-text-dim);
   padding-left: 12px;
-  margin-bottom: 10px;
+  margin-top: 18px;
+  margin-bottom: 6px;
+  transition: color 0.15s;
 }
 
 .s-nav-item {
@@ -171,7 +361,7 @@ const roleLabel: Record<string, string> = {
   padding: 8px 12px;
   border-radius: 8px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: background 0.15s, color 0.15s;
   color: var(--s-text-dim);
   font-size: 13px;
   font-weight: 500;
@@ -183,61 +373,21 @@ const roleLabel: Record<string, string> = {
 
 .s-nav-item:hover { background: var(--s-border); color: var(--s-text-mid); }
 
-.s-nav-item.is-active {
-  background: var(--s-green-glow);
-  color: var(--s-green-text);
-}
+.s-nav-icon { width: 15px; height: 15px; flex-shrink: 0; transition: color 0.15s; }
 
-.s-nav-item.is-active .s-nav-icon { color: var(--s-green); }
+.s-nav-empty { padding: 4px 12px 6px; }
 
-.s-nav-item--disabled { opacity: 0.35; cursor: not-allowed; }
-
-.s-nav-icon { width: 15px; height: 15px; flex-shrink: 0; }
-
-.s-sep {
-  margin: 18px 0 10px;
-  border-top: 1px solid var(--s-border);
-  padding-top: 16px;
-}
-
-.s-badge-soon {
-  margin-left: auto;
+.s-soon {
+  display: inline-block;
   font-size: 9px;
-  background: var(--s-border);
-  padding: 2px 6px;
-  border-radius: 4px;
-  color: var(--s-text-dim);
-  letter-spacing: 0.05em;
-  font-weight: 700;
-}
-
-/* ─── POPS ─── */
-.s-pops-section {
-  border-top: 1px solid var(--s-border);
-  padding-top: 12px;
-  margin-bottom: 10px;
-}
-
-.s-pops-link {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-  padding: 8px 12px;
-  border-radius: 9px;
-  background: var(--s-pops-glow);
-  border: 1px solid var(--s-pops-border);
-  color: var(--s-pops);
-  font-size: 13px;
   font-weight: 600;
-  text-decoration: none;
-  transition: background 0.15s;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  border: 1px solid;
+  border-radius: 4px;
+  padding: 2px 6px;
+  opacity: 0.7;
 }
-
-.s-pops-link:hover { background: rgba(200, 130, 26, 0.13); }
-
-.s-pops-wordmark { font-size: 13px; font-weight: 700; letter-spacing: 0.04em; }
-
-.s-pops-icon { width: 12px; height: 12px; margin-left: auto; opacity: 0.7; }
 
 /* ─── User ─── */
 .s-user {

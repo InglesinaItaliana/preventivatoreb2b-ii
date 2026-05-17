@@ -174,7 +174,7 @@ const openResultModal = (title: string, message: string, type: 'SUCCESS' | 'ERRO
   </script>
   
   <template>
-    <div v-if="isAuthReady" class="fixed bottom-8 right-8 z-[9999] flex flex-col items-end gap-4 pointer-events-none">
+    <div v-if="isAuthReady" v-show="!route.path.startsWith('/sidera') && !route.path.startsWith('/pulsar') && !route.path.startsWith('/cepheid')" class="fixed bottom-8 right-8 z-[9999] flex flex-col items-end gap-4 pointer-events-none">
       
       <Transition
         enter-active-class="transition-all duration-400 cubic-bezier(0.34, 1.56, 0.64, 1)"

@@ -3,13 +3,55 @@
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/png" href="/favicon.png" />
-    <link rel="apple-touch-icon" href="/favicon.png" />
-    
+
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#FFFFFF" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="PULSAR" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/icons/pulsar-180.png" />
+    <link rel="apple-touch-icon" sizes="192x192" href="/icons/pulsar-192.png" />
+    <link rel="apple-touch-icon" sizes="512x512" href="/icons/pulsar-512.png" />
     <title>P.O.P.S. Inglesina Italiana</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
+    <script>
+      // Pattern "suite di webapp": se il path inizia con /cepheid swappiamo manifest,
+      // titolo PWA e apple-touch-icon prima del bootstrap Vue.
+      (function () {
+        try {
+          var path = window.location.pathname || '';
+          if (path.indexOf('/cepheid') === 0) {
+            var head = document.head;
+            // Manifest: rimuovi quelli esistenti (VitePWA potrebbe non averlo ancora iniettato a questo punto,
+            // ma se presente lo sovrascriviamo)
+            head.querySelectorAll('link[rel="manifest"]').forEach(function (el) { el.remove() });
+            var link = document.createElement('link');
+            link.rel = 'manifest';
+            link.href = '/cepheid.webmanifest';
+            head.appendChild(link);
+
+            // Apple touch icons → CEPHEID (cache-busted)
+            var ICON_V = '2';
+            head.querySelectorAll('link[rel="apple-touch-icon"]').forEach(function (el) { el.remove() });
+            [['180x180','/icons/cepheid-180.png'],['192x192','/icons/cepheid-192.png'],['512x512','/icons/cepheid-512.png']].forEach(function (pair) {
+              var l = document.createElement('link');
+              l.rel = 'apple-touch-icon';
+              l.setAttribute('sizes', pair[0]);
+              l.href = pair[1] + '?v=' + ICON_V;
+              head.appendChild(l);
+            });
+
+            // Titolo PWA standalone (iOS)
+            var titleMeta = head.querySelector('meta[name="apple-mobile-web-app-title"]');
+            if (titleMeta) titleMeta.setAttribute('content', 'CEPHEID');
+          }
+        } catch (_e) { /* ignore */ }
+      })();
+    </script>
   </head>
   <body>
     <div id="app"></div>

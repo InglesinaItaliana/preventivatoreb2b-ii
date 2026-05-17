@@ -73,10 +73,52 @@ const router = createRouter({
       meta: { requiresAuth: true },
       children: [
         { path: '',           name: 'sidera-home',    component: () => import('../views/sidera/HomeView.vue') },
+        { path: 'hub',        name: 'sidera-hub',     component: () => import('../views/sidera/SideraHubView.vue') },
         { path: 'tasks',      name: 'sidera-tasks',   component: () => import('../views/sidera/TasksView.vue') },
         { path: 'projects',   name: 'sidera-projects',component: () => import('../views/sidera/ProjectsView.vue') },
         { path: 'projects/:id', name: 'sidera-project', component: () => import('../views/sidera/ProjectBoard.vue') },
         { path: 'chat',       name: 'sidera-chat',    component: () => import('../views/sidera/ChatView.vue') },
+        { path: 'nebula',     name: 'nebula-team',    component: () => import('../views/nebula/NebulaTeamView.vue') },
+        { path: 'nova/spedizioni', name: 'nova-spedizioni', component: () => import('../views/nova/NovaSpedizioniView.vue') },
+      ]
+    },
+    // ── PULSAR (PWA indipendente: shell PulsarLayout) ───────────────────────
+    {
+      path: '/pulsar/login',
+      name: 'pulsar-login',
+      component: () => import('../views/pulsar/PulsarLoginView.vue'),
+      meta: { pulsarScope: true }
+    },
+    {
+      path: '/pulsar',
+      component: () => import('../views/pulsar/PulsarShell.vue'),
+      meta: { requiresAuth: true, pulsarScope: true },
+      children: [
+        { path: '',         name: 'pulsar-chats',   component: () => import('../views/pulsar/PulsarChatsView.vue') },
+        { path: 'chat/:id', name: 'pulsar-chat',    component: () => import('../views/pulsar/PulsarMessageView.vue') },
+        { path: 'tags',     name: 'pulsar-tags',    component: () => import('../views/pulsar/PulsarTagsView.vue') },
+        { path: 'tag/:tag', name: 'pulsar-hashtag', component: () => import('../views/pulsar/PulsarHashtagView.vue') },
+        { path: 'sequentia',name: 'pulsar-seq',     component: () => import('../views/pulsar/PulsarSequentia.vue') },
+        { path: 'pending',  name: 'pulsar-pending', component: () => import('../views/pulsar/PulsarPendingView.vue') },
+      ]
+    },
+
+    // ── CEPHEID (PWA indipendente: shell CepheidLayout) ─────────────────────
+    {
+      path: '/cepheid/login',
+      name: 'cepheid-login',
+      component: () => import('../views/cepheid/CepheidLoginView.vue'),
+      meta: { cepheidScope: true }
+    },
+    {
+      path: '/cepheid',
+      component: () => import('../views/cepheid/CepheidShell.vue'),
+      meta: { requiresAuth: true, cepheidScope: true },
+      children: [
+        { path: '',           name: 'cepheid-actions',  component: () => import('../views/cepheid/CepheidActionsView.vue') },
+        { path: 'projects',   name: 'cepheid-projects', component: () => import('../views/cepheid/CepheidProjectsView.vue') },
+        { path: 'project/:id',name: 'cepheid-project',  component: () => import('../views/cepheid/CepheidProjectDetail.vue') },
+        { path: 'due',        name: 'cepheid-due',      component: () => import('../views/cepheid/CepheidDueView.vue') },
       ]
     }
   ]
@@ -93,9 +135,11 @@ router.beforeEach(async (to, _from, next) => {
     return;
   }
 
-  // 2. Se richiede auth ma non c'è utente -> Login
+  // 2. Se richiede auth ma non c'è utente -> Login (scoped per PWA)
   if (!currentUser) {
-    next('/');
+    const isPulsarScope = to.matched.some(r => r.meta.pulsarScope);
+    const isCepheidScope = to.matched.some(r => r.meta.cepheidScope);
+    next(isCepheidScope ? '/cepheid/login' : (isPulsarScope ? '/pulsar/login' : '/'));
     return;
   }
 
@@ -119,9 +163,9 @@ router.beforeEach(async (to, _from, next) => {
         
         // Reindirizzamenti forzati per ruoli operativi
         if (role === 'PRODUZIONE') {
-          const allowedPaths = ['/production', '/delivery'];
-          if (!allowedPaths.includes(to.path)) {
-             next('/production'); 
+          const allowedPaths = ['/production', '/delivery', '/pulsar', '/cepheid'];
+          if (!allowedPaths.some(p => to.path === p || to.path.startsWith(p + '/'))) {
+             next('/production');
              return;
           }
        }

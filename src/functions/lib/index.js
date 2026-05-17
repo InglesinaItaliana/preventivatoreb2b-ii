@@ -1227,4 +1227,101 @@ exports.resetOrderState = functions
         throw new functions.https.HttpsError('internal', e.message);
     }
 });
+// ============================================================================
+// PULSAR — Push notification su nuovo messaggio chat
+// ============================================================================
+// Trigger Firestore: ogni nuovo messaggio in chats/{chatId}/messages/{msgId}
+// → legge i membri della chat → carica i loro fcmTokens dal team doc
+// → invia push FCM a tutti tranne il mittente.
+exports.onNewPulsarMessage = functions
+    .region('europe-west1')
+    .firestore.document('chats/{chatId}/messages/{msgId}')
+    .onCreate(async (snap, context) => {
+    var _a;
+    const msg = snap.data();
+    const chatId = context.params.chatId;
+    const sender = ((msg === null || msg === void 0 ? void 0 : msg.from) || '').toLowerCase().trim();
+    if (!msg || !msg.text)
+        return null;
+    const db = admin.firestore();
+    try {
+        // 1. Carica la chat per avere members + nome
+        const chatSnap = await db.collection('chats').doc(chatId).get();
+        if (!chatSnap.exists)
+            return null;
+        const chatData = chatSnap.data() || {};
+        const members = chatData.members || [];
+        const chatName = chatData.name || '';
+        // 2. Target = tutti i membri tranne il sender
+        const targets = members
+            .map((m) => (m || '').toLowerCase().trim())
+            .filter((m) => m && m !== sender);
+        if (!targets.length)
+            return null;
+        // 3. Carica fcmTokens dai documenti team
+        const rawTokens = [];
+        const teamSnaps = await Promise.all(targets.map((email) => db.collection('team').doc(email).get()));
+        for (const ts of teamSnaps) {
+            if (!ts.exists)
+                continue;
+            const tokensMap = ((_a = ts.data()) === null || _a === void 0 ? void 0 : _a.fcmTokens) || {};
+            rawTokens.push(...Object.keys(tokensMap));
+        }
+        // Dedup: lo stesso token potrebbe comparire più volte (multi-destinatario,
+        // o token replicato per qualche bug client → notifica duplicata)
+        const tokens = Array.from(new Set(rawTokens));
+        console.log(`[PULSAR push] Target=${targets.length} | tokens raw=${rawTokens.length} | tokens unique=${tokens.length}`);
+        if (!tokens.length) {
+            console.log('[PULSAR push] Nessun fcmToken disponibile per i destinatari.');
+            return null;
+        }
+        // 4. Costruisci titolo
+        const displaySender = sender.split('@')[0] || 'Qualcuno';
+        const title = chatName ? `${displaySender} · ${chatName}` : `Nuovo messaggio da ${displaySender}`;
+        const body = msg.text.slice(0, 140);
+        // 5. Invia push multicast (data-only: il SW costruisce l'unica notifica)
+        // Se passassimo `notification`, la SDK FCM in background la mostrerebbe
+        // automaticamente E richiamerebbe `onBackgroundMessage` → notifica doppia.
+        const res = await admin.messaging().sendEachForMulticast({
+            tokens,
+            data: {
+                chatId,
+                title,
+                body,
+                url: `/pulsar/chat/${chatId}`,
+            },
+        });
+        // 6. Pulizia token invalidi
+        const invalidTokens = [];
+        res.responses.forEach((r, i) => {
+            var _a;
+            if (!r.success) {
+                const code = ((_a = r.error) === null || _a === void 0 ? void 0 : _a.code) || '';
+                if (code === 'messaging/invalid-registration-token' ||
+                    code === 'messaging/registration-token-not-registered') {
+                    invalidTokens.push(tokens[i]);
+                }
+            }
+        });
+        if (invalidTokens.length) {
+            // Rimuovi i token invalidi da TUTTI i team doc target (best-effort)
+            await Promise.all(targets.map(async (email) => {
+                const updates = {};
+                invalidTokens.forEach((tk) => { updates[`fcmTokens.${tk}`] = admin.firestore.FieldValue.delete(); });
+                if (Object.keys(updates).length) {
+                    try {
+                        await db.collection('team').doc(email).update(updates);
+                    }
+                    catch (_) { /* ignore */ }
+                }
+            }));
+        }
+        console.log(`[PULSAR push] Inviate ${res.successCount}/${tokens.length} notifiche.`);
+        return null;
+    }
+    catch (e) {
+        console.error('[PULSAR push] Errore:', e);
+        return null;
+    }
+});
 //# sourceMappingURL=index.js.map

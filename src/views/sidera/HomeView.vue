@@ -47,13 +47,13 @@ const azioniOggi = computed(() => {
     !t.completedAt &&
     !pendingDone.value.has(t.id) &&
     t.dueDate && t.dueDate >= start && t.dueDate <= end &&
-    (t.assignee === currentUser.value?.email || t.createdBy === currentUser.value?.uid)
+    (t.assignees.includes(currentUser.value?.email ?? '') || t.createdBy === currentUser.value?.uid)
   )
 })
 
 // ── Progetti attivi ───────────────────────────────────────────────────────
 const activeProjects = computed(() =>
-  projects.value.filter(p => !p.archived).slice(0, 4)
+  projects.value.filter(p => !p.archived && p.active !== false).slice(0, 4)
 )
 
 function pct(p: { taskCount: number; doneCount: number }) {
@@ -67,7 +67,7 @@ function formatDue(d: Date | null) {
 }
 
 // ── Priorità ──────────────────────────────────────────────────────────────
-const prioColor: Record<string, string> = { alta: '#C8521A', media: '#C8821A', bassa: '#7A8FA6' }
+const prioColor: Record<string, string> = { alta: '#C8521A', media: '#D4A020', bassa: '#7A8FA6' }
 const prioLabel: Record<string, string> = { alta: 'Alta', media: 'Media', bassa: 'Bassa' }
 
 // ── Feed team reale ───────────────────────────────────────────────────────
@@ -176,9 +176,9 @@ function urgenzaLabel(giorni: number) {
           class="prio-pill"
           :style="{ color: prioColor[t.priority], background: prioColor[t.priority] + '14' }"
         >{{ prioLabel[t.priority] }}</span>
-        <div v-if="t.assignee" class="az-avatar"
-          :style="{ background: avatarColor(t.assignee) + '20', border: '1.5px solid ' + avatarColor(t.assignee) + '60', color: avatarColor(t.assignee) }"
-        >{{ avatarInitial(t.assignee) }}</div>
+        <div v-for="email in t.assignees.slice(0,3)" :key="email" class="az-avatar"
+          :style="{ background: avatarColor(email) + '20', border: '1.5px solid ' + avatarColor(email) + '60', color: avatarColor(email) }"
+        >{{ avatarInitial(email) }}</div>
       </div>
     </section>
 
@@ -327,10 +327,9 @@ function urgenzaLabel(giorni: number) {
 
 .hv-greeting {
   font-family: 'Cormorant Garamond', serif;
-  font-size: 34px;
-  font-weight: 400;
-  font-style: italic;
-  letter-spacing: 0.01em;
+  font-size: 30px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
   margin-bottom: 5px;
   line-height: 1.2;
 }
@@ -382,7 +381,7 @@ function urgenzaLabel(giorni: number) {
   background: var(--s-surface);
   border-radius: 9px;
   border: 1px solid var(--s-border);
-  border-left: 3px solid transparent;
+  border-left: 6px solid transparent;
   margin-bottom: 6px;
   cursor: pointer;
   transition: all 0.15s;
@@ -399,8 +398,8 @@ function urgenzaLabel(giorni: number) {
   flex-shrink: 0; transition: all 0.15s;
 }
 
-.checkbox:hover { border-color: var(--s-green); }
-.checkbox.is-checked { background: var(--s-green); border-color: var(--s-green); }
+.checkbox:hover { border-color: var(--module-accent); }
+.checkbox.is-checked { background: var(--module-accent); border-color: var(--module-accent); }
 .check-icon { width: 10px; height: 10px; color: white; stroke-width: 3; }
 
 .azione-title { flex: 1; font-size: 13.5px; color: var(--s-text); }
@@ -514,7 +513,7 @@ function urgenzaLabel(giorni: number) {
   padding: 12px 14px;
   background: var(--s-surface);
   border: 1px solid var(--s-border);
-  border-left: 3px solid transparent;
+  border-left: 6px solid transparent;
   border-radius: 9px;
   margin-bottom: 7px;
   text-decoration: none;

@@ -1,20 +1,26 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { ClockIcon, PlusIcon, CheckIcon, XMarkIcon, ArrowUturnLeftIcon } from '@heroicons/vue/24/outline'
-import { useAllTasks }    from '../../composables/sidera/useAllTasks'
+import { ClockIcon, PlusIcon, CheckIcon, XMarkIcon, ArrowUturnLeftIcon, PencilIcon, TrashIcon } from '@heroicons/vue/24/outline'
+import { useAllTasks, type Task }    from '../../composables/sidera/useAllTasks'
 import { useProjects }    from '../../composables/sidera/useProjects'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
-import { useTeamMembers, avatarColor, avatarInitial } from '../../composables/sidera/useTeamMembers'
+import { useTeamMembers, avatarColor, avatarInitial, displayName } from '../../composables/sidera/useTeamMembers'
 
-const { tasks, loading: tasksLoading, completeTask, uncompleteTask, createTask } = useAllTasks()
+const { tasks, loading: tasksLoading, completeTask, uncompleteTask, createTask, updateTask, deleteTask } = useAllTasks()
 const { projects }   = useProjects()
 const { currentUser } = useCurrentUser()
 const isAdmin = computed(() => currentUser.value?.role === 'ADMIN' || currentUser.value?.email === 'info@inglesinaitaliana.it')
 const { members }    = useTeamMembers()
 
 // ── Priority config ──────────────────────────────────────────────────────
-const prioColor: Record<string, string> = { alta: '#C8521A', media: '#C8821A', bassa: '#7A8FA6' }
+const prioColor: Record<string, string> = { alta: '#C8521A', media: '#D4A020', bassa: '#7A8FA6' }
 const prioLabel: Record<string, string> = { alta: 'Alta', media: 'Media', bassa: 'Bassa' }
+
+const prioOptions = [
+  { id: 'alta',  label: 'Alta',  color: '#C8521A' },
+  { id: 'media', label: 'Media', color: '#D4A020' },
+  { id: 'bassa', label: 'Bassa', color: '#7A8FA6' },
+] as const
 
 // ── Optimistic done/undone ────────────────────────────────────────────────
 const pendingComplete   = ref<Set<string>>(new Set())
@@ -70,7 +76,7 @@ function taskGroup(dueDate: Date | null): 'late' | 'oggi' | 'week' | 'later' | '
 const filtered = computed(() => {
   const oggi = new Date(); oggi.setHours(0, 0, 0, 0)
   const base = activeTasks.value
-  if (filter.value === 'mie')     return base.filter(t => t.assignee === currentUser.value?.email || t.createdBy === currentUser.value?.uid)
+  if (filter.value === 'mie')     return base.filter(t => t.assignees.includes(currentUser.value?.email ?? '') || t.createdBy === currentUser.value?.uid)
   if (filter.value === 'ritardo') return base.filter(t => t.dueDate && t.dueDate < oggi)
   return base
 })
@@ -112,45 +118,86 @@ function isLate(d: Date | null): boolean {
   return d < now
 }
 
-// ── Modal "Nuova azione" ────────────────────────────────────────────────────
-const showModal = ref(false)
-const saving    = ref(false)
-const form      = ref({
+// ── Modal create/edit ────────────────────────────────────────────────────────
+const showModal   = ref(false)
+const saving      = ref(false)
+const deleting    = ref(false)
+const editingTask = ref<Task | null>(null)
+
+const form = ref({
   title:     '',
   projectId: '',
   priority:  'media' as 'alta' | 'media' | 'bassa',
   dueDate:   '',
-  assignee:  '' as string,
+  assignees: [] as string[],
 })
 
 function openModal() {
+  editingTask.value = null
+  form.value = { title: '', projectId: '', priority: 'media', dueDate: '', assignees: [] }
+  showModal.value = true
+}
+
+function openEditModal(t: Task) {
+  editingTask.value = t
   form.value = {
-    title:     '',
-    projectId: projects.value[0]?.id ?? '',
-    priority:  'media',
-    dueDate:   '',
-    assignee:  '',
+    title:     t.title,
+    projectId: t.projectId ?? '',
+    priority:  t.priority,
+    dueDate:   t.dueDate ? t.dueDate.toISOString().split('T')[0] : '',
+    assignees: [...t.assignees],
   }
   showModal.value = true
+}
+
+function toggleAssignee(email: string) {
+  const idx = form.value.assignees.indexOf(email)
+  if (idx === -1) form.value.assignees.push(email)
+  else form.value.assignees.splice(idx, 1)
 }
 
 function closeModal() { showModal.value = false }
 
 async function submit() {
-  if (!form.value.title.trim() || !form.value.projectId || saving.value) return
+  if (!form.value.title.trim() || saving.value) return
   saving.value = true
   try {
     const dueDate = form.value.dueDate ? parseDateInput(form.value.dueDate) : null
-    await createTask({
-      title:     form.value.title.trim(),
-      projectId: form.value.projectId,
-      priority:  form.value.priority,
-      dueDate,
-      assignee:  form.value.assignee || null,
-    })
+    if (editingTask.value) {
+      await updateTask(editingTask.value.projectId || null, editingTask.value.id, {
+        title:     form.value.title.trim(),
+        priority:  form.value.priority,
+        dueDate,
+        assignees: form.value.assignees,
+      })
+    } else {
+      await createTask({
+        title:     form.value.title.trim(),
+        projectId: form.value.projectId || null,
+        priority:  form.value.priority,
+        dueDate,
+        assignees: form.value.assignees,
+      })
+    }
     closeModal()
   } finally {
     saving.value = false
+  }
+}
+
+async function doDelete() {
+  if (!editingTask.value || deleting.value) return
+  if (!confirm('Eliminare questa azione?')) return
+  deleting.value = true
+  try {
+    await deleteTask(
+      editingTask.value.projectId || null,
+      editingTask.value.id,
+      !!editingTask.value.completedAt,
+    )
+    closeModal()
+  } finally {
+    deleting.value = false
   }
 }
 
@@ -209,12 +256,15 @@ function parseDateInput(s: string): Date {
           class="badge"
           :style="{ color: projectMap[t.projectId].color, background: projectMap[t.projectId].color + '12' }"
         >{{ projectMap[t.projectId].name }}</span>
-        <div
-          v-if="t.assignee"
-          class="assignee-avatar"
-          :title="t.assignee"
-          :style="{ background: avatarColor(t.assignee) + '20', border: '1.5px solid ' + avatarColor(t.assignee) + '60', color: avatarColor(t.assignee) }"
-        >{{ avatarInitial(t.assignee) }}</div>
+        <div class="avatars-stack">
+          <div
+            v-for="email in t.assignees.slice(0, 3)"
+            :key="email"
+            class="assignee-avatar"
+            :title="email"
+            :style="{ background: avatarColor(email) + '20', border: '1.5px solid ' + avatarColor(email) + '60', color: avatarColor(email) }"
+          >{{ avatarInitial(email) }}</div>
+        </div>
       </div>
     </template>
 
@@ -261,31 +311,40 @@ function parseDateInput(s: string): Date {
               :style="{ color: prioColor[t.priority], background: prioColor[t.priority] + '14' }"
             >{{ prioLabel[t.priority] }}</span>
 
-            <!-- Assignee avatar -->
-            <div
-              v-if="t.assignee"
-              class="assignee-avatar"
-              :title="t.assignee"
-              :style="{ background: avatarColor(t.assignee) + '20', border: '1.5px solid ' + avatarColor(t.assignee) + '60', color: avatarColor(t.assignee) }"
-            >{{ avatarInitial(t.assignee) }}</div>
-            <div v-else class="assignee-avatar assignee-avatar--empty" title="Non assegnata">–</div>
+            <!-- Assignees avatars stack -->
+            <div class="avatars-stack">
+              <div
+                v-for="email in t.assignees.slice(0, 3)"
+                :key="email"
+                class="assignee-avatar"
+                :title="email"
+                :style="{ background: avatarColor(email) + '20', border: '1.5px solid ' + avatarColor(email) + '60', color: avatarColor(email) }"
+              >{{ avatarInitial(email) }}</div>
+              <div v-if="t.assignees.length > 3" class="assignee-avatar assignee-avatar--more">+{{ t.assignees.length - 3 }}</div>
+              <div v-if="!t.assignees.length" class="assignee-avatar assignee-avatar--empty" title="Non assegnata">–</div>
+            </div>
 
             <!-- Due date -->
             <div class="row-due" :style="{ color: isLate(t.dueDate) ? '#C8521A' : 'var(--s-text-dim)' }">
               <ClockIcon v-if="t.dueDate" class="clock-icon" />
               {{ formatDue(t.dueDate) }}
             </div>
+
+            <!-- Edit button (visible on hover, admin only) -->
+            <button v-if="isAdmin" class="row-edit-btn" title="Modifica" @click.stop="openEditModal(t)">
+              <PencilIcon style="width:12px;height:12px" />
+            </button>
           </div>
         </template>
       </div>
     </template>
 
-    <!-- ── MODAL "Nuova azione" ─────────────────────────────────── -->
+    <!-- ── MODAL create/edit ─────────────────────────────────────── -->
     <Teleport to="body">
       <div v-if="showModal" class="modal-backdrop" @click.self="closeModal">
         <div class="modal">
           <div class="modal-header">
-            <span class="modal-title">Nuova azione</span>
+            <span class="modal-title">{{ editingTask ? 'Modifica azione' : 'Nuova azione' }}</span>
             <button class="modal-close" @click="closeModal"><XMarkIcon style="width:16px;height:16px" /></button>
           </div>
 
@@ -299,25 +358,44 @@ function parseDateInput(s: string): Date {
               @keydown.enter="submit"
             />
 
-            <label class="field-label" style="margin-top:16px">Progetto *</label>
+            <label class="field-label" style="margin-top:16px">Progetto</label>
             <select v-model="form.projectId" class="field-input field-select">
+              <option value="">— Nessun progetto —</option>
               <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
             </select>
 
             <label class="field-label" style="margin-top:16px">Assegna a</label>
-            <select v-model="form.assignee" class="field-input field-select">
-              <option value="">— Nessuno —</option>
-              <option v-for="m in members" :key="m.email" :value="m.email">{{ m.email }}</option>
-            </select>
+            <div class="assignees-chips">
+              <div
+                v-for="m in members"
+                :key="m.email"
+                class="assignee-chip"
+                :class="{ 'is-selected': form.assignees.includes(m.email) }"
+                :style="form.assignees.includes(m.email) ? { background: avatarColor(m.email) + '20', borderColor: avatarColor(m.email) + '80', color: avatarColor(m.email) } : {}"
+                @click="toggleAssignee(m.email)"
+              >
+                <span class="chip-avatar" :style="{ background: avatarColor(m.email), color: '#fff' }">{{ avatarInitial(m.email) }}</span>
+                {{ displayName(m.email, members) }}
+              </div>
+            </div>
 
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:16px">
               <div>
                 <label class="field-label">Priorità</label>
-                <select v-model="form.priority" class="field-input field-select">
-                  <option value="alta">↑ Alta</option>
-                  <option value="media">= Media</option>
-                  <option value="bassa">↓ Bassa</option>
-                </select>
+                <div class="prio-picker">
+                  <button
+                    v-for="p in prioOptions"
+                    :key="p.id"
+                    class="prio-opt"
+                    :class="{ 'is-sel': form.priority === p.id }"
+                    :style="form.priority === p.id ? { borderColor: p.color, color: p.color } : {}"
+                    type="button"
+                    @click="form.priority = p.id"
+                  >
+                    <span class="prio-dot" :style="{ background: p.color }" />
+                    {{ p.label }}
+                  </button>
+                </div>
               </div>
               <div>
                 <label class="field-label">Scadenza</label>
@@ -327,12 +405,23 @@ function parseDateInput(s: string): Date {
           </div>
 
           <div class="modal-footer">
-            <button class="btn-ghost" @click="closeModal">Annulla</button>
             <button
-              class="s-btn"
-              :disabled="!form.title.trim() || !form.projectId || saving"
-              @click="submit"
-            >{{ saving ? 'Salvataggio…' : 'Crea azione' }}</button>
+              v-if="editingTask"
+              class="btn-danger"
+              :disabled="deleting"
+              @click="doDelete"
+            >
+              <TrashIcon style="width:13px;height:13px" />
+              {{ deleting ? '…' : 'Elimina' }}
+            </button>
+            <div style="margin-left:auto;display:flex;gap:8px">
+              <button class="btn-ghost" @click="closeModal">Annulla</button>
+              <button
+                class="s-btn"
+                :disabled="!form.title.trim() || saving"
+                @click="submit"
+              >{{ saving ? 'Salvataggio…' : editingTask ? 'Salva' : 'Crea azione' }}</button>
+            </div>
           </div>
         </div>
       </div>
@@ -360,8 +449,8 @@ function parseDateInput(s: string): Date {
 .tv-title {
   font-family: 'Cormorant Garamond', serif;
   font-size: 30px;
-  font-weight: 400;
-  font-style: italic;
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 .tv-subtitle { font-size: 12px; color: var(--s-text-dim); margin-top: 4px; }
@@ -371,7 +460,7 @@ function parseDateInput(s: string): Date {
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  background: var(--s-green);
+  background: var(--module-accent);
   color: #fff;
   border: none;
   border-radius: 8px;
@@ -379,11 +468,11 @@ function parseDateInput(s: string): Date {
   font-weight: 500;
   cursor: pointer;
   font-family: 'Outfit', sans-serif;
-  transition: background 0.15s;
+  transition: filter 0.15s;
   letter-spacing: 0.01em;
 }
 
-.s-btn:hover:not(:disabled) { background: var(--s-green-light); }
+.s-btn:hover:not(:disabled) { filter: brightness(1.18); }
 .s-btn:disabled { opacity: 0.6; cursor: not-allowed; }
 .btn-icon { width: 14px; height: 14px; }
 
@@ -468,19 +557,36 @@ function parseDateInput(s: string): Date {
   background: var(--s-surface);
   border-radius: 9px;
   border: 1px solid var(--s-border);
-  border-left: 3px solid transparent;
+  border-left: 6px solid transparent;
   margin-bottom: 6px;
   transition: all 0.15s;
   box-shadow: 0 1px 2px rgba(0,0,0,.04);
 }
 
 .task-row:hover { border-color: var(--s-border-mid); box-shadow: var(--s-shadow-hover); }
+.task-row:hover .row-edit-btn { opacity: 1; }
+
+.row-edit-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--s-text-dim);
+  padding: 4px;
+  border-radius: 5px;
+  display: flex;
+  align-items: center;
+  opacity: 0;
+  transition: opacity 0.12s, color 0.12s;
+  flex-shrink: 0;
+}
+
+.row-edit-btn:hover { color: var(--module-accent); }
 
 /* Completed rows */
 .task-row--done {
   opacity: 0.55;
   cursor: default;
-  border-left: 3px solid var(--s-border);
+  border-left: 6px solid var(--s-border);
 }
 
 .task-row--done:hover { opacity: 0.75; }
@@ -498,8 +604,8 @@ function parseDateInput(s: string): Date {
   transition: all 0.15s;
 }
 
-.checkbox:hover { border-color: var(--s-green); }
-.check-icon { width: 10px; height: 10px; color: var(--s-green); stroke-width: 3; }
+.checkbox:hover { border-color: var(--module-accent); }
+.check-icon { width: 10px; height: 10px; color: var(--module-accent); stroke-width: 3; }
 
 .row-title { flex: 1; font-size: 13.5px; color: var(--s-text); min-width: 0; }
 .row-title--done { text-decoration: line-through; color: var(--s-text-dim); }
@@ -526,6 +632,8 @@ function parseDateInput(s: string): Date {
 }
 
 /* Assignee avatar */
+.avatars-stack { display: flex; gap: 2px; align-items: center; flex-shrink: 0; }
+
 .assignee-avatar {
   width: 24px;
   height: 24px;
@@ -544,6 +652,47 @@ function parseDateInput(s: string): Date {
   color: var(--s-text-dim) !important;
   font-size: 12px;
   font-weight: 400;
+}
+
+.assignee-avatar--more {
+  background: var(--s-border) !important;
+  border: 1.5px solid var(--s-border-mid) !important;
+  color: var(--s-text-dim) !important;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+/* Assignee chips (modal) */
+.assignees-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 0;
+}
+
+.assignee-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px 5px 6px;
+  border-radius: 20px;
+  border: 1.5px solid var(--s-border);
+  background: var(--s-surface-up);
+  font-size: 12px;
+  color: var(--s-text-mid);
+  cursor: pointer;
+  transition: all 0.15s;
+  user-select: none;
+}
+
+.assignee-chip:hover { border-color: var(--s-border-mid); color: var(--s-text); }
+.assignee-chip.is-selected { font-weight: 600; }
+
+.chip-avatar {
+  width: 18px; height: 18px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 9px; font-weight: 700; flex-shrink: 0;
 }
 
 .row-due {
@@ -572,7 +721,7 @@ function parseDateInput(s: string): Date {
   transition: color 0.15s;
 }
 
-.undo-btn:hover { color: var(--s-green); }
+.undo-btn:hover { color: var(--module-accent); }
 
 /* ── Modal ──────────────────────────────────────────────────────────────── */
 .modal-backdrop {
@@ -637,10 +786,35 @@ function parseDateInput(s: string): Date {
   transition: border-color 0.15s;
 }
 
-.field-input:focus { border-color: var(--s-green); }
+.field-input:focus { border-color: var(--module-accent); }
 .field-input::placeholder { color: var(--s-text-dim); }
 .field-select { cursor: pointer; }
 .field-date { cursor: pointer; color-scheme: light; }
+
+.prio-picker { display: flex; gap: 4px; }
+
+.prio-opt {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  border: 1.5px solid var(--s-border);
+  background: var(--s-surface-up);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: 'Outfit', sans-serif;
+  color: var(--s-text-dim);
+  transition: all 0.15s;
+  justify-content: center;
+}
+
+.prio-opt:hover { border-color: var(--s-border-mid); color: var(--s-text); }
+.prio-opt.is-sel { font-weight: 700; background: transparent; }
+
+.prio-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
 
 .modal-footer {
   display: flex;
@@ -665,4 +839,23 @@ function parseDateInput(s: string): Date {
 }
 
 .btn-ghost:hover { border-color: var(--s-border-mid); color: var(--s-text); }
+
+.btn-danger {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 14px;
+  background: rgba(200, 82, 26, 0.08);
+  border: 1px solid rgba(200, 82, 26, 0.3);
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  color: #C8521A;
+  font-family: 'Outfit', sans-serif;
+  transition: all 0.15s;
+}
+
+.btn-danger:hover:not(:disabled) { background: rgba(200, 82, 26, 0.16); border-color: #C8521A; }
+.btn-danger:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>

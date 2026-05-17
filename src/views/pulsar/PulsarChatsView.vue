@@ -1,0 +1,503 @@
+<script setup lang="ts">
+import { ref, computed, inject, watch, onMounted, nextTick, type Ref } from 'vue'
+import { useRouter } from 'vue-router'
+import MIcon from '../../components/pulsar/MIcon.vue'
+import { useChats } from '../../composables/pulsar/useChats'
+import { useUnreadChats } from '../../composables/pulsar/usePulsarUnread'
+import { useTeamMembers, avatarInitial, displayName } from '../../composables/sidera/useTeamMembers'
+import { pulsarAvatarColor } from '../../composables/pulsar/usePulsarAvatar'
+import { auth } from '../../firebase'
+
+const router = useRouter()
+const { chats, loading, createChat, deleteChat } = useChats()
+const { unreadCount } = useUnreadChats(chats)
+const { members } = useTeamMembers()
+
+const myEmail = auth.currentUser?.email ?? ''
+
+// ── New chat modal ────────────────────────────────────────────────────────
+const showModal  = ref(false)
+const saving     = ref(false)
+const isGroup    = ref(false)
+const dmTarget   = ref('')
+const groupName  = ref('')
+const groupMembers = ref<string[]>([])
+
+function openModal() {
+  isGroup.value     = false
+  dmTarget.value    = ''
+  groupName.value   = ''
+  groupMembers.value = []
+  showModal.value   = true
+}
+
+function toggleGroupMember(email: string) {
+  const idx = groupMembers.value.indexOf(email)
+  if (idx === -1) groupMembers.value.push(email)
+  else groupMembers.value.splice(idx, 1)
+}
+
+async function submit() {
+  if (saving.value) return
+  saving.value = true
+  try {
+    if (!isGroup.value && dmTarget.value) {
+      const otherName = displayName(dmTarget.value, members.value)
+      await createChat(otherName, [dmTarget.value], false)
+    } else if (isGroup.value && groupName.value.trim() && groupMembers.value.length > 0) {
+      await createChat(groupName.value.trim(), groupMembers.value, true)
+    }
+    showModal.value = false
+  } finally {
+    saving.value = false
+  }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────
+function chatName(chat: { name: string; members: string[]; isGroup: boolean }) {
+  if (chat.isGroup && chat.name) return chat.name
+  const other = chat.members.find(m => m !== myEmail) ?? ''
+  return displayName(other, members.value)
+}
+
+function chatInitial(chat: { name: string; members: string[]; isGroup: boolean }) {
+  return chatName(chat)[0]?.toUpperCase() ?? '?'
+}
+
+function chatColor(chat: { name: string; members: string[]; isGroup: boolean }) {
+  const other = chat.members.find(m => m !== myEmail) ?? chat.name
+  return pulsarAvatarColor(other)
+}
+
+function formatTime(d: Date | null) {
+  if (!d) return ''
+  const now = new Date()
+  const diff = now.getTime() - d.getTime()
+  if (diff < 3_600_000)  return Math.floor(diff / 60_000) + 'm'
+  if (diff < 86_400_000) return Math.floor(diff / 3_600_000) + 'h'
+  return new Intl.DateTimeFormat('it-IT', { day: 'numeric', month: 'short' }).format(d)
+}
+
+const otherMembers = computed(() => members.value.filter(m => m.email !== myEmail))
+
+// Apertura modal triggerata dalla bottom bar di PulsarLayout
+const newChatTick = inject<Ref<number>>('pulsar-new-chat-tick', null as any)
+if (newChatTick) {
+  watch(newChatTick, () => openModal())
+}
+
+// Se l'utente ha cliccato "nuova conversazione" da un'altra rotta,
+// PulsarLayout ha settato il flag e navigato qui — apri il modal al mount.
+onMounted(() => {
+  if (sessionStorage.getItem('pulsar-pending-new-chat') === '1') {
+    sessionStorage.removeItem('pulsar-pending-new-chat')
+    nextTick(() => openModal())
+  }
+})
+</script>
+
+<template>
+  <div class="cv">
+    <header class="cv-header">
+      <h2 class="p-page-title">Messaggi</h2>
+      <p class="p-page-sub">
+        {{ unreadCount === 0
+          ? 'Nessun messaggio da leggere'
+          : (unreadCount === 1 ? '1 chat con messaggi non letti' : unreadCount + ' chat con messaggi non letti') }}
+      </p>
+    </header>
+
+    <!-- Loading -->
+    <div v-if="loading" class="loading-list">
+      <div v-for="i in 4" :key="i" class="chat-skel" />
+    </div>
+
+    <!-- Empty -->
+    <div v-else-if="!chats.length" class="empty-state">
+      <p>Nessuna conversazione ancora.<br>Inizia dal tasto in basso a destra.</p>
+    </div>
+
+    <!-- Chat list -->
+    <div v-else class="chat-list">
+      <div
+        v-for="chat in chats"
+        :key="chat.id"
+        class="chat-row"
+        @click="router.push('/pulsar/chat/' + chat.id)"
+      >
+        <div
+          class="chat-avatar"
+          :style="{ background: chatColor(chat) + '25', border: '2px solid ' + chatColor(chat) + '50', color: chatColor(chat) }"
+        >
+          <MIcon v-if="!chatInitial(chat)" :name="chat.isGroup ? 'group' : 'person'" :size="16" />
+          <span v-else>{{ chatInitial(chat) }}</span>
+        </div>
+        <div class="chat-info">
+          <div class="chat-top">
+            <span class="chat-name">{{ chatName(chat) }}</span>
+            <span class="chat-time">{{ formatTime(chat.lastMessageAt) }}</span>
+          </div>
+          <div class="chat-preview">{{ chat.lastMessage || 'Nessun messaggio' }}</div>
+        </div>
+        <button class="delete-btn" title="Elimina chat" @click.stop="deleteChat(chat.id)">
+          <MIcon name="close" :size="16" />
+        </button>
+      </div>
+    </div>
+
+    <!-- Modal nuova chat -->
+    <Teleport to="body">
+      <div v-if="showModal" class="modal-backdrop" @click.self="showModal = false">
+        <div class="modal">
+          <div class="modal-header">
+            <span class="modal-title">Nuova conversazione</span>
+            <button class="modal-close" @click="showModal = false"><MIcon name="close" :size="18" /></button>
+          </div>
+
+          <div class="modal-body">
+            <!-- Toggle DM / Gruppo -->
+            <div class="type-toggle">
+              <button :class="['type-btn', { 'is-active': !isGroup }]" @click="isGroup = false">DM</button>
+              <button :class="['type-btn', { 'is-active': isGroup }]" @click="isGroup = true">Gruppo</button>
+            </div>
+
+            <!-- DM: seleziona membro -->
+            <template v-if="!isGroup">
+              <label class="field-label" style="margin-top:16px">Con chi?</label>
+              <div class="member-list">
+                <div
+                  v-for="m in otherMembers"
+                  :key="m.email"
+                  class="member-row"
+                  :class="{ 'is-selected': dmTarget === m.email }"
+                  @click="dmTarget = m.email"
+                >
+                  <div class="m-avatar" :style="{ background: pulsarAvatarColor(m.email), color: '#fff' }">{{ avatarInitial(m.email) }}</div>
+                  <span>{{ displayName(m.email, members) }}</span>
+                </div>
+              </div>
+            </template>
+
+            <!-- Gruppo: nome + selezione multipla -->
+            <template v-else>
+              <label class="field-label" style="margin-top:16px">Nome gruppo</label>
+              <input v-model="groupName" class="field-input" placeholder="Es. Marketing team" />
+              <label class="field-label" style="margin-top:16px">Partecipanti</label>
+              <div class="member-list">
+                <div
+                  v-for="m in otherMembers"
+                  :key="m.email"
+                  class="member-row"
+                  :class="{ 'is-selected': groupMembers.includes(m.email) }"
+                  @click="toggleGroupMember(m.email)"
+                >
+                  <div class="m-avatar" :style="{ background: pulsarAvatarColor(m.email), color: '#fff' }">{{ avatarInitial(m.email) }}</div>
+                  <span>{{ displayName(m.email, members) }}</span>
+                  <MIcon v-if="groupMembers.includes(m.email)" name="check" :size="16" class="check-mark" />
+                </div>
+              </div>
+            </template>
+          </div>
+
+          <div class="modal-footer">
+            <button class="btn-ghost" @click="showModal = false">Annulla</button>
+            <button
+              class="btn-primary"
+              :disabled="saving || (!isGroup && !dmTarget) || (isGroup && (!groupName.trim() || !groupMembers.length))"
+              @click="submit"
+            >{{ saving ? 'Creazione…' : 'Crea' }}</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+  </div>
+</template>
+
+<style scoped>
+.cv {
+  padding: 0;
+  position: relative;
+  min-height: calc(100vh - 120px);
+}
+
+/* Page header (stile uniforme PULSAR) */
+.cv-header {
+  padding: 18px 20px 14px;
+  background: #fff;
+  border-bottom: 1px solid #E8E5DF;
+}
+
+.p-page-title {
+  font-family: 'Outfit', sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #1A1917;
+  margin: 0 0 4px 0;
+}
+
+.p-page-sub { font-size: 12px; color: #9B9590; margin: 0; }
+
+/* Loading */
+.loading-list {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chat-skel {
+  height: 62px;
+  border-radius: 12px;
+  background: #E8E5DF;
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+/* Empty */
+.empty-state {
+  padding: 60px 20px;
+  text-align: center;
+  color: #9B9590;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+/* Chat list */
+.chat-list { display: flex; flex-direction: column; }
+
+.chat-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 20px;
+  border-bottom: 1px solid #F0EDE8;
+  cursor: pointer;
+  transition: background 0.15s;
+  background: #fff;
+}
+
+.chat-row:hover { background: #F8F6F2; }
+
+.chat-avatar {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.chat-info { flex: 1; min-width: 0; }
+
+.chat-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 3px;
+}
+
+.chat-name { font-size: 14px; font-weight: 600; color: #1A1917; }
+.chat-time { font-size: 11px; color: #9B9590; flex-shrink: 0; margin-left: 8px; }
+
+.chat-preview {
+  font-size: 12px;
+  color: #6A6560;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.delete-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #C8C5C0;
+  padding: 4px 6px;
+  border-radius: 6px;
+  transition: color 0.15s, background 0.15s;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.delete-btn:hover { color: #C8521A; background: #C8521A10; }
+
+/* Modal */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 100;
+}
+
+.modal {
+  background: #fff;
+  border-radius: 20px 20px 0 0;
+  width: 100%;
+  max-width: 540px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  font-family: 'Outfit', sans-serif;
+  overflow: hidden;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px 0;
+}
+
+.modal-title { font-size: 16px; font-weight: 600; color: #1A1917; }
+
+.modal-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #9B9590;
+  padding: 2px;
+  border-radius: 4px;
+}
+
+.modal-body {
+  padding: 16px 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.type-toggle {
+  display: flex;
+  background: #F4F2EE;
+  border-radius: 10px;
+  padding: 3px;
+}
+
+.type-btn {
+  flex: 1;
+  padding: 8px;
+  border: none;
+  background: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  font-family: 'Outfit', sans-serif;
+  color: #6A6560;
+  transition: all 0.15s;
+}
+
+.type-btn.is-active {
+  background: #fff;
+  color: #1A1917;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.field-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #9B9590;
+  margin-bottom: 8px;
+}
+
+.field-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: #F4F2EE;
+  border: 1px solid #E8E5DF;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-family: 'Outfit', sans-serif;
+  color: #1A1917;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.field-input:focus { border-color: #3A8C80; }
+
+.member-list { display: flex; flex-direction: column; gap: 4px; }
+
+.member-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s;
+  font-size: 14px;
+  color: #1A1917;
+}
+
+.member-row:hover { background: #F4F2EE; }
+
+.member-row.is-selected {
+  background: rgba(58, 140, 128, 0.07);
+  color: #2E7268;
+  font-weight: 600;
+}
+
+.m-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.check-mark { margin-left: auto; color: #3A8C80; }
+
+.modal-footer {
+  display: flex;
+  gap: 8px;
+  padding: 14px 20px 20px;
+  border-top: 1px solid #E8E5DF;
+}
+
+.btn-ghost {
+  flex: 1;
+  padding: 12px;
+  background: none;
+  border: 1px solid #E8E5DF;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  color: #6A6560;
+  font-family: 'Outfit', sans-serif;
+}
+
+.btn-primary {
+  flex: 2;
+  padding: 12px;
+  background: #3A8C80;
+  border: none;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  color: #fff;
+  font-family: 'Outfit', sans-serif;
+  transition: background 0.15s;
+}
+
+.btn-primary:hover:not(:disabled) { background: #2E7268; }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+</style>

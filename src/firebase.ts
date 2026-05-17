@@ -29,3 +29,15 @@ const storage = getStorage(app);
 const functions = getFunctions(app, 'europe-west1');
 
 export { db, auth, storage, functions, app };
+
+// ─── PULSAR — Firebase Cloud Messaging (push notifications) ─────────────────
+// Append-only: non altera nulla del codice POPS sopra.
+import { getMessaging, isSupported as isMessagingSupported } from 'firebase/messaging';
+
+export const messagingPromise = (async () => {
+    try {
+        return (await isMessagingSupported()) ? getMessaging(app) : null;
+    } catch {
+        return null;
+    }
+})();

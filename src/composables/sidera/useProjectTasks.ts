@@ -1,7 +1,7 @@
 import { ref, onUnmounted } from 'vue'
 import {
   collection, query, orderBy, onSnapshot,
-  addDoc, updateDoc, doc, serverTimestamp, increment,
+  addDoc, updateDoc, deleteDoc, doc, serverTimestamp, increment,
 } from 'firebase/firestore'
 import { db, auth } from '../../firebase'
 
@@ -10,7 +10,7 @@ export interface ProjectTask {
   title: string
   status: string
   priority: 'alta' | 'media' | 'bassa'
-  assignee: string | null
+  assignees: string[]
   dueDate: Date | null
   projectId: string
   createdBy: string
@@ -45,7 +45,7 @@ export function useProjectTasks(projectId: string) {
         title:          data.title    ?? '',
         status:         data.status   ?? 'todo',
         priority:       data.priority ?? 'media',
-        assignee:       data.assignee ?? null,
+        assignees:      data.assignees ?? (data.assignee ? [data.assignee] : []),
         dueDate:        toDate(data.dueDate),
         projectId:      data.projectId ?? projectId,
         createdBy:      data.createdBy ?? '',
@@ -68,7 +68,7 @@ export function useProjectTasks(projectId: string) {
     status: string
     priority: 'alta' | 'media' | 'bassa'
     dueDate: Date | null
-    assignee?: string | null
+    assignees?: string[]
   }) {
     await addDoc(collection(db, 'projects', projectId, 'tasks'), {
       title:          data.title,
@@ -76,7 +76,7 @@ export function useProjectTasks(projectId: string) {
       priority:       data.priority,
       dueDate:        data.dueDate ?? null,
       description:    '',
-      assignee:       data.assignee ?? null,
+      assignees:      data.assignees ?? [],
       projectId,
       createdBy:      auth.currentUser?.uid ?? '',
       createdByEmail: auth.currentUser?.email ?? '',
@@ -108,5 +108,19 @@ export function useProjectTasks(projectId: string) {
     await updateDoc(doc(db, 'projects', projectId), { doneCount: increment(-1) })
   }
 
-  return { tasks, loading, createTask, updateTaskStatus, completeTask, uncompleteTask }
+  async function updateTask(
+    taskId: string,
+    data: Partial<{ title: string; priority: 'alta' | 'media' | 'bassa'; dueDate: Date | null; assignees: string[] }>,
+  ) {
+    await updateDoc(doc(db, 'projects', projectId, 'tasks', taskId), data)
+  }
+
+  async function deleteTask(taskId: string, wasCompleted: boolean) {
+    await deleteDoc(doc(db, 'projects', projectId, 'tasks', taskId))
+    const counts: Record<string, unknown> = { taskCount: increment(-1) }
+    if (wasCompleted) counts.doneCount = increment(-1)
+    await updateDoc(doc(db, 'projects', projectId), counts)
+  }
+
+  return { tasks, loading, createTask, updateTaskStatus, completeTask, uncompleteTask, updateTask, deleteTask }
 }

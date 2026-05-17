@@ -1,0 +1,497 @@
+<script setup lang="ts">
+import { ref, computed, inject, watch, onMounted, nextTick, type Ref } from 'vue'
+import MIcon from '../../components/pulsar/MIcon.vue'
+import { useAllTasks, createStandaloneTask } from '../../composables/sidera/useAllTasks'
+import { useProjects } from '../../composables/sidera/useProjects'
+import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
+import { useTeamMembers, displayName, avatarInitial } from '../../composables/sidera/useTeamMembers'
+import { pulsarAvatarColor as avatarColor } from '../../composables/pulsar/usePulsarAvatar'
+
+const { tasks, loading, completeTask } = useAllTasks()
+const { activeProjects } = useProjects()
+const { currentUser } = useCurrentUser()
+const { members } = useTeamMembers()
+
+const prioColor: Record<string, string> = { alta: '#C8521A', media: '#D4A020', bassa: '#7A8FA6' }
+
+function projectName(id: string) {
+  return activeProjects.value.find(p => p.id === id)?.name ?? ''
+}
+function projectColor(id: string) {
+  return activeProjects.value.find(p => p.id === id)?.color ?? ''
+}
+
+const pendingDone = ref<Set<string>>(new Set())
+async function doComplete(t: { id: string; projectId: string }) {
+  if (pendingDone.value.has(t.id)) return
+  pendingDone.value = new Set([...pendingDone.value, t.id])
+  await completeTask(t.projectId, t.id)
+}
+
+// Bucket per scadenza
+const buckets = computed(() => {
+  const myEmail = currentUser.value?.email ?? ''
+  const myUid   = currentUser.value?.uid ?? ''
+
+  const now = new Date()
+  const today = new Date(now); today.setHours(0, 0, 0, 0)
+  const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1)
+  const dayAfter = new Date(tomorrow); dayAfter.setDate(tomorrow.getDate() + 1)
+  const weekEnd  = new Date(today); weekEnd.setDate(today.getDate() + 7)
+
+  const overdue: typeof tasks.value = []
+  const todayList: typeof tasks.value = []
+  const tomorrowList: typeof tasks.value = []
+  const weekList: typeof tasks.value = []
+
+  for (const t of tasks.value) {
+    if (t.completedAt || pendingDone.value.has(t.id)) continue
+    if (!t.dueDate) continue
+    // Mostro solo task mie (assegnatario o creatore)
+    if (!t.assignees.includes(myEmail) && t.createdBy !== myUid) continue
+
+    if (t.dueDate < today) overdue.push(t)
+    else if (t.dueDate < tomorrow) todayList.push(t)
+    else if (t.dueDate < dayAfter) tomorrowList.push(t)
+    else if (t.dueDate < weekEnd) weekList.push(t)
+  }
+
+  overdue.sort((a, b) => (a.dueDate?.getTime() ?? 0) - (b.dueDate?.getTime() ?? 0))
+  todayList.sort((a, b) => (a.dueDate?.getTime() ?? 0) - (b.dueDate?.getTime() ?? 0))
+  tomorrowList.sort((a, b) => (a.dueDate?.getTime() ?? 0) - (b.dueDate?.getTime() ?? 0))
+  weekList.sort((a, b) => (a.dueDate?.getTime() ?? 0) - (b.dueDate?.getTime() ?? 0))
+
+  return [
+    { id: 'overdue',  label: 'In ritardo',     list: overdue,     dotColor: '#C8521A' },
+    { id: 'today',    label: 'Oggi',           list: todayList,   dotColor: '#D4A020' },
+    { id: 'tomorrow', label: 'Domani',         list: tomorrowList,dotColor: '#7A8FA6' },
+    { id: 'week',     label: 'Questa settimana', list: weekList,  dotColor: '#B4B0AA' },
+  ].filter(b => b.list.length > 0)
+})
+
+const totalCount = computed(() => buckets.value.reduce((sum, b) => sum + b.list.length, 0))
+
+function formatDue(d: Date | null) {
+  if (!d) return ''
+  return new Intl.DateTimeFormat('it-IT', { day: 'numeric', month: 'short' }).format(d)
+}
+
+// ── Nuova azione modal (riusa stesso pattern di Actions) ───────────────────
+const showTaskModal = ref(false)
+const taskSaving = ref(false)
+const taskForm = ref({
+  title:     '',
+  projectId: '',
+  priority:  'media' as 'alta' | 'media' | 'bassa',
+  dueDate:   '',
+  assignees: [] as string[],
+})
+
+const prioOptions = [
+  { id: 'alta',  label: 'Alta',  color: '#C8521A' },
+  { id: 'media', label: 'Media', color: '#D4A020' },
+  { id: 'bassa', label: 'Bassa', color: '#7A8FA6' },
+] as const
+
+function openTaskModal() {
+  taskForm.value = {
+    title:     '',
+    projectId: '',
+    priority:  'media',
+    dueDate:   '',
+    assignees: currentUser.value?.email ? [currentUser.value.email] : [],
+  }
+  showTaskModal.value = true
+}
+
+function toggleTaskAssignee(email: string) {
+  const idx = taskForm.value.assignees.indexOf(email)
+  if (idx === -1) taskForm.value.assignees.push(email)
+  else taskForm.value.assignees.splice(idx, 1)
+}
+
+function parseDateInput(s: string): Date {
+  const [y, m, d] = s.split('-').map(Number)
+  return new Date(y, m - 1, d)
+}
+
+async function submitTask() {
+  if (!taskForm.value.title.trim() || taskSaving.value) return
+  taskSaving.value = true
+  try {
+    const dueDate = taskForm.value.dueDate ? parseDateInput(taskForm.value.dueDate) : null
+    await createStandaloneTask({
+      title:     taskForm.value.title.trim(),
+      projectId: taskForm.value.projectId || null,
+      priority:  taskForm.value.priority,
+      dueDate,
+      assignees: taskForm.value.assignees,
+    })
+    showTaskModal.value = false
+  } catch (e) {
+    console.error('[CEPHEID/due] task creation error', e)
+  } finally {
+    taskSaving.value = false
+  }
+}
+
+const newTaskTick = inject<Ref<number>>('cepheid-new-task-tick', null as any)
+if (newTaskTick) {
+  watch(newTaskTick, () => openTaskModal())
+}
+
+onMounted(() => {
+  if (sessionStorage.getItem('cepheid-pending-new-task') === '1') {
+    sessionStorage.removeItem('cepheid-pending-new-task')
+    nextTick(() => openTaskModal())
+  }
+})
+</script>
+
+<template>
+  <div class="dv">
+    <header class="dv-header">
+      <h2 class="p-page-title">Scadenze</h2>
+      <p class="p-page-sub">
+        {{ totalCount === 0
+          ? 'Nessuna scadenza nei prossimi 7 giorni'
+          : (totalCount === 1 ? '1 scadenza in vista' : totalCount + ' scadenze in vista') }}
+      </p>
+    </header>
+
+    <div class="dv-content">
+      <div v-if="loading" class="loading-rows">
+        <div v-for="i in 4" :key="i" class="row-skel" />
+      </div>
+
+      <div v-else-if="!buckets.length" class="empty-state">
+        <MIcon name="event_available" filled :size="40" class="empty-icon" />
+        Tutto sotto controllo.
+      </div>
+
+      <section v-for="b in buckets" :key="b.id" class="bucket">
+        <div class="bucket-header">
+          <span class="bucket-dot" :style="{ background: b.dotColor }" />
+          <span class="bucket-label">{{ b.label }}</span>
+          <span class="bucket-count">{{ b.list.length }}</span>
+        </div>
+
+        <div v-for="t in b.list" :key="t.id" class="task-row" :style="{ borderLeftColor: prioColor[t.priority] }">
+          <div class="checkbox" @click="doComplete(t)">
+            <MIcon v-if="pendingDone.has(t.id)" name="check" :size="14" class="check-icon" />
+          </div>
+          <div class="row-body">
+            <div class="row-title">{{ t.title }}</div>
+            <div v-if="t.projectId" class="row-meta">
+              <span class="row-proj" :style="{ background: projectColor(t.projectId) + '20', color: projectColor(t.projectId) }">{{ projectName(t.projectId) }}</span>
+            </div>
+          </div>
+          <div v-if="t.dueDate" class="row-due" :class="{ 'is-overdue': b.id === 'overdue' }">
+            <MIcon name="schedule" :size="12" />{{ formatDue(t.dueDate) }}
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Modal Nuova azione -->
+    <Teleport to="body">
+      <div v-if="showTaskModal" class="modal-backdrop" @click.self="showTaskModal = false">
+        <div class="modal" @click.stop>
+          <div class="modal-header">
+            <span class="modal-title">Nuova azione</span>
+            <button class="modal-close" @click="showTaskModal = false"><MIcon name="close" :size="18" /></button>
+          </div>
+          <div class="modal-body">
+            <label class="field-label">Titolo *</label>
+            <input v-model="taskForm.title" class="field-input" autofocus />
+
+            <label class="field-label" style="margin-top:12px">Progetto</label>
+            <select v-model="taskForm.projectId" class="field-input">
+              <option value="">— Nessun progetto —</option>
+              <option v-for="p in activeProjects" :key="p.id" :value="p.id">{{ p.name }}</option>
+            </select>
+
+            <label class="field-label" style="margin-top:12px">Assegna a</label>
+            <div class="assignees-chips">
+              <div
+                v-for="m in members"
+                :key="m.email"
+                class="assignee-chip"
+                :class="{ 'is-selected': taskForm.assignees.includes(m.email) }"
+                :style="taskForm.assignees.includes(m.email) ? { background: avatarColor(m.email) + '20', borderColor: avatarColor(m.email) + '80', color: avatarColor(m.email) } : {}"
+                @click="toggleTaskAssignee(m.email)"
+              >
+                <span class="chip-avatar" :style="{ background: avatarColor(m.email), color: '#fff' }">{{ avatarInitial(m.email) }}</span>
+                {{ displayName(m.email, members) }}
+              </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
+              <div>
+                <label class="field-label">Priorità</label>
+                <div class="prio-picker">
+                  <button
+                    v-for="p in prioOptions"
+                    :key="p.id"
+                    class="prio-opt"
+                    :class="{ 'is-sel': taskForm.priority === p.id }"
+                    :style="taskForm.priority === p.id ? { borderColor: p.color, color: p.color } : {}"
+                    type="button"
+                    @click="taskForm.priority = p.id"
+                  >
+                    <span class="prio-dot" :style="{ background: p.color }" />
+                    {{ p.label }}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label class="field-label">Scadenza</label>
+                <input v-model="taskForm.dueDate" type="date" class="field-input field-date" />
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn-ghost" @click="showTaskModal = false">Annulla</button>
+            <button
+              class="btn-primary"
+              :disabled="!taskForm.title.trim() || taskSaving"
+              @click="submitTask"
+            >{{ taskSaving ? 'Creazione…' : 'Crea azione' }}</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+  </div>
+</template>
+
+<style scoped>
+.dv {
+  font-family: 'Outfit', sans-serif;
+  color: #1A1917;
+  min-height: calc(100vh - 120px);
+}
+
+.dv-header {
+  padding: 18px 20px 14px;
+  background: #fff;
+  border-bottom: 1px solid #E8E5DF;
+}
+
+.p-page-title {
+  font-family: 'Outfit', sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #1A1917;
+  margin: 0 0 4px 0;
+}
+
+.p-page-sub { font-size: 12px; color: #9B9590; margin: 0; }
+
+.dv-content { padding: 16px; }
+
+.loading-rows { display: flex; flex-direction: column; gap: 6px; }
+.row-skel { height: 48px; border-radius: 10px; background: #E8E5DF; animation: pulse 1.4s ease-in-out infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+.empty-state {
+  padding: 60px 20px;
+  text-align: center;
+  color: #9B9590;
+  font-size: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.empty-icon { color: #D4A020; opacity: 0.35; }
+
+.bucket { margin-bottom: 18px; }
+
+.bucket-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.bucket-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+.bucket-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #6A6560;
+}
+
+.bucket-count {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 600;
+  color: #9B9590;
+  background: #F4F2EE;
+  padding: 1px 7px;
+  border-radius: 999px;
+}
+
+.task-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  background: #fff;
+  border-radius: 10px;
+  border: 1px solid #E8E5DF;
+  border-left: 6px solid transparent;
+  margin-bottom: 6px;
+  box-shadow: 0 1px 2px rgba(0,0,0,.03);
+}
+
+.checkbox {
+  width: 18px; height: 18px;
+  border-radius: 5px;
+  border: 1.5px solid #C8C5C0;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; cursor: pointer;
+  transition: all 0.15s;
+}
+
+.checkbox:hover { border-color: #D4A020; }
+.check-icon { color: #D4A020; }
+
+.row-body { flex: 1; min-width: 0; }
+.row-title { font-size: 14px; color: #1A1917; }
+.row-meta { margin-top: 3px; display: flex; gap: 6px; }
+.row-proj { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; }
+
+.row-due {
+  font-size: 11px; color: #9B9590;
+  display: flex; align-items: center; gap: 3px;
+  flex-shrink: 0;
+}
+.row-due.is-overdue { color: #C8521A; font-weight: 600; }
+
+/* Modal */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 100;
+}
+
+.modal {
+  background: #fff;
+  border-radius: 20px 20px 0 0;
+  width: 100%;
+  max-width: 540px;
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+  font-family: 'Outfit', sans-serif;
+  overflow: hidden;
+}
+
+.modal-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 0; }
+.modal-title { font-size: 16px; font-weight: 600; color: #1A1917; }
+.modal-close { background: none; border: none; cursor: pointer; color: #9B9590; padding: 2px; border-radius: 4px; }
+.modal-body { padding: 16px 20px; overflow-y: auto; flex: 1; }
+
+.field-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #9B9590;
+  margin-bottom: 8px;
+}
+
+.field-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: #F4F2EE;
+  border: 1px solid #E8E5DF;
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 14px;
+  font-family: 'Outfit', sans-serif;
+  color: #1A1917;
+  outline: none;
+  transition: border-color 0.15s;
+}
+.field-input:focus { border-color: #D4A020; }
+.field-date { color-scheme: light; }
+
+.assignees-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+
+.assignee-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px 4px 4px;
+  border: 1px solid #E8E5DF;
+  border-radius: 999px;
+  font-size: 12px; font-weight: 500;
+  color: #6A6560; cursor: pointer;
+  background: #fff;
+  transition: all 0.15s;
+}
+
+.chip-avatar {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 10px; font-weight: 700;
+  flex-shrink: 0;
+}
+
+.prio-picker { display: flex; gap: 4px; }
+.prio-opt {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 8px;
+  border: 1.5px solid #E8E5DF;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+  font-family: 'Outfit', sans-serif;
+  cursor: pointer;
+  background: #fff;
+  color: #6A6560;
+}
+.prio-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+
+.modal-footer {
+  display: flex; gap: 8px;
+  padding: 14px 20px 20px;
+  border-top: 1px solid #E8E5DF;
+}
+
+.btn-ghost {
+  flex: 1; padding: 12px;
+  background: none; border: 1px solid #E8E5DF;
+  border-radius: 12px;
+  font-size: 14px; font-weight: 500;
+  cursor: pointer; color: #6A6560;
+  font-family: 'Outfit', sans-serif;
+}
+
+.btn-primary {
+  flex: 2; padding: 12px;
+  background: #D4A020; border: none;
+  border-radius: 12px;
+  font-size: 14px; font-weight: 600;
+  cursor: pointer; color: #fff;
+  font-family: 'Outfit', sans-serif;
+  transition: background 0.15s;
+}
+
+.btn-primary:hover:not(:disabled) { background: #B8870E; }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+</style>
