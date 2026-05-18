@@ -106,6 +106,13 @@ export function useNotifications(scope: NotificationScope) {
       foregroundUnsub = onMessage(messaging, (payload) => {
         const title = payload.notification?.title || payload.data?.title || 'PULSAR'
         const body  = payload.notification?.body  || payload.data?.body  || ''
+        const url   = payload.data?.url
+
+        // Suppressione: utente già sulla URL target della push → niente notifica duplicata
+        if (url && typeof window !== 'undefined' && window.location.pathname === url) {
+          return
+        }
+
         notify(title, body)
       })
     } catch (e) {
