@@ -15,17 +15,32 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging()
 
-messaging.onBackgroundMessage((payload) => {
+messaging.onBackgroundMessage(async (payload) => {
   const title = payload.notification?.title || payload.data?.title || 'PULSAR'
   const body  = payload.notification?.body  || payload.data?.body  || ''
   const chatId = payload.data?.chatId
+  const targetUrl = payload.data?.url || (chatId ? `/pulsar/chat/${chatId}` : '/pulsar')
+
+  // Suppressione: se una finestra/PWA è già visibile sulla URL target, non duplicare in notifica
+  try {
+    const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+    const alreadyHere = wins.some((w) => {
+      if (w.visibilityState !== 'visible') return false
+      try {
+        return new URL(w.url).pathname === targetUrl
+      } catch (_) {
+        return w.url.includes(targetUrl)
+      }
+    })
+    if (alreadyHere) return
+  } catch (_) { /* fallback: mostra comunque */ }
 
   self.registration.showNotification(title, {
     body,
     icon: '/icons/pulsar-192.png',
     badge: '/icons/pulsar-192.png',
     tag:  chatId ? `chat-${chatId}` : 'pulsar',
-    data: { chatId, url: chatId ? `/pulsar/chat/${chatId}` : '/pulsar' },
+    data: { chatId, url: targetUrl },
   })
 })
 
