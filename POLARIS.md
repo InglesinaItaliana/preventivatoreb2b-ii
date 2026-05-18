@@ -4,7 +4,7 @@
 > Documento "vivo": va aggiornato dopo ogni step completato o decisione esplicita.
 
 **Ultima revisione:** 2026-05-18
-**Stato globale:** in pianificazione — nessuna azione POLARIS ancora avviata.
+**Stato globale:** azione 1 implementata in codice, in attesa di deploy + test.
 
 ---
 
@@ -52,7 +52,7 @@ POLARIS è la roadmap che governa l'evoluzione architetturale di `preventivatore
 
 | # | Priorità | Azione | Trigger ideale | Rischio POPS | Stato |
 |---|---|---|---|---|---|
-| 1 | 🔴 Alta | **FCM token-per-scope** | Prima del prossimo modulo notificato (es. notifiche CEPHEID) | Nessuno | ☐ |
+| 1 | 🔴 Alta | **FCM token-per-scope** | Prima del prossimo modulo notificato (es. notifiche CEPHEID) | Nessuno | 🔄 |
 | 2 | 🟠 Media-alta | **Manifest statici per tutti gli scope** (rimuovere generazione VitePWA dinamica) | Quando si può testare iOS standalone a freddo | Basso | ☐ |
 | 3 | 🟠 Media-alta | **ScopedLogin componente unificato** | Prima di aggiungere PWA #3 (NEBULA o NOVA) | Nessuno | ☐ |
 | 4 | 🟡 Media | **Code splitting raffinato** (firebase modular, visualizer) | Quando si percepiscono rallentamenti mobile | Basso | ☐ |
@@ -89,6 +89,16 @@ POLARIS è la roadmap che governa l'evoluzione architetturale di `preventivatore
 - ☐ PULSAR PWA su Android: idem
 - ☐ Stesso utente con token vecchio formato (no scope) → push PULSAR continuano ad arrivare (fallback)
 - ☐ Doppia installazione PULSAR + CEPHEID sullo stesso device → token salvati con scope diverso
+
+**Implementazione 2026-05-18 (branch `polaris/1-fcm-token-scope`):**
+- Composable spostato a `src/composables/shared/useNotifications.ts` con firma `useNotifications(scope: NotificationScope)`.
+- Aggiunto type `NotificationScope = 'pulsar' | 'cepheid' | 'sidera'`. `'sidera'` introdotto come wildcard desktop (vedi sezione 4 — Decisioni esplicite).
+- Schema entry token: `{ ts: serverTimestamp(), scope, ua?: string }`. UA limitato a 120 caratteri per non sprecare spazio doc.
+- Prune token stale: helper `extractTimestamp()` riconosce sia oggetto nuovo (`val.ts`) sia legacy (Timestamp nudo).
+- Cloud Function `onNewPulsarMessage` (src/functions/index.ts:1408-1424): filtro per scope ∈ {`pulsar`, `sidera`}; entry senza `scope` (formato legacy) trattata come `pulsar`.
+- File POPS toccati: **zero** (verifica `grep` post-modifica).
+- `firestore.rules`: invariate. La regola `hasOnly(['fcmTokens'])` continua a funzionare (mappa top-level invariata).
+- **Deploy pendente:** Functions prima, Hosting dopo (vedi piano in sezione "Deploy" della checklist).
 
 ---
 
@@ -244,7 +254,15 @@ POLARIS è la roadmap che governa l'evoluzione architetturale di `preventivatore
 
 > Quando si sceglie di NON fare un'azione POLARIS, o di farla in un modo diverso da quello pianificato, annotare qui con data e motivo. Aiuta a non rivisitare le stesse domande tra mesi.
 
-*(vuoto per ora)*
+### 2026-05-18 — Azione 1: introduzione scope `'sidera'` come wildcard desktop
+
+**Contesto.** Il piano originale parlava di scope per-PWA (`pulsar`, `cepheid`, ...). Durante l'implementazione, ho rilevato che `SideraLayout.vue` (shell desktop) chiama anche lui `useNotifications()` — quindi anche le sessioni desktop registrano un token FCM.
+
+**Decisione.** Introdurre un terzo scope `'sidera'` che rappresenta il browser desktop. Convenzione: i token con scope `'sidera'` ricevono **tutte** le notifiche di tutti i moduli (wildcard). La Cloud Function `onNewPulsarMessage` filtra `scope ∈ {'pulsar', 'sidera'}`; future Cloud Function `onNewCepheidAction` filtreranno `scope ∈ {'cepheid', 'sidera'}`.
+
+**Razionale.** Una postazione desktop è agnostica al modulo: il dipendente in ufficio si aspetta di ricevere chat (PULSAR) E azioni assegnate (CEPHEID) sullo stesso device. Non avrebbe senso fargli installare 2 PWA sul Mac.
+
+**Implicazioni.** Quando aggiungeremo notifiche CEPHEID (Cloud Function dedicata), basterà includere `'sidera'` nel filtro scope per propagare anche al desktop.
 
 ---
 
@@ -265,3 +283,4 @@ Quando si decide di lavorare su un'azione POLARIS:
 ## 6. Cronologia revisioni
 
 - **2026-05-18** — Creazione documento. Roadmap iniziale a 7 azioni. Stato globale: pianificazione, 0 azioni avviate.
+- **2026-05-18** — Azione 1 FCM token-per-scope implementata in codice (branch `polaris/1-fcm-token-scope`). Decisione esplicita: introdotto scope `'sidera'` come wildcard desktop. Deploy + test pendenti.
