@@ -7,14 +7,14 @@ import MIcon from '../../components/pulsar/MIcon.vue'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
 import { useTeamMembers, displayName, avatarColor } from '../../composables/sidera/useTeamMembers'
 import { useChats } from '../../composables/pulsar/useChats'
-import { useNotifications } from '../../composables/pulsar/useNotifications'
+import { useNotifications } from '../../composables/shared/useNotifications'
 
 const route  = useRoute()
 const router = useRouter()
 const { currentUser } = useCurrentUser()
 const { members } = useTeamMembers()
 const { chats } = useChats()
-const { requestPermission, notify, setupForegroundMessages } = useNotifications()
+const { requestPermission, notify, setupForegroundMessages } = useNotifications('pulsar')
 
 async function logout() {
   await signOut(auth)

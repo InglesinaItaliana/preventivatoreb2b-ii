@@ -1,5 +1,5 @@
 import { getToken, onMessage } from 'firebase/messaging'
-import { doc, setDoc, getDoc, serverTimestamp, deleteField } from 'firebase/firestore'
+import { doc, setDoc, getDoc, serverTimestamp, deleteField, Timestamp } from 'firebase/firestore'
 import { db, auth, messagingPromise } from '../../firebase'
 
 // Token non aggiornati da più di 7 giorni vengono considerati stale e rimossi:
@@ -7,13 +7,32 @@ import { db, auth, messagingPromise } from '../../firebase'
 // della PWA (es. iOS dopo reinstall) che lasciano subscription orfane.
 const STALE_TOKEN_MS = 7 * 24 * 60 * 60 * 1000
 
-// ⚠️ VAPID key — da generare in Firebase Console > Project Settings > Cloud Messaging > Web Push certificates
-// Finché non viene inserita, FCM token non viene richiesto ma le notifiche in-app (foreground browser) continuano a funzionare.
+// ⚠️ VAPID key — Firebase Console > Project Settings > Cloud Messaging > Web Push certificates
 const VAPID_KEY = 'BKHZvBeWzYyHEmWNFUd-CNfmRtEUbb8xYchwnvQNif47LR6xE0hpJHXgoZRHP47wzMIiarFXNYqzuFh-PtXTDhY'
+
+export type NotificationScope = 'pulsar' | 'cepheid' | 'sidera'
+
+// Schema entry token in team/{email}.fcmTokens:
+//   - Nuovo: { ts: Timestamp, scope: NotificationScope, ua?: string }
+//   - Legacy: Timestamp nudo (interpretato come scope 'pulsar' dalla Cloud Function)
+type TokenEntryNew = { ts: Timestamp; scope: NotificationScope; ua?: string }
+type TokenEntryLegacy = Timestamp
+type TokenEntry = TokenEntryNew | TokenEntryLegacy | null | undefined
+
+function extractTimestamp(val: TokenEntry): Timestamp | null {
+  if (!val) return null
+  if (val instanceof Timestamp) return val
+  if (typeof val === 'object' && 'ts' in val && val.ts instanceof Timestamp) return val.ts
+  // Fallback: oggetto serializzato senza prototipo Timestamp (es. rilettura raw)
+  const maybe = val as { toMillis?: () => number; ts?: { toMillis?: () => number } }
+  if (typeof maybe.toMillis === 'function') return val as unknown as Timestamp
+  if (maybe.ts && typeof maybe.ts.toMillis === 'function') return maybe.ts as unknown as Timestamp
+  return null
+}
 
 let foregroundUnsub: (() => void) | null = null
 
-export function useNotifications() {
+export function useNotifications(scope: NotificationScope) {
   async function requestPermission(): Promise<boolean> {
     if (!('Notification' in window)) return false
 
@@ -23,13 +42,11 @@ export function useNotifications() {
     }
     if (perm !== 'granted') return false
 
-    // Registra FCM token se VAPID configurato e ambiente supportato
     if (VAPID_KEY) {
       try {
         const messaging = await messagingPromise
         if (!messaging) return true
 
-        // Aspetta il service worker registrato da vite-plugin-pwa, poi punta FCM su quello dedicato.
         const swReg = await navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' })
 
         const token = await getToken(messaging, {
@@ -41,17 +58,19 @@ export function useNotifications() {
           const email = auth.currentUser.email.toLowerCase().trim()
           const teamRef = doc(db, 'team', email)
 
-          // Prune token stale + registra/aggiorna il token corrente in un'unica scrittura
+          const ua = typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 120) : undefined
           const tokenUpdate: Record<string, unknown> = {
-            [token]: serverTimestamp(),
+            [token]: { ts: serverTimestamp(), scope, ...(ua ? { ua } : {}) },
           }
+
           try {
             const snap = await getDoc(teamRef)
-            const existing = (snap.data()?.fcmTokens ?? {}) as Record<string, { toMillis?: () => number } | null>
+            const existing = (snap.data()?.fcmTokens ?? {}) as Record<string, TokenEntry>
             const now = Date.now()
-            for (const [tk, ts] of Object.entries(existing)) {
+            for (const [tk, val] of Object.entries(existing)) {
               if (tk === token) continue
-              const ms = ts?.toMillis?.() ?? 0
+              const tsObj = extractTimestamp(val)
+              const ms = tsObj?.toMillis?.() ?? 0
               if (now - ms > STALE_TOKEN_MS) {
                 tokenUpdate[tk] = deleteField()
               }

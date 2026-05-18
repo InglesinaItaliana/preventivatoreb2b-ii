@@ -1406,12 +1406,22 @@ exports.onNewPulsarMessage = functions
             if (!targets.length) return null;
 
             // 3. Carica fcmTokens dai documenti team
+            // Schema entry: nuovo = { ts, scope, ua? } | legacy = Timestamp nudo (= scope 'pulsar' default).
+            // Filtra scope 'pulsar' (PWA) e 'sidera' (desktop wildcard).
             const rawTokens: string[] = [];
             const teamSnaps = await Promise.all(targets.map((email) => db.collection('team').doc(email).get()));
             for (const ts of teamSnaps) {
                 if (!ts.exists) continue;
                 const tokensMap = ts.data()?.fcmTokens || {};
-                rawTokens.push(...Object.keys(tokensMap));
+                for (const [tk, val] of Object.entries(tokensMap)) {
+                    if (val && typeof val === 'object' && 'scope' in (val as Record<string, unknown>)) {
+                        const scope = (val as { scope?: string }).scope;
+                        if (scope === 'pulsar' || scope === 'sidera') rawTokens.push(tk);
+                    } else {
+                        // Legacy: timestamp nudo → default 'pulsar'
+                        rawTokens.push(tk);
+                    }
+                }
             }
 
             // Dedup: lo stesso token potrebbe comparire più volte (multi-destinatario,

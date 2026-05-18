@@ -6,13 +6,13 @@ import { auth } from '../../firebase'
 import MIcon from '../../components/pulsar/MIcon.vue'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
 import { useTeamMembers, displayName, avatarColor } from '../../composables/sidera/useTeamMembers'
-import { useNotifications } from '../../composables/pulsar/useNotifications'
+import { useNotifications } from '../../composables/shared/useNotifications'
 
 const route  = useRoute()
 const router = useRouter()
 const { currentUser } = useCurrentUser()
 const { members } = useTeamMembers()
-const { requestPermission, setupForegroundMessages } = useNotifications()
+const { requestPermission, setupForegroundMessages } = useNotifications('cepheid')
 
 async function logout() {
   await signOut(auth)
