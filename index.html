@@ -10,27 +10,21 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="POPS" />
     <meta name="mobile-web-app-capable" content="yes" />
-    <link rel="manifest" href="/pops.webmanifest" />
-    <link rel="apple-touch-icon" sizes="180x180" href="/icons/pops-180.png" />
-    <link rel="apple-touch-icon" sizes="192x192" href="/icons/pops-192.png" />
-    <link rel="apple-touch-icon" sizes="512x512" href="/icons/pops-512.png" />
+    <!-- Manifest e apple-touch-icon iniettati dallo script inline qui sotto in base al path,
+         prima del primo paint. Niente hardcoded qui per evitare race condition su iOS "Add to Home". -->
     <title>P.O.P.S. Inglesina Italiana</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet">
     <script>
-      // Pattern "suite of webapps": default POPS, swap a PULSAR o CEPHEID in base al path
-      // prima del bootstrap Vue. Manifest statici in /public/. Vedi POLARIS.md azione 2.
+      // Pattern "suite of webapps": iniettiamo manifest + apple-touch-icon SEMPRE
+      // in base al path, prima del primo paint. Niente hardcoded sopra per evitare
+      // che iOS "Add to Home" legga eager il manifest sbagliato. Vedi POLARIS.md azione 2.
       (function () {
         try {
           var path = window.location.pathname || '';
-          // POPS è il default: meta tag base in HTML già impostati. Esci.
-          if (path.indexOf('/pulsar') !== 0 && path.indexOf('/cepheid') !== 0) return;
-
           var head = document.head;
-          head.querySelectorAll('link[rel="manifest"]').forEach(function (el) { el.remove(); });
-          head.querySelectorAll('link[rel="apple-touch-icon"]').forEach(function (el) { el.remove(); });
           var titleMeta = head.querySelector('meta[name="apple-mobile-web-app-title"]');
 
           function addManifest(href) {
@@ -57,6 +51,11 @@
             addManifest('/cepheid.webmanifest');
             addAppleIcons('/icons/cepheid', '2');
             if (titleMeta) titleMeta.setAttribute('content', 'CEPHEID');
+          } else {
+            // POPS default (qualsiasi altro path: /, /preventivatore, /production, /delivery, ...)
+            addManifest('/pops.webmanifest');
+            addAppleIcons('/icons/pops', null);
+            if (titleMeta) titleMeta.setAttribute('content', 'POPS');
           }
         } catch (_e) { /* ignore */ }
       })();
