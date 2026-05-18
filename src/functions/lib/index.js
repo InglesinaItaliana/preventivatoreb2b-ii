@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createTeamMember = void 0;
+exports.autoDeliveredAfter7Days = exports.createTeamMember = void 0;
 const dotenv = __importStar(require("dotenv")); // <--- AGGIUNGI QUESTO
 dotenv.config(); // <--- E QUESTO (Carica subito il file .env)
 const functions = __importStar(require("firebase-functions/v1"));
@@ -1335,5 +1335,48 @@ exports.onNewPulsarMessage = functions
         console.error('[PULSAR push] Errore:', e);
         return null;
     }
+});
+// ──────────────────────────────────────────────────────────────────
+// CRON: SHIPPED → DELIVERED dopo 7 giorni dalla spedizione
+// Risolve i casi in cui il cliente B2B non clicca "Conferma Ricezione"
+// in ClientDashboard, lasciando l'ordine bloccato in SHIPPED.
+// ──────────────────────────────────────────────────────────────────
+exports.autoDeliveredAfter7Days = functions
+    .region('europe-west1')
+    .pubsub.schedule('every day 06:00')
+    .timeZone('Europe/Rome')
+    .onRun(async () => {
+    const db = admin.firestore();
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const snap = await db.collection('preventivi')
+        .where('stato', '==', 'SHIPPED')
+        .where('dataSpedizione', '<=', admin.firestore.Timestamp.fromDate(sevenDaysAgo))
+        .get();
+    if (snap.empty) {
+        console.log('[autoDeliveredAfter7Days] Nessun ordine da convertire.');
+        return null;
+    }
+    const CHUNK = 500;
+    let totale = 0;
+    for (let i = 0; i < snap.docs.length; i += CHUNK) {
+        const batch = db.batch();
+        const slice = snap.docs.slice(i, i + CHUNK);
+        slice.forEach((d) => {
+            const dataSped = d.data().dataSpedizione;
+            if (!(dataSped === null || dataSped === void 0 ? void 0 : dataSped.toDate))
+                return;
+            const dataConsegnaEffettiva = new Date(dataSped.toDate().getTime() + 7 * 24 * 60 * 60 * 1000);
+            batch.update(d.ref, {
+                stato: 'DELIVERED',
+                dataConsegnaEffettiva: admin.firestore.Timestamp.fromDate(dataConsegnaEffettiva),
+                autoDelivered: true,
+            });
+        });
+        await batch.commit();
+        totale += slice.length;
+    }
+    console.log(`[autoDeliveredAfter7Days] Convertiti ${totale} ordini SHIPPED → DELIVERED.`);
+    return null;
 });
 //# sourceMappingURL=index.js.map

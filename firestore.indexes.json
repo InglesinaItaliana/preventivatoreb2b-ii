@@ -81,6 +81,14 @@
         { "fieldPath": "hashtags",  "arrayConfig": "CONTAINS" },
         { "fieldPath": "createdAt", "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "preventivi",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "stato",          "order": "ASCENDING" },
+        { "fieldPath": "dataSpedizione", "order": "ASCENDING" }
+      ]
     }
   ],
   "fieldOverrides": [
