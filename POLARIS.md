@@ -4,7 +4,7 @@
 > Documento "vivo": va aggiornato dopo ogni step completato o decisione esplicita.
 
 **Ultima revisione:** 2026-05-18
-**Stato globale:** azione 1 implementata in codice, in attesa di deploy + test.
+**Stato globale:** azione 1 deployata in produzione. Azione 2 (con 5 in piggyback) implementata in codice, in attesa di deploy + test. POPS promosso a 3ª PWA installabile.
 
 ---
 
@@ -52,11 +52,11 @@ POLARIS è la roadmap che governa l'evoluzione architetturale di `preventivatore
 
 | # | Priorità | Azione | Trigger ideale | Rischio POPS | Stato |
 |---|---|---|---|---|---|
-| 1 | 🔴 Alta | **FCM token-per-scope** | Prima del prossimo modulo notificato (es. notifiche CEPHEID) | Nessuno | 🔄 |
-| 2 | 🟠 Media-alta | **Manifest statici per tutti gli scope** (rimuovere generazione VitePWA dinamica) | Quando si può testare iOS standalone a freddo | Basso | ☐ |
+| 1 | 🔴 Alta | **FCM token-per-scope** | Prima del prossimo modulo notificato (es. notifiche CEPHEID) | Nessuno | ☑ |
+| 2 | 🟠 Media-alta | **Manifest statici per tutti gli scope** (rimuovere generazione VitePWA dinamica) | Quando si può testare iOS standalone a freddo | Basso | 🔄 |
 | 3 | 🟠 Media-alta | **ScopedLogin componente unificato** | Prima di aggiungere PWA #3 (NEBULA o NOVA) | Nessuno | ☐ |
 | 4 | 🟡 Media | **Code splitting raffinato** (firebase modular, visualizer) | Quando si percepiscono rallentamenti mobile | Basso | ☐ |
-| 5 | 🟢 Bassa | **`name` manifest più parlanti** | Quando si lavora su uno scope per altri motivi | Nessuno | ☐ |
+| 5 | 🟢 Bassa | **`name` manifest più parlanti** | Quando si lavora su uno scope per altri motivi | Nessuno | 🔄 (piggyback su azione 2) |
 | 6 | 🟢 Bassa | **`meta.scope` unificato nel router guard** | Da 4+ PWA in poi | Medio (test ruoli POPS obbligatori) | ☐ |
 | 7 | ⚪ Differita | **Separazione deploy POPS vs interno** | Tra 6–12 mesi, se POPS cresce o legal richiede dominio separato | Altissimo | ⏸ |
 
@@ -126,12 +126,23 @@ POLARIS è la roadmap che governa l'evoluzione architetturale di `preventivatore
 **Rischio POPS.** Basso (step 1). Lo script inline gira solo se path è `/pulsar*` o `/cepheid*`, non tocca POPS.
 
 **Test obbligatori prima del merge (step 1).**
-- ☐ POPS `/` → nessun manifest linkato (o quello "default" se vogliamo mantenerlo)
+- ☐ POPS `/` → manifest POPS caricato (POPS è ora 3ª PWA installabile)
 - ☐ `/pulsar/` da browser → manifest PULSAR caricato, no warning console
 - ☐ `/cepheid/` da browser → manifest CEPHEID caricato
-- ☐ iOS: "Add to Home" da `/pulsar/` → icona + nome PULSAR (testare in modalità navigazione privata per cache vuota)
+- ☐ iOS: "Add to Home" da `/` → icona + nome POPS
+- ☐ iOS: "Add to Home" da `/pulsar/` → icona + nome PULSAR (modalità navigazione privata per cache vuota)
 - ☐ iOS: "Add to Home" da `/cepheid/` → icona + nome CEPHEID
-- ☐ Android Chrome: install prompt sui due scope mostra il manifest giusto
+- ☐ Android Chrome: install prompt sui tre scope mostra il manifest giusto
+
+**Implementazione 2026-05-18 (branch `polaris/2-manifest-statici`):**
+- POPS promosso a **3ª PWA installabile** (vedi sezione 4 — Decisioni esplicite): scope `/`, start_url `/`, name "POPS — Inglesina".
+- Icone POPS generate da `public/favicon.png` (1024×1024) con sharp-cli → `public/icons/pops-{180,192,512}.png`.
+- `public/pops.webmanifest` + `public/pulsar.webmanifest` creati come file statici. `public/cepheid.webmanifest` esisteva già: aggiornato solo `name` per allineamento.
+- `vite.config.ts` → `manifest: false` (VitePWA continua a generare il SW workbox, ma non più il manifest dinamico). Eliminato il conflitto tra manifest auto-iniettato e swap runtime.
+- `index.html` → base meta `apple-mobile-web-app-title` + `apple-touch-icon` ora puntano a POPS (default). Script inline riscritto in 3 rami: default POPS, `/pulsar*` → PULSAR, `/cepheid*` → CEPHEID. Niente più rimozione di un manifest auto-generato.
+- Azione 5 (name parlanti) completata in piggyback: tutti i manifest hanno ora `name` lungo descrittivo ("POPS — Inglesina", "PULSAR — Chat Inglesina", "CEPHEID — Azioni Inglesina"); `short_name` resta breve.
+- **File POPS toccati**: solo `index.html` (meta base + script inline, aggiunte e cambi mirati). Confermato dall'utente come strategia "modifiche miratissime, solo aggiunte o modifiche chirurgiche".
+- Step 2 (HTML separati per scope) **rimandato**: lo step 1 elimina la race condition (no più conflitto VitePWA), e gli utenti aziendali hanno browser moderni. Riprenderemo step 2 solo se si presenteranno problemi reali di "Add to Home" su iOS.
 
 ---
 
@@ -254,6 +265,22 @@ POLARIS è la roadmap che governa l'evoluzione architetturale di `preventivatore
 
 > Quando si sceglie di NON fare un'azione POLARIS, o di farla in un modo diverso da quello pianificato, annotare qui con data e motivo. Aiuta a non rivisitare le stesse domande tra mesi.
 
+### 2026-05-18 — Azione 2: POPS promosso a 3ª PWA installabile
+
+**Contesto.** Il piano originale di azione 2 prevedeva manifest statici solo per i moduli SIDERA (PULSAR, CEPHEID), considerando POPS come "non installabile". Durante la conversazione l'utente ha chiarito che POPS **è già usato come webapp mobile dai dipendenti** (interfaccia spedizioni con firma da smartphone), e ha richiesto di mantenerlo installabile come PWA.
+
+**Decisione.** POPS diventa la terza PWA installabile, simmetrica a PULSAR e CEPHEID:
+- Scope `/` (root, copre tutti i path POPS: `/`, `/preventivatore`, `/production`, `/delivery`, `/dashboard`, ecc.)
+- `start_url: /` (login)
+- `name: "POPS — Inglesina"`, `short_name: "POPS"`
+- Icone generate da `public/favicon.png` (asset 1024×1024 già esistente)
+
+**Razionale.** POPS ha un caso d'uso mobile reale (LOGISTICA che firma le consegne dal proprio smartphone). Renderlo PWA "vera" elimina ambiguità (oggi i meta tag base puntavano per errore a PULSAR) e dà un'esperienza coerente con gli altri moduli.
+
+**Implicazioni.** L'index.html base ora rappresenta POPS, non più PULSAR. Lo script inline gestisce 3 rami invece di 1. Allineamento simultaneo dei `name` di tutti i manifest (POLARIS azione 5 in piggyback) per coerenza.
+
+---
+
 ### 2026-05-18 — Azione 1: introduzione scope `'sidera'` come wildcard desktop
 
 **Contesto.** Il piano originale parlava di scope per-PWA (`pulsar`, `cepheid`, ...). Durante l'implementazione, ho rilevato che `SideraLayout.vue` (shell desktop) chiama anche lui `useNotifications()` — quindi anche le sessioni desktop registrano un token FCM.
@@ -284,3 +311,5 @@ Quando si decide di lavorare su un'azione POLARIS:
 
 - **2026-05-18** — Creazione documento. Roadmap iniziale a 7 azioni. Stato globale: pianificazione, 0 azioni avviate.
 - **2026-05-18** — Azione 1 FCM token-per-scope implementata in codice (branch `polaris/1-fcm-token-scope`). Decisione esplicita: introdotto scope `'sidera'` come wildcard desktop. Deploy + test pendenti.
+- **2026-05-18** — Azione 1 mergiata (PR #1) e deployata in produzione (Functions + Hosting). Cloud Function `onNewPulsarMessage` con filtro scope live.
+- **2026-05-18** — Azione 2 manifest statici implementata in codice (branch `polaris/2-manifest-statici`). Decisione esplicita: POPS promosso a 3ª PWA installabile. Azione 5 (name parlanti) completata in piggyback. Step 2 (HTML separati per scope) rimandato. Deploy + test pendenti.
