@@ -1,0 +1,16 @@
+{
+  "name": "POPS — Inglesina",
+  "short_name": "POPS",
+  "description": "Preventivi - Ordini - Produzione - Spedizioni",
+  "theme_color": "#FFFFFF",
+  "background_color": "#FFFFFF",
+  "display": "standalone",
+  "orientation": "portrait",
+  "start_url": "/",
+  "scope": "/",
+  "id": "/",
+  "icons": [
+    { "src": "/icons/pops-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/pops-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

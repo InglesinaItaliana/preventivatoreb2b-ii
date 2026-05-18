@@ -8,22 +8,10 @@ export default defineConfig({
     vue(),
     VitePWA({
       registerType: 'autoUpdate',
-      manifest: {
-        name: 'PULSAR',
-        short_name: 'PULSAR',
-        description: 'Chat e collaborazione Inglesina',
-        theme_color: '#FFFFFF',
-        background_color: '#FFFFFF',
-        display: 'standalone',
-        orientation: 'portrait',
-        start_url: '/pulsar/',
-        scope: '/pulsar/',
-        id: '/pulsar/',
-        icons: [
-          { src: '/icons/pulsar-192.png', sizes: '192x192', type: 'image/png' },
-          { src: '/icons/pulsar-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
-        ],
-      },
+      // Manifest gestiti come file statici in /public/ (pops|pulsar|cepheid.webmanifest)
+      // e selezionati a runtime dallo script inline in index.html in base al path.
+      // Vedi POLARIS.md azione 2.
+      manifest: false,
       workbox: {
         navigateFallback: '/index.html',
         globPatterns: ['**/*.{js,css,html,ico,svg,woff2}'],

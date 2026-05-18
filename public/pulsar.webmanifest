@@ -1,0 +1,16 @@
+{
+  "name": "PULSAR — Chat Inglesina",
+  "short_name": "PULSAR",
+  "description": "Chat e collaborazione Inglesina",
+  "theme_color": "#FFFFFF",
+  "background_color": "#FFFFFF",
+  "display": "standalone",
+  "orientation": "portrait",
+  "start_url": "/pulsar/",
+  "scope": "/pulsar/",
+  "id": "/pulsar/",
+  "icons": [
+    { "src": "/icons/pulsar-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/pulsar-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}
