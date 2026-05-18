@@ -16,7 +16,7 @@ const projectId = route.params.id as string
 
 // ── Project doc ───────────────────────────────────────────────────────────
 interface ProjectState { id: string; label: string; color: string; order: number }
-interface ProjectData  { name: string; color: string; states: ProjectState[]; taskCount: number; doneCount: number }
+interface ProjectData  { name: string; description: string; color: string; states: ProjectState[]; taskCount: number; doneCount: number }
 
 const project = ref<ProjectData | null>(null)
 const projLoading = ref(true)
@@ -27,11 +27,12 @@ onMounted(async () => {
     if (snap.exists()) {
       const d = snap.data()
       project.value = {
-        name:      d.name      ?? '',
-        color:     d.color     ?? '#2F6B4A',
-        states:    d.states    ?? [],
-        taskCount: d.taskCount ?? 0,
-        doneCount: d.doneCount ?? 0,
+        name:        d.name        ?? '',
+        description: d.description ?? '',
+        color:       d.color       ?? '#2F6B4A',
+        states:      d.states      ?? [],
+        taskCount:   d.taskCount   ?? 0,
+        doneCount:   d.doneCount   ?? 0,
       }
     }
   } catch (e) {
@@ -47,6 +48,9 @@ const { deleteProject } = useProjects()
 const { currentUser } = useCurrentUser()
 const { members } = useTeamMembers()
 const isAdmin = computed(() => currentUser.value?.role === 'ADMIN' || currentUser.value?.email === 'info@inglesinaitaliana.it')
+
+const descExpanded = ref(false)
+const descIsLong   = computed(() => (project.value?.description?.length ?? 0) > 140)
 
 async function handleDeleteProject() {
   if (!confirm(`Eliminare il progetto "${project.value?.name}" e tutte le sue azioni? L'operazione è irreversibile.`)) return
@@ -241,6 +245,14 @@ async function deleteCurrentTask() {
         >{{ pct }}% completato</span>
         <button v-if="isAdmin && !projLoading" class="bv-delete-btn" title="Elimina progetto" @click="handleDeleteProject">
           <MaterialIcon name="delete" :size="15" />
+        </button>
+      </div>
+      <div v-if="project?.description" class="bv-description">
+        <p class="bv-description-text" :class="{ 'is-collapsed': !descExpanded && descIsLong }">
+          {{ project.description }}
+        </p>
+        <button v-if="descIsLong" class="bv-description-toggle" @click="descExpanded = !descExpanded">
+          {{ descExpanded ? 'mostra meno' : 'leggi tutto' }}
         </button>
       </div>
       <div class="bv-tabs">
@@ -507,7 +519,37 @@ async function deleteCurrentTask() {
 .bv-sep   { color: var(--s-border-mid); }
 .bv-crumb { font-size: 12px; color: var(--s-text-mid); }
 
-.bv-title-row { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.bv-title-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+
+.bv-description { margin: 0 0 14px 0; }
+.bv-description-text {
+  margin: 0;
+  font-family: 'Outfit', sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--s-text-mid);
+  white-space: pre-wrap;
+}
+.bv-description-text.is-collapsed {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.bv-description-toggle {
+  margin-top: 4px;
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: 'Outfit', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--s-text-dim);
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.bv-description-toggle:hover { color: var(--s-text-mid); }
 
 .title-skeleton {
   width: 180px; height: 30px;

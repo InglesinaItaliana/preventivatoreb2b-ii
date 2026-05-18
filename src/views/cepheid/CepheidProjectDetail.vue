@@ -54,6 +54,9 @@ async function doUncomplete(t: { id: string }) {
 
 const showDone = ref(false)
 
+const descExpanded = ref(false)
+const descIsLong   = computed(() => (project.value?.description?.length ?? 0) > 120)
+
 // Sposta task tra stati: click sul chip di stato apre dropdown semplice
 const movingTaskId = ref('')
 function openStatusMenu(id: string) {
@@ -72,6 +75,14 @@ async function changeStatus(taskId: string, newStatus: string) {
       <div class="pd-titles">
         <h2 class="p-page-title">{{ project.name }}</h2>
         <p class="p-page-sub">{{ project.doneCount }}/{{ project.taskCount }} azioni · {{ pct(project) }}%</p>
+        <div v-if="project.description" class="pd-description">
+          <p class="pd-description-text" :class="{ 'is-collapsed': !descExpanded && descIsLong }">
+            {{ project.description }}
+          </p>
+          <button v-if="descIsLong" class="pd-description-toggle" @click="descExpanded = !descExpanded">
+            {{ descExpanded ? 'mostra meno' : 'leggi tutto' }}
+          </button>
+        </div>
       </div>
     </header>
 
@@ -180,6 +191,36 @@ async function changeStatus(taskId: string, newStatus: string) {
 }
 
 .p-page-sub { font-size: 12px; color: #9B9590; margin: 0; }
+
+.pd-description { margin-top: 8px; }
+.pd-description-text {
+  margin: 0;
+  font-family: 'Outfit', sans-serif;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #6A6560;
+  white-space: pre-wrap;
+}
+.pd-description-text.is-collapsed {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.pd-description-toggle {
+  margin-top: 4px;
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: 'Outfit', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  color: #9B9590;
+  cursor: pointer;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.pd-description-toggle:hover { color: #6A6560; }
 
 .pd-content { padding: 16px; }
 
