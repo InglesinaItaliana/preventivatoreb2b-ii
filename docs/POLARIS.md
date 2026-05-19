@@ -43,7 +43,7 @@ POLARIS è la roadmap che governa l'evoluzione architetturale di `preventivatore
 - Build singolo Vite → unico `dist/` (oggi ~720 KB di JS firebase + vendor sempre caricati)
 - Service Worker FCM unico (`public/firebase-messaging-sw.js`) registrato con scope `/`
 - Auth Firebase unica per tutti (POPS clienti B2B + team interno PRODUZIONE / LOGISTICA / ADMIN)
-- Firestore unico (collections: `chats`, `messages`, `tasks`, `projects`, `team`, `clienti`, ...)
+- Firestore unico (collections: `chats`, `messages`, `tasks` (con discriminator `type`), `projects`, `obiettivi`, `team`, `clienti`, ...)
 - Cloud Functions `europe-west1`, Node 20 (deprecato 2026-04-30 → bumpare a Node 22 entro 2026-10-30)
 
 ---
@@ -357,3 +357,4 @@ Quando si decide di lavorare su un'azione POLARIS:
 - **2026-05-19** — Azione 4 code splitting implementata in codice (branch `polaris/4-code-splitting`). Firebase modulare split in 4 chunk (core/firestore/functions/messaging). Visualizer aggiunto. Risparmio POPS modesto (~8 KB raw) ma struttura preparata per ottimizzazioni future. Deploy + test pendenti.
 - **2026-05-19** — Azione 4 fix dynamic import: `src/firebase.ts` rimosso import statico di `firebase/messaging`; `useNotifications.ts` lazy-load il modulo via `import('firebase/messaging')`. Verifica post-fix: chunk `firebase-messaging` NON più nei `<link rel="modulepreload">` di POPS. Risparmio reale POPS: ~16 KB ogni first load.
 - **2026-05-19** — Azione 4 mergiata (PR #6) e deployata in produzione. 5 azioni POLARIS su 7 completate.
+- **2026-05-19** — Feature extra (fuori-azioni POLARIS): **CEPHEID Asana-flavored** (PR #8, branch `feature/cepheid-asana`). Introdotta gerarchia Obiettivi → Progetti → (task | milestone | deliverable) con schema retrocompatibile. Nuova collection `obiettivi/` (regole Firestore deployate). Discriminator `tasks/{id}.type` aggiunto alla collection condivisa con SIDERA: filtri lato view in SIDERA TasksView/ProjectBoard per non mostrare milestone/deliverable come task. ProjectBoard SIDERA esteso con 2 view tab Milestone+Deliverable. File POPS toccati: zero. Deploy hosting pendente.
