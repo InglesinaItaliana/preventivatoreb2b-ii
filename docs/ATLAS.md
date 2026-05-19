@@ -585,7 +585,36 @@ Se tocchi anche solo uno di questi, **test obbligatori su POPS**:
 
 ---
 
-## 10. Decision log
+## 10. PWA update banner — best practice
+
+Le PWA della suite si aggiornano via Service Worker generato da `vite-plugin-pwa`. Per evitare che gli utenti restino bloccati sul codice vecchio (specie su iOS standalone dove la PWA resta in background per giorni) **e** per evitare reload brutali che cancellerebbero form/messaggi in scrittura, l'update è **opt-in via banner**.
+
+### Pattern attuale
+
+`vite.config.ts` → `registerType: 'prompt'` (non `'autoUpdate'`).
+
+Il nuovo SW viene scaricato in background ma resta in stato `waiting` finché l'utente non clicca **Aggiorna** nel banner che appare in basso. Solo allora viene chiamato `skipWaiting()` + reload.
+
+### Componenti coinvolti
+
+| File | Ruolo |
+|---|---|
+| `src/composables/shared/useSWUpdate.ts` | Wrappa `useRegisterSW` da `virtual:pwa-register/vue`. Espone `needRefresh`, `applyUpdate`, `dismiss` |
+| `src/components/UpdateBanner.vue` | UI banner globale tematizzato per path (POPS giallo `amber-400`, PULSAR verde `#338076`, CEPHEID oro `#D4A020`) |
+| `src/App.vue` | Monta `<UpdateBanner />` sotto `<RouterView>` — visibile in ogni scope |
+| `tsconfig.app.json` | Include `"vite-plugin-pwa/client"` nei `types` per il modulo virtuale |
+
+### Regola
+
+**Mai tornare a `registerType: 'autoUpdate'`.** Quella modalità ricarica la pagina senza preavviso e cancella form/messaggi in scrittura. Il banner costa zero in attrito utente (1 click) e protegge il data entry.
+
+### Quando estendere
+
+Se aggiungi una nuova PWA (es. NEBULA), il banner funziona già out-of-the-box: aggiungi solo il ramo path → colore in `UpdateBanner.vue` (es. `path.startsWith('/nebula')` → palette nebula).
+
+---
+
+## 11. Decision log
 
 Tutte le decisioni architetturali esplicite sono in **`POLARIS.md` sez. 4** con data, contesto, decisione, razionale, implicazioni.
 
@@ -598,7 +627,7 @@ Esempi finora documentati:
 
 ---
 
-## 11. Riferimenti incrociati
+## 12. Riferimenti incrociati
 
 | File | Ruolo |
 |---|---|
@@ -613,13 +642,14 @@ Esempi finora documentati:
 | `firestore.rules` | Security rules |
 | `src/firebase.ts` | Firebase init (no messaging — lazy in useNotifications) |
 | `src/router/index.ts` | Rotte + auth guard scope-aware |
-| `src/composables/shared/` | Composables generici (useNotifications, ...) |
+| `src/composables/shared/` | Composables generici (useNotifications, useSWUpdate, ...) |
 | `src/components/shared/` | Components generici (SideraLogoSchlegel) |
+| `src/components/UpdateBanner.vue` | Banner update PWA tematizzato (sez. 10) |
 | `src/views/shared/` | Views generiche (ScopedLogin) |
 
 ---
 
-## 12. Quick start "Aggiungere NEBULA come PWA"
+## 13. Quick start "Aggiungere NEBULA come PWA"
 
 Riassunto ultra-compatto della ricetta sez. 3, copia-incollabile:
 
@@ -641,6 +671,7 @@ Riassunto ultra-compatto della ricetta sez. 3, copia-incollabile:
 
 ---
 
-## 13. Cronologia revisioni ATLAS
+## 14. Cronologia revisioni ATLAS
 
 - **2026-05-19** — Creazione documento. Estrazione pattern emersi durante POLARIS azioni 1-5 (deployate). Coverage: filosofia, naming, ricetta nuova PWA, FCM, Schlegel logo, code splitting, mobile, doppia identità, preview channel workflow.
+- **2026-05-19** — Aggiunta sez. 10 "PWA update banner — best practice". Pattern: `registerType: 'prompt'` + banner tematizzato globale per evitare reload distruttivi durante data entry. Sezioni 11-14 rinumerate.

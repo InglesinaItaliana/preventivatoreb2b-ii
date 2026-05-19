@@ -10,7 +10,7 @@ export default defineConfig({
     // Bundle analysis: `ANALYZE=true npm run build` → genera dist/stats.html con visualizzazione interattiva
     process.env.ANALYZE ? visualizer({ filename: 'dist/stats.html', open: false, gzipSize: true, brotliSize: true }) : null,
     VitePWA({
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
       // Manifest gestiti come file statici in /public/ (pops|pulsar|cepheid.webmanifest)
       // e selezionati a runtime dallo script inline in index.html in base al path.
       // Vedi POLARIS.md azione 2.
