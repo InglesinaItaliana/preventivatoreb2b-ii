@@ -42,7 +42,7 @@ const theme = computed(() => {
       >
         <div class="flex-1 min-w-0">
           <p class="text-sm font-medium text-gray-900">Nuova versione disponibile</p>
-          <p class="text-xs text-gray-500">Aggiorna per applicarla ora.</p>
+          <p class="text-xs text-gray-500">Aggiorna ora per applicarla.</p>
         </div>
         <button
           type="button"
