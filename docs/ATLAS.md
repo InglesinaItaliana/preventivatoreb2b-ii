@@ -120,11 +120,13 @@ src/
 
 ### Memoria persistente (per Claude/AI agent)
 
-I file `.md` in root sono indicizzati per riferimento rapido:
-- `POLARIS.md` — roadmap
-- `WORKFLOW.md` — processo
-- `docs/ATLAS.md` — manuale
-- `POPSnextstep.md` — roadmap POPS B2B (separata da POLARIS)
+Tutta la documentazione vive in `docs/` (eccetto `README.md` in root, convenzione GitHub):
+- `docs/POLARIS.md` — roadmap
+- `docs/WORKFLOW.md` — processo
+- `docs/ATLAS.md` — manuale (questo file)
+- `docs/POPSnextstep.md` — roadmap POPS B2B (separata da POLARIS)
+- `docs/blueprint.md` · `docs/INSTRUCTIONS.md` · `docs/GEMINI.md` — documenti storici/strumentali
+- `README.md` (root) — landing page del repo per GitHub
 
 ---
 
@@ -641,11 +643,11 @@ Esempi finora documentati:
 
 | File | Ruolo |
 |---|---|
-| `POLARIS.md` | Roadmap evolutiva + decision log |
-| `WORKFLOW.md` | Processo git/GitHub/Firebase/deploy |
+| `docs/POLARIS.md` | Roadmap evolutiva + decision log |
+| `docs/WORKFLOW.md` | Processo git/GitHub/Firebase/deploy |
 | `docs/ATLAS.md` | Manuale architettura (questo file) |
-| `POPSnextstep.md` | Roadmap parallela POPS B2B |
-| `README.md` | Panoramica progetto |
+| `docs/POPSnextstep.md` | Roadmap parallela POPS B2B |
+| `README.md` | Landing page repo (root, convenzione GitHub) |
 | `package.json` | Script npm |
 | `vite.config.ts` | Build config (manualChunks, PWA workbox, visualizer) |
 | `firebase.json` | Hosting + Functions config |
