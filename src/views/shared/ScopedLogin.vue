@@ -94,7 +94,7 @@ const sphereColors = computed(() => {
   }
 })
 
-const footerText = computed(() => `Sistema ${props.title} · Inglesina Italiana`)
+const footerText = computed(() => `Modulo ${props.title} · Sistema SIDERA · Inglesina Italiana`)
 </script>
 
 <template>

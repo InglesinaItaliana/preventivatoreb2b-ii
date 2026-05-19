@@ -40,6 +40,18 @@ const active = computed(() => MODULES[props.activeScope])
 const moduleEntries = computed(() => Object.entries(MODULES) as [ScopeKey, Vertex][])
 const isEdgeActive = (a: ScopeKey, b: ScopeKey) => a === props.activeScope || b === props.activeScope
 
+// Edges collegati al vertice attivo, normalizzati con il vertice attivo come "from" (opaco)
+// e l'altro vertice come "to" (trasparente). Replica il pattern del logo PULSAR/CEPHEID originale.
+const activeEdges = computed(() => {
+  return EDGES
+    .filter(([a, b]) => isEdgeActive(a, b))
+    .map(([a, b], i) => {
+      const from = a === props.activeScope ? MODULES[a] : MODULES[b]
+      const to   = a === props.activeScope ? MODULES[b] : MODULES[a]
+      return { id: `sls-edge-grad-${props.activeScope}-${i}`, from, to }
+    })
+})
+
 // Stagger animation: SVG fade-in, poi il vertice attivo "si accende"
 const svgMounted = ref(false)
 const activeOn = ref(false)
@@ -76,6 +88,16 @@ const heightPx = computed(() => Math.round(props.size * 480 / 680))
         <feGaussianBlur stdDeviation="18" result="b"/>
         <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
       </filter>
+      <!-- Gradient dinamico per ogni edge attivo: opaco al vertice attivo, trasparente all'altro -->
+      <linearGradient
+        v-for="e in activeEdges" :key="e.id"
+        :id="e.id"
+        gradientUnits="userSpaceOnUse"
+        :x1="e.from.x" :y1="e.from.y" :x2="e.to.x" :y2="e.to.y"
+      >
+        <stop offset="0%"   :stop-color="active.color" stop-opacity="0.95"/>
+        <stop offset="100%" :stop-color="active.color" stop-opacity="0.15"/>
+      </linearGradient>
     </defs>
 
     <!-- Edges base (tenui) -->
@@ -87,14 +109,15 @@ const heightPx = computed(() => Math.round(props.size * 480 / 680))
       stroke-width="1.2"
     />
 
-    <!-- Edge glow (solo edges collegati al vertice attivo) -->
+    <!-- Edge glow (solo edges collegati al vertice attivo, con gradient sfumato verso l'esterno) -->
     <g class="sl-edge-glow" :class="{ on: activeOn }">
       <line
-        v-for="([a, b], i) in EDGES.filter(([x, y]) => isEdgeActive(x, y))" :key="`eg-${i}`"
-        :x1="MODULES[a].x" :y1="MODULES[a].y"
-        :x2="MODULES[b].x" :y2="MODULES[b].y"
-        :stroke="active.color"
-        stroke-width="3"
+        v-for="e in activeEdges" :key="`eg-${e.id}`"
+        :x1="e.from.x" :y1="e.from.y"
+        :x2="e.to.x"   :y2="e.to.y"
+        :stroke="`url(#${e.id})`"
+        stroke-width="3.5"
+        stroke-linecap="round"
         :filter="'url(#sls-gf-sm)'"
       />
     </g>
@@ -131,6 +154,7 @@ const heightPx = computed(() => Math.round(props.size * 480 / 680))
 <style scoped>
 .sl-schlegel {
   display: block;
+  margin: 0 auto;
   opacity: 0;
   transition: opacity 0.9s ease;
 }
