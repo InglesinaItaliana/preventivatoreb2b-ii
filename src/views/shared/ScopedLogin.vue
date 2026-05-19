@@ -1,8 +1,21 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth'
 import { auth } from '../../firebase'
+import SideraLogoSchlegel, { type ScopeKey } from '../../components/shared/SideraLogoSchlegel.vue'
+
+// Login unificata per le PWA modulari (PULSAR, CEPHEID, future). Vedi POLARIS.md azione 3.
+// Logo: SideraLogoSchlegel con vertice attivo = scope. Palette via CSS variable --sl-primary.
+
+interface Props {
+  scope: ScopeKey
+  primaryColor: string        // es. '#3AAF98' (PULSAR), '#D4A020' (CEPHEID)
+  title: string               // es. 'PULSAR', 'CEPHEID'
+  tagline: string             // es. 'Chat · Comunicazione · Collaborazione'
+  redirectPath: string        // es. '/pulsar', '/cepheid'
+}
+const props = defineProps<Props>()
 
 const router = useRouter()
 const email = ref('')
@@ -15,7 +28,7 @@ const mounted = ref(false)
 
 onMounted(() => {
   if (auth.currentUser) {
-    router.replace('/pulsar')
+    router.replace(props.redirectPath)
     return
   }
   requestAnimationFrame(() => requestAnimationFrame(() => { mounted.value = true }))
@@ -31,7 +44,7 @@ async function handleLogin() {
   infoMsg.value = ''
   try {
     await signInWithEmailAndPassword(auth, email.value.trim(), password.value)
-    router.replace('/pulsar')
+    router.replace(props.redirectPath)
   } catch (e: any) {
     if (e.code === 'auth/invalid-credential' || e.code === 'auth/wrong-password' || e.code === 'auth/user-not-found') {
       errorMsg.value = 'Credenziali non valide.'
@@ -67,63 +80,43 @@ async function handleForgot() {
     loading.value = false
   }
 }
+
+// Sphere colors derivate dal primaryColor (replica logica setSpheres di SideraHubView)
+function hexToRgb(h: string) {
+  return { r: parseInt(h.slice(1, 3), 16), g: parseInt(h.slice(3, 5), 16), b: parseInt(h.slice(5, 7), 16) }
+}
+const sphereColors = computed(() => {
+  const { r, g, b } = hexToRgb(props.primaryColor)
+  return {
+    s1: `rgba(${r},${g},${b},0.42)`,
+    s2: `rgba(${Math.round(r * 0.5)},${Math.round(g * 0.55)},${Math.round(b * 0.6)},0.55)`,
+    s3: `rgba(${Math.round(r * 0.3)},${Math.round(g * 0.36)},${Math.round(b * 0.4)},0.5)`,
+  }
+})
+
+const footerText = computed(() => `Sistema ${props.title} · Inglesina Italiana`)
 </script>
 
 <template>
-  <div class="pl-shell">
-    <div class="pl-bg">
-      <div class="pl-sphere s1" :class="{ on: mounted }"></div>
-      <div class="pl-sphere s2" :class="{ on: mounted }"></div>
-      <div class="pl-sphere s3" :class="{ on: mounted }"></div>
+  <div class="sl-shell" :style="{ '--sl-primary': primaryColor }">
+    <div class="sl-bg">
+      <div class="sl-sphere s1" :class="{ on: mounted }" :style="{ background: sphereColors.s1 }"></div>
+      <div class="sl-sphere s2" :class="{ on: mounted }" :style="{ background: sphereColors.s2 }"></div>
+      <div class="sl-sphere s3" :class="{ on: mounted }" :style="{ background: sphereColors.s3 }"></div>
     </div>
 
-    <div class="pl-content" :class="{ on: mounted }">
-      <div class="pl-brand">
-        <svg class="pl-logo-icon" width="140" height="140" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <radialGradient id="pl-halo-grad" cx="50%" cy="50%" r="50%">
-              <stop offset="0%"   stop-color="#3AAF98" stop-opacity="0.55"/>
-              <stop offset="55%"  stop-color="#3AAF98" stop-opacity="0.15"/>
-              <stop offset="100%" stop-color="#3AAF98" stop-opacity="0"/>
-            </radialGradient>
-            <linearGradient id="pl-e1" x1="512" y1="512" x2="359" y2="78"  gradientUnits="userSpaceOnUse">
-              <stop offset="0%" stop-color="#3AAF98" stop-opacity="0.95"/>
-              <stop offset="100%" stop-color="#3AAF98" stop-opacity="0.15"/>
-            </linearGradient>
-            <linearGradient id="pl-e2" x1="512" y1="512" x2="795" y2="861" gradientUnits="userSpaceOnUse">
-              <stop offset="0%" stop-color="#3AAF98" stop-opacity="0.95"/>
-              <stop offset="100%" stop-color="#3AAF98" stop-opacity="0.15"/>
-            </linearGradient>
-            <linearGradient id="pl-e3" x1="512" y1="512" x2="205" y2="512" gradientUnits="userSpaceOnUse">
-              <stop offset="0%" stop-color="#3AAF98" stop-opacity="0.95"/>
-              <stop offset="100%" stop-color="#3AAF98" stop-opacity="0.15"/>
-            </linearGradient>
-            <linearGradient id="pl-e4" x1="512" y1="512" x2="359" y2="776" gradientUnits="userSpaceOnUse">
-              <stop offset="0%" stop-color="#3AAF98" stop-opacity="0.95"/>
-              <stop offset="100%" stop-color="#3AAF98" stop-opacity="0.15"/>
-            </linearGradient>
-          </defs>
-
-          <circle cx="512" cy="512" r="400" fill="url(#pl-halo-grad)"/>
-          <g stroke-width="7" stroke-linecap="round" fill="none">
-            <line x1="512" y1="512" x2="359" y2="78"  stroke="url(#pl-e1)"/>
-            <line x1="512" y1="512" x2="795" y2="861" stroke="url(#pl-e2)"/>
-            <line x1="512" y1="512" x2="205" y2="512" stroke="url(#pl-e3)"/>
-            <line x1="512" y1="512" x2="359" y2="776" stroke="url(#pl-e4)"/>
-          </g>
-          <circle cx="512" cy="512" r="135" fill="#3AAF98" opacity="0.22"/>
-          <circle cx="512" cy="512" r="85"  fill="#3AAF98" opacity="0.45"/>
-          <circle cx="512" cy="512" r="58"  fill="#3AAF98"/>
-        </svg>
-        <h1 class="pl-title">PULSAR</h1>
-        <p class="pl-tagline">Chat · Comunicazione · Collaborazione</p>
+    <div class="sl-content" :class="{ on: mounted }">
+      <div class="sl-brand">
+        <SideraLogoSchlegel :active-scope="scope" :size="280" />
+        <h1 class="sl-title">{{ title }}</h1>
+        <p class="sl-tagline">{{ tagline }}</p>
       </div>
 
-      <form class="pl-form" @submit.prevent="showForgot ? handleForgot() : handleLogin()">
-        <div class="pl-field">
-          <label for="pl-email">Email</label>
+      <form class="sl-form" @submit.prevent="showForgot ? handleForgot() : handleLogin()">
+        <div class="sl-field">
+          <label for="sl-email">Email</label>
           <input
-            id="pl-email"
+            id="sl-email"
             v-model="email"
             type="email"
             autocomplete="email"
@@ -135,10 +128,10 @@ async function handleForgot() {
           />
         </div>
 
-        <div v-if="!showForgot" class="pl-field">
-          <label for="pl-pwd">Password</label>
+        <div v-if="!showForgot" class="sl-field">
+          <label for="sl-pwd">Password</label>
           <input
-            id="pl-pwd"
+            id="sl-pwd"
             v-model="password"
             type="password"
             autocomplete="current-password"
@@ -147,10 +140,10 @@ async function handleForgot() {
           />
         </div>
 
-        <p v-if="errorMsg" class="pl-msg pl-msg-err">{{ errorMsg }}</p>
-        <p v-if="infoMsg" class="pl-msg pl-msg-ok">{{ infoMsg }}</p>
+        <p v-if="errorMsg" class="sl-msg sl-msg-err">{{ errorMsg }}</p>
+        <p v-if="infoMsg" class="sl-msg sl-msg-ok">{{ infoMsg }}</p>
 
-        <button type="submit" class="pl-btn" :disabled="loading">
+        <button type="submit" class="sl-btn" :disabled="loading">
           <span v-if="loading">…</span>
           <span v-else-if="showForgot">Invia link di reset</span>
           <span v-else>Entra</span>
@@ -158,7 +151,7 @@ async function handleForgot() {
 
         <button
           type="button"
-          class="pl-link"
+          class="sl-link"
           :disabled="loading"
           @click="showForgot = !showForgot; errorMsg = ''; infoMsg = ''"
         >
@@ -166,13 +159,13 @@ async function handleForgot() {
         </button>
       </form>
 
-      <p class="pl-footer">Sistema PULSAR · Inglesina Italiana</p>
+      <p class="sl-footer">{{ footerText }}</p>
     </div>
   </div>
 </template>
 
 <style scoped>
-.pl-shell {
+.sl-shell {
   position: fixed;
   inset: 0;
   background: #05090F;
@@ -185,7 +178,7 @@ async function handleForgot() {
   padding: env(safe-area-inset-top) 24px env(safe-area-inset-bottom);
 }
 
-.pl-bg {
+.sl-bg {
   position: absolute;
   inset: 0;
   overflow: hidden;
@@ -193,33 +186,30 @@ async function handleForgot() {
   z-index: 0;
 }
 
-.pl-sphere {
+.sl-sphere {
   position: absolute;
   border-radius: 50%;
   opacity: 0;
   will-change: transform;
   transition: opacity 2s ease;
 }
-.pl-sphere.on { opacity: 1; }
+.sl-sphere.on { opacity: 1; }
 
 .s1 {
   width: 540px; height: 540px;
   top: -200px; left: -160px;
-  background: rgba(58, 175, 152, 0.42);
   filter: blur(110px);
   animation: d1 30s ease-in-out infinite;
 }
 .s2 {
   width: 460px; height: 460px;
   bottom: -180px; right: -140px;
-  background: rgba(46, 114, 104, 0.55);
   filter: blur(120px);
   animation: d2 36s ease-in-out infinite;
 }
 .s3 {
   width: 380px; height: 380px;
   top: 30%; right: -100px;
-  background: rgba(30, 70, 64, 0.5);
   filter: blur(95px);
   animation: d3 26s ease-in-out infinite;
 }
@@ -228,7 +218,7 @@ async function handleForgot() {
 @keyframes d2 { 0%,100%{transform:translate(0,0) scale(1)} 50%{transform:translate(-80px,-50px) scale(1.04)} }
 @keyframes d3 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(70px,-60px) scale(1.03)} }
 
-.pl-content {
+.sl-content {
   position: relative;
   z-index: 1;
   width: 100%;
@@ -237,44 +227,36 @@ async function handleForgot() {
   transform: translateY(14px);
   transition: opacity 0.9s ease, transform 0.9s ease;
 }
-.pl-content.on { opacity: 1; transform: translateY(0); }
+.sl-content.on { opacity: 1; transform: translateY(0); }
 
-.pl-brand {
+.sl-brand {
   text-align: center;
   margin-bottom: 2.4rem;
 }
 
-.pl-logo-icon {
-  display: block;
-  margin: 0 auto 1.2rem;
-}
-
-.pl-title {
+.sl-title {
   font-family: 'Cormorant Garamond', serif;
   font-weight: 500;
   font-size: 2.4rem;
   letter-spacing: 0.22em;
   color: #fff;
-  margin-bottom: 0.5rem;
+  margin: 0.4rem 0 0.5rem;
 }
 
-.pl-tagline {
+.sl-tagline {
   font-size: 0.7rem;
   letter-spacing: 0.2em;
   color: rgba(255,255,255,0.35);
   text-transform: uppercase;
   font-weight: 300;
+  margin: 0;
 }
 
-.pl-form {
-  display: flex;
-  flex-direction: column;
-  gap: 1.2rem;
-}
+.sl-form { display: flex; flex-direction: column; gap: 1.2rem; }
 
-.pl-field { display: flex; flex-direction: column; gap: 0.45rem; }
+.sl-field { display: flex; flex-direction: column; gap: 0.45rem; }
 
-.pl-field label {
+.sl-field label {
   font-size: 0.62rem;
   letter-spacing: 0.22em;
   text-transform: uppercase;
@@ -282,7 +264,7 @@ async function handleForgot() {
   font-weight: 300;
 }
 
-.pl-field input {
+.sl-field input {
   width: 100%;
   background: rgba(255,255,255,0.03);
   border: 1px solid rgba(255,255,255,0.08);
@@ -297,18 +279,18 @@ async function handleForgot() {
   -webkit-appearance: none;
   appearance: none;
 }
-.pl-field input::placeholder { color: rgba(255,255,255,0.18); }
-.pl-field input:focus {
-  border-color: #3AAF98;
-  background: rgba(58, 175, 152, 0.06);
+.sl-field input::placeholder { color: rgba(255,255,255,0.18); }
+.sl-field input:focus {
+  border-color: var(--sl-primary);
+  background: rgba(255,255,255,0.04);
 }
-.pl-field input:disabled { opacity: 0.55; }
+.sl-field input:disabled { opacity: 0.55; }
 
-.pl-btn {
+.sl-btn {
   margin-top: 0.4rem;
   padding: 1rem;
-  background: #3AAF98;
-  border: 1px solid #3AAF98;
+  background: var(--sl-primary);
+  border: 1px solid var(--sl-primary);
   color: #05090F;
   font-family: 'Outfit', sans-serif;
   font-weight: 600;
@@ -317,12 +299,12 @@ async function handleForgot() {
   text-transform: uppercase;
   border-radius: 8px;
   cursor: pointer;
-  transition: background 0.2s, opacity 0.2s;
+  transition: opacity 0.2s, filter 0.2s;
 }
-.pl-btn:disabled { opacity: 0.5; cursor: default; }
-.pl-btn:not(:disabled):active { background: #2E8E7B; }
+.sl-btn:disabled { opacity: 0.5; cursor: default; }
+.sl-btn:not(:disabled):active { filter: brightness(0.85); }
 
-.pl-link {
+.sl-link {
   background: none;
   border: none;
   color: rgba(255,255,255,0.42);
@@ -334,27 +316,27 @@ async function handleForgot() {
   cursor: pointer;
   transition: color 0.2s;
 }
-.pl-link:hover, .pl-link:active { color: #3AAF98; }
+.sl-link:hover, .sl-link:active { color: var(--sl-primary); }
 
-.pl-msg {
+.sl-msg {
   font-size: 0.78rem;
   text-align: center;
   margin: 0;
   padding: 0.5rem 0.6rem;
   border-radius: 6px;
 }
-.pl-msg-err {
+.sl-msg-err {
   color: #ff8a72;
   background: rgba(255, 138, 114, 0.08);
   border: 1px solid rgba(255, 138, 114, 0.18);
 }
-.pl-msg-ok {
-  color: #3AAF98;
-  background: rgba(58, 175, 152, 0.08);
-  border: 1px solid rgba(58, 175, 152, 0.22);
+.sl-msg-ok {
+  color: var(--sl-primary);
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
 }
 
-.pl-footer {
+.sl-footer {
   margin-top: 2.4rem;
   text-align: center;
   font-family: 'Cormorant Garamond', serif;
@@ -366,7 +348,7 @@ async function handleForgot() {
 }
 
 @media (min-width: 769px) {
-  .pl-content { max-width: 420px; }
-  .pl-title { font-size: 2.8rem; }
+  .sl-content { max-width: 420px; }
+  .sl-title { font-size: 2.8rem; }
 }
 </style>
