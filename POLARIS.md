@@ -4,7 +4,7 @@
 > Documento "vivo": va aggiornato dopo ogni step completato o decisione esplicita.
 
 **Ultima revisione:** 2026-05-19
-**Stato globale:** azioni 1, 2 (con 5 piggyback) deployate in produzione. Azione 3 implementata in codice, in attesa di deploy + test. POPS = 3ª PWA installabile.
+**Stato globale:** azioni 1, 2, 3, 5 deployate in produzione. Azione 4 implementata in codice, in attesa di deploy + test. POPS = 3ª PWA installabile, login con Schlegel + vertice attivo live.
 
 ---
 
@@ -54,9 +54,9 @@ POLARIS è la roadmap che governa l'evoluzione architetturale di `preventivatore
 |---|---|---|---|---|---|
 | 1 | 🔴 Alta | **FCM token-per-scope** | Prima del prossimo modulo notificato (es. notifiche CEPHEID) | Nessuno | ☑ |
 | 2 | 🟠 Media-alta | **Manifest statici per tutti gli scope** (rimuovere generazione VitePWA dinamica) | Quando si può testare iOS standalone a freddo | Basso | ☑ |
-| 3 | 🟠 Media-alta | **ScopedLogin componente unificato** | Prima di aggiungere PWA #3 (NEBULA o NOVA) | Nessuno | 🔄 |
-| 4 | 🟡 Media | **Code splitting raffinato** (firebase modular, visualizer) | Quando si percepiscono rallentamenti mobile | Basso | ☐ |
-| 5 | 🟢 Bassa | **`name` manifest più parlanti** | Quando si lavora su uno scope per altri motivi | Nessuno | 🔄 (piggyback su azione 2) |
+| 3 | 🟠 Media-alta | **ScopedLogin componente unificato** | Prima di aggiungere PWA #3 (NEBULA o NOVA) | Nessuno | ☑ |
+| 4 | 🟡 Media | **Code splitting raffinato** (firebase modular, visualizer) | Quando si percepiscono rallentamenti mobile | Basso | 🔄 |
+| 5 | 🟢 Bassa | **`name` manifest più parlanti** | Quando si lavora su uno scope per altri motivi | Nessuno | ☑ (piggyback su azione 2) |
 | 6 | 🟢 Bassa | **`meta.scope` unificato nel router guard** | Da 4+ PWA in poi | Medio (test ruoli POPS obbligatori) | ☐ |
 | 7 | ⚪ Differita | **Separazione deploy POPS vs interno** | Tra 6–12 mesi, se POPS cresce o legal richiede dominio separato | Altissimo | ⏸ |
 
@@ -206,6 +206,17 @@ POLARIS è la roadmap che governa l'evoluzione architetturale di `preventivatore
 - ☐ Production dashboard: caricamento OK
 - ☐ Lighthouse mobile su `/`: First Contentful Paint non peggiorato
 
+**Implementazione 2026-05-19 (branch `polaris/4-code-splitting`):**
+- Aggiunto `rollup-plugin-visualizer` come devDep. Run con `ANALYZE=true npm run build` → `dist/stats.html` interattivo.
+- `vite.config.ts` → `manualChunks` granulare: `firebase-core` (app+auth), `firebase-firestore`, `firebase-functions`, `firebase-messaging`. Vendor invariato.
+- **Misure (raw size):**
+  - Pre-split: `firebase` monolite = 464 KB
+  - Post-split: `firebase-core` 184 KB + `firebase-firestore` 260 KB + `firebase-functions` 12 KB + `firebase-messaging` 12 KB = 468 KB totali
+  - **Risparmio POPS** (no messaging): ~8 KB raw (~3-5 KB gzip). Modesto come numero assoluto.
+- **Beneficio strutturale**: cache HTTP granulare (cambio a firestore non invalida auth), HTTP/2 multiplexing migliore, enabler per lazy-load futuro di firestore/functions/messaging.
+- Step 3 (lazy SW registration) NON fatto in questa azione — rimandato per ridurre rischio. Lo SW VitePWA continua a registrarsi per tutti gli scope.
+- **File POPS toccati**: solo `vite.config.ts` (configurazione build). Zero codice applicativo POPS modificato.
+
 ---
 
 ### Azione 5 — `name` manifest più parlanti 🟢
@@ -342,3 +353,5 @@ Quando si decide di lavorare su un'azione POLARIS:
 - **2026-05-18** — Azione 2 manifest statici implementata in codice (branch `polaris/2-manifest-statici`). Decisione esplicita: POPS promosso a 3ª PWA installabile. Azione 5 (name parlanti) completata in piggyback. Step 2 (HTML separati per scope) rimandato. Deploy + test pendenti.
 - **2026-05-18** — Azione 2 fix race iOS PWA: manifest iniettato sempre via script (no hardcoded HTML). Mergiata (PR #4) e deployata in produzione.
 - **2026-05-19** — Azione 3 ScopedLogin implementata in codice (branch `polaris/3-scoped-login`). Decisione esplicita: doppia identità (icona PWA single-vertex + login Schlegel completo con vertice attivo). Nuovi componenti `SideraLogoSchlegel.vue` e `ScopedLogin.vue`. Eliminati 2 file legacy (~744 righe duplicate). Deploy + test pendenti.
+- **2026-05-19** — Azione 3 affinata con review utente: edges con linearGradient sfumato (replica logo originale), centratura SVG (margin auto), footer richiama SIDERA, wordmark con puntini come stelle lontane (glow + opacity 0.3 + size 0.75). Mergiata (PR #5) e deployata in produzione.
+- **2026-05-19** — Azione 4 code splitting implementata in codice (branch `polaris/4-code-splitting`). Firebase modulare split in 4 chunk (core/firestore/functions/messaging). Visualizer aggiunto. Risparmio POPS modesto (~8 KB raw) ma struttura preparata per ottimizzazioni future. Deploy + test pendenti.

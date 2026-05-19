@@ -30,14 +30,6 @@ const functions = getFunctions(app, 'europe-west1');
 
 export { db, auth, storage, functions, app };
 
-// ─── PULSAR — Firebase Cloud Messaging (push notifications) ─────────────────
-// Append-only: non altera nulla del codice POPS sopra.
-import { getMessaging, isSupported as isMessagingSupported } from 'firebase/messaging';
-
-export const messagingPromise = (async () => {
-    try {
-        return (await isMessagingSupported()) ? getMessaging(app) : null;
-    } catch {
-        return null;
-    }
-})();
+// NB: l'inizializzazione di `firebase/messaging` è stata spostata in
+// `composables/shared/useNotifications.ts` con dynamic import per evitare che
+// il chunk firebase-messaging venga preloaded anche su POPS (POLARIS azione 4).

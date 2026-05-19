@@ -1,6 +1,26 @@
-import { getToken, onMessage } from 'firebase/messaging'
 import { doc, setDoc, getDoc, serverTimestamp, deleteField, Timestamp } from 'firebase/firestore'
-import { db, auth, messagingPromise } from '../../firebase'
+import type { Messaging } from 'firebase/messaging'
+import { db, auth, app } from '../../firebase'
+
+// Lazy-load del modulo firebase/messaging per non includerlo nel chunk preloaded di POPS.
+// Caricato solo quando setupForegroundMessages() o requestPermission() vengono invocati
+// (cioè dai layout PWA: PulsarLayout, CepheidLayout, SideraLayout). Vedi POLARIS azione 4.
+type MessagingModule = typeof import('firebase/messaging')
+let messagingModulePromise: Promise<MessagingModule> | null = null
+function loadMessagingModule(): Promise<MessagingModule> {
+  if (!messagingModulePromise) {
+    messagingModulePromise = import('firebase/messaging')
+  }
+  return messagingModulePromise
+}
+async function getMessagingInstance(): Promise<Messaging | null> {
+  try {
+    const mod = await loadMessagingModule()
+    return (await mod.isSupported()) ? mod.getMessaging(app) : null
+  } catch {
+    return null
+  }
+}
 
 // Token non aggiornati da più di 7 giorni vengono considerati stale e rimossi:
 // proteggono dalla duplicazione delle notifiche dovuta a installazioni precedenti
@@ -44,12 +64,13 @@ export function useNotifications(scope: NotificationScope) {
 
     if (VAPID_KEY) {
       try {
-        const messaging = await messagingPromise
+        const messaging = await getMessagingInstance()
         if (!messaging) return true
 
         const swReg = await navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' })
 
-        const token = await getToken(messaging, {
+        const mod = await loadMessagingModule()
+        const token = await mod.getToken(messaging, {
           vapidKey: VAPID_KEY,
           serviceWorkerRegistration: swReg,
         })
@@ -101,9 +122,10 @@ export function useNotifications(scope: NotificationScope) {
   async function setupForegroundMessages() {
     if (foregroundUnsub) return
     try {
-      const messaging = await messagingPromise
+      const messaging = await getMessagingInstance()
       if (!messaging) return
-      foregroundUnsub = onMessage(messaging, (payload) => {
+      const mod = await loadMessagingModule()
+      foregroundUnsub = mod.onMessage(messaging, (payload) => {
         const title = payload.notification?.title || payload.data?.title || 'PULSAR'
         const body  = payload.notification?.body  || payload.data?.body  || ''
         const url   = payload.data?.url
