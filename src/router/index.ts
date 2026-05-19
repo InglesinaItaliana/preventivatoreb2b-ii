@@ -86,7 +86,14 @@ const router = createRouter({
     {
       path: '/pulsar/login',
       name: 'pulsar-login',
-      component: () => import('../views/pulsar/PulsarLoginView.vue'),
+      component: () => import('../views/shared/ScopedLogin.vue'),
+      props: {
+        scope: 'pulsar',
+        primaryColor: '#3AAF98',
+        title: 'PULSAR',
+        tagline: 'Chat · Comunicazione · Collaborazione',
+        redirectPath: '/pulsar',
+      },
       meta: { pulsarScope: true }
     },
     {
@@ -107,7 +114,14 @@ const router = createRouter({
     {
       path: '/cepheid/login',
       name: 'cepheid-login',
-      component: () => import('../views/cepheid/CepheidLoginView.vue'),
+      component: () => import('../views/shared/ScopedLogin.vue'),
+      props: {
+        scope: 'cepheid',
+        primaryColor: '#D4A020',
+        title: 'CEPHEID',
+        tagline: 'Project Management · Workflow · Task',
+        redirectPath: '/cepheid',
+      },
       meta: { cepheidScope: true }
     },
     {

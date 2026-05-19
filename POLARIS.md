@@ -3,8 +3,8 @@
 > Roadmap strategica per l'evoluzione strutturale della suite-of-webapps.
 > Documento "vivo": va aggiornato dopo ogni step completato o decisione esplicita.
 
-**Ultima revisione:** 2026-05-18
-**Stato globale:** azione 1 deployata in produzione. Azione 2 (con 5 in piggyback) implementata in codice, in attesa di deploy + test. POPS promosso a 3ª PWA installabile.
+**Ultima revisione:** 2026-05-19
+**Stato globale:** azioni 1, 2 (con 5 piggyback) deployate in produzione. Azione 3 implementata in codice, in attesa di deploy + test. POPS = 3ª PWA installabile.
 
 ---
 
@@ -53,8 +53,8 @@ POLARIS è la roadmap che governa l'evoluzione architetturale di `preventivatore
 | # | Priorità | Azione | Trigger ideale | Rischio POPS | Stato |
 |---|---|---|---|---|---|
 | 1 | 🔴 Alta | **FCM token-per-scope** | Prima del prossimo modulo notificato (es. notifiche CEPHEID) | Nessuno | ☑ |
-| 2 | 🟠 Media-alta | **Manifest statici per tutti gli scope** (rimuovere generazione VitePWA dinamica) | Quando si può testare iOS standalone a freddo | Basso | 🔄 |
-| 3 | 🟠 Media-alta | **ScopedLogin componente unificato** | Prima di aggiungere PWA #3 (NEBULA o NOVA) | Nessuno | ☐ |
+| 2 | 🟠 Media-alta | **Manifest statici per tutti gli scope** (rimuovere generazione VitePWA dinamica) | Quando si può testare iOS standalone a freddo | Basso | ☑ |
+| 3 | 🟠 Media-alta | **ScopedLogin componente unificato** | Prima di aggiungere PWA #3 (NEBULA o NOVA) | Nessuno | 🔄 |
 | 4 | 🟡 Media | **Code splitting raffinato** (firebase modular, visualizer) | Quando si percepiscono rallentamenti mobile | Basso | ☐ |
 | 5 | 🟢 Bassa | **`name` manifest più parlanti** | Quando si lavora su uno scope per altri motivi | Nessuno | 🔄 (piggyback su azione 2) |
 | 6 | 🟢 Bassa | **`meta.scope` unificato nel router guard** | Da 4+ PWA in poi | Medio (test ruoli POPS obbligatori) | ☐ |
@@ -164,10 +164,20 @@ POLARIS è la roadmap che governa l'evoluzione architetturale di `preventivatore
 **Rischio POPS.** Zero. `LoginView.vue` POPS è completamente separato e non va toccato.
 
 **Test obbligatori prima del merge.**
-- ☐ `/pulsar/login` → render identico al precedente, login funzionante, redirect a `/pulsar`
-- ☐ `/cepheid/login` → render identico al precedente, login funzionante, redirect a `/cepheid`
+- ☐ `/pulsar/login` → render con Schlegel + vertice PULSAR attivo (verde), login funzionante, redirect a `/pulsar`
+- ☐ `/cepheid/login` → render con Schlegel + vertice CEPHEID attivo (oro), login funzionante, redirect a `/cepheid`
 - ☐ Comportamento `display-mode: standalone` preservato (vedi memory `project-pulsar`)
 - ☐ Login con utente non-team → redirect corretto
+- ☐ Sphere background dinamiche derivate dal `primaryColor` per ogni scope
+- ☐ Animazione: SVG fade-in, poi vertice attivo "si accende" dopo ~500ms
+
+**Implementazione 2026-05-19 (branch `polaris/3-scoped-login`):**
+- Nuovo componente `src/components/shared/SideraLogoSchlegel.vue`: diagramma Schlegel dell'ottaedro (6 vertici, 12 edges) parametrizzato via prop `activeScope`. Stesse coordinate di `SideraHubView.vue` per coerenza visiva tra Hub e Login.
+- Nuovo componente `src/views/shared/ScopedLogin.vue`: guscio login generico con props (`scope`, `primaryColor`, `title`, `tagline`, `redirectPath`). Classi `sl-*`. Palette via CSS variable `--sl-primary`. Sphere colors derivate algoritmicamente dal `primaryColor`.
+- `src/router/index.ts`: 2 rotte login passano props differenti allo stesso componente. `meta.pulsarScope`/`cepheidScope` invariati.
+- Eliminati: `src/views/pulsar/PulsarLoginView.vue`, `src/views/cepheid/CepheidLoginView.vue` (~744 righe duplicate rimosse).
+- **Decisione di design "doppia identità"** (vedi sezione 4): icona PWA installata mantiene single-vertex + raggi (riconoscibilità minimal stile Apple); login screen usa Schlegel completo (storytelling sistema).
+- **Azione 5 piggyback con azione 2** già fatta in PR #4 (name parlanti nei manifest).
 
 ---
 
@@ -265,6 +275,23 @@ POLARIS è la roadmap che governa l'evoluzione architetturale di `preventivatore
 
 > Quando si sceglie di NON fare un'azione POLARIS, o di farla in un modo diverso da quello pianificato, annotare qui con data e motivo. Aiuta a non rivisitare le stesse domande tra mesi.
 
+### 2026-05-19 — Azione 3: doppia identità visiva (icona PWA vs login Schlegel)
+
+**Contesto.** Il piano originale di azione 3 prevedeva un componente `ScopedLogin` con SVG inline o slot per il logo, replicando lo stile attuale "singolo vertice + 4 raggi". L'utente ha proposto un'alternativa: riutilizzare il **diagramma Schlegel completo** del `SideraHubView` come logo dinamico del login, attivando solo il vertice corrispondente allo scope.
+
+**Decisione.** Adottiamo entrambe le identità in contesti diversi (pattern design system Apple/moderno):
+- **Icona PWA installata** (manifest icons 180/192/512): mantiene **singolo vertice + 4 raggi** — riconoscibilità minimal a tutte le dimensioni, identità del singolo modulo.
+- **Login screen** (ScopedLogin): usa **Schlegel completo** con vertice attivo evidenziato — storytelling esperienziale ("stai entrando nel modulo X del sistema SIDERA").
+
+**Razionale (marketing + design).** Apple, Linear, Vercel, Notion seguono questa convenzione: icone minimali sul telefono, esperienze ricche dentro l'app. L'icona PWA su home screen funziona perché riconoscibile a glance; il login funziona perché contestualizza l'esperienza nel sistema. Inoltre il Schlegel è già aggiornato/manutenuto in `SideraHubView`, riusarlo riduce manutenzione e mantiene coerenza visiva tra Hub e Login.
+
+**Implicazioni.**
+- Nuovo componente shared `SideraLogoSchlegel.vue` riutilizzabile in altri contesti (future splash screens, marketing pages, ...).
+- Future PWA (NEBULA, NOVA, MAGNETAR, QUASAR) non richiedono nuovi disegni SVG per il login: basta passare lo scope come prop. Le loro icone PWA (singolo vertice + raggi) restano da generare ad-hoc come oggi per pulsar/cepheid/pops.
+- `SideraHubView.vue` non è stato refactored (resta con il suo codice complesso e funzionante). Refactoring opzionale per riusare `SideraLogoSchlegel` rimandato a futuro.
+
+---
+
 ### 2026-05-18 — Azione 2: POPS promosso a 3ª PWA installabile
 
 **Contesto.** Il piano originale di azione 2 prevedeva manifest statici solo per i moduli SIDERA (PULSAR, CEPHEID), considerando POPS come "non installabile". Durante la conversazione l'utente ha chiarito che POPS **è già usato come webapp mobile dai dipendenti** (interfaccia spedizioni con firma da smartphone), e ha richiesto di mantenerlo installabile come PWA.
@@ -313,3 +340,5 @@ Quando si decide di lavorare su un'azione POLARIS:
 - **2026-05-18** — Azione 1 FCM token-per-scope implementata in codice (branch `polaris/1-fcm-token-scope`). Decisione esplicita: introdotto scope `'sidera'` come wildcard desktop. Deploy + test pendenti.
 - **2026-05-18** — Azione 1 mergiata (PR #1) e deployata in produzione (Functions + Hosting). Cloud Function `onNewPulsarMessage` con filtro scope live.
 - **2026-05-18** — Azione 2 manifest statici implementata in codice (branch `polaris/2-manifest-statici`). Decisione esplicita: POPS promosso a 3ª PWA installabile. Azione 5 (name parlanti) completata in piggyback. Step 2 (HTML separati per scope) rimandato. Deploy + test pendenti.
+- **2026-05-18** — Azione 2 fix race iOS PWA: manifest iniettato sempre via script (no hardcoded HTML). Mergiata (PR #4) e deployata in produzione.
+- **2026-05-19** — Azione 3 ScopedLogin implementata in codice (branch `polaris/3-scoped-login`). Decisione esplicita: doppia identità (icona PWA single-vertex + login Schlegel completo con vertice attivo). Nuovi componenti `SideraLogoSchlegel.vue` e `ScopedLogin.vue`. Eliminati 2 file legacy (~744 righe duplicate). Deploy + test pendenti.
