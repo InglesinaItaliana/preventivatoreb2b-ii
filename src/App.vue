@@ -2,6 +2,7 @@
 import { RouterView, useRoute } from 'vue-router'
 import { onMounted, computed } from 'vue';
 import GlobalBugReporter from './components/GlobalBugReporter.vue'; // <--- Importa
+import UpdateBanner from './components/UpdateBanner.vue';
 
 const route = useRoute();
 const showFab = computed(() => {
@@ -46,6 +47,7 @@ onMounted(() => {
     </div>
 
     <GlobalBugReporter v-if="showFab" />
+    <UpdateBanner />
   </div>
 </template>
 
