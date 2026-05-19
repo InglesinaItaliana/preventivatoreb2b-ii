@@ -48,17 +48,25 @@ Tutti questi prodotti condividono Auth Firebase, Firestore, Cloud Functions, Ser
 
 ### Moduli galattici
 
-I moduli interni hanno **nomi di oggetti astronomici**:
+I moduli interni hanno **nomi di oggetti astronomici**. Ogni colore è estratto dalla **Nebula del Granchio (M1, Hubble Space Telescope)** — la palette è quindi armonica per costruzione (stessa fotografia, stesso illuminante).
 
-| Modulo | Tipo astronomico | Funzione | Colore |
-|---|---|---|---|
-| QUASAR | Quasar (oggetto galattico luminosissimo) | Analytics · KPI · Business Intelligence | `#98C0D0` |
-| NEBULA | Nebula (gas interstellare) | HR · Anagrafiche · Documentale | `#C46030` |
-| CEPHEID | Cefeide (stella variabile) | Project Management · Workflow · Task | `#D4A020` |
-| PULSAR | Pulsar (stella di neutroni) | Chat · Comunicazione · Collaborazione | `#3AAF98` |
-| NOVA | Nova (esplosione stellare) | Logistica · Supply Chain · Spedizioni | `#8FAB35` |
-| MAGNETAR | Magnetar (pulsar magnetica) | CRM · Lead · Pipeline Commerciale | `#B06842` |
-| SIDERA | "Stelle" (latino, generico) | Shell desktop unificata | `#D4C498` (oro tenue) |
+Ogni modulo ha **due valori** del proprio accent (vedi sez. 14 "Design Tokens" e [dual-surface contrast](#14-design-tokens-base-material-design-3)):
+- **on-dark** — versione luminosa, usata su superfici scure (sidebar SIDERA, Hub Schlegel, splash)
+- **on-light** — versione profonda, usata su superfici chiare (PWA, modali bianche, body)
+
+Eccezioni: **QUASAR** e **SIDERA** hanno un solo valore perché vivono già in zona di lightness intermedia che funziona su entrambi i fondi.
+
+| Modulo | Tipo astronomico | Funzione | Accent on-dark | Accent on-light |
+|---|---|---|---|---|
+| QUASAR | Quasar (oggetto galattico luminosissimo) | Analytics · KPI · Business Intelligence | `#98C0D0` | `#98C0D0` |
+| NEBULA | Nebula (gas interstellare) | HR · Anagrafiche · Documentale | `#C46030` | `#B85425` |
+| CEPHEID | Cefeide (stella variabile) | Project Management · Workflow · Task | `#D4A020` | `#C4941C` |
+| PULSAR | Pulsar (stella di neutroni) | Chat · Comunicazione · Collaborazione | `#3AAF98` | `#3A8C80` |
+| NOVA | Nova (esplosione stellare) | Logistica · Supply Chain · Spedizioni | `#8FAB35` | `#5C6822` |
+| MAGNETAR | Magnetar (pulsar magnetica) | CRM · Lead · Pipeline Commerciale | `#B06842` | `#7A4830` |
+| SIDERA | "Stelle" (latino, generico) | Shell desktop unificata (oro tenue, neutro) | `#D4C498` | `#D4C498` |
+
+I valori on-light sono quelli "veri" Crab Nebula (più desaturati / più scuri). I valori on-dark sono variazioni più luminose progettate per non sparire su `#05090F` (sidebar SIDERA) e per restare riconoscibili nello Schlegel su sfondo scuro.
 
 Per **estensioni future**: oggetti astronomici stabili e riconoscibili. Evitare nomi confusi (es. "BLACK HOLE" → troppo generico) o offensivi.
 
@@ -683,8 +691,114 @@ Riassunto ultra-compatto della ricetta sez. 3, copia-incollabile:
 
 ---
 
-## 14. Cronologia revisioni ATLAS
+## 14. Design Tokens — base Material Design 3
+
+### Principio
+
+Il linguaggio grafico della suite è ispirato a **Material Design 3** (https://m3.material.io/) per *struttura* (naming dei token, type scale, shape, elevation, state layers, motion) e usa la **palette Crab Nebula** (vedi sez. 2) per *valori*. Adottare M3 come grammatica permette di:
+- avere un vocabolario condiviso e ben documentato per ogni decisione di design
+- usare strumenti ufficiali (Material Theme Builder) per derivare scheme da key color
+- mantenere la nostra identità (Crab + Schlegel) come strato di brand sopra una base solida
+
+### Pattern dual-surface (decisione esplicita)
+
+I colori-modulo non sono un singolo valore: sono **due valori** che rappresentano lo *stesso colore* su due superfici diverse.
+
+| Token | Quando si usa | Esempi nella suite |
+|---|---|---|
+| `--s-{module}-on-dark` | Su superfici scure | Sidebar SIDERA (`#05090F`), Hub Schlegel, splash, eventuali aree dark mode |
+| `--s-{module}-on-light` | Su superfici chiare | PWA scope layouts, modali bianche, body text accentato |
+
+Per QUASAR (`#98C0D0`) e SIDERA (`#D4C498`) i due valori coincidono: hanno lightness intermedia che funziona su entrambi i fondi.
+
+**Razionale**: su `#05090F` colori profondi tipo NOVA `#5C6822` o MAGNETAR `#7A4830` si appiattiscono in macchie indistinguibili. Servono varianti più luminose. Viceversa, su superfici PWA bianche, i valori "on-dark" appaiono troppo brillanti per essere accent sobri di un sistema enterprise.
+
+### Mapping M3
+
+Quando si entra nello scope di un modulo, il token M3 `--md-sys-color-primary` viene assegnato al brand color del modulo nella variante appropriata per la surface corrente:
+
+```
+/* dentro PulsarLayout (PWA, surface chiara) */
+.s-scope-pulsar {
+  --md-sys-color-primary: var(--s-pulsar-on-light);
+  --md-sys-color-on-primary: #FFFFFF;
+}
+
+/* dentro SideraLayout (shell con sidebar scura) */
+.s-scope-sidera-shell .s-surface-dark {
+  --md-sys-color-primary: var(--s-pulsar-on-dark);  /* esempio: se Schlegel evidenzia PULSAR */
+}
+```
+
+I token M3 strutturali (`--md-sys-color-surface`, `--md-sys-color-on-surface`, `--md-sys-color-outline`, ecc.) saranno definiti in fase successiva del refactor — questa sezione documenta solo i **brand tokens**, primo strato della migrazione.
+
+### Inventario brand tokens (in `src/style.css`)
+
+```
+/* Modulo: PULSAR */
+--s-pulsar-on-dark:  #3AAF98;
+--s-pulsar-on-light: #3A8C80;
+
+/* Modulo: CEPHEID */
+--s-cepheid-on-dark:  #D4A020;
+--s-cepheid-on-light: #C4941C;
+
+/* Modulo: NEBULA */
+--s-nebula-on-dark:  #C46030;
+--s-nebula-on-light: #B85425;
+
+/* Modulo: NOVA */
+--s-nova-on-dark:  #8FAB35;
+--s-nova-on-light: #5C6822;
+
+/* Modulo: MAGNETAR */
+--s-magnetar-on-dark:  #B06842;
+--s-magnetar-on-light: #7A4830;
+
+/* Modulo: QUASAR — singolo valore (lightness intermedia) */
+--s-quasar: #98C0D0;
+
+/* Shell: SIDERA — singolo valore (neutro caldo) */
+--s-sidera: #D4C498;
+```
+
+### Regole d'uso
+
+1. **Mai più hex inline per i colori-modulo** nei `.vue` — sempre `var(--s-{module}-on-{surface})`.
+2. **Scegliere on-dark vs on-light in base alla surface**, non in base allo scope. Esempio: lo Schlegel sulla SideraHubView è sfondo scuro → vertex PULSAR usa `var(--s-pulsar-on-dark)` anche se il modulo è PULSAR.
+3. **QUASAR/SIDERA** non hanno varianti — se in futuro emergessero problemi di contrasto, si aggiungeranno e si aggiornerà questa sezione (mai aggiungere varianti in silenzio).
+4. **L'accent è accent, non sfondo**: il brand color sta in CTA primaria, link attivi, focus ring, icone hover, vertice attivo. Lo sfondo della PWA resta neutro (vedi token `--md-sys-color-surface` in arrivo).
+
+### Roadmap design tokens (next steps, non implementati qui)
+
+**Regola fondamentale**: ogni layer di token deve seguire **M3 letterale** — naming, valori di default, scale, ratio. Le **varianti** dei colori-modulo (toni, container, on-container) NON vanno inventate a istinto: si generano con il [Material Theme Builder](https://material-foundation.github.io/material-theme-builder/) usando ciascun colore-modulo come *key color*. Il Builder produce una tonal palette di 13 toni (0/10/20/30/40/50/60/70/80/90/95/99/100) che è la fonte di verità per tutti i valori derivati.
+
+- **Tonal palettes per modulo**: per ogni key color (PULSAR `#3A8C80`, CEPHEID `#C4941C`, ecc.) generare via Material Theme Builder i 13 toni → esporre come `--md-ref-palette-{module}-{0..100}`. Da qui derivano tutti i ruoli.
+- **Mapping ruoli M3 per scope**: per ogni scope, definire `--md-sys-color-primary`, `--on-primary`, `--primary-container`, `--on-primary-container` (+ `secondary` / `tertiary` se servono) assegnando i toni M3 corretti — light scheme `40/100/90/10`, dark scheme `80/20/30/90`. Esattamente come da specifica M3.
+- **Neutri & semantici**: `--md-sys-color-surface`, `--surface-variant`, `--outline`, `--outline-variant`, `--text-on-surface`, `--text-on-surface-variant`, + ruolo `error` M3. Eventuale estensione `success`/`warning`/`info` per business UX, fuori spec M3 ma nominata con la stessa convenzione (`--md-sys-color-success`, ecc.).
+- **Type scale M3**: `--md-sys-typescale-display-{large,medium,small}`, `--headline-*`, `--title-*`, `--body-*`, `--label-*` (15 stili totali) — mappate sulla coppia Outfit + Cormorant Garamond.
+- **Shape scale**: `--md-sys-shape-corner-{none,extra-small,small,medium,large,extra-large,full}` — radius standardizzati M3.
+- **Elevation**: `--md-sys-elevation-level-{0,1,2,3,4,5}` — shadow tokens M3 (NB: M3 usa "tonal elevation" su superfici, non solo shadow — tenerlo presente in dark mode).
+- **State layers**: opacità standard M3 — hover 8%, focus 10%, pressed 10%, dragged 16%. Applicate come overlay del colore di ruolo (es. `on-primary` al 8% sopra `primary` per hover).
+- **Motion**: easing `standard` (`cubic-bezier(0.2, 0, 0, 1)`), `emphasized` (`cubic-bezier(0.2, 0, 0, 1)`), `emphasized-decelerate`, `emphasized-accelerate` + duration tokens short1-4, medium1-4, long1-4, extra-long1-4.
+
+Ogni step va affrontato in branch dedicato `polaris/design-tokens-{layer}` per evitare diff giganteschi.
+
+### Riferimenti
+
+- [Material Design 3 — overview](https://m3.material.io/)
+- [M3 Color system](https://m3.material.io/styles/color/system/overview)
+- [M3 Typography](https://m3.material.io/styles/typography/overview)
+- [M3 Shape](https://m3.material.io/styles/shape/overview)
+- [Material Theme Builder](https://material-foundation.github.io/material-theme-builder/)
+- `src/style.css` — implementazione token
+- `docs/ATLAS.md` sez. 2 — palette Crab Nebula
+
+---
+
+## 15. Cronologia revisioni ATLAS
 
 - **2026-05-19** — Creazione documento. Estrazione pattern emersi durante POLARIS azioni 1-5 (deployate). Coverage: filosofia, naming, ricetta nuova PWA, FCM, Schlegel logo, code splitting, mobile, doppia identità, preview channel workflow.
 - **2026-05-19** — Aggiunta sez. 10 "PWA update banner — best practice". Pattern: `registerType: 'prompt'` + banner tematizzato globale per evitare reload distruttivi durante data entry. Sezioni 11-14 rinumerate.
 - **2026-05-19** — Sez. 10 aggiornata: `useSWUpdate` ora usa `workbox-window` direttamente con filtro `event.isExternal` + fallback hard-reload, per evitare loop banner causato dalla coesistenza di `/sw.js` (workbox) e `/firebase-messaging-sw.js` (FCM) sullo stesso scope `'/'`.
+- **2026-05-19** — Sez. 2 aggiornata con palette **Crab Nebula** (estrazione da M1 Hubble) e pattern **dual-surface** (on-dark / on-light) per i moduli con lightness fuori dalla zona intermedia. QUASAR e SIDERA restano singolo valore. Aggiunta nuova sez. 14 "Design Tokens" che dichiara Material Design 3 come linguaggio grafico di riferimento per la suite e definisce il primo strato (brand tokens) — type/shape/elevation/state/motion in roadmap.

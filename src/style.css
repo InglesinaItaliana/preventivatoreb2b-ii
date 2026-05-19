@@ -73,6 +73,23 @@ input[type=number] {
   --s-prio-alta:    #C8521A;
   --s-prio-media:   #2F6B4A;
   --s-prio-bassa:   #7A8FA6;
+
+  /* ── Brand tokens — Crab Nebula palette (vedi docs/ATLAS.md sez. 2 e 14) ──
+     Pattern dual-surface: ogni modulo ha on-dark (superfici scure: sidebar
+     SIDERA, Hub Schlegel) e on-light (superfici chiare: PWA, modali).
+     QUASAR e SIDERA = singolo valore (lightness intermedia, ok su entrambi). */
+  --s-pulsar-on-dark:    #3AAF98;
+  --s-pulsar-on-light:   #3A8C80;
+  --s-cepheid-on-dark:   #D4A020;
+  --s-cepheid-on-light:  #C4941C;
+  --s-nebula-on-dark:    #C46030;
+  --s-nebula-on-light:   #B85425;
+  --s-nova-on-dark:      #8FAB35;
+  --s-nova-on-light:     #5C6822;
+  --s-magnetar-on-dark:  #B06842;
+  --s-magnetar-on-light: #7A4830;
+  --s-quasar:            #98C0D0;
+  --s-sidera:            #D4C498;
 }
 
 @keyframes s-fade-in {
