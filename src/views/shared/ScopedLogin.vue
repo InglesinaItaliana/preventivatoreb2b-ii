@@ -108,7 +108,12 @@ const footerText = computed(() => `Modulo ${props.title} · Sistema SIDERA · In
     <div class="sl-content" :class="{ on: mounted }">
       <div class="sl-brand">
         <SideraLogoSchlegel :active-scope="scope" :size="280" />
-        <h1 class="sl-title">{{ title }}</h1>
+        <h1 class="sl-wordmark">
+          <template v-for="(letter, i) in title.split('')" :key="i">
+            <span class="sl-ltr">{{ letter }}</span>
+            <span v-if="i < title.length - 1" class="sl-dot">·</span>
+          </template>
+        </h1>
         <p class="sl-tagline">{{ tagline }}</p>
       </div>
 
@@ -234,13 +239,24 @@ const footerText = computed(() => `Modulo ${props.title} · Sistema SIDERA · In
   margin-bottom: 2.4rem;
 }
 
-.sl-title {
+.sl-wordmark {
   font-family: 'Cormorant Garamond', serif;
-  font-weight: 500;
+  font-weight: 700;
   font-size: 2.4rem;
-  letter-spacing: 0.22em;
+  letter-spacing: 0.04em;
+  line-height: 1;
   color: #fff;
   margin: 0.4rem 0 0.5rem;
+  text-align: center;
+}
+.sl-ltr { display: inline-block; }
+.sl-dot {
+  font-weight: 400;
+  opacity: 0.4;
+  display: inline-block;
+  margin: 0 0.06em;
+  position: relative;
+  top: -0.08em;
 }
 
 .sl-tagline {
@@ -349,6 +365,6 @@ const footerText = computed(() => `Modulo ${props.title} · Sistema SIDERA · In
 
 @media (min-width: 769px) {
   .sl-content { max-width: 420px; }
-  .sl-title { font-size: 2.8rem; }
+  .sl-wordmark { font-size: 2.8rem; }
 }
 </style>
