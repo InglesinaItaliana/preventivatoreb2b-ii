@@ -11,6 +11,7 @@ export interface Project {
   dueDate: Date | null
   taskCount: number
   doneCount: number
+  obiettivoId: string | null
   createdBy: string
   createdAt: Date
   archived: boolean
@@ -50,6 +51,7 @@ export function useProjects() {
         dueDate:     toDate(data.dueDate),
         taskCount:   data.taskCount   ?? 0,
         doneCount:   data.doneCount   ?? 0,
+        obiettivoId: data.obiettivoId ?? null,
         createdBy:   data.createdBy   ?? '',
         createdAt:   toDate(data.createdAt) ?? new Date(),
         archived:    data.archived    ?? false,
@@ -69,6 +71,7 @@ export function useProjects() {
     description: string
     color: string
     dueDate: Date | null
+    obiettivoId?: string | null
   }) {
     await addDoc(collection(db, 'projects'), {
       name:        data.name,
@@ -80,6 +83,7 @@ export function useProjects() {
       notes:       '',
       taskCount:   0,
       doneCount:   0,
+      obiettivoId: data.obiettivoId ?? null,
       archived:    false,
       active:      true,
       createdBy:   auth.currentUser?.uid ?? '',
@@ -101,7 +105,7 @@ export function useProjects() {
 
   async function updateProject(
     projectId: string,
-    data: Partial<{ name: string; description: string; color: string; dueDate: Date | null }>,
+    data: Partial<{ name: string; description: string; color: string; dueDate: Date | null; obiettivoId: string | null }>,
   ) {
     await updateDoc(doc(db, 'projects', projectId), data)
   }
@@ -110,5 +114,9 @@ export function useProjects() {
     projects.value.filter(p => !p.archived && p.active !== false)
   )
 
-  return { projects, activeProjects, loading, createProject, toggleActive, deleteProject, updateProject }
+  function projectsByObiettivo(obiettivoId: string) {
+    return activeProjects.value.filter(p => p.obiettivoId === obiettivoId)
+  }
+
+  return { projects, activeProjects, loading, createProject, toggleActive, deleteProject, updateProject, projectsByObiettivo }
 }

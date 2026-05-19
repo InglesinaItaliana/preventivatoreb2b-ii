@@ -2,10 +2,12 @@
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import MaterialIcon from '../../components/MaterialIcon.vue'
+import GoalChip from '../../components/cepheid/GoalChip.vue'
 import { doc, getDoc } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useProjectTasks, type ProjectTask } from '../../composables/sidera/useProjectTasks'
 import { useProjects }     from '../../composables/sidera/useProjects'
+import { useObiettivi }    from '../../composables/sidera/useObiettivi'
 import { useCurrentUser }  from '../../composables/sidera/useCurrentUser'
 import { useTeamMembers, avatarColor, avatarInitial, displayName } from '../../composables/sidera/useTeamMembers'
 
@@ -16,7 +18,7 @@ const projectId = route.params.id as string
 
 // ── Project doc ───────────────────────────────────────────────────────────
 interface ProjectState { id: string; label: string; color: string; order: number }
-interface ProjectData  { name: string; description: string; color: string; states: ProjectState[]; taskCount: number; doneCount: number }
+interface ProjectData  { name: string; description: string; color: string; states: ProjectState[]; taskCount: number; doneCount: number; obiettivoId: string | null }
 
 const project = ref<ProjectData | null>(null)
 const projLoading = ref(true)
@@ -33,6 +35,7 @@ onMounted(async () => {
         states:      d.states      ?? [],
         taskCount:   d.taskCount   ?? 0,
         doneCount:   d.doneCount   ?? 0,
+        obiettivoId: d.obiettivoId ?? null,
       }
     }
   } catch (e) {
@@ -42,9 +45,21 @@ onMounted(async () => {
   }
 })
 
+// ── Obiettivo collegato ──────────────────────────────────────────────────
+const { obiettiviAttivi } = useObiettivi()
+const obiettivoCollegato = computed(() => {
+  if (!project.value?.obiettivoId) return null
+  return obiettiviAttivi.value.find(o => o.id === project.value!.obiettivoId) ?? null
+})
+
 // ── Tasks ─────────────────────────────────────────────────────────────────
-const { tasks, loading: tasksLoading, createTask, completeTask, updateTaskStatus, updateTask, deleteTask } = useProjectTasks(projectId)
+const { tasks, loading: tasksLoading, createTask, completeTask, uncompleteTask, updateTaskStatus, updateTask, deleteTask } = useProjectTasks(projectId)
 const { deleteProject } = useProjects()
+
+// Separati per tipo
+const realTasks        = computed(() => tasks.value.filter(t => !t.type || t.type === 'task'))
+const milestoneItems   = computed(() => tasks.value.filter(t => t.type === 'milestone'))
+const deliverableItems = computed(() => tasks.value.filter(t => t.type === 'deliverable'))
 const { currentUser } = useCurrentUser()
 const { members } = useTeamMembers()
 const isAdmin = computed(() => currentUser.value?.role === 'ADMIN' || currentUser.value?.email === 'info@inglesinaitaliana.it')
@@ -64,7 +79,7 @@ const sortedStates = computed(() =>
 )
 
 function tasksInCol(colId: string) {
-  return tasks.value.filter(t => t.status === colId)
+  return realTasks.value.filter(t => t.status === colId)
 }
 
 function isTaskDone(t: { id: string; completedAt: Date | null }) {
@@ -141,14 +156,57 @@ const pct = computed(() => {
 
 const prioColor: Record<string, string> = { alta: '#C8521A', media: '#D4A020', bassa: '#7A8FA6' }
 
-const allTasksFlat = computed(() => tasks.value)
+const allTasksFlat = computed(() => realTasks.value)
 
 const views = [
-  { id: 'board', label: 'Board',      icon: 'view_kanban' },
-  { id: 'list',  label: 'Lista',      icon: 'list' },
-  { id: 'cal',   label: 'Calendario', icon: 'calendar_month' },
-  { id: 'notes', label: 'Note',       icon: 'description' },
+  { id: 'board',       label: 'Board',       icon: 'view_kanban' },
+  { id: 'list',        label: 'Lista',       icon: 'list' },
+  { id: 'milestone',   label: 'Milestone',   icon: 'flag' },
+  { id: 'deliverable', label: 'Deliverable', icon: 'inventory_2' },
+  { id: 'cal',         label: 'Calendario',  icon: 'calendar_month' },
+  { id: 'notes',       label: 'Note',        icon: 'description' },
 ]
+
+// ── Milestone / Deliverable helpers ──────────────────────────────────────
+const milestoneSorted = computed(() =>
+  [...milestoneItems.value].sort((a, b) => {
+    const da = a.dueDate?.getTime() ?? Number.MAX_SAFE_INTEGER
+    const db = b.dueDate?.getTime() ?? Number.MAX_SAFE_INTEGER
+    return da - db
+  })
+)
+
+const deliverableSorted = computed(() =>
+  [...deliverableItems.value].sort((a, b) => {
+    const da = a.dueDate?.getTime() ?? Number.MAX_SAFE_INTEGER
+    const db = b.dueDate?.getTime() ?? Number.MAX_SAFE_INTEGER
+    return da - db
+  })
+)
+
+async function toggleMilestone(m: { id: string; completedAt: Date | null }) {
+  if (m.completedAt) await uncompleteTask(m.id)
+  else await completeTask(m.id)
+}
+
+const expandedDeliverableId = ref('')
+function toggleDeliverableExpand(id: string) {
+  expandedDeliverableId.value = expandedDeliverableId.value === id ? '' : id
+}
+function tasksOfDeliverable(deliverableTaskIds: string[]) {
+  return realTasks.value.filter(t => deliverableTaskIds.includes(t.id))
+}
+function deliverablePct(d: { deliverableTaskIds: string[] }): number {
+  const sub = tasksOfDeliverable(d.deliverableTaskIds)
+  if (!sub.length) return 0
+  const done = sub.filter(t => t.completedAt).length
+  return Math.round((done / sub.length) * 100)
+}
+
+function formatDueShort(d: Date | null) {
+  if (!d) return ''
+  return new Intl.DateTimeFormat('it-IT', { day: 'numeric', month: 'short' }).format(d)
+}
 
 // ── Edit task modal ──────────────────────────────────────────────────────────
 const editingTask = ref<ProjectTask | null>(null)
@@ -238,6 +296,14 @@ async function deleteCurrentTask() {
       <div class="bv-title-row">
         <div v-if="projLoading" class="title-skeleton" />
         <h1 v-else class="bv-title">{{ project?.name ?? 'Progetto' }}</h1>
+        <GoalChip
+          v-if="obiettivoCollegato"
+          :titolo="obiettivoCollegato.titolo"
+          :colore="obiettivoCollegato.colore"
+          size="sm"
+          clickable
+          @click="router.push('/sidera/goal/' + obiettivoCollegato.id)"
+        />
         <span
           v-if="project"
           class="bv-pct"
@@ -398,6 +464,85 @@ async function deleteCurrentTask() {
               </span>
             </div>
           </template>
+        </div>
+      </template>
+
+      <!-- Milestone -->
+      <template v-else-if="tab === 'milestone'">
+        <div v-if="!milestoneSorted.length" class="empty-tab">
+          <MaterialIcon name="flag" :filled="true" :size="32" class="empty-tab-icon" />
+          <div>Nessuna milestone.</div>
+          <div class="empty-tab-hint">Una milestone è un checkpoint datato senza sotto-task. Crea milestone da CEPHEID.</div>
+        </div>
+        <div v-else class="milestone-timeline">
+          <div
+            v-for="m in milestoneSorted"
+            :key="m.id"
+            class="milestone-item"
+            :class="{ 'is-done': m.completedAt }"
+          >
+            <div class="milestone-line" />
+            <button
+              class="milestone-circle"
+              :class="{ 'is-done': m.completedAt }"
+              @click="toggleMilestone(m)"
+              :title="m.completedAt ? 'Riapri' : 'Segna come raggiunta'"
+            >
+              <span v-if="m.completedAt">✓</span>
+            </button>
+            <div class="milestone-body">
+              <div class="milestone-title" :class="{ 'is-done': m.completedAt }">{{ m.title }}</div>
+              <div v-if="m.dueDate" class="milestone-date">{{ formatDueShort(m.dueDate) }}</div>
+              <div v-else class="milestone-date milestone-date--missing">data non impostata</div>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- Deliverable -->
+      <template v-else-if="tab === 'deliverable'">
+        <div v-if="!deliverableSorted.length" class="empty-tab">
+          <MaterialIcon name="inventory_2" :filled="true" :size="32" class="empty-tab-icon" />
+          <div>Nessun deliverable.</div>
+          <div class="empty-tab-hint">Un deliverable è l'output tangibile del progetto. Crea deliverable da CEPHEID.</div>
+        </div>
+        <div v-else class="deliverable-list">
+          <div
+            v-for="d in deliverableSorted"
+            :key="d.id"
+            class="deliverable-card"
+            :class="{ 'is-done': d.completedAt }"
+          >
+            <div class="deliverable-stripe" :style="{ background: prioColor[d.priority] }" />
+            <div class="deliverable-body">
+              <div class="deliverable-top">
+                <div class="deliverable-title" :class="{ 'is-done': d.completedAt }">{{ d.title }}</div>
+              </div>
+              <div class="deliverable-meta">
+                <span v-if="d.dueDate" class="d-meta-chip">📅 {{ formatDueShort(d.dueDate) }}</span>
+                <span v-if="d.assignees.length" class="d-meta-chip">👤 {{ displayName(d.assignees[0], members) }}</span>
+                <span class="d-meta-chip" :style="{ background: prioColor[d.priority] + '15', color: prioColor[d.priority] }">{{ d.priority }}</span>
+              </div>
+              <div v-if="d.deliverableTaskIds.length" class="deliverable-sub">
+                <button class="deliverable-expand" @click="toggleDeliverableExpand(d.id)">
+                  <span style="font-size:14px">{{ expandedDeliverableId === d.id ? '▾' : '▸' }}</span>
+                  {{ tasksOfDeliverable(d.deliverableTaskIds).filter(t => t.completedAt).length }} /
+                  {{ tasksOfDeliverable(d.deliverableTaskIds).length }} task · {{ deliverablePct(d) }}%
+                </button>
+                <div class="prog-track" style="margin-top:6px">
+                  <div class="prog-fill" :style="{ width: deliverablePct(d) + '%', background: prioColor[d.priority] }" />
+                </div>
+                <div v-if="expandedDeliverableId === d.id" class="deliverable-subtasks">
+                  <div v-for="sub in tasksOfDeliverable(d.deliverableTaskIds)" :key="sub.id" class="deliverable-subtask">
+                    <div class="subtask-dot" :class="{ 'is-done': sub.completedAt }" />
+                    <span class="subtask-title" :class="{ 'is-done': sub.completedAt }">{{ sub.title }}</span>
+                    <span v-if="sub.dueDate" class="subtask-due">{{ formatDueShort(sub.dueDate) }}</span>
+                  </div>
+                </div>
+              </div>
+              <div v-else class="deliverable-no-sub">Nessun task collegato</div>
+            </div>
+          </div>
         </div>
       </template>
 
@@ -999,4 +1144,192 @@ async function deleteCurrentTask() {
 
 .btn-danger:hover:not(:disabled) { background: rgba(200, 82, 26, 0.16); border-color: #C8521A; }
 .btn-danger:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* ── Empty state per tab Milestone/Deliverable ───────────────────────── */
+.empty-tab {
+  padding: 50px 20px;
+  text-align: center;
+  color: var(--s-text-dim);
+  font-size: 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+}
+.empty-tab-icon { color: #D4A020; opacity: 0.35; margin-bottom: 4px; }
+.empty-tab-hint {
+  font-size: 12px;
+  color: var(--s-text-dim);
+  opacity: 0.7;
+  max-width: 360px;
+  line-height: 1.6;
+}
+
+/* ── Milestone timeline ──────────────────────────────────────────────── */
+.milestone-timeline { position: relative; padding: 16px 8px; }
+.milestone-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 8px 8px 0;
+}
+.milestone-item .milestone-line {
+  position: absolute;
+  left: 17px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--s-border);
+}
+.milestone-item:first-child .milestone-line { top: 50%; }
+.milestone-item:last-child .milestone-line { bottom: 50%; }
+
+.milestone-circle {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  border: 2px solid #B4B0AA;
+  background: var(--s-surface);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  z-index: 1;
+  color: #fff;
+  font-size: 12px;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+.milestone-circle:hover { border-color: #D4A020; }
+.milestone-circle.is-done {
+  background: #2F6B4A;
+  border-color: #2F6B4A;
+}
+
+.milestone-body {
+  flex: 1;
+  min-width: 0;
+  padding: 10px 14px;
+  background: var(--s-surface);
+  border: 1px solid var(--s-border);
+  border-radius: 10px;
+}
+.milestone-item.is-done .milestone-body { opacity: 0.7; }
+
+.milestone-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--s-text);
+  margin-bottom: 2px;
+}
+.milestone-title.is-done { text-decoration: line-through; color: var(--s-text-dim); }
+
+.milestone-date { font-size: 11px; font-weight: 600; color: #2F6B4A; }
+.milestone-date--missing { color: var(--s-text-dim); font-style: italic; font-weight: 400; }
+
+/* ── Deliverable cards ──────────────────────────────────────────────── */
+.deliverable-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+}
+
+.deliverable-card {
+  display: flex;
+  background: var(--s-surface);
+  border: 1px solid var(--s-border);
+  border-radius: 12px;
+  overflow: hidden;
+}
+.deliverable-card.is-done { opacity: 0.6; }
+
+.deliverable-stripe { width: 5px; flex-shrink: 0; }
+.deliverable-body { flex: 1; padding: 12px 14px; min-width: 0; }
+
+.deliverable-top { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+
+.deliverable-title {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--s-text);
+  min-width: 0;
+}
+.deliverable-title.is-done { text-decoration: line-through; color: var(--s-text-dim); }
+
+.deliverable-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.d-meta-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--s-border);
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--s-text-dim);
+}
+
+.deliverable-sub { margin-top: 4px; }
+.deliverable-expand {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-family: 'Outfit', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--s-text-dim);
+}
+.deliverable-expand:hover { color: var(--s-text); }
+
+.deliverable-subtasks {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-left: 8px;
+  border-left: 2px solid var(--s-border);
+}
+
+.deliverable-subtask {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.subtask-dot {
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  border: 1.5px solid #B4B0AA;
+  flex-shrink: 0;
+}
+.subtask-dot.is-done { background: #2F6B4A; border-color: #2F6B4A; }
+
+.subtask-title {
+  flex: 1;
+  font-size: 12px;
+  color: var(--s-text-mid);
+  min-width: 0;
+}
+.subtask-title.is-done { text-decoration: line-through; color: #B4B0AA; }
+.subtask-due { font-size: 10px; color: var(--s-text-dim); flex-shrink: 0; }
+
+.deliverable-no-sub {
+  font-size: 11px;
+  color: var(--s-text-dim);
+  font-style: italic;
+}
+
+.prog-track { height: 4px; background: var(--s-border); border-radius: 999px; overflow: hidden; }
+.prog-fill { height: 100%; border-radius: 999px; transition: width 0.3s ease; }
 </style>

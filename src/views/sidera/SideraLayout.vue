@@ -43,8 +43,9 @@ const modules = [
     name: 'CEPHEID',  accent: '#D4A020',
     vx: 525, vy: 400, vr: 10,
     items: [
-      { path: '/sidera/tasks',    exact: false, label: 'Azioni',   icon: 'checklist' },
-      { path: '/sidera/projects', exact: false, label: 'Progetti', icon: 'grid_view' },
+      { path: '/sidera/goals',    exact: false, label: 'Obiettivi', icon: 'flag' },
+      { path: '/sidera/tasks',    exact: false, label: 'Azioni',    icon: 'checklist' },
+      { path: '/sidera/projects', exact: false, label: 'Progetti',  icon: 'grid_view' },
     ],
   },
   {

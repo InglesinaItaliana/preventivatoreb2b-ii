@@ -55,12 +55,17 @@ const filterTabs: { id: FilterId; label: string }[] = [
 ]
 
 // ── Derived task lists ────────────────────────────────────────────────────
+// Esclude milestone/deliverable creati da CEPHEID (collection condivisa tasks/)
+const realTasks = computed(() =>
+  tasks.value.filter(t => !t.type || t.type === 'task')
+)
+
 const activeTasks = computed(() =>
-  tasks.value.filter(t => !t.completedAt && !pendingComplete.value.has(t.id))
+  realTasks.value.filter(t => !t.completedAt && !pendingComplete.value.has(t.id))
 )
 
 const completedTasks = computed(() =>
-  tasks.value.filter(t => (t.completedAt || pendingComplete.value.has(t.id)) && !pendingUncomplete.value.has(t.id))
+  realTasks.value.filter(t => (t.completedAt || pendingComplete.value.has(t.id)) && !pendingUncomplete.value.has(t.id))
 )
 
 function taskGroup(dueDate: Date | null): 'late' | 'oggi' | 'week' | 'later' | 'nodate' {
