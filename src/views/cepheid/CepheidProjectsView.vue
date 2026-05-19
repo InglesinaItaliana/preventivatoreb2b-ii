@@ -1,22 +1,42 @@
 <script setup lang="ts">
-import { ref, inject, watch, onMounted, nextTick, type Ref } from 'vue'
+import { ref, computed, inject, watch, onMounted, nextTick, type Ref } from 'vue'
 import { useRouter } from 'vue-router'
 import MIcon from '../../components/pulsar/MIcon.vue'
+import GoalChip from '../../components/cepheid/GoalChip.vue'
 import { useProjects } from '../../composables/sidera/useProjects'
+import { useObiettivi } from '../../composables/sidera/useObiettivi'
 
 const router = useRouter()
 const { activeProjects, loading, createProject } = useProjects()
+const { obiettiviAttivi } = useObiettivi()
 
 const COLOR_PRESETS = ['#D4A020', '#2F6B4A', '#3A8C80', '#C8521A', '#7A8FA6', '#9B5BB5']
+
+// ── Filtro per obiettivo ──────────────────────────────────────────────────
+const filterObiettivoId = ref<string>('') // '' = tutti
+
+const visibleProjects = computed(() => {
+  if (!filterObiettivoId.value) return activeProjects.value
+  if (filterObiettivoId.value === '__none__') {
+    return activeProjects.value.filter(p => !p.obiettivoId)
+  }
+  return activeProjects.value.filter(p => p.obiettivoId === filterObiettivoId.value)
+})
+
+function obiettivoFor(id: string | null) {
+  if (!id) return null
+  return obiettiviAttivi.value.find(o => o.id === id) ?? null
+}
 
 // ── Nuovo progetto (modal) ─────────────────────────────────────────────────
 const showProjModal = ref(false)
 const projSaving    = ref(false)
 const projForm = ref({
-  name:        '',
-  description: '',
-  color:       COLOR_PRESETS[0],
-  dueDate:     '',
+  name:         '',
+  description:  '',
+  color:        COLOR_PRESETS[0],
+  dueDate:      '',
+  obiettivoId:  '',
 })
 
 function openProjModal() {
@@ -25,6 +45,7 @@ function openProjModal() {
     description: '',
     color:       COLOR_PRESETS[0],
     dueDate:     '',
+    obiettivoId: filterObiettivoId.value && filterObiettivoId.value !== '__none__' ? filterObiettivoId.value : '',
   }
   showProjModal.value = true
 }
@@ -44,6 +65,7 @@ async function submitProject() {
       description: projForm.value.description.trim(),
       color:       projForm.value.color,
       dueDate,
+      obiettivoId: projForm.value.obiettivoId || null,
     })
     showProjModal.value = false
   } catch (e) {
@@ -75,33 +97,55 @@ onMounted(() => {
 <template>
   <div class="pv">
     <header class="pv-header">
-      <h2 class="p-page-title">Progetti</h2>
-      <p class="p-page-sub">
-        {{ activeProjects.length === 0
-          ? 'Nessun progetto attivo'
-          : (activeProjects.length === 1 ? '1 progetto attivo' : activeProjects.length + ' progetti attivi') }}
-      </p>
+      <div class="pv-header-text">
+        <h2 class="p-page-title">Progetti</h2>
+        <p class="p-page-sub">
+          {{ activeProjects.length === 0
+            ? 'Nessun progetto attivo'
+            : (activeProjects.length === 1 ? '1 progetto attivo' : activeProjects.length + ' progetti attivi') }}
+        </p>
+      </div>
+      <button class="header-cta" @click="openProjModal">
+        <MIcon name="add" :size="16" /> Nuovo progetto
+      </button>
     </header>
 
     <div class="pv-content">
+      <div v-if="obiettiviAttivi.length" class="pv-filter">
+        <label class="pv-filter-label">Obiettivo</label>
+        <select v-model="filterObiettivoId" class="pv-filter-select">
+          <option value="">Tutti</option>
+          <option value="__none__">— Senza obiettivo —</option>
+          <option v-for="o in obiettiviAttivi" :key="o.id" :value="o.id">{{ o.titolo }}</option>
+        </select>
+      </div>
+
       <div v-if="loading" class="loading-rows">
         <div v-for="i in 3" :key="i" class="row-skel" />
       </div>
 
-      <div v-else-if="!activeProjects.length" class="empty-state">
+      <div v-else-if="!visibleProjects.length" class="empty-state">
         <MIcon name="folder_open" filled :size="40" class="empty-icon" />
-        Nessun progetto.
+        {{ filterObiettivoId ? 'Nessun progetto per questo filtro.' : 'Nessun progetto.' }}
       </div>
 
       <div
-        v-for="p in activeProjects"
+        v-for="p in visibleProjects"
         :key="p.id"
         class="proj-row"
         @click="router.push('/cepheid/project/' + p.id)"
       >
         <div class="proj-stripe" :style="{ background: p.color }" />
         <div class="proj-body">
-          <div class="proj-name">{{ p.name }}</div>
+          <div class="proj-top">
+            <div class="proj-name">{{ p.name }}</div>
+            <GoalChip
+              v-if="obiettivoFor(p.obiettivoId)"
+              :titolo="obiettivoFor(p.obiettivoId)!.titolo"
+              :colore="obiettivoFor(p.obiettivoId)!.colore"
+              size="sm"
+            />
+          </div>
           <div v-if="p.description" class="proj-desc">{{ p.description }}</div>
           <div class="proj-stats">{{ p.doneCount }}/{{ p.taskCount }} azioni · {{ pct(p) }}%</div>
           <div class="prog-track">
@@ -125,6 +169,12 @@ onMounted(() => {
 
             <label class="field-label" style="margin-top:12px">Descrizione</label>
             <textarea v-model="projForm.description" class="field-input" rows="2" />
+
+            <label v-if="obiettiviAttivi.length" class="field-label" style="margin-top:12px">Obiettivo</label>
+            <select v-if="obiettiviAttivi.length" v-model="projForm.obiettivoId" class="field-input">
+              <option value="">— Nessun obiettivo —</option>
+              <option v-for="o in obiettiviAttivi" :key="o.id" :value="o.id">{{ o.titolo }}</option>
+            </select>
 
             <label class="field-label" style="margin-top:12px">Colore</label>
             <div class="color-picker">
@@ -167,7 +217,30 @@ onMounted(() => {
   padding: 18px 20px 14px;
   background: #fff;
   border-bottom: 1px solid #E8E5DF;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
+.pv-header-text { flex: 1; min-width: 0; }
+.header-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 9px 14px;
+  background: #D4A020;
+  border: none;
+  border-radius: 10px;
+  font-family: 'Outfit', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+.header-cta:hover { background: #B8870E; }
+@media (max-width: 768px) { .header-cta { display: none; } }
 
 .p-page-title {
   font-family: 'Outfit', sans-serif;
@@ -182,6 +255,42 @@ onMounted(() => {
 .p-page-sub { font-size: 12px; color: #9B9590; margin: 0; }
 
 .pv-content { padding: 16px; display: flex; flex-direction: column; gap: 8px; }
+
+.pv-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.pv-filter-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #9B9590;
+}
+.pv-filter-select {
+  flex: 1;
+  background: #F4F2EE;
+  border: 1px solid #E8E5DF;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-family: 'Outfit', sans-serif;
+  color: #1A1917;
+  outline: none;
+  cursor: pointer;
+}
+.pv-filter-select:focus { border-color: #D4A020; }
+
+.proj-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+.proj-top .proj-name { margin-bottom: 0; }
 
 .loading-rows { display: flex; flex-direction: column; gap: 6px; }
 .row-skel { height: 90px; border-radius: 12px; background: #E8E5DF; animation: pulse 1.4s ease-in-out infinite; }

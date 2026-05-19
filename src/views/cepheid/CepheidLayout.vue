@@ -20,35 +20,55 @@ async function logout() {
 }
 
 const navItems = [
-  { path: '/cepheid',          exact: true,  label: 'Azioni',   icon: 'check_circle' },
-  { path: '/cepheid/projects', exact: false, label: 'Progetti', icon: 'grid_view' },
-  { path: '/cepheid/due',      exact: false, label: 'Scadenze', icon: 'event_busy' },
+  { path: '/cepheid/goals',    exact: false, label: 'Obiettivi', icon: 'flag' },
+  { path: '/cepheid',          exact: true,  label: 'Azioni',    icon: 'check_circle' },
+  { path: '/cepheid/projects', exact: false, label: 'Progetti',  icon: 'grid_view' },
+  { path: '/cepheid/due',      exact: false, label: 'Scadenze',  icon: 'event_busy' },
 ]
 
 // ── FAB contestuale (provide/inject ai children) ──────────────────────────
 const newTaskTick    = ref(0)
 const newProjectTick = ref(0)
+const newGoalTick    = ref(0)
 provide('cepheid-new-task-tick',    newTaskTick)
 provide('cepheid-new-project-tick', newProjectTick)
+provide('cepheid-new-goal-tick',    newGoalTick)
 
-const fabKind = computed<'task' | 'project'>(() => {
-  return route.path.startsWith('/cepheid/projects') ? 'project' : 'task'
+const fabKind = computed<'task' | 'project' | 'goal' | 'project-item'>(() => {
+  if (route.path.startsWith('/cepheid/goal')) return 'goal'
+  if (route.path.startsWith('/cepheid/project/')) return 'project-item'
+  if (route.path.startsWith('/cepheid/projects')) return 'project'
+  return 'task'
 })
 
 const fabIcon = computed(() => 'add_circle')
-const fabLabel = computed(() => fabKind.value === 'project' ? 'Nuovo progetto' : 'Nuova azione')
+const fabLabel = computed(() => {
+  if (fabKind.value === 'goal') return 'Nuovo obiettivo'
+  if (fabKind.value === 'project') return 'Nuovo progetto'
+  if (fabKind.value === 'project-item') return 'Nuovo elemento'
+  return 'Nuova azione'
+})
 
 function triggerNew() {
-  if (fabKind.value === 'project') {
+  if (fabKind.value === 'goal') {
+    if (route.path === '/cepheid/goals') {
+      newGoalTick.value++
+    } else {
+      sessionStorage.setItem('cepheid-pending-new-goal', '1')
+      router.push('/cepheid/goals')
+    }
+  } else if (fabKind.value === 'project') {
     if (route.path === '/cepheid/projects') {
       newProjectTick.value++
     } else {
       sessionStorage.setItem('cepheid-pending-new-project', '1')
       router.push('/cepheid/projects')
     }
+  } else if (fabKind.value === 'project-item') {
+    // Dentro un project detail: il componente intercetta newTaskTick
+    // e apre il modal del tab attivo (Kanban / Milestone / Deliverable).
+    newTaskTick.value++
   } else {
-    // Apre il modal nuova azione su qualunque rotta /cepheid (Azioni o Scadenze).
-    // Per chi non è già su Azioni, naviga lì e apre via sessionStorage.
     if (route.path === '/cepheid' || route.path === '/cepheid/due') {
       newTaskTick.value++
     } else {
@@ -148,7 +168,7 @@ onBeforeUnmount(() => {
       <!-- Header solo mobile -->
       <header class="c-mobile-header">
         <button
-          v-if="route.path !== '/cepheid' && route.path !== '/cepheid/projects' && route.path !== '/cepheid/due'"
+          v-if="route.path !== '/cepheid' && route.path !== '/cepheid/goals' && route.path !== '/cepheid/projects' && route.path !== '/cepheid/due'"
           class="c-back-btn"
           @click="router.back()"
         >

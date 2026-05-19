@@ -36,6 +36,7 @@ const visibleOpen = computed(() => {
   const myEmail = currentUser.value?.email ?? ''
   const myUid   = currentUser.value?.uid ?? ''
   return tasks.value.filter(t => {
+    if (t.type && t.type !== 'task') return false
     if (t.completedAt || pendingDone.value.has(t.id)) return false
     if (filter.value === 'all') return true
     return t.assignees.includes(myEmail) || t.createdBy === myUid
@@ -44,6 +45,7 @@ const visibleOpen = computed(() => {
 
 const doneTasks = computed(() =>
   tasks.value.filter(t =>
+    (!t.type || t.type === 'task') &&
     (t.completedAt || pendingDone.value.has(t.id)) &&
     !pendingUndo.value.has(t.id)
   ).slice(0, 10)
@@ -149,12 +151,17 @@ onMounted(() => {
 <template>
   <div class="av">
     <header class="av-header">
-      <h2 class="p-page-title">Azioni</h2>
-      <p class="p-page-sub">
-        {{ dueTodayCount === 0
-          ? 'Nessuna in scadenza oggi'
-          : (dueTodayCount === 1 ? '1 in scadenza oggi' : dueTodayCount + ' in scadenza oggi') }}
-      </p>
+      <div class="av-header-text">
+        <h2 class="p-page-title">Azioni</h2>
+        <p class="p-page-sub">
+          {{ dueTodayCount === 0
+            ? 'Nessuna in scadenza oggi'
+            : (dueTodayCount === 1 ? '1 in scadenza oggi' : dueTodayCount + ' in scadenza oggi') }}
+        </p>
+      </div>
+      <button class="header-cta" @click="openTaskModal">
+        <MIcon name="add" :size="16" /> Nuova azione
+      </button>
     </header>
 
     <div class="av-content">
@@ -294,7 +301,30 @@ onMounted(() => {
   padding: 18px 20px 14px;
   background: #fff;
   border-bottom: 1px solid #E8E5DF;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
+.av-header-text { flex: 1; min-width: 0; }
+.header-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 9px 14px;
+  background: #D4A020;
+  border: none;
+  border-radius: 10px;
+  font-family: 'Outfit', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+.header-cta:hover { background: #B8870E; }
+@media (max-width: 768px) { .header-cta { display: none; } }
 
 .p-page-title {
   font-family: 'Outfit', sans-serif;

@@ -45,6 +45,7 @@ const buckets = computed(() => {
   const weekList: typeof tasks.value = []
 
   for (const t of tasks.value) {
+    if (t.type && t.type !== 'task') continue
     if (t.completedAt || pendingDone.value.has(t.id)) continue
     if (!t.dueDate) continue
     // Mostro solo task mie (assegnatario o creatore)
@@ -151,12 +152,17 @@ onMounted(() => {
 <template>
   <div class="dv">
     <header class="dv-header">
-      <h2 class="p-page-title">Scadenze</h2>
-      <p class="p-page-sub">
-        {{ totalCount === 0
-          ? 'Nessuna scadenza nei prossimi 7 giorni'
-          : (totalCount === 1 ? '1 scadenza in vista' : totalCount + ' scadenze in vista') }}
-      </p>
+      <div class="dv-header-text">
+        <h2 class="p-page-title">Scadenze</h2>
+        <p class="p-page-sub">
+          {{ totalCount === 0
+            ? 'Nessuna scadenza nei prossimi 7 giorni'
+            : (totalCount === 1 ? '1 scadenza in vista' : totalCount + ' scadenze in vista') }}
+        </p>
+      </div>
+      <button class="header-cta" @click="openTaskModal">
+        <MIcon name="add" :size="16" /> Nuova azione
+      </button>
     </header>
 
     <div class="dv-content">
@@ -275,7 +281,30 @@ onMounted(() => {
   padding: 18px 20px 14px;
   background: #fff;
   border-bottom: 1px solid #E8E5DF;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
+.dv-header-text { flex: 1; min-width: 0; }
+.header-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 9px 14px;
+  background: #D4A020;
+  border: none;
+  border-radius: 10px;
+  font-family: 'Outfit', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: #fff;
+  cursor: pointer;
+  transition: background 0.15s;
+  flex-shrink: 0;
+}
+.header-cta:hover { background: #B8870E; }
+@media (max-width: 768px) { .header-cta { display: none; } }
 
 .p-page-title {
   font-family: 'Outfit', sans-serif;

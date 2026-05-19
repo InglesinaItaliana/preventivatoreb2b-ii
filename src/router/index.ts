@@ -77,6 +77,8 @@ const router = createRouter({
         { path: 'tasks',      name: 'sidera-tasks',   component: () => import('../views/sidera/TasksView.vue') },
         { path: 'projects',   name: 'sidera-projects',component: () => import('../views/sidera/ProjectsView.vue') },
         { path: 'projects/:id', name: 'sidera-project', component: () => import('../views/sidera/ProjectBoard.vue') },
+        { path: 'goals',      name: 'sidera-goals',   component: () => import('../views/cepheid/CepheidGoalsView.vue') },
+        { path: 'goal/:id',   name: 'sidera-goal',    component: () => import('../views/cepheid/CepheidGoalDetail.vue') },
         { path: 'chat',       name: 'sidera-chat',    component: () => import('../views/sidera/ChatView.vue') },
         { path: 'nebula',     name: 'nebula-team',    component: () => import('../views/nebula/NebulaTeamView.vue') },
         { path: 'nova/spedizioni', name: 'nova-spedizioni', component: () => import('../views/nova/NovaSpedizioniView.vue') },
@@ -130,6 +132,8 @@ const router = createRouter({
       meta: { requiresAuth: true, cepheidScope: true },
       children: [
         { path: '',           name: 'cepheid-actions',  component: () => import('../views/cepheid/CepheidActionsView.vue') },
+        { path: 'goals',      name: 'cepheid-goals',    component: () => import('../views/cepheid/CepheidGoalsView.vue') },
+        { path: 'goal/:id',   name: 'cepheid-goal',     component: () => import('../views/cepheid/CepheidGoalDetail.vue') },
         { path: 'projects',   name: 'cepheid-projects', component: () => import('../views/cepheid/CepheidProjectsView.vue') },
         { path: 'project/:id',name: 'cepheid-project',  component: () => import('../views/cepheid/CepheidProjectDetail.vue') },
         { path: 'due',        name: 'cepheid-due',      component: () => import('../views/cepheid/CepheidDueView.vue') },
