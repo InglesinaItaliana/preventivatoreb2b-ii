@@ -1,11 +1,14 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import { VitePWA } from 'vite-plugin-pwa'
+import { visualizer } from 'rollup-plugin-visualizer'
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [
     vue(),
+    // Bundle analysis: `ANALYZE=true npm run build` → genera dist/stats.html con visualizzazione interattiva
+    process.env.ANALYZE ? visualizer({ filename: 'dist/stats.html', open: false, gzipSize: true, brotliSize: true }) : null,
     VitePWA({
       registerType: 'autoUpdate',
       // Manifest gestiti come file statici in /public/ (pops|pulsar|cepheid.webmanifest)
@@ -26,10 +29,21 @@ export default defineConfig({
     chunkSizeWarningLimit: 1600,
     rollupOptions: {
       output: {
+        // POLARIS azione 4 — split granulare Firebase: POPS NON usa messaging, lo carichiamo
+        // solo nelle PWA che lo richiedono (PULSAR/CEPHEID via composables/shared/useNotifications).
         manualChunks(id) {
           if (id.includes('node_modules')) {
+            if (id.includes('firebase/messaging') || id.includes('@firebase/messaging')) {
+              return 'firebase-messaging'
+            }
+            if (id.includes('firebase/firestore') || id.includes('@firebase/firestore')) {
+              return 'firebase-firestore'
+            }
+            if (id.includes('firebase/functions') || id.includes('@firebase/functions')) {
+              return 'firebase-functions'
+            }
             if (id.includes('firebase') || id.includes('@firebase')) {
-              return 'firebase'
+              return 'firebase-core'
             }
             return 'vendor'
           }
