@@ -252,11 +252,13 @@ const footerText = computed(() => `Modulo ${props.title} · Sistema SIDERA · In
 .sl-ltr { display: inline-block; }
 .sl-dot {
   font-weight: 400;
-  opacity: 0.4;
+  font-size: 0.75em;
+  opacity: 0.3;
   display: inline-block;
-  margin: 0 0.06em;
+  margin: 0 0.08em;
   position: relative;
-  top: -0.08em;
+  top: -0.18em;
+  text-shadow: 0 0 3px rgba(255, 255, 255, 0.55), 0 0 7px rgba(255, 255, 255, 0.25);
 }
 
 .sl-tagline {
