@@ -2,64 +2,146 @@
 import { computed } from 'vue'
 import { useRoute } from 'vue-router'
 import { useSWUpdate } from '../composables/shared/useSWUpdate'
+import { detectScope, type ScopeId } from '../views/sidera/scopeConfig'
 
 const { needRefresh, applyUpdate, dismiss } = useSWUpdate()
 const route = useRoute()
 
-// Tematizzazione path-based: il banner adotta il colore della PWA corrente.
-// POPS (default) usa amber-400, il giallo accento standard del progetto.
-const theme = computed(() => {
-  const p = route.path || ''
-  if (p.startsWith('/pulsar')) {
-    return { btn: 'bg-[#338076] hover:bg-[#2E7268] text-white', ring: 'ring-[#338076]/30' }
-  }
-  if (p.startsWith('/cepheid')) {
-    return { btn: 'bg-[#D4A020] hover:bg-[#B8870E] text-white', ring: 'ring-[#D4A020]/30' }
-  }
-  return { btn: 'bg-amber-400 hover:bg-amber-500 text-gray-900', ring: 'ring-amber-400/30' }
-})
+// Scope-aware: applichiamo .s-scope-{module} al banner così i token M3
+// --md-sys-color-primary risolvono al brand del modulo corrente.
+// Su /pops (root '/') currentScope = 'sidera' (default), il primary
+// e' var(--s-sidera) = oro tenue. Per il banner POPS-themed amber,
+// override esplicito quando scope === 'sidera' e siamo nel root '/'.
+const currentScope = computed<ScopeId>(() => detectScope(route.path))
+const isPops = computed(() => !route.path.startsWith('/sidera') &&
+                              !route.path.startsWith('/pulsar') &&
+                              !route.path.startsWith('/cepheid') &&
+                              !route.path.startsWith('/nebula') &&
+                              !route.path.startsWith('/nova') &&
+                              !route.path.startsWith('/magnetar') &&
+                              !route.path.startsWith('/quasar'))
 </script>
 
 <template>
   <Transition
-    enter-active-class="transition duration-300 ease-out"
-    enter-from-class="opacity-0 translate-y-4"
-    enter-to-class="opacity-100 translate-y-0"
-    leave-active-class="transition duration-200 ease-in"
-    leave-from-class="opacity-100 translate-y-0"
-    leave-to-class="opacity-0 translate-y-4"
+    enter-active-class="ub-enter-active"
+    enter-from-class="ub-enter-from"
+    enter-to-class="ub-enter-to"
+    leave-active-class="ub-leave-active"
+    leave-from-class="ub-leave-from"
+    leave-to-class="ub-leave-to"
   >
     <div
       v-if="needRefresh"
+      :class="['ub-wrapper', `s-scope-${currentScope}`, { 'ub-pops': isPops }]"
       role="status"
       aria-live="polite"
-      class="fixed left-1/2 -translate-x-1/2 bottom-4 z-[9999] w-[min(92vw,420px)]"
-      :style="{ bottom: 'max(1rem, env(safe-area-inset-bottom))' }"
     >
-      <div
-        class="flex items-center gap-3 rounded-2xl bg-white/95 backdrop-blur-md shadow-lg ring-1 px-4 py-3"
-        :class="theme.ring"
-      >
-        <div class="flex-1 min-w-0">
-          <p class="text-sm font-medium text-gray-900">Nuova versione disponibile</p>
-          <p class="text-xs text-gray-500">Aggiorna ora per applicarla.</p>
+      <div class="ub-card">
+        <div class="ub-text">
+          <p class="ub-title">Nuova versione disponibile</p>
+          <p class="ub-sub">Aggiorna ora per applicarla.</p>
         </div>
-        <button
-          type="button"
-          class="text-xs px-3 py-1.5 rounded-lg text-gray-500 hover:text-gray-700 hover:bg-gray-100 transition"
-          @click="dismiss"
-        >
-          Più tardi
-        </button>
-        <button
-          type="button"
-          class="text-xs font-semibold px-3 py-1.5 rounded-lg shadow-sm transition"
-          :class="theme.btn"
-          @click="applyUpdate"
-        >
-          Aggiorna
-        </button>
+        <button type="button" class="ub-btn ub-btn--ghost" @click="dismiss">Più tardi</button>
+        <button type="button" class="ub-btn ub-btn--primary" @click="applyUpdate">Aggiorna</button>
       </div>
     </div>
   </Transition>
 </template>
+
+<style scoped>
+.ub-wrapper {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  z-index: 9999;
+  width: min(92vw, 420px);
+}
+
+.ub-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: color-mix(in srgb, var(--md-sys-color-surface) 95%, transparent);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: var(--md-sys-shape-corner-large);
+  box-shadow: var(--md-sys-elevation-level-3);
+  /* Ring 1px col primary del scope corrente, opacità 30% */
+  outline: 1px solid color-mix(in srgb, var(--md-sys-color-primary) 30%, transparent);
+}
+
+.ub-text { flex: 1; min-width: 0; }
+
+.ub-title {
+  font-family: var(--md-sys-typescale-body-medium-font);
+  font-size:   var(--md-sys-typescale-body-medium-size);
+  line-height: var(--md-sys-typescale-body-medium-line-height);
+  font-weight: 600;
+  color: var(--md-sys-color-on-surface);
+  margin: 0;
+}
+
+.ub-sub {
+  font-family: var(--md-sys-typescale-body-small-font);
+  font-size:   var(--md-sys-typescale-body-small-size);
+  line-height: var(--md-sys-typescale-body-small-line-height);
+  color: var(--md-sys-color-on-surface-variant);
+  margin: 2px 0 0;
+}
+
+.ub-btn {
+  font-family: var(--md-sys-typescale-label-medium-font);
+  font-size:   var(--md-sys-typescale-label-medium-size);
+  font-weight: var(--md-sys-typescale-label-medium-weight);
+  border-radius: var(--md-sys-shape-corner-small);
+  padding: 6px 12px;
+  cursor: pointer;
+  border: none;
+  transition: background var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              color      var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
+  flex-shrink: 0;
+}
+
+.ub-btn--ghost {
+  background: transparent;
+  color: var(--md-sys-color-on-surface-variant);
+}
+.ub-btn--ghost:hover {
+  background: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent);
+  color: var(--md-sys-color-on-surface);
+}
+
+.ub-btn--primary {
+  background: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
+  box-shadow: var(--md-sys-elevation-level-1);
+}
+.ub-btn--primary:hover {
+  background: var(--md-sys-color-primary-hover);
+}
+
+/* Override POPS: amber-400 invece di SIDERA oro tenue per coerenza storica.
+   POPS non ha ancora un --md-sys-color-primary dedicato (lo scope mostra il default
+   sidera). Per il banner POPS forziamo amber + testo scuro. */
+.ub-wrapper.ub-pops .ub-btn--primary {
+  background: #FBBF24; /* amber-400 */
+  color: #1A1815;
+}
+.ub-wrapper.ub-pops .ub-btn--primary:hover {
+  background: #F59E0B; /* amber-500 */
+}
+.ub-wrapper.ub-pops .ub-card {
+  outline-color: color-mix(in srgb, #FBBF24 30%, transparent);
+}
+
+/* Transition classes (uso CSS scoped, sostituiscono le Tailwind transition utilities) */
+.ub-enter-active { transition: opacity var(--md-sys-motion-duration-medium2) var(--md-sys-motion-easing-emphasized-decelerate),
+                                transform var(--md-sys-motion-duration-medium2) var(--md-sys-motion-easing-emphasized-decelerate); }
+.ub-leave-active { transition: opacity var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-emphasized-accelerate),
+                                transform var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-emphasized-accelerate); }
+.ub-enter-from, .ub-leave-to { opacity: 0; transform: translateX(-50%) translateY(16px); }
+.ub-enter-to,   .ub-leave-from { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
