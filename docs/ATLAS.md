@@ -200,22 +200,53 @@ Nel blocco `<script>` inline, aggiungi un ramo per NEBULA:
 }
 ```
 
-### Step 5 — Layout NEBULA
+### Step 5 — Configurare lo scope nel registry
 
-`src/views/nebula/NebulaLayout.vue` (copia struttura da `PulsarLayout.vue` o `CepheidLayout.vue`):
-- Sidebar/bottom nav scope-specifica
-- `display-mode: standalone` detection per nascondere cross-link a SIDERA
-- `useNotifications('nebula')` (vedi sez. 4)
+Aggiungi un'entry in `src/views/sidera/scopeConfig.ts` (`SCOPE_CONFIGS.nebula`):
 
-### Step 6 — Shell (wrapper desktop vs mobile)
+```ts
+nebula: {
+  name: 'NEBULA',
+  wordmark: 'NEBULA',
+  brandSvg: 'nebula',
+  mobileNav: [
+    { path: '/nebula',         exact: true,  label: 'Team',       icon: 'group' },
+    // ... altre voci PWA
+  ],
+  fab: { icon: 'add', action: 'new-...', ariaLabel: 'Nuova ...' },
+  isTopLevelPath: (p) => p === '/nebula' || /* ... */,
+  loginPath: '/nebula/login',
+  notificationScope: 'nebula',
+}
+```
 
-`src/views/nebula/NebulaShell.vue` (copia da `PulsarShell.vue` / `CepheidShell.vue`):
-- Se desktop browser → monta `SideraLayout`
-- Se PWA standalone OR mobile viewport → monta `NebulaLayout`
+`detectScope()` riconosce già il prefix `/nebula` (vedi scopeConfig.ts). Aggiungi infine la corrispondente classe `.s-scope-nebula` in `src/style.css` (vedi sez. 14):
+
+```css
+.s-scope-nebula {
+  --md-sys-color-primary:               var(--s-nebula-on-light);
+  --md-sys-color-on-primary:            #FFFFFF;
+  --md-sys-color-primary-container:     var(--md-ref-palette-nebula-90);
+  --md-sys-color-on-primary-container:  var(--md-ref-palette-nebula-10);
+}
+.s-scope-nebula.s-surface-dark, /* ... */ {
+  --md-sys-color-primary:               var(--s-nebula-on-dark);
+  /* ... dark variants ... */
+}
+```
+
+### Step 6 — Nessuna Shell switching da scrivere
+
+**Il pattern attuale non richiede più componenti `*Shell.vue` di switching tra layout desktop e mobile**. `SideraLayout.vue` è il **layout unificato e adattivo**: rileva `display-mode: standalone` o viewport `≤ 768px` e mostra il chrome mobile (`ContextualMobileHeader`, `ContextualBottomNav`, `ContextualFab`) automaticamente leggendo la config dello scope corrente. I componenti contestuali sono in `src/components/shared/`.
+
+Storicamente esistevano `PulsarShell.vue` e `CepheidShell.vue` (47 righe ciascuno) che switchavano dinamicamente tra `SideraLayout` e `*Layout` modulare. Sono stati rimossi (vedi cronologia 2026-05-20): causavano remount Vue al resize del viewport, perdita di stato locale (scroll, draft, chat aperta) e duplicazione di codice tra layout desktop e mobile.
+
+Per scope='pulsar' la migrazione è già fatta (questo branch). Per CEPHEID e i futuri moduli, basta seguire questo step (config in `scopeConfig.ts` + router montato su `SideraLayout`).
 
 ### Step 7 — Rotte router
 
-In `src/router/index.ts`:
+In `src/router/index.ts`, monta `SideraLayout` come componente per la sezione `/nebula` (NON un NebulaShell dedicato — vedi Step 6):
+
 ```typescript
 {
   path: '/nebula/login',
@@ -232,7 +263,7 @@ In `src/router/index.ts`:
 },
 {
   path: '/nebula',
-  component: () => import('../views/nebula/NebulaShell.vue'),
+  component: () => import('../views/sidera/SideraLayout.vue'),  // ← layout unificato
   meta: { requiresAuth: true, nebulaScope: true },
   children: [
     { path: '', name: 'nebula-home', component: () => import('../views/nebula/NebulaHomeView.vue') },
@@ -244,10 +275,10 @@ In `src/router/index.ts`:
 Nel guard `beforeEach`, aggiungi:
 ```typescript
 const isNebulaScope = to.matched.some(r => r.meta.nebulaScope);
-// ... usa nei redirect
+// ... usa nei redirect (per scoped login fallback su 401)
 ```
 
-(Quando arriverà il 4° modulo PWA, POLARIS azione 6 si attiverà naturalmente — unifichiamo con `meta.scope: 'nebula'`).
+`SideraLayout` rileverà automaticamente lo scope dal `route.path` via `detectScope()` e mostrera il chrome appropriato (mobile vs desktop, modulo PULSAR vs CEPHEID vs NEBULA, ecc.).
 
 ### Step 8 — Cloud Function FCM (se NEBULA ha notifiche)
 
@@ -679,9 +710,9 @@ Riassunto ultra-compatto della ricetta sez. 3, copia-incollabile:
 ☐ Genera public/icons/nebula-{180,192,512}.png con sharp-cli
 ☐ Crea public/nebula.webmanifest (scope: /nebula/, name lungo)
 ☐ Aggiungi ramo nello script inline di index.html
-☐ Crea src/views/nebula/NebulaLayout.vue (copia da PulsarLayout)
-☐ Crea src/views/nebula/NebulaShell.vue (copia da PulsarShell)
-☐ Aggiungi rotte in src/router/index.ts (login con ScopedLogin props, scope guard)
+☐ Aggiungi SCOPE_CONFIGS.nebula in src/views/sidera/scopeConfig.ts (nav, FAB, paths)
+☐ Aggiungi .s-scope-nebula (light + dark) in src/style.css (ruoli M3, vedi sez. 14)
+☐ Aggiungi rotte in src/router/index.ts (login con ScopedLogin props + /nebula con component: SideraLayout, scope guard)
 ☐ (Se notifiche) Aggiungi Cloud Function onNew<Event> con filtro scope
 ☐ Update POLARIS.md sez. 1 (snapshot) + sez. 4 (decision log)
 ☐ npm run build → verifica dist/index.html
@@ -940,3 +971,4 @@ Ogni step va affrontato in branch dedicato `polaris/design-tokens-{layer}` per e
 - **2026-05-19** — Sez. 2 aggiornata con palette **Crab Nebula** (estrazione da M1 Hubble) e pattern **dual-surface** (on-dark / on-light) per i moduli con lightness fuori dalla zona intermedia. QUASAR e SIDERA restano singolo valore. Aggiunta nuova sez. 14 "Design Tokens" che dichiara Material Design 3 come linguaggio grafico di riferimento per la suite e definisce il primo strato (brand tokens) — type/shape/elevation/state/motion in roadmap.
 - **2026-05-20** — Sez. 14 estesa con **tonal palettes M3** (18 toni × 7 moduli = 126 reference tokens) generate via `@material/material-color-utilities` (algoritmo HCT, stesso del MTB). Decisione **Strada B**: i `--md-sys-color-primary` restano i valori Crab on-light/on-dark, le palette servono solo per varianti container/on-container/state-layer. Strade A (M3 letterale tone 40/80) e C (tone 50/70 ibrido) documentate come esperimenti futuri. Aggiunto `scripts/generate-tonal-palettes.mjs` per rigenerare deterministicamente. Mapping `--md-sys-color-*` per scope rinviato al branch `polaris/design-tokens-roles`.
 - **2026-05-20** — Sez. 14 estesa con **ruoli M3 system color** in `src/style.css` (branch `polaris/design-tokens-roles`): light scheme + `.s-surface-dark` per i ruoli neutri/surface/error/outline (scope-agnostic, valori dal MTB export con seed SIDERA), + `.s-scope-{module}` per primary/on-primary/primary-container/on-primary-container scope-aware su 7 moduli con dual surface. I componenti esistenti NON sono toccati — migrazione modulo-per-modulo in branch successivi (`polaris/{module}-m3-migration`).
+- **2026-05-20** — **Unified shell pattern** (branch `polaris/pulsar-unified-shell`): eliminato lo switching tra `SideraLayout` e `*Layout` modulare via `*Shell.vue`. Ora `SideraLayout.vue` è il **layout unificato e adattivo** per tutti gli scope sotto la suite (`/sidera/*`, `/pulsar/*`, `/cepheid/*`, futuri). Rileva `display-mode: standalone` o viewport `≤ 768px` e mostra il chrome mobile (`ContextualMobileHeader`, `ContextualBottomNav`, `ContextualFab` in `src/components/shared/`) leggendo la config dello scope corrente da `src/views/sidera/scopeConfig.ts`. **Eliminati**: `PulsarShell.vue`, `PulsarLayout.vue` (assorbiti da SideraLayout). **Sez. 3 step 5-7 riscritti** per riflettere il nuovo pattern. **Sez. 13 quick start** aggiornata: niente più `*Shell.vue` / `*Layout.vue` da copiare — basta un'entry in `scopeConfig.ts` + classe scope in `style.css` + rotte router che montano `SideraLayout`. Beneficio: niente remount al resize, stato locale preservato, riduzione duplicazione codice. Effort per nuovo scope: ~30 minuti invece di 2-4 ore. CEPHEID rimane da migrare in un branch separato (`polaris/cepheid-unified-shell`).

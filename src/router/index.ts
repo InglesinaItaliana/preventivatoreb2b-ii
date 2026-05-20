@@ -84,7 +84,7 @@ const router = createRouter({
         { path: 'nova/spedizioni', name: 'nova-spedizioni', component: () => import('../views/nova/NovaSpedizioniView.vue') },
       ]
     },
-    // ── PULSAR (PWA indipendente: shell PulsarLayout) ───────────────────────
+    // ── PULSAR (scope mobile, montato sotto SideraLayout adattivo) ──────────
     {
       path: '/pulsar/login',
       name: 'pulsar-login',
@@ -100,7 +100,7 @@ const router = createRouter({
     },
     {
       path: '/pulsar',
-      component: () => import('../views/pulsar/PulsarShell.vue'),
+      component: () => import('../views/sidera/SideraLayout.vue'),
       meta: { requiresAuth: true, pulsarScope: true },
       children: [
         { path: '',         name: 'pulsar-chats',   component: () => import('../views/pulsar/PulsarChatsView.vue') },
