@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import MaterialIcon from '../../components/MaterialIcon.vue'
+import MIcon from '../../components/pulsar/MIcon.vue'
 import { useAllTasks, type Task }    from '../../composables/sidera/useAllTasks'
 import { useProjects }    from '../../composables/sidera/useProjects'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
@@ -224,7 +224,7 @@ function parseDateInput(s: string): Date {
         </p>
       </div>
       <button v-if="isAdmin" class="s-btn" @click="openModal">
-        <MaterialIcon name="add" :size="16" />Nuova azione
+        <MIcon name="add" :size="16" />Nuova azione
       </button>
     </div>
 
@@ -253,7 +253,7 @@ function parseDateInput(s: string): Date {
 
       <div v-for="t in completedTasks" :key="t.id" class="task-row task-row--done">
         <button class="undo-btn" title="Riapri task" @click="doUncomplete(t)">
-          <MaterialIcon name="undo" :size="15" />
+          <MIcon name="undo" :size="15" />
         </button>
         <div class="row-title row-title--done">{{ t.title }}</div>
         <span
@@ -297,7 +297,7 @@ function parseDateInput(s: string): Date {
           >
             <!-- Checkbox -->
             <div class="checkbox" @click="doComplete(t)">
-              <MaterialIcon v-if="pendingComplete.has(t.id)" name="check" :size="12" :weight="700" class="check-icon" />
+              <MIcon v-if="pendingComplete.has(t.id)" name="check" :size="12" :weight="700" class="check-icon" />
             </div>
 
             <!-- Title -->
@@ -331,13 +331,13 @@ function parseDateInput(s: string): Date {
 
             <!-- Due date -->
             <div class="row-due" :style="{ color: isLate(t.dueDate) ? '#C8521A' : 'var(--s-text-dim)' }">
-              <MaterialIcon v-if="t.dueDate" name="schedule" :filled="isLate(t.dueDate)" :size="13" class="clock-icon" />
+              <MIcon v-if="t.dueDate" name="schedule" :filled="isLate(t.dueDate)" :size="13" class="clock-icon" />
               {{ formatDue(t.dueDate) }}
             </div>
 
             <!-- Edit button (visible on hover, admin only) -->
             <button v-if="isAdmin" class="row-edit-btn" title="Modifica" @click.stop="openEditModal(t)">
-              <MaterialIcon name="edit" :size="14" />
+              <MIcon name="edit" :size="14" />
             </button>
           </div>
         </template>
@@ -350,7 +350,7 @@ function parseDateInput(s: string): Date {
         <div class="modal">
           <div class="modal-header">
             <span class="modal-title">{{ editingTask ? 'Modifica azione' : 'Nuova azione' }}</span>
-            <button class="modal-close" @click="closeModal"><MaterialIcon name="close" :size="18" /></button>
+            <button class="modal-close" @click="closeModal"><MIcon name="close" :size="18" /></button>
           </div>
 
           <div class="modal-body">
@@ -416,7 +416,7 @@ function parseDateInput(s: string): Date {
               :disabled="deleting"
               @click="doDelete"
             >
-              <MaterialIcon name="delete" :size="15" />
+              <MIcon name="delete" :size="15" />
               {{ deleting ? '…' : 'Elimina' }}
             </button>
             <div style="margin-left:auto;display:flex;gap:8px">

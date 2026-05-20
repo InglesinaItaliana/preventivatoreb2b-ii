@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import MaterialIcon from '../../components/MaterialIcon.vue'
+import MIcon from '../../components/pulsar/MIcon.vue'
 import { usePopsMetrics }  from '../../composables/sidera/usePopsMetrics'
 import { useAllTasks }     from '../../composables/sidera/useAllTasks'
 import { useProjects }     from '../../composables/sidera/useProjects'
@@ -169,7 +169,7 @@ function urgenzaLabel(giorni: number) {
         @click="doComplete(t)"
       >
         <div class="checkbox" :class="{ 'is-checked': pendingDone.has(t.id) }">
-          <MaterialIcon v-if="pendingDone.has(t.id)" name="check" :size="12" :weight="700" class="check-icon" />
+          <MIcon v-if="pendingDone.has(t.id)" name="check" :size="12" :weight="700" class="check-icon" />
         </div>
         <div class="azione-title">{{ t.title }}</div>
         <span
@@ -211,7 +211,7 @@ function urgenzaLabel(giorni: number) {
               <div class="prog-fill" :style="{ width: pct(p) + '%', background: p.color }" />
             </div>
             <div class="proj-mini-info">
-              <MaterialIcon name="schedule" :size="13" class="clock-icon" />
+              <MIcon name="schedule" :size="13" class="clock-icon" />
               {{ p.doneCount }}/{{ p.taskCount }} azioni
               <template v-if="p.dueDate"> · {{ formatDue(p.dueDate) }}</template>
             </div>

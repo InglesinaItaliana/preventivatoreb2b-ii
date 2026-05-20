@@ -3,7 +3,7 @@ import { ref, computed, watch, onMounted, onBeforeUnmount, provide } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { signOut } from 'firebase/auth'
 import { auth } from '../../firebase'
-import MaterialIcon from '../../components/MaterialIcon.vue'
+import MIcon from '../../components/pulsar/MIcon.vue'
 import ContextualMobileHeader from '../../components/shared/ContextualMobileHeader.vue'
 import ContextualBottomNav from '../../components/shared/ContextualBottomNav.vue'
 import ContextualFab from '../../components/shared/ContextualFab.vue'
@@ -323,7 +323,7 @@ const roleLabel: Record<string, string> = {
               rel="noopener noreferrer"
               class="s-nav-item"
             >
-              <MaterialIcon :name="item.icon" :size="18" class="s-nav-icon" />
+              <MIcon :name="item.icon" :size="18" class="s-nav-icon" />
               {{ item.label }}
             </a>
             <RouterLink
@@ -332,7 +332,7 @@ const roleLabel: Record<string, string> = {
               class="s-nav-item"
               :style="activeStyle(item.path, item.exact, mod.accent, item.excludePaths)"
             >
-              <MaterialIcon
+              <MIcon
                 :name="item.icon"
                 :size="18"
                 :filled="isActive(item.path, item.exact, item.excludePaths)"
@@ -360,7 +360,7 @@ const roleLabel: Record<string, string> = {
           <div class="s-user-role">{{ roleLabel[currentUser?.role ?? ''] ?? 'Membro' }}</div>
         </div>
         <button class="s-logout-btn" title="Esci" @click="logout">
-          <MaterialIcon name="logout" :size="16" />
+          <MIcon name="logout" :size="16" />
         </button>
       </div>
     </aside>

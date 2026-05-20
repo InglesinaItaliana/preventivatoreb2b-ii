@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import MaterialIcon from '../../components/MaterialIcon.vue'
+import MIcon from '../../components/pulsar/MIcon.vue'
 import { useProjects, type Project } from '../../composables/sidera/useProjects'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
 
@@ -111,7 +111,7 @@ function formatDue(d: Date | null) {
 
       </div>
       <button v-if="isAdmin" class="s-btn" @click="openModal">
-        <MaterialIcon name="add" :size="16" />Nuovo progetto
+        <MIcon name="add" :size="16" />Nuovo progetto
       </button>
     </div>
 
@@ -149,13 +149,13 @@ function formatDue(d: Date | null) {
                 @click.stop="toggleActive(p.id, !p.active)"
               >{{ p.active ? '⏸' : '▶' }}</button>
               <div class="proj-menu-wrap" @click.stop>
-                <MaterialIcon name="more_horiz" :size="18" class="proj-more" @click="openMenu(p.id, $event)" />
+                <MIcon name="more_horiz" :size="18" class="proj-more" @click="openMenu(p.id, $event)" />
                 <div v-if="menuOpen === p.id" class="proj-dropdown">
                   <button class="proj-dropdown-item" @click="openEditModal(p, $event)">
-                    <MaterialIcon name="edit" :size="14" />Modifica progetto
+                    <MIcon name="edit" :size="14" />Modifica progetto
                   </button>
                   <button class="proj-dropdown-item proj-dropdown-item--danger" @click="confirmDelete(p.id, $event)">
-                    <MaterialIcon name="delete" :size="14" />Elimina progetto
+                    <MIcon name="delete" :size="14" />Elimina progetto
                   </button>
                 </div>
               </div>
@@ -178,7 +178,7 @@ function formatDue(d: Date | null) {
               {{ p.name[0]?.toUpperCase() }}
             </div>
             <div v-if="p.dueDate" class="proj-due">
-              <MaterialIcon name="schedule" :size="13" class="clock-icon" />{{ formatDue(p.dueDate) }}
+              <MIcon name="schedule" :size="13" class="clock-icon" />{{ formatDue(p.dueDate) }}
             </div>
           </div>
         </div>
@@ -191,7 +191,7 @@ function formatDue(d: Date | null) {
         <div class="modal">
           <div class="modal-header">
             <span class="modal-title">{{ editingProject ? 'Modifica progetto' : 'Nuovo progetto' }}</span>
-            <button class="modal-close" @click="closeModal"><MaterialIcon name="close" :size="18" /></button>
+            <button class="modal-close" @click="closeModal"><MIcon name="close" :size="18" /></button>
           </div>
 
           <div class="modal-body">

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import MaterialIcon from '../../components/MaterialIcon.vue'
+import MIcon from '../../components/pulsar/MIcon.vue'
 import GoalChip from '../../components/cepheid/GoalChip.vue'
 import { doc, getDoc } from 'firebase/firestore'
 import { db } from '../../firebase'
@@ -288,7 +288,7 @@ async function deleteCurrentTask() {
     <div class="bv-header">
       <div class="bv-breadcrumb">
         <button class="bv-back" @click="router.push('/sidera/projects')">
-          <MaterialIcon name="arrow_back" :size="15" />Progetti
+          <MIcon name="arrow_back" :size="15" />Progetti
         </button>
         <span class="bv-sep">/</span>
         <span class="bv-crumb">{{ project?.name ?? '…' }}</span>
@@ -310,7 +310,7 @@ async function deleteCurrentTask() {
           :style="{ color: project.color, background: project.color + '12' }"
         >{{ pct }}% completato</span>
         <button v-if="isAdmin && !projLoading" class="bv-delete-btn" title="Elimina progetto" @click="handleDeleteProject">
-          <MaterialIcon name="delete" :size="15" />
+          <MIcon name="delete" :size="15" />
         </button>
       </div>
       <div v-if="project?.description" class="bv-description">
@@ -329,7 +329,7 @@ async function deleteCurrentTask() {
           :class="{ 'is-active': tab === v.id }"
           @click="tab = v.id"
         >
-          <MaterialIcon :name="v.icon" :size="14" :filled="tab === v.id" :weight="tab === v.id ? 600 : 400" />{{ v.label }}
+          <MIcon :name="v.icon" :size="14" :filled="tab === v.id" :weight="tab === v.id ? 600 : 400" />{{ v.label }}
         </button>
       </div>
     </div>
@@ -350,7 +350,7 @@ async function deleteCurrentTask() {
                 <span class="col-count">{{ tasksInCol(col.id).length }}</span>
               </div>
               <button v-if="isAdmin" class="col-add-btn" @click="startAdd(col.id)">
-                <MaterialIcon name="add" :size="14" />
+                <MIcon name="add" :size="14" />
               </button>
             </div>
 
@@ -428,7 +428,7 @@ async function deleteCurrentTask() {
                   Aggiungi
                 </button>
                 <button class="add-cancel" @click="cancelAdd">
-                  <MaterialIcon name="close" :size="13" />
+                  <MIcon name="close" :size="13" />
                 </button>
               </div>
             </div>
@@ -438,7 +438,7 @@ async function deleteCurrentTask() {
               class="add-task"
               @click="startAdd(col.id)"
             >
-              <MaterialIcon name="add" :size="13" />Aggiungi azione
+              <MIcon name="add" :size="13" />Aggiungi azione
             </div>
           </div>
 
@@ -470,7 +470,7 @@ async function deleteCurrentTask() {
       <!-- Milestone -->
       <template v-else-if="tab === 'milestone'">
         <div v-if="!milestoneSorted.length" class="empty-tab">
-          <MaterialIcon name="flag" :filled="true" :size="32" class="empty-tab-icon" />
+          <MIcon name="flag" :filled="true" :size="32" class="empty-tab-icon" />
           <div>Nessuna milestone.</div>
           <div class="empty-tab-hint">Una milestone è un checkpoint datato senza sotto-task. Crea milestone da CEPHEID.</div>
         </div>
@@ -502,7 +502,7 @@ async function deleteCurrentTask() {
       <!-- Deliverable -->
       <template v-else-if="tab === 'deliverable'">
         <div v-if="!deliverableSorted.length" class="empty-tab">
-          <MaterialIcon name="inventory_2" :filled="true" :size="32" class="empty-tab-icon" />
+          <MIcon name="inventory_2" :filled="true" :size="32" class="empty-tab-icon" />
           <div>Nessun deliverable.</div>
           <div class="empty-tab-hint">Un deliverable è l'output tangibile del progetto. Crea deliverable da CEPHEID.</div>
         </div>
@@ -561,7 +561,7 @@ async function deleteCurrentTask() {
         <div class="modal">
           <div class="modal-header">
             <span class="modal-title">Modifica azione</span>
-            <button class="modal-close" @click="closeEdit"><MaterialIcon name="close" :size="18" /></button>
+            <button class="modal-close" @click="closeEdit"><MIcon name="close" :size="18" /></button>
           </div>
 
           <div class="modal-body">
@@ -615,7 +615,7 @@ async function deleteCurrentTask() {
 
           <div class="modal-footer">
             <button class="btn-danger" :disabled="editDeleting" @click="deleteCurrentTask">
-              <MaterialIcon name="delete" :size="15" />
+              <MIcon name="delete" :size="15" />
               {{ editDeleting ? '…' : 'Elimina' }}
             </button>
             <div style="margin-left:auto;display:flex;gap:8px">
