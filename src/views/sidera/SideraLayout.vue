@@ -454,6 +454,8 @@ const roleLabel: Record<string, string> = {
 .s-nav { flex: 1; }
 
 .s-section-label {
+  /* M3 label-small: 11px, ma qui 10px per dare aria al letter-spacing maggiorato (0.1em) */
+  font-family: var(--md-sys-typescale-label-small-font);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -462,7 +464,7 @@ const roleLabel: Record<string, string> = {
   padding-left: 12px;
   margin-top: 18px;
   margin-bottom: 6px;
-  transition: color 0.15s;
+  transition: color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
 }
 
 .s-nav-item {
@@ -470,11 +472,13 @@ const roleLabel: Record<string, string> = {
   align-items: center;
   gap: 9px;
   padding: 8px 12px;
-  border-radius: 8px;
+  border-radius: var(--md-sys-shape-corner-small);
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition: background var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              color      var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
   color: var(--s-text-dim);
-  font-size: 13px;
+  font-family: var(--md-sys-typescale-label-large-font);
+  font-size: 13px; /* leggermente sotto label-large (14) per coerenza density sidebar */
   font-weight: 500;
   letter-spacing: 0.01em;
   user-select: none;
@@ -484,18 +488,24 @@ const roleLabel: Record<string, string> = {
 
 .s-nav-item:hover { background: var(--s-border); color: var(--s-text-mid); }
 
-.s-nav-icon { font-size: 18px; flex-shrink: 0; transition: color 0.15s, font-variation-settings 0.2s; }
+.s-nav-icon {
+  font-size: 18px;
+  flex-shrink: 0;
+  transition: color                var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              font-variation-settings var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard);
+}
 
 .s-nav-empty { padding: 4px 12px 6px; }
 
 .s-soon {
   display: inline-block;
+  font-family: var(--md-sys-typescale-label-small-font);
   font-size: 9px;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   border: 1px solid;
-  border-radius: 4px;
+  border-radius: var(--md-sys-shape-corner-extra-small);
   padding: 2px 6px;
   opacity: 0.7;
 }
@@ -512,19 +522,28 @@ const roleLabel: Record<string, string> = {
 .s-user-avatar {
   width: 30px;
   height: 30px;
-  border-radius: 50%;
+  border-radius: var(--md-sys-shape-corner-full);
   background: linear-gradient(135deg, var(--s-green), #1E5038);
   display: flex;
   align-items: center;
   justify-content: center;
+  font-family: var(--md-sys-typescale-label-medium-font);
   font-size: 12px;
   font-weight: 700;
   color: #fff;
   flex-shrink: 0;
 }
 
-.s-user-name { font-size: 12px; font-weight: 500; }
-.s-user-role { font-size: 11px; color: var(--s-text-dim); }
+.s-user-name {
+  font-family: var(--md-sys-typescale-label-medium-font);
+  font-size: 12px;
+  font-weight: 500;
+}
+.s-user-role {
+  font-family: var(--md-sys-typescale-label-small-font);
+  font-size: 11px;
+  color: var(--s-text-dim);
+}
 
 .s-logout-btn {
   background: none;
@@ -534,9 +553,9 @@ const roleLabel: Record<string, string> = {
   display: flex;
   align-items: center;
   padding: 3px;
-  border-radius: 5px;
+  border-radius: var(--md-sys-shape-corner-extra-small);
   margin-left: auto;
-  transition: color 0.15s;
+  transition: color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
 }
 
 .s-logout-btn:hover { color: #C8521A; }
