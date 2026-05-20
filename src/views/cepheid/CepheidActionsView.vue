@@ -221,23 +221,23 @@ onMounted(() => {
 
     <!-- Modal Nuova azione -->
     <Teleport to="body">
-      <div v-if="showTaskModal" class="modal-backdrop" @click.self="showTaskModal = false">
-        <div class="modal" @click.stop>
-          <div class="modal-header">
-            <span class="modal-title">Nuova azione</span>
-            <button class="modal-close" @click="showTaskModal = false"><MIcon name="close" :size="18" /></button>
+      <div v-if="showTaskModal" class="modal-backdrop md-modal-backdrop" @click.self="showTaskModal = false">
+        <div class="modal md-modal-dialog" @click.stop>
+          <div class="modal-header md-modal-header">
+            <span class="modal-title md-modal-title">Nuova azione</span>
+            <button class="modal-close md-modal-close" @click="showTaskModal = false"><MIcon name="close" :size="18" /></button>
           </div>
-          <div class="modal-body">
-            <label class="field-label">Titolo *</label>
-            <input v-model="taskForm.title" class="field-input" autofocus />
+          <div class="modal-body md-modal-body">
+            <label class="field-label md-text-field-label">Titolo *</label>
+            <input v-model="taskForm.title" class="field-input md-text-field-input" autofocus />
 
-            <label class="field-label" style="margin-top:12px">Progetto</label>
-            <select v-model="taskForm.projectId" class="field-input">
+            <label class="field-label md-text-field-label" style="margin-top:12px">Progetto</label>
+            <select v-model="taskForm.projectId" class="field-input md-text-field-input">
               <option value="">— Nessun progetto —</option>
               <option v-for="p in activeProjects" :key="p.id" :value="p.id">{{ p.name }}</option>
             </select>
 
-            <label class="field-label" style="margin-top:12px">Assegna a</label>
+            <label class="field-label md-text-field-label" style="margin-top:12px">Assegna a</label>
             <div class="assignees-chips">
               <div
                 v-for="m in members"
@@ -254,7 +254,7 @@ onMounted(() => {
 
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
               <div>
-                <label class="field-label">Priorità</label>
+                <label class="field-label md-text-field-label">Priorità</label>
                 <div class="prio-picker">
                   <button
                     v-for="p in prioOptions"
@@ -271,15 +271,15 @@ onMounted(() => {
                 </div>
               </div>
               <div>
-                <label class="field-label">Scadenza</label>
+                <label class="field-label md-text-field-label">Scadenza</label>
                 <input v-model="taskForm.dueDate" type="date" class="field-input field-date" />
               </div>
             </div>
           </div>
-          <div class="modal-footer">
-            <button class="btn-ghost" @click="showTaskModal = false">Annulla</button>
+          <div class="modal-footer md-modal-footer">
+            <button class="btn-ghost md-btn md-btn--outlined md-btn--rounded" @click="showTaskModal = false">Annulla</button>
             <button
-              class="btn-primary"
+              class="btn-primary md-btn md-btn--filled md-btn--rounded"
               :disabled="!taskForm.title.trim() || taskSaving"
               @click="submitTask"
             >{{ taskSaving ? 'Creazione…' : 'Crea azione' }}</button>

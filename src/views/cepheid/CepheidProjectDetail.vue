@@ -475,19 +475,19 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
 
     <!-- Modal unificata (task / milestone / deliverable) -->
     <Teleport to="body">
-      <div v-if="showModal" class="modal-backdrop" @click.self="showModal = false">
-        <div class="modal" @click.stop>
-          <div class="modal-header">
-            <span class="modal-title">{{ modalTitle }}</span>
-            <button class="modal-close" @click="showModal = false"><MIcon name="close" :size="18" /></button>
+      <div v-if="showModal" class="modal-backdrop md-modal-backdrop" @click.self="showModal = false">
+        <div class="modal md-modal-dialog" @click.stop>
+          <div class="modal-header md-modal-header">
+            <span class="modal-title md-modal-title">{{ modalTitle }}</span>
+            <button class="modal-close md-modal-close" @click="showModal = false"><MIcon name="close" :size="18" /></button>
           </div>
-          <div class="modal-body">
-            <label class="field-label">Titolo *</label>
-            <input v-model="form.title" class="field-input" autofocus />
+          <div class="modal-body md-modal-body">
+            <label class="field-label md-text-field-label">Titolo *</label>
+            <input v-model="form.title" class="field-input md-text-field-input" autofocus />
 
             <!-- Assegnatari (no per milestone) -->
             <template v-if="modalKind !== 'milestone'">
-              <label class="field-label" style="margin-top:12px">{{ modalKind === 'deliverable' ? 'Owner' : 'Assegna a' }}</label>
+              <label class="field-label md-text-field-label" style="margin-top:12px">{{ modalKind === 'deliverable' ? 'Owner' : 'Assegna a' }}</label>
               <div class="assignees-chips">
                 <div
                   v-for="m in members"
@@ -506,7 +506,7 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
             <!-- Priorità (no per milestone) + Scadenza -->
             <div :style="modalKind === 'milestone' ? 'margin-top:12px' : 'display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px'">
               <div v-if="modalKind !== 'milestone'">
-                <label class="field-label">Priorità</label>
+                <label class="field-label md-text-field-label">Priorità</label>
                 <div class="prio-picker">
                   <button
                     v-for="p in prioOptions"
@@ -523,22 +523,22 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
                 </div>
               </div>
               <div>
-                <label class="field-label">{{ modalKind === 'milestone' ? 'Data checkpoint' : 'Scadenza' }}</label>
+                <label class="field-label md-text-field-label">{{ modalKind === 'milestone' ? 'Data checkpoint' : 'Scadenza' }}</label>
                 <input v-model="form.dueDate" type="date" class="field-input field-date" />
               </div>
             </div>
 
             <!-- Stato iniziale (solo task) -->
             <template v-if="modalKind === 'task'">
-              <label class="field-label" style="margin-top:12px">Stato iniziale</label>
-              <select v-model="form.status" class="field-input">
+              <label class="field-label md-text-field-label" style="margin-top:12px">Stato iniziale</label>
+              <select v-model="form.status" class="field-input md-text-field-input">
                 <option v-for="s in states" :key="s.id" :value="s.id">{{ s.label }}</option>
               </select>
             </template>
 
             <!-- Task collegati (solo deliverable) -->
             <template v-if="modalKind === 'deliverable'">
-              <label class="field-label" style="margin-top:12px">Task collegati</label>
+              <label class="field-label md-text-field-label" style="margin-top:12px">Task collegati</label>
               <div v-if="!taskItems.length" class="modal-empty">
                 Nessun task disponibile in questo progetto.
               </div>
@@ -559,10 +559,10 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
               </div>
             </template>
           </div>
-          <div class="modal-footer">
-            <button class="btn-ghost" @click="showModal = false">Annulla</button>
+          <div class="modal-footer md-modal-footer">
+            <button class="btn-ghost md-btn md-btn--outlined md-btn--rounded" @click="showModal = false">Annulla</button>
             <button
-              class="btn-primary"
+              class="btn-primary md-btn md-btn--filled md-btn--rounded"
               :disabled="!form.title.trim() || saving"
               @click="submitForm"
             >{{ modalCta }}</button>

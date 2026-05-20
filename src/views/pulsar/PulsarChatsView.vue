@@ -166,14 +166,14 @@ onMounted(() => {
 
     <!-- Modal nuova chat -->
     <Teleport to="body">
-      <div v-if="showModal" class="modal-backdrop" @click.self="showModal = false">
-        <div class="modal">
-          <div class="modal-header">
-            <span class="modal-title">Nuova conversazione</span>
-            <button class="modal-close" @click="showModal = false"><MIcon name="close" :size="18" /></button>
+      <div v-if="showModal" class="modal-backdrop md-modal-backdrop" @click.self="showModal = false">
+        <div class="modal md-modal-dialog">
+          <div class="modal-header md-modal-header">
+            <span class="modal-title md-modal-title">Nuova conversazione</span>
+            <button class="modal-close md-modal-close" @click="showModal = false"><MIcon name="close" :size="18" /></button>
           </div>
 
-          <div class="modal-body">
+          <div class="modal-body md-modal-body">
             <!-- Toggle DM / Gruppo -->
             <div class="type-toggle">
               <button :class="['type-btn', { 'is-active': !isGroup }]" @click="isGroup = false">DM</button>
@@ -182,7 +182,7 @@ onMounted(() => {
 
             <!-- DM: seleziona membro -->
             <template v-if="!isGroup">
-              <label class="field-label" style="margin-top:16px">Con chi?</label>
+              <label class="field-label md-text-field-label" style="margin-top:16px">Con chi?</label>
               <div class="member-list">
                 <div
                   v-for="m in otherMembers"
@@ -199,9 +199,9 @@ onMounted(() => {
 
             <!-- Gruppo: nome + selezione multipla -->
             <template v-else>
-              <label class="field-label" style="margin-top:16px">Nome gruppo</label>
-              <input v-model="groupName" class="field-input" placeholder="Es. Marketing team" />
-              <label class="field-label" style="margin-top:16px">Partecipanti</label>
+              <label class="field-label md-text-field-label" style="margin-top:16px">Nome gruppo</label>
+              <input v-model="groupName" class="field-input md-text-field-input" placeholder="Es. Marketing team" />
+              <label class="field-label md-text-field-label" style="margin-top:16px">Partecipanti</label>
               <div class="member-list">
                 <div
                   v-for="m in otherMembers"
@@ -218,10 +218,10 @@ onMounted(() => {
             </template>
           </div>
 
-          <div class="modal-footer">
-            <button class="btn-ghost" @click="showModal = false">Annulla</button>
+          <div class="modal-footer md-modal-footer">
+            <button class="btn-ghost md-btn md-btn--outlined md-btn--rounded" @click="showModal = false">Annulla</button>
             <button
-              class="btn-primary"
+              class="btn-primary md-btn md-btn--filled md-btn--rounded"
               :disabled="saving || (!isGroup && !dmTarget) || (isGroup && (!groupName.trim() || !groupMembers.length))"
               @click="submit"
             >{{ saving ? 'Creazione…' : 'Crea' }}</button>
@@ -232,21 +232,21 @@ onMounted(() => {
 
     <!-- Modal conferma cancellazione chat -->
     <Teleport to="body">
-      <div v-if="chatToDelete" class="modal-backdrop" @click.self="chatToDelete = null">
+      <div v-if="chatToDelete" class="modal-backdrop md-modal-backdrop" @click.self="chatToDelete = null">
         <div class="modal modal--confirm">
-          <div class="modal-header">
-            <span class="modal-title">Eliminare la chat?</span>
-            <button class="modal-close" @click="chatToDelete = null"><MIcon name="close" :size="18" /></button>
+          <div class="modal-header md-modal-header">
+            <span class="modal-title md-modal-title">Eliminare la chat?</span>
+            <button class="modal-close md-modal-close" @click="chatToDelete = null"><MIcon name="close" :size="18" /></button>
           </div>
-          <div class="modal-body">
+          <div class="modal-body md-modal-body">
             <p class="confirm-text">
               Stai per eliminare <strong>{{ chatToDelete.name }}</strong>.
               L'azione è irreversibile: cronologia e pendenze della chat verranno rimosse.
             </p>
           </div>
-          <div class="modal-footer">
-            <button class="btn-ghost" :disabled="deleting" @click="chatToDelete = null">Annulla</button>
-            <button class="btn-danger" :disabled="deleting" @click="confirmDelete">
+          <div class="modal-footer md-modal-footer">
+            <button class="btn-ghost md-btn md-btn--outlined md-btn--rounded" :disabled="deleting" @click="chatToDelete = null">Annulla</button>
+            <button class="btn-danger md-btn md-btn--danger md-btn--rounded" :disabled="deleting" @click="confirmDelete">
               {{ deleting ? 'Eliminazione…' : 'Elimina' }}
             </button>
           </div>

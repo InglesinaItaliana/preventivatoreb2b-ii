@@ -247,13 +247,13 @@ function metricaCorrenteVsTarget(): string {
 
     <!-- Modal Collega progetto -->
     <Teleport to="body">
-      <div v-if="showLinkModal" class="modal-backdrop" @click.self="showLinkModal = false">
-        <div class="modal" @click.stop>
-          <div class="modal-header">
-            <span class="modal-title">Collega progetto</span>
-            <button class="modal-close" @click="showLinkModal = false"><MIcon name="close" :size="18" /></button>
+      <div v-if="showLinkModal" class="modal-backdrop md-modal-backdrop" @click.self="showLinkModal = false">
+        <div class="modal md-modal-dialog" @click.stop>
+          <div class="modal-header md-modal-header">
+            <span class="modal-title md-modal-title">Collega progetto</span>
+            <button class="modal-close md-modal-close" @click="showLinkModal = false"><MIcon name="close" :size="18" /></button>
           </div>
-          <div class="modal-body">
+          <div class="modal-body md-modal-body">
             <div v-if="!unlinkedProjects.length" class="modal-empty">
               Tutti i progetti attivi sono già collegati a un obiettivo.
             </div>
@@ -271,8 +271,8 @@ function metricaCorrenteVsTarget(): string {
               <MIcon name="add" :size="16" class="link-add" />
             </div>
           </div>
-          <div class="modal-footer">
-            <button class="btn-ghost" @click="showLinkModal = false" style="flex:1">Chiudi</button>
+          <div class="modal-footer md-modal-footer">
+            <button class="btn-ghost md-btn md-btn--outlined md-btn--rounded" @click="showLinkModal = false" style="flex:1">Chiudi</button>
           </div>
         </div>
       </div>
@@ -280,40 +280,40 @@ function metricaCorrenteVsTarget(): string {
 
     <!-- Modal Edit obiettivo -->
     <Teleport to="body">
-      <div v-if="showEditModal" class="modal-backdrop" @click.self="showEditModal = false">
-        <div class="modal" @click.stop>
-          <div class="modal-header">
-            <span class="modal-title">Modifica obiettivo</span>
-            <button class="modal-close" @click="showEditModal = false"><MIcon name="close" :size="18" /></button>
+      <div v-if="showEditModal" class="modal-backdrop md-modal-backdrop" @click.self="showEditModal = false">
+        <div class="modal md-modal-dialog" @click.stop>
+          <div class="modal-header md-modal-header">
+            <span class="modal-title md-modal-title">Modifica obiettivo</span>
+            <button class="modal-close md-modal-close" @click="showEditModal = false"><MIcon name="close" :size="18" /></button>
           </div>
-          <div class="modal-body">
-            <label class="field-label">Titolo *</label>
-            <input v-model="editForm.titolo" class="field-input" autofocus />
+          <div class="modal-body md-modal-body">
+            <label class="field-label md-text-field-label">Titolo *</label>
+            <input v-model="editForm.titolo" class="field-input md-text-field-input" autofocus />
 
-            <label class="field-label" style="margin-top:12px">Metrica</label>
-            <input v-model="editForm.metrica" class="field-input" />
+            <label class="field-label md-text-field-label" style="margin-top:12px">Metrica</label>
+            <input v-model="editForm.metrica" class="field-input md-text-field-input" />
 
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
               <div>
-                <label class="field-label">Valore corrente</label>
-                <input v-model="editForm.valoreCorrente" type="number" class="field-input" />
+                <label class="field-label md-text-field-label">Valore corrente</label>
+                <input v-model="editForm.valoreCorrente" type="number" class="field-input md-text-field-input" />
               </div>
               <div>
-                <label class="field-label">Valore target</label>
-                <input v-model="editForm.valoreTarget" type="number" class="field-input" />
+                <label class="field-label md-text-field-label">Valore target</label>
+                <input v-model="editForm.valoreTarget" type="number" class="field-input md-text-field-input" />
               </div>
             </div>
 
-            <label class="field-label" style="margin-top:12px">Descrizione</label>
-            <textarea v-model="editForm.descrizione" class="field-input" rows="2" />
+            <label class="field-label md-text-field-label" style="margin-top:12px">Descrizione</label>
+            <textarea v-model="editForm.descrizione" class="field-input md-text-field-input" rows="2" />
 
             <div style="display:grid;grid-template-columns:80px 1fr;gap:12px;margin-top:12px">
               <div>
-                <label class="field-label">Anno</label>
-                <input v-model="editForm.anno" type="number" class="field-input" />
+                <label class="field-label md-text-field-label">Anno</label>
+                <input v-model="editForm.anno" type="number" class="field-input md-text-field-input" />
               </div>
               <div>
-                <label class="field-label">Colore</label>
+                <label class="field-label md-text-field-label">Colore</label>
                 <div class="color-picker">
                   <button
                     v-for="c in GOAL_COLOR_PRESETS"
@@ -328,10 +328,10 @@ function metricaCorrenteVsTarget(): string {
               </div>
             </div>
           </div>
-          <div class="modal-footer">
-            <button class="btn-ghost" @click="showEditModal = false">Annulla</button>
+          <div class="modal-footer md-modal-footer">
+            <button class="btn-ghost md-btn md-btn--outlined md-btn--rounded" @click="showEditModal = false">Annulla</button>
             <button
-              class="btn-primary"
+              class="btn-primary md-btn md-btn--filled md-btn--rounded"
               :disabled="!editForm.titolo.trim() || editSaving"
               @click="submitEdit"
             >{{ editSaving ? 'Salvataggio…' : 'Salva' }}</button>

@@ -157,26 +157,26 @@ onMounted(() => {
 
     <!-- Modal Nuovo progetto -->
     <Teleport to="body">
-      <div v-if="showProjModal" class="modal-backdrop" @click.self="showProjModal = false">
-        <div class="modal" @click.stop>
-          <div class="modal-header">
-            <span class="modal-title">Nuovo progetto</span>
-            <button class="modal-close" @click="showProjModal = false"><MIcon name="close" :size="18" /></button>
+      <div v-if="showProjModal" class="modal-backdrop md-modal-backdrop" @click.self="showProjModal = false">
+        <div class="modal md-modal-dialog" @click.stop>
+          <div class="modal-header md-modal-header">
+            <span class="modal-title md-modal-title">Nuovo progetto</span>
+            <button class="modal-close md-modal-close" @click="showProjModal = false"><MIcon name="close" :size="18" /></button>
           </div>
-          <div class="modal-body">
-            <label class="field-label">Nome *</label>
-            <input v-model="projForm.name" class="field-input" autofocus />
+          <div class="modal-body md-modal-body">
+            <label class="field-label md-text-field-label">Nome *</label>
+            <input v-model="projForm.name" class="field-input md-text-field-input" autofocus />
 
-            <label class="field-label" style="margin-top:12px">Descrizione</label>
-            <textarea v-model="projForm.description" class="field-input" rows="2" />
+            <label class="field-label md-text-field-label" style="margin-top:12px">Descrizione</label>
+            <textarea v-model="projForm.description" class="field-input md-text-field-input" rows="2" />
 
-            <label v-if="obiettiviAttivi.length" class="field-label" style="margin-top:12px">Obiettivo</label>
-            <select v-if="obiettiviAttivi.length" v-model="projForm.obiettivoId" class="field-input">
+            <label v-if="obiettiviAttivi.length" class="field-label md-text-field-label" style="margin-top:12px">Obiettivo</label>
+            <select v-if="obiettiviAttivi.length" v-model="projForm.obiettivoId" class="field-input md-text-field-input">
               <option value="">— Nessun obiettivo —</option>
               <option v-for="o in obiettiviAttivi" :key="o.id" :value="o.id">{{ o.titolo }}</option>
             </select>
 
-            <label class="field-label" style="margin-top:12px">Colore</label>
+            <label class="field-label md-text-field-label" style="margin-top:12px">Colore</label>
             <div class="color-picker">
               <button
                 v-for="c in COLOR_PRESETS"
@@ -189,13 +189,13 @@ onMounted(() => {
               />
             </div>
 
-            <label class="field-label" style="margin-top:12px">Scadenza</label>
+            <label class="field-label md-text-field-label" style="margin-top:12px">Scadenza</label>
             <input v-model="projForm.dueDate" type="date" class="field-input field-date" />
           </div>
-          <div class="modal-footer">
-            <button class="btn-ghost" @click="showProjModal = false">Annulla</button>
+          <div class="modal-footer md-modal-footer">
+            <button class="btn-ghost md-btn md-btn--outlined md-btn--rounded" @click="showProjModal = false">Annulla</button>
             <button
-              class="btn-primary"
+              class="btn-primary md-btn md-btn--filled md-btn--rounded"
               :disabled="!projForm.name.trim() || projSaving"
               @click="submitProject"
             >{{ projSaving ? 'Creazione…' : 'Crea progetto' }}</button>

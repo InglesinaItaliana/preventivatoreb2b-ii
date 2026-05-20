@@ -356,9 +356,9 @@ async function submitTask() {
                   @keydown.enter.exact.prevent="submitInlineReply(msg)"
                 />
                 <div class="inline-reply-actions">
-                  <button class="btn-ghost-sm" :disabled="replySending" @click="cancelInlineReply">Annulla</button>
+                  <button class="btn-ghost-sm md-btn md-btn--outlined md-btn--sm md-btn--rounded" :disabled="replySending" @click="cancelInlineReply">Annulla</button>
                   <button
-                    class="btn-primary-sm"
+                    class="btn-primary-sm md-btn md-btn--filled md-btn--sm md-btn--rounded"
                     :disabled="!replyText.trim() || replySending"
                     @click="submitInlineReply(msg)"
                   >
@@ -420,28 +420,28 @@ async function submitTask() {
 
       <!-- Task creation modal -->
       <Teleport to="body">
-        <div v-if="showTaskModal" class="modal-backdrop" @click.self="closeTaskModal">
+        <div v-if="showTaskModal" class="modal-backdrop md-modal-backdrop" @click.self="closeTaskModal">
           <div class="task-modal" @click.stop>
-            <div class="modal-header">
-              <span class="modal-title">Crea azione</span>
-              <button class="modal-close" @click="closeTaskModal">
+            <div class="modal-header md-modal-header">
+              <span class="modal-title md-modal-title">Crea azione</span>
+              <button class="modal-close md-modal-close" @click="closeTaskModal">
                 <MIcon name="close" :size="18" />
               </button>
             </div>
-            <div class="modal-body">
+            <div class="modal-body md-modal-body">
               <p v-if="taskMsg" class="modal-context">
                 Dalla chat <b>{{ taskMsg.chatName }}</b> · {{ displayName(taskMsg.from, members) }}
               </p>
-              <label class="field-label">Titolo *</label>
-              <input v-model="taskForm.title" class="field-input" autofocus />
+              <label class="field-label md-text-field-label">Titolo *</label>
+              <input v-model="taskForm.title" class="field-input md-text-field-input" autofocus />
 
-              <label class="field-label" style="margin-top:12px">Progetto</label>
-              <select v-model="taskForm.projectId" class="field-input">
+              <label class="field-label md-text-field-label" style="margin-top:12px">Progetto</label>
+              <select v-model="taskForm.projectId" class="field-input md-text-field-input">
                 <option value="">— Nessun progetto —</option>
                 <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
               </select>
 
-              <label class="field-label" style="margin-top:12px">Assegna a</label>
+              <label class="field-label md-text-field-label" style="margin-top:12px">Assegna a</label>
               <div class="assignees-chips">
                 <div
                   v-for="m in members"
@@ -460,7 +460,7 @@ async function submitTask() {
 
               <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
                 <div>
-                  <label class="field-label">Priorità</label>
+                  <label class="field-label md-text-field-label">Priorità</label>
                   <div class="prio-picker">
                     <button
                       v-for="p in prioOptions"
@@ -477,15 +477,15 @@ async function submitTask() {
                   </div>
                 </div>
                 <div>
-                  <label class="field-label">Scadenza</label>
+                  <label class="field-label md-text-field-label">Scadenza</label>
                   <input v-model="taskForm.dueDate" type="date" class="field-input field-date" />
                 </div>
               </div>
             </div>
-            <div class="modal-footer">
-              <button class="btn-ghost" @click="closeTaskModal">Annulla</button>
+            <div class="modal-footer md-modal-footer">
+              <button class="btn-ghost md-btn md-btn--outlined md-btn--rounded" @click="closeTaskModal">Annulla</button>
               <button
-                class="btn-primary"
+                class="btn-primary md-btn md-btn--filled md-btn--rounded"
                 :disabled="!taskForm.title.trim() || taskSaving"
                 @click="submitTask"
               >{{ taskSaving ? 'Creazione…' : 'Crea azione' }}</button>
