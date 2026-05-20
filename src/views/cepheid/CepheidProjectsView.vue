@@ -273,7 +273,7 @@ onMounted(() => {
   flex: 1;
   background: #F4F2EE;
   border: 1px solid #E8E5DF;
-  border-radius: 8px;
+  border-radius: var(--md-sys-shape-corner-small);
   padding: 6px 10px;
   font-size: 12px;
   font-family: 'Outfit', sans-serif;
@@ -293,7 +293,7 @@ onMounted(() => {
 .proj-top .proj-name { margin-bottom: 0; }
 
 .loading-rows { display: flex; flex-direction: column; gap: 6px; }
-.row-skel { height: 90px; border-radius: 12px; background: #E8E5DF; animation: pulse 1.4s ease-in-out infinite; }
+.row-skel { height: 90px; border-radius: var(--md-sys-shape-corner-medium); background: #E8E5DF; animation: pulse 1.4s ease-in-out infinite; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 
 .empty-state {
@@ -312,7 +312,7 @@ onMounted(() => {
   display: flex;
   background: #fff;
   border: 1px solid #E8E5DF;
-  border-radius: 12px;
+  border-radius: var(--md-sys-shape-corner-medium);
   overflow: hidden;
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s;
@@ -328,8 +328,8 @@ onMounted(() => {
 .proj-desc { font-size: 12px; color: #6A6560; margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .proj-stats { font-size: 11px; color: #9B9590; margin-bottom: 6px; }
 
-.prog-track { height: 4px; background: #F0EDE8; border-radius: 999px; overflow: hidden; }
-.prog-fill { height: 100%; border-radius: 999px; transition: width 0.3s ease; }
+.prog-track { height: 4px; background: #F0EDE8; border-radius: var(--md-sys-shape-corner-full); overflow: hidden; }
+.prog-fill { height: 100%; border-radius: var(--md-sys-shape-corner-full); transition: width 0.3s ease; }
 
 /* Modal */
 .modal-backdrop {
@@ -359,7 +359,7 @@ onMounted(() => {
 
 .modal-close {
   background: none; border: none; cursor: pointer;
-  color: #9B9590; padding: 2px; border-radius: 4px;
+  color: #9B9590; padding: 2px; border-radius: var(--md-sys-shape-corner-extra-small);
 }
 
 .modal-body { padding: 16px 20px; overflow-y: auto; flex: 1; }
@@ -395,7 +395,7 @@ onMounted(() => {
 
 .color-swatch {
   width: 32px; height: 32px;
-  border-radius: 50%;
+  border-radius: var(--md-sys-shape-corner-full);
   border: 2px solid transparent;
   cursor: pointer;
   transition: transform 0.15s, border-color 0.15s;
@@ -415,7 +415,7 @@ onMounted(() => {
   padding: 12px;
   background: none;
   border: 1px solid #E8E5DF;
-  border-radius: 12px;
+  border-radius: var(--md-sys-shape-corner-medium);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -428,7 +428,7 @@ onMounted(() => {
   padding: 12px;
   background: var(--md-sys-color-primary);
   border: none;
-  border-radius: 12px;
+  border-radius: var(--md-sys-shape-corner-medium);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;

@@ -345,7 +345,7 @@ onMounted(() => {
   margin-bottom: 8px;
 }
 
-.bucket-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.bucket-dot { width: 8px; height: 8px; border-radius: var(--md-sys-shape-corner-full); flex-shrink: 0; }
 
 .bucket-label {
   font-size: 10px;
@@ -362,7 +362,7 @@ onMounted(() => {
   color: #9B9590;
   background: #F4F2EE;
   padding: 1px 7px;
-  border-radius: 999px;
+  border-radius: var(--md-sys-shape-corner-full);
 }
 
 .task-row {
@@ -393,7 +393,7 @@ onMounted(() => {
 .row-body { flex: 1; min-width: 0; }
 .row-title { font-size: 14px; color: #1A1917; }
 .row-meta { margin-top: 3px; display: flex; gap: 6px; }
-.row-proj { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; }
+.row-proj { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: var(--md-sys-shape-corner-extra-small); }
 
 .row-due {
   font-size: 11px; color: #9B9590;
@@ -427,7 +427,7 @@ onMounted(() => {
 
 .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 0; }
 .modal-title { font-size: 16px; font-weight: 600; color: #1A1917; }
-.modal-close { background: none; border: none; cursor: pointer; color: #9B9590; padding: 2px; border-radius: 4px; }
+.modal-close { background: none; border: none; cursor: pointer; color: #9B9590; padding: 2px; border-radius: var(--md-sys-shape-corner-extra-small); }
 .modal-body { padding: 16px 20px; overflow-y: auto; flex: 1; }
 
 .field-label {
@@ -462,7 +462,7 @@ onMounted(() => {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 4px 10px 4px 4px;
   border: 1px solid #E8E5DF;
-  border-radius: 999px;
+  border-radius: var(--md-sys-shape-corner-full);
   font-size: 12px; font-weight: 500;
   color: #6A6560; cursor: pointer;
   background: #fff;
@@ -471,7 +471,7 @@ onMounted(() => {
 
 .chip-avatar {
   width: 22px; height: 22px;
-  border-radius: 50%;
+  border-radius: var(--md-sys-shape-corner-full);
   display: flex; align-items: center; justify-content: center;
   font-size: 10px; font-weight: 700;
   flex-shrink: 0;
@@ -486,7 +486,7 @@ onMounted(() => {
   gap: 4px;
   padding: 8px 8px;
   border: 1.5px solid #E8E5DF;
-  border-radius: 8px;
+  border-radius: var(--md-sys-shape-corner-small);
   font-size: 12px;
   font-weight: 500;
   font-family: 'Outfit', sans-serif;
@@ -494,7 +494,7 @@ onMounted(() => {
   background: #fff;
   color: #6A6560;
 }
-.prio-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.prio-dot { width: 8px; height: 8px; border-radius: var(--md-sys-shape-corner-full); flex-shrink: 0; }
 
 .modal-footer {
   display: flex; gap: 8px;
@@ -505,7 +505,7 @@ onMounted(() => {
 .btn-ghost {
   flex: 1; padding: 12px;
   background: none; border: 1px solid #E8E5DF;
-  border-radius: 12px;
+  border-radius: var(--md-sys-shape-corner-medium);
   font-size: 14px; font-weight: 500;
   cursor: pointer; color: #6A6560;
   font-family: 'Outfit', sans-serif;
@@ -514,7 +514,7 @@ onMounted(() => {
 .btn-primary {
   flex: 2; padding: 12px;
   background: var(--md-sys-color-primary); border: none;
-  border-radius: 12px;
+  border-radius: var(--md-sys-shape-corner-medium);
   font-size: 14px; font-weight: 600;
   cursor: pointer; color: #fff;
   font-family: 'Outfit', sans-serif;

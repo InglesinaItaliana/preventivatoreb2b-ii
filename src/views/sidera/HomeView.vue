@@ -411,7 +411,7 @@ function urgenzaLabel(giorni: number) {
 }
 
 .az-avatar {
-  width: 26px; height: 26px; border-radius: 50%;
+  width: 26px; height: 26px; border-radius: var(--md-sys-shape-corner-full);
   display: flex; align-items: center; justify-content: center;
   font-size: 9.5px; font-weight: 700; letter-spacing: 0.02em; flex-shrink: 0;
 }
@@ -472,7 +472,7 @@ function urgenzaLabel(giorni: number) {
 .kpi-card {
   background: var(--s-surface);
   border: 1px solid var(--s-border);
-  border-radius: 12px;
+  border-radius: var(--md-sys-shape-corner-medium);
   padding: 18px 20px;
   text-decoration: none;
   color: inherit;
@@ -537,7 +537,7 @@ function urgenzaLabel(giorni: number) {
 .feed-item { display: flex; gap: 10px; margin-bottom: 14px; }
 
 .feed-avatar {
-  width: 28px; height: 28px; border-radius: 50%;
+  width: 28px; height: 28px; border-radius: var(--md-sys-shape-corner-full);
   display: flex; align-items: center; justify-content: center;
   font-size: 10px; font-weight: 700; letter-spacing: 0.02em; flex-shrink: 0;
 }

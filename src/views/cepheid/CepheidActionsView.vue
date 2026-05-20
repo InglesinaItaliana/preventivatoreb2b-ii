@@ -348,7 +348,7 @@ onMounted(() => {
 
 .filter-pill {
   padding: 6px 14px;
-  border-radius: 999px;
+  border-radius: var(--md-sys-shape-corner-full);
   border: 1px solid transparent;
   background: var(--md-sys-color-surface-container);
   font-size: 12px;
@@ -398,13 +398,13 @@ onMounted(() => {
 .row-title { font-size: 14px; color: #1A1917; }
 .row-title--done { text-decoration: line-through; color: #9B9590; flex: 1; }
 .row-meta { margin-top: 3px; display: flex; gap: 6px; }
-.row-proj { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: 4px; }
+.row-proj { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: var(--md-sys-shape-corner-extra-small); }
 
 .row-due { font-size: 11px; color: #9B9590; display: flex; align-items: center; gap: 3px; flex-shrink: 0; }
 
 .undo-btn {
   background: none; border: none; cursor: pointer;
-  color: #9B9590; padding: 2px; border-radius: 4px;
+  color: #9B9590; padding: 2px; border-radius: var(--md-sys-shape-corner-extra-small);
   display: flex; align-items: center;
   transition: color 0.15s;
   flex-shrink: 0;
@@ -443,7 +443,7 @@ onMounted(() => {
   font-size: 11px;
   font-weight: 600;
   padding: 1px 7px;
-  border-radius: 999px;
+  border-radius: var(--md-sys-shape-corner-full);
   letter-spacing: 0;
 }
 
@@ -488,7 +488,7 @@ onMounted(() => {
   cursor: pointer;
   color: #9B9590;
   padding: 2px;
-  border-radius: 4px;
+  border-radius: var(--md-sys-shape-corner-extra-small);
 }
 
 .modal-body {
@@ -535,7 +535,7 @@ onMounted(() => {
   gap: 6px;
   padding: 4px 10px 4px 4px;
   border: 1px solid #E8E5DF;
-  border-radius: 999px;
+  border-radius: var(--md-sys-shape-corner-full);
   font-size: 12px;
   font-weight: 500;
   color: #6A6560;
@@ -546,7 +546,7 @@ onMounted(() => {
 
 .chip-avatar {
   width: 22px; height: 22px;
-  border-radius: 50%;
+  border-radius: var(--md-sys-shape-corner-full);
   display: flex; align-items: center; justify-content: center;
   font-size: 10px; font-weight: 700;
   flex-shrink: 0;
@@ -561,7 +561,7 @@ onMounted(() => {
   gap: 4px;
   padding: 8px 8px;
   border: 1.5px solid #E8E5DF;
-  border-radius: 8px;
+  border-radius: var(--md-sys-shape-corner-small);
   font-size: 12px;
   font-weight: 500;
   font-family: 'Outfit', sans-serif;
@@ -570,7 +570,7 @@ onMounted(() => {
   color: #6A6560;
 }
 
-.prio-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.prio-dot { width: 8px; height: 8px; border-radius: var(--md-sys-shape-corner-full); flex-shrink: 0; }
 
 .modal-footer {
   display: flex;
@@ -584,7 +584,7 @@ onMounted(() => {
   padding: 12px;
   background: none;
   border: 1px solid #E8E5DF;
-  border-radius: 12px;
+  border-radius: var(--md-sys-shape-corner-medium);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -597,7 +597,7 @@ onMounted(() => {
   padding: 12px;
   background: var(--md-sys-color-primary);
   border: none;
-  border-radius: 12px;
+  border-radius: var(--md-sys-shape-corner-medium);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;

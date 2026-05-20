@@ -292,7 +292,7 @@ onMounted(() => {
 
 .chat-skel {
   height: 62px;
-  border-radius: 12px;
+  border-radius: var(--md-sys-shape-corner-medium);
   background: #E8E5DF;
   animation: pulse 1.4s ease-in-out infinite;
 }
@@ -327,7 +327,7 @@ onMounted(() => {
 .chat-avatar {
   width: 46px;
   height: 46px;
-  border-radius: 50%;
+  border-radius: var(--md-sys-shape-corner-full);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -409,7 +409,7 @@ onMounted(() => {
   cursor: pointer;
   color: #9B9590;
   padding: 2px;
-  border-radius: 4px;
+  border-radius: var(--md-sys-shape-corner-extra-small);
 }
 
 .modal-body {
@@ -430,7 +430,7 @@ onMounted(() => {
   padding: 8px;
   border: none;
   background: none;
-  border-radius: 8px;
+  border-radius: var(--md-sys-shape-corner-small);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -496,7 +496,7 @@ onMounted(() => {
 .m-avatar {
   width: 32px;
   height: 32px;
-  border-radius: 50%;
+  border-radius: var(--md-sys-shape-corner-full);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -519,7 +519,7 @@ onMounted(() => {
   padding: 12px;
   background: none;
   border: 1px solid #E8E5DF;
-  border-radius: 12px;
+  border-radius: var(--md-sys-shape-corner-medium);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -532,7 +532,7 @@ onMounted(() => {
   padding: 12px;
   background: var(--md-sys-color-primary);
   border: none;
-  border-radius: 12px;
+  border-radius: var(--md-sys-shape-corner-medium);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -550,7 +550,7 @@ onMounted(() => {
   padding: 12px;
   background: var(--md-sys-color-error);
   border: none;
-  border-radius: 12px;
+  border-radius: var(--md-sys-shape-corner-medium);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;

@@ -402,7 +402,7 @@ function metricaCorrenteVsTarget(): string {
   color: #9B9590;
   background: #F4F2EE;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--md-sys-shape-corner-full);
 }
 .gd-menu-btn {
   background: none; border: none; cursor: pointer;
@@ -509,7 +509,7 @@ function metricaCorrenteVsTarget(): string {
   padding: 5px 10px;
   background: color-mix(in srgb, var(--md-sys-color-primary) 10%, transparent);
   border: 1px solid color-mix(in srgb, var(--md-sys-color-primary) 30%, transparent);
-  border-radius: 999px;
+  border-radius: var(--md-sys-shape-corner-full);
   font-family: 'Outfit', sans-serif;
   font-size: 11px;
   font-weight: 600;
@@ -531,7 +531,7 @@ function metricaCorrenteVsTarget(): string {
   display: flex;
   background: #fff;
   border: 1px solid #E8E5DF;
-  border-radius: 12px;
+  border-radius: var(--md-sys-shape-corner-medium);
   overflow: hidden;
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s;
@@ -541,8 +541,8 @@ function metricaCorrenteVsTarget(): string {
 .proj-body { padding: 12px 14px; flex: 1; min-width: 0; }
 .proj-name { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
 .proj-stats { font-size: 11px; color: #9B9590; margin-bottom: 6px; }
-.prog-track { height: 4px; background: #F0EDE8; border-radius: 999px; overflow: hidden; }
-.prog-fill { height: 100%; border-radius: 999px; transition: width 0.3s ease; }
+.prog-track { height: 4px; background: #F0EDE8; border-radius: var(--md-sys-shape-corner-full); overflow: hidden; }
+.prog-fill { height: 100%; border-radius: var(--md-sys-shape-corner-full); transition: width 0.3s ease; }
 
 .unlink-btn {
   background: none; border: none; cursor: pointer;
@@ -597,7 +597,7 @@ function metricaCorrenteVsTarget(): string {
 
 .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 0; }
 .modal-title { font-size: 16px; font-weight: 600; color: #1A1917; }
-.modal-close { background: none; border: none; cursor: pointer; color: #9B9590; padding: 2px; border-radius: 4px; }
+.modal-close { background: none; border: none; cursor: pointer; color: #9B9590; padding: 2px; border-radius: var(--md-sys-shape-corner-extra-small); }
 .modal-body { padding: 16px 20px; overflow-y: auto; flex: 1; }
 
 .field-label {
@@ -618,7 +618,7 @@ function metricaCorrenteVsTarget(): string {
 .color-picker { display: flex; gap: 8px; }
 .color-swatch {
   width: 28px; height: 28px;
-  border-radius: 50%; border: 2px solid transparent;
+  border-radius: var(--md-sys-shape-corner-full); border: 2px solid transparent;
   cursor: pointer; transition: transform 0.15s, border-color 0.15s;
 }
 .color-swatch.is-sel { border-color: #1A1917; transform: scale(1.1); }
@@ -631,7 +631,7 @@ function metricaCorrenteVsTarget(): string {
 .btn-ghost {
   flex: 1; padding: 12px;
   background: none; border: 1px solid #E8E5DF;
-  border-radius: 12px;
+  border-radius: var(--md-sys-shape-corner-medium);
   font-size: 14px; font-weight: 500;
   cursor: pointer; color: #6A6560;
   font-family: 'Outfit', sans-serif;
@@ -639,7 +639,7 @@ function metricaCorrenteVsTarget(): string {
 .btn-primary {
   flex: 2; padding: 12px;
   background: var(--md-sys-color-primary); border: none;
-  border-radius: 12px;
+  border-radius: var(--md-sys-shape-corner-medium);
   font-size: 14px; font-weight: 600;
   cursor: pointer; color: #fff;
   font-family: 'Outfit', sans-serif;

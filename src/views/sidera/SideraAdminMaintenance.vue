@@ -98,7 +98,7 @@ async function runCleanup() {
 .m-header { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
 .m-back {
   background: none; border: 1px solid var(--md-sys-color-outline-variant, #CEC6B4);
-  width: 36px; height: 36px; border-radius: 50%;
+  width: 36px; height: 36px; border-radius: var(--md-sys-shape-corner-full);
   cursor: pointer; font-size: 18px; color: inherit;
 }
 .m-back:hover { background: var(--md-sys-color-surface-container, #F5EDDF); }
@@ -107,7 +107,7 @@ async function runCleanup() {
 
 .m-empty {
   background: var(--md-sys-color-surface-container, #F5EDDF);
-  padding: 32px; border-radius: 12px; text-align: center;
+  padding: 32px; border-radius: var(--md-sys-shape-corner-medium); text-align: center;
 }
 
 .m-task {
@@ -121,7 +121,7 @@ async function runCleanup() {
   font-family: 'JetBrains Mono', 'SF Mono', monospace;
   font-size: 12px;
   background: var(--md-sys-color-surface-container-high, #EFE7DA);
-  padding: 1px 6px; border-radius: 4px;
+  padding: 1px 6px; border-radius: var(--md-sys-shape-corner-extra-small);
 }
 
 .m-btn {

@@ -325,7 +325,7 @@ onUnmounted(() => {
 
 .hv-sphere {
   position: absolute;
-  border-radius: 50%;
+  border-radius: var(--md-sys-shape-corner-full);
   opacity: 0;
   will-change: transform, background;
   transition: background 3.8s ease, opacity 2.2s ease;

@@ -144,7 +144,7 @@ const currentLabel = () => channels.find(c => c.id === channel.value)?.label ?? 
 .unread-dot {
   width: 6px;
   height: 6px;
-  border-radius: 50%;
+  border-radius: var(--md-sys-shape-corner-full);
   background: var(--s-green);
   margin-left: auto;
   flex-shrink: 0;
@@ -183,7 +183,7 @@ const currentLabel = () => channels.find(c => c.id === channel.value)?.label ?? 
 .msg-avatar {
   width: 32px;
   height: 32px;
-  border-radius: 50%;
+  border-radius: var(--md-sys-shape-corner-full);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -209,7 +209,7 @@ const currentLabel = () => channels.find(c => c.id === channel.value)?.label ?? 
   padding: 10px 14px;
   background: var(--s-green-glow);
   border: 1px solid var(--s-green-border);
-  border-radius: 8px;
+  border-radius: var(--md-sys-shape-corner-small);
   max-width: 380px;
 }
 

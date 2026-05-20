@@ -703,7 +703,7 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
   height: 18px;
   padding: 0 6px;
   background: #F4F2EE;
-  border-radius: 999px;
+  border-radius: var(--md-sys-shape-corner-full);
   font-size: 10px;
   font-weight: 700;
   color: #6A6560;
@@ -748,7 +748,7 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
   margin-bottom: 8px;
 }
 
-.state-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.state-dot { width: 8px; height: 8px; border-radius: var(--md-sys-shape-corner-full); flex-shrink: 0; }
 
 .state-label {
   font-size: 10px;
@@ -765,7 +765,7 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
   color: #9B9590;
   background: #F4F2EE;
   padding: 1px 7px;
-  border-radius: 999px;
+  border-radius: var(--md-sys-shape-corner-full);
 }
 
 .state-empty { font-size: 12px; color: #C8C5C0; padding: 6px 0 10px 14px; }
@@ -794,7 +794,7 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
   flex-shrink: 0; cursor: pointer;
   transition: all 0.15s;
 }
-.checkbox--sm { width: 14px; height: 14px; border-radius: 4px; }
+.checkbox--sm { width: 14px; height: 14px; border-radius: var(--md-sys-shape-corner-extra-small); }
 
 .checkbox:hover { border-color: var(--md-sys-color-primary); }
 .check-icon { color: var(--md-sys-color-primary); }
@@ -807,7 +807,7 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
   align-items: center;
   gap: 2px;
   padding: 3px 8px;
-  border-radius: 999px;
+  border-radius: var(--md-sys-shape-corner-full);
   border: none;
   font-size: 10px;
   font-weight: 600;
@@ -819,7 +819,7 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
 
 .row-del-btn {
   background: none; border: none; cursor: pointer;
-  color: #C8C5C0; padding: 4px; border-radius: 4px;
+  color: #C8C5C0; padding: 4px; border-radius: var(--md-sys-shape-corner-extra-small);
   display: flex; align-items: center;
   transition: color 0.15s;
   flex-shrink: 0;
@@ -861,7 +861,7 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
 
 .undo-btn {
   background: none; border: none; cursor: pointer;
-  color: #9B9590; padding: 2px; border-radius: 4px;
+  color: #9B9590; padding: 2px; border-radius: var(--md-sys-shape-corner-extra-small);
   display: flex; align-items: center;
   transition: color 0.15s;
   flex-shrink: 0;
@@ -895,7 +895,7 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
   font-size: 11px;
   font-weight: 600;
   padding: 1px 7px;
-  border-radius: 999px;
+  border-radius: var(--md-sys-shape-corner-full);
   letter-spacing: 0;
 }
 
@@ -926,7 +926,7 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
 
 .milestone-circle {
   width: 22px; height: 22px;
-  border-radius: 50%;
+  border-radius: var(--md-sys-shape-corner-full);
   border: 2px solid #B4B0AA;
   background: #fff;
   display: flex; align-items: center; justify-content: center;
@@ -974,7 +974,7 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
   display: flex;
   background: #fff;
   border: 1px solid #E8E5DF;
-  border-radius: 12px;
+  border-radius: var(--md-sys-shape-corner-medium);
   overflow: hidden;
 }
 .deliverable-card.is-done { opacity: 0.6; }
@@ -1011,7 +1011,7 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
   align-items: center;
   gap: 3px;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--md-sys-shape-corner-full);
   background: #F4F2EE;
   font-size: 10px;
   font-weight: 600;
@@ -1065,8 +1065,8 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
   font-style: italic;
 }
 
-.prog-track { height: 4px; background: #F0EDE8; border-radius: 999px; overflow: hidden; }
-.prog-fill { height: 100%; border-radius: 999px; transition: width 0.3s ease; }
+.prog-track { height: 4px; background: #F0EDE8; border-radius: var(--md-sys-shape-corner-full); overflow: hidden; }
+.prog-fill { height: 100%; border-radius: var(--md-sys-shape-corner-full); transition: width 0.3s ease; }
 
 /* Modal */
 .modal-backdrop {
@@ -1088,7 +1088,7 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
 
 .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 0; }
 .modal-title { font-size: 16px; font-weight: 600; color: #1A1917; }
-.modal-close { background: none; border: none; cursor: pointer; color: #9B9590; padding: 2px; border-radius: 4px; }
+.modal-close { background: none; border: none; cursor: pointer; color: #9B9590; padding: 2px; border-radius: var(--md-sys-shape-corner-extra-small); }
 .modal-body { padding: 16px 20px; overflow-y: auto; flex: 1; }
 .modal-empty {
   padding: 16px;
@@ -1132,7 +1132,7 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
   gap: 6px;
   padding: 4px 10px 4px 4px;
   border: 1px solid #E8E5DF;
-  border-radius: 999px;
+  border-radius: var(--md-sys-shape-corner-full);
   font-size: 12px;
   font-weight: 500;
   color: #6A6560;
@@ -1143,7 +1143,7 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
 
 .chip-avatar {
   width: 22px; height: 22px;
-  border-radius: 50%;
+  border-radius: var(--md-sys-shape-corner-full);
   display: flex; align-items: center; justify-content: center;
   font-size: 10px; font-weight: 700;
   flex-shrink: 0;
@@ -1158,7 +1158,7 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
   gap: 4px;
   padding: 8px 8px;
   border: 1.5px solid #E8E5DF;
-  border-radius: 8px;
+  border-radius: var(--md-sys-shape-corner-small);
   font-size: 12px;
   font-weight: 500;
   font-family: 'Outfit', sans-serif;
@@ -1167,7 +1167,7 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
   color: #6A6560;
 }
 
-.prio-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.prio-dot { width: 8px; height: 8px; border-radius: var(--md-sys-shape-corner-full); flex-shrink: 0; }
 
 .subtask-picker {
   display: flex;
@@ -1209,7 +1209,7 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
   padding: 12px;
   background: none;
   border: 1px solid #E8E5DF;
-  border-radius: 12px;
+  border-radius: var(--md-sys-shape-corner-medium);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -1222,7 +1222,7 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
   padding: 12px;
   background: var(--md-sys-color-primary);
   border: none;
-  border-radius: 12px;
+  border-radius: var(--md-sys-shape-corner-medium);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;

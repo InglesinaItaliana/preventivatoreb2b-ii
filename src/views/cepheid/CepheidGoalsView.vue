@@ -343,7 +343,7 @@ const totalActive = computed(() => obiettiviAttivi.value.length)
   color: #9B9590;
   background: #F4F2EE;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--md-sys-shape-corner-full);
   flex-shrink: 0;
 }
 
@@ -411,7 +411,7 @@ const totalActive = computed(() => obiettiviAttivi.value.length)
 
 .modal-close {
   background: none; border: none; cursor: pointer;
-  color: #9B9590; padding: 2px; border-radius: 4px;
+  color: #9B9590; padding: 2px; border-radius: var(--md-sys-shape-corner-extra-small);
 }
 
 .modal-body { padding: 16px 20px; overflow-y: auto; flex: 1; }
@@ -445,7 +445,7 @@ const totalActive = computed(() => obiettiviAttivi.value.length)
 .color-picker { display: flex; gap: 8px; }
 .color-swatch {
   width: 28px; height: 28px;
-  border-radius: 50%;
+  border-radius: var(--md-sys-shape-corner-full);
   border: 2px solid transparent;
   cursor: pointer;
   transition: transform 0.15s, border-color 0.15s;
@@ -464,7 +464,7 @@ const totalActive = computed(() => obiettiviAttivi.value.length)
   padding: 12px;
   background: none;
   border: 1px solid #E8E5DF;
-  border-radius: 12px;
+  border-radius: var(--md-sys-shape-corner-medium);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
@@ -477,7 +477,7 @@ const totalActive = computed(() => obiettiviAttivi.value.length)
   padding: 12px;
   background: var(--md-sys-color-primary);
   border: none;
-  border-radius: 12px;
+  border-radius: var(--md-sys-shape-corner-medium);
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;

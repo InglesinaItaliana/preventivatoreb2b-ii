@@ -665,7 +665,7 @@ async function submitTask() {
 }
 
 .card-avatar {
-  width: 34px; height: 34px; border-radius: 50%;
+  width: 34px; height: 34px; border-radius: var(--md-sys-shape-corner-full);
   display: flex; align-items: center; justify-content: center;
   font-size: 12px; font-weight: 700; color: #fff; flex-shrink: 0;
 }
@@ -691,7 +691,7 @@ async function submitTask() {
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  border-radius: 999px;
+  border-radius: var(--md-sys-shape-corner-full);
   border: 1px solid transparent;
   background: var(--md-sys-color-surface-container);
   font-size: 12px;
@@ -752,7 +752,7 @@ async function submitTask() {
 
 .btn-ghost-sm {
   padding: 7px 12px;
-  border-radius: 8px;
+  border-radius: var(--md-sys-shape-corner-small);
   border: 1px solid #E8E5DF;
   background: none;
   font-size: 12px;
@@ -766,7 +766,7 @@ async function submitTask() {
   align-items: center;
   gap: 6px;
   padding: 7px 14px;
-  border-radius: 8px;
+  border-radius: var(--md-sys-shape-corner-small);
   border: none;
   background: var(--md-sys-color-primary);
   color: #fff;
@@ -787,7 +787,7 @@ async function submitTask() {
 
 .task-modal {
   background: #fff;
-  border-radius: 16px;
+  border-radius: var(--md-sys-shape-corner-large);
   width: 100%; max-width: 420px;
   font-family: 'Outfit', sans-serif;
 }
@@ -811,7 +811,7 @@ async function submitTask() {
 .field-input {
   width: 100%; box-sizing: border-box;
   background: #F4F2EE; border: 1px solid #E8E5DF;
-  border-radius: 8px; padding: 9px 12px;
+  border-radius: var(--md-sys-shape-corner-small); padding: 9px 12px;
   font-size: 16px; font-family: 'Outfit', sans-serif;
   color: #1A1917; outline: none;
 }
@@ -820,7 +820,7 @@ async function submitTask() {
 .prio-picker { display: flex; gap: 4px; }
 .prio-opt {
   flex: 1; display: flex; align-items: center; gap: 5px;
-  padding: 7px 6px; border-radius: 8px;
+  padding: 7px 6px; border-radius: var(--md-sys-shape-corner-small);
   border: 1.5px solid #E8E5DF; background: #F4F2EE;
   font-size: 11px; font-weight: 500; cursor: pointer;
   font-family: 'Outfit', sans-serif; color: #6A6560;
@@ -828,7 +828,7 @@ async function submitTask() {
 }
 .prio-opt:hover { border-color: #C8C5C0; color: #1A1917; }
 .prio-opt.is-sel { font-weight: 700; background: transparent; }
-.prio-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.prio-dot { width: 8px; height: 8px; border-radius: var(--md-sys-shape-corner-full); flex-shrink: 0; }
 
 .assignees-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 0; }
 .assignee-chip {
@@ -841,7 +841,7 @@ async function submitTask() {
 .assignee-chip:hover { border-color: #C8C5C0; color: #1A1917; }
 .assignee-chip.is-selected { font-weight: 600; }
 .chip-avatar {
-  width: 18px; height: 18px; border-radius: 50%;
+  width: 18px; height: 18px; border-radius: var(--md-sys-shape-corner-full);
   display: flex; align-items: center; justify-content: center;
   font-size: 9px; font-weight: 700; flex-shrink: 0;
 }

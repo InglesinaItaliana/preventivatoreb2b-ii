@@ -197,7 +197,7 @@ const showDone = ref(false)
 
 .undo-btn {
   background: none; border: none; cursor: pointer;
-  color: #9B9590; padding: 2px; border-radius: 4px;
+  color: #9B9590; padding: 2px; border-radius: var(--md-sys-shape-corner-extra-small);
   display: flex; align-items: center;
   transition: color 0.15s;
   flex-shrink: 0;
@@ -240,7 +240,7 @@ const showDone = ref(false)
   font-size: 11px;
   font-weight: 600;
   padding: 1px 7px;
-  border-radius: 999px;
+  border-radius: var(--md-sys-shape-corner-full);
   letter-spacing: 0;
 }
 

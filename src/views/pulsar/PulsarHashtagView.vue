@@ -192,7 +192,7 @@ function renderText(t: string) {
 
 .card-avatar {
   width: 36px; height: 36px;
-  border-radius: 50%;
+  border-radius: var(--md-sys-shape-corner-full);
   display: flex; align-items: center; justify-content: center;
   font-size: 13px; font-weight: 700; flex-shrink: 0;
 }
@@ -219,7 +219,7 @@ function renderText(t: string) {
   align-items: center;
   gap: 6px;
   padding: 8px 16px;
-  border-radius: 999px;
+  border-radius: var(--md-sys-shape-corner-full);
   border: 1px solid transparent;
   background: var(--md-sys-color-surface-container);
   font-size: 12px;

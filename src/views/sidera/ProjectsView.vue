@@ -272,7 +272,7 @@ function formatDue(d: Date | null) {
   background: var(--module-accent);
   color: #fff;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--md-sys-shape-corner-small);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -297,7 +297,7 @@ function formatDue(d: Date | null) {
   height: 180px;
   background: var(--s-surface);
   border: 1px solid var(--s-border);
-  border-radius: 12px;
+  border-radius: var(--md-sys-shape-corner-medium);
   animation: s-pulse 1.4s ease-in-out infinite;
 }
 
@@ -325,7 +325,7 @@ function formatDue(d: Date | null) {
 .proj-card {
   background: var(--s-surface);
   border: 1px solid var(--s-border);
-  border-radius: 12px;
+  border-radius: var(--md-sys-shape-corner-medium);
   cursor: pointer;
   transition: all 0.2s;
   position: relative;
@@ -371,7 +371,7 @@ function formatDue(d: Date | null) {
   font-size: 9px;
   font-weight: 700;
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--md-sys-shape-corner-extra-small);
   background: var(--s-border);
   color: var(--s-text-dim);
   letter-spacing: 0.05em;
@@ -384,7 +384,7 @@ function formatDue(d: Date | null) {
   cursor: pointer;
   font-size: 11px;
   padding: 2px 4px;
-  border-radius: 4px;
+  border-radius: var(--md-sys-shape-corner-extra-small);
   color: var(--s-text-dim);
   transition: background 0.15s, color 0.15s;
 }
@@ -401,7 +401,7 @@ function formatDue(d: Date | null) {
   right: 0;
   background: var(--s-surface);
   border: 1px solid var(--s-border);
-  border-radius: 8px;
+  border-radius: var(--md-sys-shape-corner-small);
   box-shadow: 0 8px 24px rgba(0,0,0,0.14);
   z-index: 50;
   min-width: 160px;
@@ -443,7 +443,7 @@ function formatDue(d: Date | null) {
 .proj-color-dot {
   width: 24px;
   height: 24px;
-  border-radius: 50%;
+  border-radius: var(--md-sys-shape-corner-full);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -489,7 +489,7 @@ function formatDue(d: Date | null) {
   cursor: pointer;
   color: var(--s-text-dim);
   padding: 2px;
-  border-radius: 4px;
+  border-radius: var(--md-sys-shape-corner-extra-small);
   transition: color 0.15s;
 }
 
@@ -512,7 +512,7 @@ function formatDue(d: Date | null) {
   box-sizing: border-box;
   background: var(--s-surface-up);
   border: 1px solid var(--s-border);
-  border-radius: 8px;
+  border-radius: var(--md-sys-shape-corner-small);
   padding: 9px 12px;
   font-size: 13px;
   font-family: 'Outfit', sans-serif;
@@ -533,7 +533,7 @@ function formatDue(d: Date | null) {
 .color-swatch {
   width: 26px;
   height: 26px;
-  border-radius: 50%;
+  border-radius: var(--md-sys-shape-corner-full);
   border: none;
   cursor: pointer;
   transition: transform 0.15s;
@@ -554,7 +554,7 @@ function formatDue(d: Date | null) {
   padding: 8px 16px;
   background: none;
   border: 1px solid var(--s-border);
-  border-radius: 8px;
+  border-radius: var(--md-sys-shape-corner-small);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;

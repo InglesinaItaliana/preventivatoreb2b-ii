@@ -468,7 +468,7 @@ function parseDateInput(s: string): Date {
   background: var(--module-accent);
   color: #fff;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--md-sys-shape-corner-small);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -548,7 +548,7 @@ function parseDateInput(s: string): Date {
   margin-bottom: 12px;
 }
 
-.group-dot   { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+.group-dot   { width: 7px; height: 7px; border-radius: var(--md-sys-shape-corner-full); flex-shrink: 0; }
 .group-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; flex-shrink: 0; }
 .group-line  { flex: 1; height: 1px; background: var(--s-border); }
 .group-count { font-size: 11px; color: var(--s-text-dim); }
@@ -619,7 +619,7 @@ function parseDateInput(s: string): Date {
   font-size: 10.5px;
   font-weight: 600;
   padding: 2px 8px;
-  border-radius: 4px;
+  border-radius: var(--md-sys-shape-corner-extra-small);
   letter-spacing: 0.01em;
   flex-shrink: 0;
   white-space: nowrap;
@@ -642,7 +642,7 @@ function parseDateInput(s: string): Date {
 .assignee-avatar {
   width: 26px;
   height: 26px;
-  border-radius: 50%;
+  border-radius: var(--md-sys-shape-corner-full);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -696,7 +696,7 @@ function parseDateInput(s: string): Date {
 
 .chip-avatar {
   width: 20px; height: 20px;
-  border-radius: 50%;
+  border-radius: var(--md-sys-shape-corner-full);
   display: flex; align-items: center; justify-content: center;
   font-size: 8.5px; font-weight: 700; flex-shrink: 0;
 }
@@ -722,7 +722,7 @@ function parseDateInput(s: string): Date {
   display: flex;
   align-items: center;
   padding: 2px;
-  border-radius: 4px;
+  border-radius: var(--md-sys-shape-corner-extra-small);
   flex-shrink: 0;
   transition: color 0.15s;
 }
@@ -760,7 +760,7 @@ function parseDateInput(s: string): Date {
 
 .modal-close {
   background: none; border: none; cursor: pointer;
-  color: var(--s-text-dim); padding: 2px; border-radius: 4px;
+  color: var(--s-text-dim); padding: 2px; border-radius: var(--md-sys-shape-corner-extra-small);
   transition: color 0.15s;
 }
 
@@ -783,7 +783,7 @@ function parseDateInput(s: string): Date {
   box-sizing: border-box;
   background: var(--s-surface-up);
   border: 1px solid var(--s-border);
-  border-radius: 8px;
+  border-radius: var(--md-sys-shape-corner-small);
   padding: 9px 12px;
   font-size: 13px;
   font-family: 'Outfit', sans-serif;
@@ -805,7 +805,7 @@ function parseDateInput(s: string): Date {
   align-items: center;
   gap: 5px;
   padding: 7px 8px;
-  border-radius: 8px;
+  border-radius: var(--md-sys-shape-corner-small);
   border: 1.5px solid var(--s-border);
   background: var(--s-surface-up);
   font-size: 11px;
@@ -820,7 +820,7 @@ function parseDateInput(s: string): Date {
 .prio-opt:hover { border-color: var(--s-border-mid); color: var(--s-text); }
 .prio-opt.is-sel { font-weight: 700; background: transparent; }
 
-.prio-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.prio-dot { width: 8px; height: 8px; border-radius: var(--md-sys-shape-corner-full); flex-shrink: 0; }
 
 .modal-footer {
   display: flex;
@@ -835,7 +835,7 @@ function parseDateInput(s: string): Date {
   padding: 8px 16px;
   background: none;
   border: 1px solid var(--s-border);
-  border-radius: 8px;
+  border-radius: var(--md-sys-shape-corner-small);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -853,7 +853,7 @@ function parseDateInput(s: string): Date {
   padding: 8px 14px;
   background: rgba(200, 82, 26, 0.08);
   border: 1px solid rgba(200, 82, 26, 0.3);
-  border-radius: 8px;
+  border-radius: var(--md-sys-shape-corner-small);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;

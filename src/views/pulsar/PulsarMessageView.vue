@@ -630,7 +630,7 @@ function renderText(t: string) {
 .chat-header-avatar {
   width: 38px;
   height: 38px;
-  border-radius: 50%;
+  border-radius: var(--md-sys-shape-corner-full);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -708,7 +708,7 @@ function renderText(t: string) {
 .msg-avatar {
   width: 30px;
   height: 30px;
-  border-radius: 50%;
+  border-radius: var(--md-sys-shape-corner-full);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -740,7 +740,7 @@ function renderText(t: string) {
   margin-bottom: 6px;
   border-left: 3px solid var(--md-sys-color-primary);
   background: color-mix(in srgb, var(--md-sys-color-primary) 8%, transparent);
-  border-radius: 4px;
+  border-radius: var(--md-sys-shape-corner-extra-small);
   cursor: pointer;
   transition: background 0.15s;
 }
@@ -849,7 +849,7 @@ function renderText(t: string) {
   display: flex;
   align-items: center;
   padding: 2px;
-  border-radius: 4px;
+  border-radius: var(--md-sys-shape-corner-extra-small);
   flex-shrink: 0;
   transition: color 0.15s;
 }
@@ -878,7 +878,7 @@ function renderText(t: string) {
   left: 16px;
   right: 16px;
   background: #fff;
-  border-radius: 12px;
+  border-radius: var(--md-sys-shape-corner-medium);
   border: 1px solid #E8E5DF;
   box-shadow: 0 8px 24px rgba(0,0,0,.12);
   z-index: 20;
@@ -900,7 +900,7 @@ function renderText(t: string) {
 
 .mention-av {
   width: 28px; height: 28px;
-  border-radius: 50%;
+  border-radius: var(--md-sys-shape-corner-full);
   display: flex; align-items: center; justify-content: center;
   font-size: 11px; font-weight: 700; flex-shrink: 0;
 }
@@ -921,7 +921,7 @@ function renderText(t: string) {
   box-sizing: border-box;
   background: #F4F2EE;
   border: 1px solid #E8E5DF;
-  border-radius: 8px;
+  border-radius: var(--md-sys-shape-corner-small);
   padding: 8px 12px;
   font-size: 13px;
   font-family: 'Outfit', sans-serif;
@@ -988,7 +988,7 @@ function renderText(t: string) {
 
 .pill {
   width: 36px; height: 36px;
-  border-radius: 50%;
+  border-radius: var(--md-sys-shape-corner-full);
   border: 1.5px solid #E8E5DF;
   background: #F4F2EE;
   cursor: pointer;
@@ -1043,7 +1043,7 @@ function renderText(t: string) {
 
 .send-btn {
   width: 34px; height: 34px;
-  border-radius: 50%;
+  border-radius: var(--md-sys-shape-corner-full);
   background: var(--md-sys-color-primary);
   border: none;
   cursor: pointer;
@@ -1067,7 +1067,7 @@ function renderText(t: string) {
 
 .task-modal {
   background: #fff;
-  border-radius: 16px;
+  border-radius: var(--md-sys-shape-corner-large);
   width: 100%; max-width: 420px;
   font-family: 'Outfit', sans-serif;
 }
@@ -1095,7 +1095,7 @@ function renderText(t: string) {
 .field-input {
   width: 100%; box-sizing: border-box;
   background: #F4F2EE; border: 1px solid #E8E5DF;
-  border-radius: 8px; padding: 9px 12px;
+  border-radius: var(--md-sys-shape-corner-small); padding: 9px 12px;
   font-size: 13px; font-family: 'Outfit', sans-serif;
   color: #1A1917; outline: none;
 }
@@ -1110,7 +1110,7 @@ function renderText(t: string) {
   align-items: center;
   gap: 5px;
   padding: 7px 6px;
-  border-radius: 8px;
+  border-radius: var(--md-sys-shape-corner-small);
   border: 1.5px solid #E8E5DF;
   background: #F4F2EE;
   font-size: 11px;
@@ -1125,7 +1125,7 @@ function renderText(t: string) {
 .prio-opt:hover { border-color: #C8C5C0; color: #1A1917; }
 .prio-opt.is-sel { font-weight: 700; background: transparent; }
 
-.prio-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.prio-dot { width: 8px; height: 8px; border-radius: var(--md-sys-shape-corner-full); flex-shrink: 0; }
 
 .assignees-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 0; }
 
@@ -1143,7 +1143,7 @@ function renderText(t: string) {
 .assignee-chip.is-selected { font-weight: 600; }
 
 .chip-avatar {
-  width: 18px; height: 18px; border-radius: 50%;
+  width: 18px; height: 18px; border-radius: var(--md-sys-shape-corner-full);
   display: flex; align-items: center; justify-content: center;
   font-size: 9px; font-weight: 700; flex-shrink: 0;
 }

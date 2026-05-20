@@ -724,7 +724,7 @@ async function deleteCurrentTask() {
 .bv-tabs {
   display: flex; gap: 2px;
   background: var(--s-surface-up);
-  padding: 3px; border-radius: 8px;
+  padding: 3px; border-radius: var(--md-sys-shape-corner-small);
   width: fit-content;
   border: 1px solid var(--s-border);
   margin-bottom: -1px;
@@ -774,7 +774,7 @@ async function deleteCurrentTask() {
 
 .col-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 .col-header-left { display: flex; align-items: center; gap: 7px; }
-.col-dot { width: 7px; height: 7px; border-radius: 50%; }
+.col-dot { width: 7px; height: 7px; border-radius: var(--md-sys-shape-corner-full); }
 
 .col-label { font-size: 10px; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; color: var(--s-text-mid); }
 .col-count { font-size: 11px; color: var(--s-text-dim); }
@@ -782,7 +782,7 @@ async function deleteCurrentTask() {
 .col-add-btn {
   background: none; border: none; cursor: pointer;
   color: var(--s-text-dim); padding: 2px;
-  border-radius: 4px; display: flex; align-items: center;
+  border-radius: var(--md-sys-shape-corner-extra-small); display: flex; align-items: center;
   transition: color 0.15s;
 }
 
@@ -809,7 +809,7 @@ async function deleteCurrentTask() {
 .card-footer { display: flex; align-items: center; gap: 6px; }
 
 .card-avatar {
-  width: 24px; height: 24px; border-radius: 50%;
+  width: 24px; height: 24px; border-radius: var(--md-sys-shape-corner-full);
   display: flex; align-items: center; justify-content: center;
   font-size: 8.5px; font-weight: 700; letter-spacing: 0.02em; flex-shrink: 0;
 }
@@ -832,7 +832,7 @@ async function deleteCurrentTask() {
 
 .card-right { display: flex; align-items: center; gap: 5px; margin-left: auto; }
 
-.card-prio { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.card-prio { width: 6px; height: 6px; border-radius: var(--md-sys-shape-corner-full); flex-shrink: 0; }
 
 .card-complete-btn {
   background: none; border: none; cursor: pointer;
@@ -849,14 +849,14 @@ async function deleteCurrentTask() {
   display: flex; align-items: center; gap: 3px;
   background: none; border: none; cursor: pointer;
   color: var(--s-text-dim); padding: 2px 4px;
-  border-radius: 4px; transition: background 0.12s;
+  border-radius: var(--md-sys-shape-corner-extra-small); transition: background 0.12s;
 }
 
 .status-trigger:hover { background: var(--s-border); color: var(--s-text-mid); }
 .status-trigger-arrow { font-size: 8px; }
 
 .status-dot-sm {
-  width: 6px; height: 6px; border-radius: 50%;
+  width: 6px; height: 6px; border-radius: var(--md-sys-shape-corner-full);
   display: inline-block; flex-shrink: 0;
 }
 
@@ -865,7 +865,7 @@ async function deleteCurrentTask() {
   bottom: calc(100% + 4px); right: 0;
   background: var(--s-surface);
   border: 1px solid var(--s-border);
-  border-radius: 8px;
+  border-radius: var(--md-sys-shape-corner-small);
   box-shadow: 0 8px 24px rgba(0,0,0,0.12);
   z-index: 50; min-width: 140px; padding: 4px;
 }
@@ -960,7 +960,7 @@ async function deleteCurrentTask() {
 
 .checkbox.is-checked { background: var(--s-green); border-color: var(--s-green); }
 
-.prio-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.prio-dot { width: 6px; height: 6px; border-radius: var(--md-sys-shape-corner-full); flex-shrink: 0; }
 .list-title { flex: 1; font-size: 13px; }
 .list-title.is-done { text-decoration: line-through; color: var(--s-text-dim); }
 .list-state { font-size: 11px; font-weight: 600; flex-shrink: 0; }
@@ -1005,7 +1005,7 @@ async function deleteCurrentTask() {
 .modal-close {
   background: none; border: none; cursor: pointer;
   color: var(--s-text-dim); padding: 2px;
-  border-radius: 4px; transition: color 0.15s;
+  border-radius: var(--md-sys-shape-corner-extra-small); transition: color 0.15s;
 }
 
 .modal-close:hover { color: var(--s-text); }
@@ -1027,7 +1027,7 @@ async function deleteCurrentTask() {
   box-sizing: border-box;
   background: var(--s-surface-up);
   border: 1px solid var(--s-border);
-  border-radius: 8px;
+  border-radius: var(--md-sys-shape-corner-small);
   padding: 9px 12px;
   font-size: 13px;
   font-family: 'Outfit', sans-serif;
@@ -1049,7 +1049,7 @@ async function deleteCurrentTask() {
   gap: 6px;
   padding: 4px 10px 4px 4px;
   border: 1px solid var(--s-border);
-  border-radius: 999px;
+  border-radius: var(--md-sys-shape-corner-full);
   font-size: 12px;
   cursor: pointer;
   background: var(--s-surface-up);
@@ -1060,7 +1060,7 @@ async function deleteCurrentTask() {
 
 .assignee-chip:hover { border-color: var(--s-border-mid); }
 .chip-avatar {
-  width: 20px; height: 20px; border-radius: 50%;
+  width: 20px; height: 20px; border-radius: var(--md-sys-shape-corner-full);
   display: inline-flex; align-items: center; justify-content: center;
   font-size: 8.5px; font-weight: 700; letter-spacing: 0.02em;
 }
@@ -1072,7 +1072,7 @@ async function deleteCurrentTask() {
   padding: 6px 10px;
   background: var(--s-surface-up);
   border: 1px solid var(--s-border);
-  border-radius: 8px;
+  border-radius: var(--md-sys-shape-corner-small);
   cursor: pointer;
   font-size: 12px;
   font-family: 'Outfit', sans-serif;
@@ -1081,7 +1081,7 @@ async function deleteCurrentTask() {
 }
 
 .prio-opt:hover { color: var(--s-text); }
-.prio-dot-x { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+.prio-dot-x { width: 6px; height: 6px; border-radius: var(--md-sys-shape-corner-full); flex-shrink: 0; }
 
 .modal-footer {
   display: flex;
@@ -1096,7 +1096,7 @@ async function deleteCurrentTask() {
   padding: 8px 16px;
   background: none;
   border: 1px solid var(--s-border);
-  border-radius: 8px;
+  border-radius: var(--md-sys-shape-corner-small);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -1115,7 +1115,7 @@ async function deleteCurrentTask() {
   background: var(--module-accent);
   color: #fff;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--md-sys-shape-corner-small);
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
@@ -1133,7 +1133,7 @@ async function deleteCurrentTask() {
   padding: 8px 14px;
   background: rgba(200, 82, 26, 0.08);
   border: 1px solid rgba(200, 82, 26, 0.3);
-  border-radius: 8px;
+  border-radius: var(--md-sys-shape-corner-small);
   font-size: 12px;
   font-weight: 500;
   cursor: pointer;
@@ -1187,7 +1187,7 @@ async function deleteCurrentTask() {
 
 .milestone-circle {
   width: 22px; height: 22px;
-  border-radius: 50%;
+  border-radius: var(--md-sys-shape-corner-full);
   border: 2px solid var(--s-text-dim);
   background: var(--s-surface);
   display: flex; align-items: center; justify-content: center;
@@ -1237,7 +1237,7 @@ async function deleteCurrentTask() {
   display: flex;
   background: var(--s-surface);
   border: 1px solid var(--s-border);
-  border-radius: 12px;
+  border-radius: var(--md-sys-shape-corner-medium);
   overflow: hidden;
 }
 .deliverable-card.is-done { opacity: 0.6; }
@@ -1268,7 +1268,7 @@ async function deleteCurrentTask() {
   align-items: center;
   gap: 3px;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--md-sys-shape-corner-full);
   background: var(--s-border);
   font-size: 10px;
   font-weight: 600;
@@ -1309,7 +1309,7 @@ async function deleteCurrentTask() {
 
 .subtask-dot {
   width: 10px; height: 10px;
-  border-radius: 50%;
+  border-radius: var(--md-sys-shape-corner-full);
   border: 1.5px solid var(--s-text-dim);
   flex-shrink: 0;
 }
@@ -1330,6 +1330,6 @@ async function deleteCurrentTask() {
   font-style: italic;
 }
 
-.prog-track { height: 4px; background: var(--s-border); border-radius: 999px; overflow: hidden; }
-.prog-fill { height: 100%; border-radius: 999px; transition: width 0.3s ease; }
+.prog-track { height: 4px; background: var(--s-border); border-radius: var(--md-sys-shape-corner-full); overflow: hidden; }
+.prog-fill { height: 100%; border-radius: var(--md-sys-shape-corner-full); transition: width 0.3s ease; }
 </style>

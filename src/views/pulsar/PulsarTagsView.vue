@@ -91,7 +91,7 @@ const sorted = computed(() =>
   padding: 12px 14px;
   background: #fff;
   border: 1px solid #E8E5DF;
-  border-radius: 12px;
+  border-radius: var(--md-sys-shape-corner-medium);
   cursor: pointer;
   font-family: inherit;
   font-size: 14px;
@@ -115,6 +115,6 @@ const sorted = computed(() =>
   color: #6A6560;
   background: #F4F2EE;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: var(--md-sys-shape-corner-full);
 }
 </style>
