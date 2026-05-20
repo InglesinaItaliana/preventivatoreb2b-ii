@@ -129,11 +129,9 @@ const modules = [
   {
     name: 'CEPHEID',  accent: '#D4A020',
     vx: 525, vy: 400, vr: 10,
-    items: [
-      { path: '/sidera/goals',    exact: false, label: 'Obiettivi', icon: 'flag' },
-      { path: '/sidera/tasks',    exact: false, label: 'Azioni',    icon: 'checklist' },
-      { path: '/sidera/projects', exact: false, label: 'Progetti',  icon: 'grid_view' },
-    ],
+    // Single source of truth con bottom-nav mobile: stessi link CEPHEID-PWA
+    // (/cepheid/*) sia nella sidebar desktop che nella pillola mobile.
+    items: SCOPE_CONFIGS.cepheid.mobileNav as any[],
   },
   {
     name: 'PULSAR',   accent: '#3AAF98',
