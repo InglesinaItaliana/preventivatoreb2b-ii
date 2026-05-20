@@ -1106,23 +1106,108 @@ Esempio:
 
 Spec: https://m3.material.io/styles/motion/motion-tokens
 
-### Pattern UI standardizzati (linee guida per sviluppo futuro)
+### Pattern UI standardizzati — utility class globali ✅ implementate 2026-05-20
 
-I 5 layer di token sopra sono i mattoni; questa sezione spiega **come combinarli** per i pattern UI ricorrenti. Da seguire ogni volta che si introducono nuovi componenti.
+I 5 layer di token sopra sono i mattoni; queste utility class sono i **componenti primitivi** standardizzati che li combinano nei pattern M3. Sono in `src/style.css` (sezione "M3 COMPONENT PRIMITIVES") e sono **la prima scelta per ogni nuovo componente UI**.
 
-#### Bottoni
+#### Bottoni — `.md-btn` + varianti
 
-M3 prevede 5 stili. Suite oggi:
+5 stili M3 disponibili come utility class globali. Tutti hanno:
+- Altezza 40px standard (`.md-btn--sm` 32px / `.md-btn--lg` 56px)
+- Padding 0 24px (text variant 0 12px)
+- Typography label-large
+- Border-radius `corner-full` (M3 default; override con `.md-btn--square` o `.md-btn--rounded`)
+- Transition short3 + standard easing
 
-| Stile | Quando | CSS pattern |
-|---|---|---|
-| **Filled** | CTA primaria della pagina (es. "Salva", "Crea") | `background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); border-radius: var(--md-sys-shape-corner-full); height: 40px; padding: 0 24px;` |
-| **Filled Tonal** | CTA secondaria contestuale (meno enfatica del Filled, più del Outlined) | `background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container);` (altrimenti come Filled) |
-| **Outlined** | Azioni secondarie, "Annulla" in modal | `background: transparent; color: var(--md-sys-color-primary); border: 1px solid var(--md-sys-color-outline);` |
-| **Text** | Link inline, "Mostra altro", "Annulla" minimale | `background: transparent; color: var(--md-sys-color-primary); padding: 0 12px;` (no bordo) |
-| **Elevated** | Bottone su immagine/colore (raro nella suite) | Come Filled Tonal + `box-shadow: var(--md-sys-elevation-level-1);` |
+```vue
+<!-- CTA primaria (Save, Crea, Conferma) -->
+<button class="md-btn md-btn--filled">Salva</button>
 
-Tipografia bottoni: sempre `var(--md-sys-typescale-label-large)`.
+<!-- CTA secondaria meno enfatica -->
+<button class="md-btn md-btn--filled-tonal">Aggiungi membro</button>
+
+<!-- Azione secondaria con bordo (Annulla in modal) -->
+<button class="md-btn md-btn--outlined">Annulla</button>
+
+<!-- Link inline minimale -->
+<button class="md-btn md-btn--text">Mostra altro</button>
+
+<!-- Destructive (Elimina, Rimuovi permanent) -->
+<button class="md-btn md-btn--danger">Elimina chat</button>
+
+<!-- Size modifiers -->
+<button class="md-btn md-btn--filled md-btn--sm">Salva</button>
+<button class="md-btn md-btn--filled md-btn--lg">Inizia ora</button>
+
+<!-- Shape modifiers -->
+<button class="md-btn md-btn--filled md-btn--square">OK</button>   <!-- corner-small -->
+<button class="md-btn md-btn--filled md-btn--rounded">OK</button>  <!-- corner-medium -->
+```
+
+#### Modal / Dialog / Bottom Sheet — `.md-modal-*`
+
+Due tipi di overlay M3 con regole d'uso definite:
+
+```vue
+<!-- Dialog (centered modal): desktop, conferme critiche, scelte di pochi item -->
+<Teleport to="body">
+  <div v-if="showModal" class="md-modal-backdrop" @click.self="showModal = false">
+    <div class="md-modal-dialog">
+      <div class="md-modal-header">
+        <span class="md-modal-title">Eliminare la chat?</span>
+        <button class="md-modal-close" @click="showModal = false"><MIcon name="close" :size="18" /></button>
+      </div>
+      <div class="md-modal-body">
+        <p>Stai per eliminare la chat con Maria. L'azione e' irreversibile.</p>
+      </div>
+      <div class="md-modal-footer">
+        <button class="md-btn md-btn--outlined" @click="showModal = false">Annulla</button>
+        <button class="md-btn md-btn--danger" @click="confirmDelete">Elimina</button>
+      </div>
+    </div>
+  </div>
+</Teleport>
+
+<!-- Bottom Sheet: mobile / PWA, azioni contestuali, form medio-lunghi -->
+<Teleport to="body">
+  <div v-if="showSheet" class="md-modal-backdrop" @click.self="showSheet = false">
+    <div class="md-modal-bottom-sheet">
+      <div class="md-modal-header">
+        <span class="md-modal-title">Nuova azione</span>
+        <button class="md-modal-close" @click="showSheet = false"><MIcon name="close" :size="18" /></button>
+      </div>
+      <div class="md-modal-body">
+        <!-- form fields ... -->
+      </div>
+      <div class="md-modal-footer">
+        <button class="md-btn md-btn--outlined" @click="showSheet = false">Annulla</button>
+        <button class="md-btn md-btn--filled" @click="submit">Crea</button>
+      </div>
+    </div>
+  </div>
+</Teleport>
+```
+
+**Regola d'uso**: `Dialog` su desktop, `BottomSheet` su mobile. Quando una vista deve supportare entrambi (es. PulsarChatsView), usa media query CSS per applicare classe condizionale o passa via prop.
+
+Animazioni incluse: fade-in del backdrop (medium2), pop-in del dialog (medium2 emphasized-decelerate), slide-up del bottom sheet (medium3).
+
+#### Text Field — `.md-text-field*` (Outlined M3)
+
+```vue
+<label class="md-text-field">
+  <span class="md-text-field-label">Email</span>
+  <input class="md-text-field-input" type="email" placeholder="nome@esempio.it" />
+</label>
+```
+
+Outlined M3: border 1px outline (resting) → 2px primary (focus) con compensation padding per altezza costante.
+
+#### Pattern legacy esistenti (non rimossi)
+
+I componenti esistenti usano ancora classi locali (`.btn-primary`, `.btn-ghost`, `.modal`, `.field-input`, ecc.) — non sono stati migrati in massa per evitare diff esplosivi. Sono lasciati funzionanti.
+
+**Per nuovo codice**: usa SEMPRE le utility class globali `.md-btn-*` / `.md-modal-*` / `.md-text-field-*`. Quando refactorizzi un componente esistente, migra le sue classi locali alle utility globali.
 
 #### Card
 
@@ -1195,4 +1280,5 @@ Quando trovi codice non-M3-compliant durante un fix: migra solo se è nello scop
 - **2026-05-20** — Sez. 14 estesa con **ruoli M3 system color** in `src/style.css` (branch `polaris/design-tokens-roles`): light scheme + `.s-surface-dark` per i ruoli neutri/surface/error/outline (scope-agnostic, valori dal MTB export con seed SIDERA), + `.s-scope-{module}` per primary/on-primary/primary-container/on-primary-container scope-aware su 7 moduli con dual surface. I componenti esistenti NON sono toccati — migrazione modulo-per-modulo in branch successivi (`polaris/{module}-m3-migration`).
 - **2026-05-20** — **Unified shell pattern** (branch `polaris/pulsar-unified-shell`): eliminato lo switching tra `SideraLayout` e `*Layout` modulare via `*Shell.vue`. Ora `SideraLayout.vue` è il **layout unificato e adattivo** per tutti gli scope sotto la suite (`/sidera/*`, `/pulsar/*`, `/cepheid/*`, futuri). Rileva `display-mode: standalone` o viewport `≤ 768px` e mostra il chrome mobile (`ContextualMobileHeader`, `ContextualBottomNav`, `ContextualFab` in `src/components/shared/`) leggendo la config dello scope corrente da `src/views/sidera/scopeConfig.ts`. **Eliminati**: `PulsarShell.vue`, `PulsarLayout.vue` (assorbiti da SideraLayout). **Sez. 3 step 5-7 riscritti** per riflettere il nuovo pattern. **Sez. 13 quick start** aggiornata: niente più `*Shell.vue` / `*Layout.vue` da copiare — basta un'entry in `scopeConfig.ts` + classe scope in `style.css` + rotte router che montano `SideraLayout`. Beneficio: niente remount al resize, stato locale preservato, riduzione duplicazione codice. Effort per nuovo scope: ~30 minuti invece di 2-4 ore. CEPHEID rimane da migrare in un branch separato (`polaris/cepheid-unified-shell`).
 - **2026-05-20** — **CEPHEID unified shell** (branch `polaris/cepheid-unified-shell`): replicato il pattern PULSAR per CEPHEID. **Eliminati**: `CepheidShell.vue` (47 righe) e `CepheidLayout.vue` (501 righe). Router `/cepheid` ora monta `SideraLayout`. Aggiunto `cepheid-new-project-tick` e `cepheid-new-goal-tick` ai provide di SideraLayout (oltre a `cepheid-new-task-tick` già esistente). `onFabTrigger` esteso con la logica context-aware originaria di `CepheidLayout.triggerNew`: in base alla route attiva (`/cepheid/goals`, `/cepheid/projects`, `/cepheid/project/:id`, ...) dispatcha al tick giusto. Icona FAB CEPHEID aggiornata a `'add_circle'` (era `'add'`) per coerenza con CepheidLayout precedente. Restano da migrare: NEBULA, NOVA, MAGNETAR, QUASAR (oggi non ancora promossi a PWA con layout dedicato — basta seguire la stessa ricetta).
+- **2026-05-20** — **M3 component primitives** (branch `polaris/m3-elevation-button-modal`): aggiunte utility class globali in `src/style.css`: `.md-btn` con varianti `--filled`, `--filled-tonal`, `--outlined`, `--text`, `--danger` (+ modifiers `--sm`/`--lg`/`--square`/`--rounded`); `.md-modal-backdrop` + `.md-modal-dialog` (centered desktop) + `.md-modal-bottom-sheet` (slide-up mobile) + helpers header/body/footer/title/close; `.md-text-field` + `.md-text-field-label` + `.md-text-field-input` (Outlined M3). 3 keyframes M3-spec: fade-in backdrop, pop-in dialog, slide-up bottom-sheet. Aggiornato ATLAS sez. 14 "Pattern UI standardizzati" con esempi `<button class="md-btn md-btn--filled">` concreti. **Migrazione box-shadow ai token elevation**: 28 occorrenze in 13 file viste sostituite via regex batch. `--s-shadow` / `--s-shadow-hover` ora alias di `var(--md-sys-elevation-level-1)` / `level-2`. Cambio visivo lieve (shadow leggermente piu' marcate, M3-coerenti).
 - **2026-05-20** — **M3 layers 1-5 implementati** (branch `polaris/m3-layers-typography-shape-elevation-state-motion`): completati gli ultimi 5 strati dei design tokens M3. **Typography**: 15 stili `--md-sys-typescale-*` (display/headline/title/body/label × large/medium/small) + utility class `.md-typescale-*`, font mapping: Cormorant Garamond per display+headline, Outfit per title+body+label. **Shape**: 7 token `--md-sys-shape-corner-{none,extra-small,small,medium,large,extra-large,full}`. **Elevation**: 6 token `--md-sys-elevation-level-{0..5}` (box-shadow M3). **State layers**: 4 token opacità (`--md-sys-state-{hover,focus,pressed,dragged}-state-layer-opacity`). **Motion**: 16 duration + 8 easing token `--md-sys-motion-*`. Sez. 14 estesa con sotto-sezioni dettagliate per ogni layer + **pattern guide UI** (Bottoni Filled/Filled Tonal/Outlined/Text/Elevated, Card Elevated/Filled/Outlined, Dialog vs Bottom Sheet, Input Text Field) che diventano la base per lo sviluppo futuro. I componenti esistenti NON sono migrati ai nuovi token tipografici/shape/elevation — l'adozione è incrementale: ogni nuovo componente o refactor li userà.

@@ -642,6 +642,254 @@ input[type=number] {
    il pattern definitivo userà overlay (M3 ortodosso) o color-mix (più semplice).
 */
 
+/* ════════════════════════════════════════════════════════════════════════
+   M3 COMPONENT PRIMITIVES — utility class globali per Button, Modal, TextField
+   Vedi docs/ATLAS.md sez. 14 "Pattern UI standardizzati".
+
+   Pattern d'uso:
+     <button class="md-btn md-btn--filled">Salva</button>
+     <button class="md-btn md-btn--outlined">Annulla</button>
+     <button class="md-btn md-btn--danger">Elimina</button>
+
+   Le utility class implementano i pattern M3. Tutti i token sono variabili,
+   quindi cambiano con lo scope corrente (s-scope-{module}) per primary.
+
+   NB: i componenti esistenti hanno ancora classi locali (.btn-primary, .btn-ghost,
+   .modal, .field-input, ecc.) — non vengono migrati in massa. Le utility class
+   nuove sono la PRIMA SCELTA per ogni nuovo componente.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── BUTTONS ─────────────────────────────────────────────────────────── */
+
+.md-btn {
+  /* base button — applicare insieme a una variante (.md-btn--filled, ecc.) */
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 24px;
+  border: none;
+  border-radius: var(--md-sys-shape-corner-full);
+  font-family: var(--md-sys-typescale-label-large-font);
+  font-size:   var(--md-sys-typescale-label-large-size);
+  line-height: var(--md-sys-typescale-label-large-line-height);
+  letter-spacing: var(--md-sys-typescale-label-large-tracking);
+  font-weight: var(--md-sys-typescale-label-large-weight);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+  transition: background var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              color      var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              box-shadow var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
+}
+.md-btn:disabled { opacity: 0.38; cursor: not-allowed; }
+
+/* Filled — CTA primaria della pagina */
+.md-btn--filled {
+  background: var(--md-sys-color-primary);
+  color:      var(--md-sys-color-on-primary);
+}
+.md-btn--filled:hover:not(:disabled) {
+  background: var(--md-sys-color-primary-hover);
+  box-shadow: var(--md-sys-elevation-level-1);
+}
+.md-btn--filled:active:not(:disabled) {
+  box-shadow: var(--md-sys-elevation-level-0);
+}
+
+/* Filled Tonal — CTA secondaria contestuale (meno enfatica del Filled) */
+.md-btn--filled-tonal {
+  background: var(--md-sys-color-primary-container);
+  color:      var(--md-sys-color-on-primary-container);
+}
+.md-btn--filled-tonal:hover:not(:disabled) {
+  box-shadow: var(--md-sys-elevation-level-1);
+}
+
+/* Outlined — azione secondaria, "Annulla" in modal */
+.md-btn--outlined {
+  background: transparent;
+  color:      var(--md-sys-color-primary);
+  border:     1px solid var(--md-sys-color-outline);
+}
+.md-btn--outlined:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--md-sys-color-primary) 8%, transparent);
+}
+
+/* Text — link inline, "Annulla" minimale, "Mostra altro" */
+.md-btn--text {
+  background: transparent;
+  color:      var(--md-sys-color-primary);
+  padding:    0 12px;
+}
+.md-btn--text:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--md-sys-color-primary) 8%, transparent);
+}
+
+/* Danger — destructive CTA (delete, remove permanent) */
+.md-btn--danger {
+  background: var(--md-sys-color-error);
+  color:      var(--md-sys-color-on-error);
+}
+.md-btn--danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--md-sys-color-error), black 12%);
+  box-shadow: var(--md-sys-elevation-level-1);
+}
+
+/* Modificatori size opzionali */
+.md-btn--sm { height: 32px; padding: 0 16px; font-size: var(--md-sys-typescale-label-medium-size); }
+.md-btn--lg { height: 56px; padding: 0 32px; font-size: var(--md-sys-typescale-title-medium-size); }
+
+/* Modificatori shape opzionali — l'M3 default e' corner-full, override comuni */
+.md-btn--square { border-radius: var(--md-sys-shape-corner-small); }
+.md-btn--rounded { border-radius: var(--md-sys-shape-corner-medium); }
+
+
+/* ── MODAL / DIALOG ──────────────────────────────────────────────────── */
+
+.md-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--md-sys-color-scrim);
+  background: color-mix(in srgb, var(--md-sys-color-scrim) 40%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  z-index: 200;
+  animation: md-modal-fade-in var(--md-sys-motion-duration-medium2) var(--md-sys-motion-easing-emphasized-decelerate);
+}
+
+/* Dialog M3: centered, usato su desktop per conferme/scelte critiche */
+.md-modal-dialog {
+  background: var(--md-sys-color-surface-container-high);
+  color:      var(--md-sys-color-on-surface);
+  border-radius: var(--md-sys-shape-corner-extra-large);
+  box-shadow: var(--md-sys-elevation-level-3);
+  width: 100%;
+  max-width: 420px;
+  max-height: calc(100vh - 40px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: md-modal-pop-in var(--md-sys-motion-duration-medium2) var(--md-sys-motion-easing-emphasized-decelerate);
+}
+
+/* Bottom Sheet M3: slide-up dal basso, usato su mobile / azioni contestuali */
+.md-modal-bottom-sheet {
+  background: var(--md-sys-color-surface-container);
+  color:      var(--md-sys-color-on-surface);
+  border-top-left-radius:  var(--md-sys-shape-corner-large);
+  border-top-right-radius: var(--md-sys-shape-corner-large);
+  border-bottom-left-radius:  0;
+  border-bottom-right-radius: 0;
+  box-shadow: var(--md-sys-elevation-level-3);
+  width: 100%;
+  max-width: 640px;
+  margin-top: auto; /* si appoggia in basso quando backdrop e' align-items center */
+  display: flex;
+  flex-direction: column;
+  animation: md-modal-slide-up var(--md-sys-motion-duration-medium3) var(--md-sys-motion-easing-emphasized-decelerate);
+}
+
+.md-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 20px 24px 12px;
+}
+.md-modal-title {
+  font-family: var(--md-sys-typescale-headline-small-font);
+  font-size:   var(--md-sys-typescale-headline-small-size);
+  line-height: var(--md-sys-typescale-headline-small-line-height);
+  font-weight: 600;
+  color: var(--md-sys-color-on-surface);
+}
+.md-modal-close {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--md-sys-color-on-surface-variant);
+  padding: 4px;
+  border-radius: var(--md-sys-shape-corner-full);
+  display: flex;
+  align-items: center;
+  transition: background var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
+}
+.md-modal-close:hover {
+  background: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent);
+}
+
+.md-modal-body {
+  padding: 0 24px 20px;
+  overflow-y: auto;
+  font-family: var(--md-sys-typescale-body-medium-font);
+  font-size:   var(--md-sys-typescale-body-medium-size);
+  line-height: var(--md-sys-typescale-body-medium-line-height);
+  color: var(--md-sys-color-on-surface);
+}
+
+.md-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 8px 24px 24px;
+}
+
+@keyframes md-modal-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes md-modal-pop-in {
+  from { opacity: 0; transform: scale(0.92); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes md-modal-slide-up {
+  from { transform: translateY(40px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+
+
+/* ── TEXT FIELD (Outlined M3) ─────────────────────────────────────────── */
+
+.md-text-field {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.md-text-field-label {
+  font-family: var(--md-sys-typescale-label-medium-font);
+  font-size:   var(--md-sys-typescale-label-medium-size);
+  font-weight: var(--md-sys-typescale-label-medium-weight);
+  color: var(--md-sys-color-on-surface-variant);
+}
+.md-text-field-input {
+  background: transparent;
+  color: var(--md-sys-color-on-surface);
+  border: 1px solid var(--md-sys-color-outline);
+  border-radius: var(--md-sys-shape-corner-extra-small);
+  padding: 12px 16px;
+  font-family: var(--md-sys-typescale-body-large-font);
+  font-size:   var(--md-sys-typescale-body-large-size);
+  line-height: var(--md-sys-typescale-body-large-line-height);
+  outline: none;
+  transition: border-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
+}
+.md-text-field-input::placeholder { color: var(--md-sys-color-on-surface-variant); opacity: 0.6; }
+.md-text-field-input:hover  { border-color: var(--md-sys-color-on-surface); }
+.md-text-field-input:focus  {
+  border-color: var(--md-sys-color-primary);
+  border-width: 2px;
+  padding: 11px 15px; /* compensa border width +1 per mantenere altezza */
+}
+.md-text-field-input:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+
 @keyframes s-fade-in {
   from { opacity: 0; transform: translateY(7px); }
   to   { opacity: 1; transform: translateY(0); }
