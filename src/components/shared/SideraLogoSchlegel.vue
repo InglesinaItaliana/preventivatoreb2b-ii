@@ -95,8 +95,12 @@ const heightPx = computed(() => Math.round(props.size * 480 / 680))
         gradientUnits="userSpaceOnUse"
         :x1="e.from.x" :y1="e.from.y" :x2="e.to.x" :y2="e.to.y"
       >
+        <!-- 100% opacity 0.45 (non 0.15) per evitare che edges lunghi (es. NEBULA-CEPHEID)
+             sembrino interrotti vicino al vertice opposto. Vedi SideraLayout.vue per
+             la stessa correzione applicata al logo della sidebar. -->
         <stop offset="0%"   :stop-color="active.color" stop-opacity="0.95"/>
-        <stop offset="100%" :stop-color="active.color" stop-opacity="0.15"/>
+        <stop offset="75%"  :stop-color="active.color" stop-opacity="0.8"/>
+        <stop offset="100%" :stop-color="active.color" stop-opacity="0.45"/>
       </linearGradient>
     </defs>
 

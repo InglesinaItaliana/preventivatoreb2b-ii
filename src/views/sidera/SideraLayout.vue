@@ -159,12 +159,68 @@ const modules = [
 const activeModule = computed(() =>
   modules.find(m => {
     if (m.name === 'QUASAR')
-      return route.path === '/sidera' || route.path === '/sidera/hub'
+      return route.path === '/sidera'   // SOLO /sidera (Cruscotto) — /sidera/hub è all-mode
     return m.items.some((item: any) =>
       item.exact ? route.path === item.path : route.path.startsWith(item.path)
     )
   }) ?? null
 )
+
+// Logo "all-mode": SOLO su /sidera/hub mostriamo tutti i vertici accesi
+// col color SIDERA uniforme (come la pagina HubView). Su /sidera (Cruscotto)
+// e' attivo QUASAR come modulo singolo (vertice illuminato + wordmark color).
+const isAllMode = computed(() => route.path === '/sidera/hub')
+const activeLogoModule = computed(() => isAllMode.value ? null : activeModule.value)
+
+// ── Edges Schlegel per il logo "ricco" della sidebar (replica HubView) ─────
+// 12 edges per nome modulo. Coordinate dei vertici prese da modules[].vx/vy.
+const EDGES_HUB: [string, string][] = [
+  ['QUASAR', 'NEBULA'], ['NEBULA', 'CEPHEID'], ['CEPHEID', 'QUASAR'],
+  ['NOVA', 'PULSAR'], ['PULSAR', 'MAGNETAR'], ['MAGNETAR', 'NOVA'],
+  ['QUASAR', 'PULSAR'], ['QUASAR', 'NOVA'],
+  ['NEBULA', 'NOVA'], ['NEBULA', 'MAGNETAR'],
+  ['CEPHEID', 'PULSAR'], ['CEPHEID', 'MAGNETAR'],
+]
+const NE_COLOR = '#2A3F52'   // edge inattivo / fade-out gradient end
+const NV_COLOR = '#243648'   // vertice inattivo fill
+const NS_COLOR = '#364F66'   // vertice inattivo stroke
+
+function moduleByName(name: string) {
+  return modules.find(m => m.name === name)
+}
+
+// Edges adiacenti al modulo attivo, normalizzati col modulo attivo come "from".
+// Gradient 0% color, 75% color, 100% color@0.45 — l'edge mantiene il SUO color
+// fino al vertice opposto, solo fadeato in opacity. Risolve il bug 'edges che
+// sfumano in NE si confondono con gli edges base' (es. NEBULA-CEPHEID orizzontale).
+const activeEdges = computed(() => {
+  const am = activeLogoModule.value
+  if (!am) return []
+  return EDGES_HUB
+    .filter(([a, b]) => a === am.name || b === am.name)
+    .map(([a, b], i) => {
+      const from = moduleByName(a === am.name ? a : b)!
+      const to   = moduleByName(a === am.name ? b : a)!
+      return { id: `s-hv-g${i}`, from, to }
+    })
+})
+
+// Dimensioni halo per il vertice attivo: outer più grandi, inner più piccoli
+// (replica HubView: outer halo-lg=42 / md=24, inner halo-lg=34 / md=19).
+const activeHaloLg = computed(() => {
+  const am = activeLogoModule.value
+  if (!am) return 0
+  // outer = QUASAR/NEBULA/CEPHEID (vr 10), inner = PULSAR/NOVA/MAGNETAR (vr 8)
+  return am.vr === 10 ? 42 : 34
+})
+const activeHaloMd = computed(() => {
+  const am = activeLogoModule.value
+  if (!am) return 0
+  return am.vr === 10 ? 24 : 19
+})
+function haloMdSize(mod: typeof modules[0]) {
+  return mod.vr === 10 ? 24 : 19
+}
 
 const SIDERA_COLOR      = '#D4C498'
 const SIDERA_COLOR_DIM  = '#D4C49880'
@@ -271,29 +327,100 @@ const roleLabel: Record<string, string> = {
     <!-- ── SIDEBAR ── -->
     <aside class="s-sidebar">
       <div class="s-logo" style="cursor: pointer" @click="router.push('/sidera/hub')">
-        <!-- Schlegel diagram ottaedro — 6 vertici, 12 lati -->
-        <svg class="s-logo-icon" width="116" height="82" viewBox="0 0 680 480" fill="none" xmlns="http://www.w3.org/2000/svg">
-          <!-- outer edges -->
-          <line x1="340" y1="68"  x2="155" y2="400" :stroke="edgeStroke" :style="{ transition: edgeTransition }" stroke-width="1.5"/>
-          <line x1="155" y1="400" x2="525" y2="400" :stroke="edgeStroke" :style="{ transition: edgeTransition }" stroke-width="1.5"/>
-          <line x1="525" y1="400" x2="340" y2="68"  :stroke="edgeStroke" :style="{ transition: edgeTransition }" stroke-width="1.5"/>
-          <!-- inner edges -->
-          <line x1="275" y1="252" x2="405" y2="252" :stroke="edgeStroke" :style="{ transition: edgeTransition }" stroke-width="1.5"/>
-          <line x1="405" y1="252" x2="340" y2="364" :stroke="edgeStroke" :style="{ transition: edgeTransition }" stroke-width="1.5"/>
-          <line x1="340" y1="364" x2="275" y2="252" :stroke="edgeStroke" :style="{ transition: edgeTransition }" stroke-width="1.5"/>
-          <!-- cross edges -->
-          <line x1="340" y1="68"  x2="405" y2="252" :stroke="edgeStroke" :style="{ transition: edgeTransition }" stroke-width="1.5"/>
-          <line x1="340" y1="68"  x2="275" y2="252" :stroke="edgeStroke" :style="{ transition: edgeTransition }" stroke-width="1.5"/>
-          <line x1="155" y1="400" x2="275" y2="252" :stroke="edgeStroke" :style="{ transition: edgeTransition }" stroke-width="1.5"/>
-          <line x1="155" y1="400" x2="340" y2="364" :stroke="edgeStroke" :style="{ transition: edgeTransition }" stroke-width="1.5"/>
-          <line x1="525" y1="400" x2="405" y2="252" :stroke="edgeStroke" :style="{ transition: edgeTransition }" stroke-width="1.5"/>
-          <line x1="525" y1="400" x2="340" y2="364" :stroke="edgeStroke" :style="{ transition: edgeTransition }" stroke-width="1.5"/>
-          <!-- vertici reattivi: colorati in base al modulo attivo -->
-          <circle v-for="mod in modules" :key="mod.name"
+        <!-- Schlegel diagram ricco — replica HubView (no cycle, attivo in base alla route) -->
+        <svg class="s-logo-icon" width="116" height="82" viewBox="0 0 680 480" fill="none" xmlns="http://www.w3.org/2000/svg" style="overflow: visible">
+          <defs>
+            <filter id="s-hv-gf-sm" x="-80%" y="-80%" width="260%" height="260%">
+              <feGaussianBlur stdDeviation="4.5" result="b"/>
+              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+            <filter id="s-hv-gf-md" x="-120%" y="-120%" width="340%" height="340%">
+              <feGaussianBlur stdDeviation="9" result="b"/>
+              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+            <filter id="s-hv-gf-lg" x="-180%" y="-180%" width="460%" height="460%">
+              <feGaussianBlur stdDeviation="18" result="b"/>
+              <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+            </filter>
+            <!-- Gradient per ogni edge attivo: 0%/75% color modulo, 100% accent@0.45.
+                 NOTA: fadiamo in opacity sullo stesso color (no fade-to-NE) per evitare
+                 che gli edges lunghi (NEBULA-CEPHEID, PULSAR-NOVA orizzontali) sembrino
+                 sparire vicino al vertice opposto — bug riscontrato anche su ScopedLogin. -->
+            <linearGradient
+              v-for="e in activeEdges" :key="e.id"
+              :id="e.id"
+              gradientUnits="userSpaceOnUse"
+              :x1="e.from.vx" :y1="e.from.vy" :x2="e.to.vx" :y2="e.to.vy"
+            >
+              <stop offset="0%"   :stop-color="activeLogoModule!.accent" stop-opacity="1"/>
+              <stop offset="75%"  :stop-color="activeLogoModule!.accent" stop-opacity="0.85"/>
+              <stop offset="100%" :stop-color="activeLogoModule!.accent" stop-opacity="0.45"/>
+            </linearGradient>
+          </defs>
+
+          <!-- Edges base (sempre visibili, sottili) -->
+          <line
+            v-for="([a, b], i) in EDGES_HUB" :key="`e-${i}`"
+            :x1="moduleByName(a)!.vx" :y1="moduleByName(a)!.vy"
+            :x2="moduleByName(b)!.vx" :y2="moduleByName(b)!.vy"
+            :stroke="NE_COLOR" stroke-width="1.2"
+            style="transition: stroke 0.5s ease"
+          />
+
+          <!-- Halo grande (vertice attivo, modulo singolo) — SOTTO l'edge glow -->
+          <circle
+            v-if="activeLogoModule"
+            :cx="activeLogoModule.vx" :cy="activeLogoModule.vy" :r="activeHaloLg"
+            :fill="activeLogoModule.accent" fill-opacity="0.11"
+            filter="url(#s-hv-gf-lg)"
+            style="transition: fill 0.6s ease, fill-opacity 0.6s ease"
+          />
+          <!-- Halo medio (vertice attivo, modulo singolo) — SOTTO l'edge glow -->
+          <circle
+            v-if="activeLogoModule"
+            :cx="activeLogoModule.vx" :cy="activeLogoModule.vy" :r="activeHaloMd"
+            :fill="activeLogoModule.accent" fill-opacity="0.28"
+            filter="url(#s-hv-gf-md)"
+            style="transition: fill 0.5s ease, fill-opacity 0.5s ease"
+          />
+
+          <!-- All-mode (route /sidera/hub): tutti gli edges glow color SIDERA.
+               Opacity 0.65 + stroke-width 4 per renderli ben visibili sui lati
+               orizzontali (NOVA-PULSAR, NEBULA-CEPHEID) che altrimenti si
+               fondono con i halo dei vertici adiacenti.
+               NIENTE halo md SIDERA su ciascun vertice — sono superflui e
+               coprono le linee orizzontali fondendosi con gli edges. -->
+          <g v-if="isAllMode" style="opacity: 0.65">
+            <line
+              v-for="([a, b], i) in EDGES_HUB" :key="`ea-${i}`"
+              :x1="moduleByName(a)!.vx" :y1="moduleByName(a)!.vy"
+              :x2="moduleByName(b)!.vx" :y2="moduleByName(b)!.vy"
+              stroke="#D4C498" stroke-width="4" filter="url(#s-hv-gf-sm)"
+            />
+          </g>
+
+          <!-- Edge glow gradient (solo edges adiacenti al modulo attivo).
+               Renderizzato DOPO i halo lg/md, quindi sopra. -->
+          <g v-if="activeLogoModule" style="transition: opacity 0.6s ease">
+            <line
+              v-for="e in activeEdges" :key="`eg-${e.id}`"
+              :x1="e.from.vx" :y1="e.from.vy"
+              :x2="e.to.vx" :y2="e.to.vy"
+              :stroke="`url(#${e.id})`"
+              stroke-width="4" filter="url(#s-hv-gf-sm)"
+            />
+          </g>
+
+          <!-- Vertici: all-mode → tutti SIDERA / single → solo attivo color modulo -->
+          <circle
+            v-for="mod in modules" :key="mod.name"
             :cx="mod.vx" :cy="mod.vy"
-            :r="vertexRadius(mod)"
-            v-bind="vertexStyle(mod)"
-            stroke-width="1.4"
+            :r="mod.vr === 10 ? 14 : 12"
+            :fill="isAllMode ? '#D4C498' : (activeLogoModule?.name === mod.name ? mod.accent : NV_COLOR)"
+            :stroke="isAllMode ? '#D4C498' : (activeLogoModule?.name === mod.name ? mod.accent : NS_COLOR)"
+            stroke-width="0.8"
+            filter="url(#s-hv-gf-sm)"
+            style="transition: fill 0.5s ease, stroke 0.5s ease"
           />
         </svg>
 
