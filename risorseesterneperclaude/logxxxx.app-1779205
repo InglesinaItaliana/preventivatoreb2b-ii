@@ -1,0 +1,76 @@
+index-Cim-NrAl.js:2 [useSWUpdate v5] pre-existing reg scope= https://preventivatoreb2b-ii--pwa-update-banner-rlkbak51.web.app/ active= https://preventivatoreb2b-ii--pwa-update-banner-rlkbak51.web.app/sw.js waiting= https://preventivatoreb2b-ii--pwa-update-banner-rlkbak51.web.app/sw.js installing= undefined
+index-Cim-NrAl.js:2 [useSWUpdate v5] WAITING event {isExternal: undefined, scriptURL: 'https://preventivatoreb2b-ii--pwa-update-banner-rlkbak51.web.app/sw.js', wasWaitingBeforeRegister: true}isExternal: undefinedscriptURL: "https://preventivatoreb2b-ii--pwa-update-banner-rlkbak51.web.app/sw.js"wasWaitingBeforeRegister: true[[Prototype]]: Objectconstructor: ƒ Object()hasOwnProperty: ƒ hasOwnProperty()isPrototypeOf: ƒ isPrototypeOf()propertyIsEnumerable: ƒ propertyIsEnumerable()toLocaleString: ƒ toLocaleString()toString: ƒ toString()valueOf: ƒ valueOf()__defineGetter__: ƒ __defineGetter__()__defineSetter__: ƒ __defineSetter__()__lookupGetter__: ƒ __lookupGetter__()__lookupSetter__: ƒ __lookupSetter__()__proto__: (...)get __proto__: ƒ __proto__()set __proto__: ƒ __proto__()
+index-Cim-NrAl.js:2 [useSWUpdate v5] registered ok, scope= https://preventivatoreb2b-ii--pwa-update-banner-rlkbak51.web.app/
+index-Cim-NrAl.js:2 [useSWUpdate v5] INSTALLED event {isExternal: true, isUpdate: undefined, scriptURL: 'https://preventivatoreb2b-ii--pwa-update-banner-rlkbak51.web.app/firebase-messaging-sw.js'}
+index-Cim-NrAl.js:2 [useSWUpdate v5] WAITING event {isExternal: true, scriptURL: 'https://preventivatoreb2b-ii--pwa-update-banner-rlkbak51.web.app/firebase-messaging-sw.js', wasWaitingBeforeRegister: undefined}
+SideraLayout-C71sgdV1.js:2 [useNotifications] FCM token error FirebaseError: Missing or insufficient permissions.
+r @ SideraLayout-C71sgdV1.js:2
+await in r
+(anonymous) @ SideraLayout-C71sgdV1.js:2
+(anonymous) @ vendor-EWnQcCmH.js:1
+wr @ vendor-EWnQcCmH.js:1
+gt @ vendor-EWnQcCmH.js:1
+t.__weh.t.__weh @ vendor-EWnQcCmH.js:1
+xa @ vendor-EWnQcCmH.js:1
+Ea @ vendor-EWnQcCmH.js:1
+Promise.then
+_a @ vendor-EWnQcCmH.js:1
+jo @ vendor-EWnQcCmH.js:1
+I.scheduler @ vendor-EWnQcCmH.js:1
+trigger @ vendor-EWnQcCmH.js:1
+Bo @ vendor-EWnQcCmH.js:1
+notify @ vendor-EWnQcCmH.js:1
+trigger @ vendor-EWnQcCmH.js:1
+set value @ vendor-EWnQcCmH.js:1
+S @ vendor-EWnQcCmH.js:1
+(anonymous) @ vendor-EWnQcCmH.js:1
+Promise.then
+V @ vendor-EWnQcCmH.js:1
+T @ vendor-EWnQcCmH.js:1
+install @ vendor-EWnQcCmH.js:1
+use @ vendor-EWnQcCmH.js:1
+(anonymous) @ index-Cim-NrAl.js:2
+(anonymous) @ firebase-core-CML4JrZ8.js:32
+Promise.then
+registerStateListener @ firebase-core-CML4JrZ8.js:32
+onAuthStateChanged @ firebase-core-CML4JrZ8.js:32
+Ed @ firebase-core-CML4JrZ8.js:32
+(anonymous) @ index-Cim-NrAl.js:2
+SideraLayout-C71sgdV1.js:2 [useNotifications] FCM token error FirebaseError: Missing or insufficient permissions.
+r @ SideraLayout-C71sgdV1.js:2
+await in r
+(anonymous) @ PulsarShell-Br4DAbNT.js:1
+(anonymous) @ vendor-EWnQcCmH.js:1
+wr @ vendor-EWnQcCmH.js:1
+gt @ vendor-EWnQcCmH.js:1
+t.__weh.t.__weh @ vendor-EWnQcCmH.js:1
+xa @ vendor-EWnQcCmH.js:1
+Ea @ vendor-EWnQcCmH.js:1
+Ea @ vendor-EWnQcCmH.js:1
+Promise.then
+_a @ vendor-EWnQcCmH.js:1
+jo @ vendor-EWnQcCmH.js:1
+I.scheduler @ vendor-EWnQcCmH.js:1
+trigger @ vendor-EWnQcCmH.js:1
+Bo @ vendor-EWnQcCmH.js:1
+notify @ vendor-EWnQcCmH.js:1
+trigger @ vendor-EWnQcCmH.js:1
+set value @ vendor-EWnQcCmH.js:1
+S @ vendor-EWnQcCmH.js:1
+(anonymous) @ vendor-EWnQcCmH.js:1
+Promise.then
+V @ vendor-EWnQcCmH.js:1
+T @ vendor-EWnQcCmH.js:1
+install @ vendor-EWnQcCmH.js:1
+use @ vendor-EWnQcCmH.js:1
+(anonymous) @ index-Cim-NrAl.js:2
+(anonymous) @ firebase-core-CML4JrZ8.js:32
+Promise.then
+registerStateListener @ firebase-core-CML4JrZ8.js:32
+onAuthStateChanged @ firebase-core-CML4JrZ8.js:32
+Ed @ firebase-core-CML4JrZ8.js:32
+(anonymous) @ index-Cim-NrAl.js:2
+pulsar/:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+pulsar/:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+pulsar/:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received
+pulsar/:1 Uncaught (in promise) Error: A listener indicated an asynchronous response by returning true, but the message channel closed before a response was received

@@ -57,10 +57,14 @@ async function logout() {
 
 // ── FAB action handlers (one per scope) ─────────────────────────────────────
 // I tick reattivi sono forniti via provide/inject; i view figli del scope li ascoltano.
-const newChatTick = ref(0)
-const newTaskTick = ref(0)
-provide('pulsar-new-chat-tick', newChatTick)
-provide('cepheid-new-task-tick', newTaskTick)
+const newChatTick    = ref(0)
+const newTaskTick    = ref(0)
+const newProjectTick = ref(0)
+const newGoalTick    = ref(0)
+provide('pulsar-new-chat-tick',     newChatTick)
+provide('cepheid-new-task-tick',    newTaskTick)
+provide('cepheid-new-project-tick', newProjectTick)
+provide('cepheid-new-goal-tick',    newGoalTick)
 
 function onFabTrigger(action: 'new-chat' | 'new-task' | 'new-project' | 'new-goal' | 'none') {
   if (action === 'new-chat') {
@@ -70,15 +74,38 @@ function onFabTrigger(action: 'new-chat' | 'new-task' | 'new-project' | 'new-goa
       sessionStorage.setItem('pulsar-pending-new-chat', '1')
       router.push('/pulsar')
     }
-  } else if (action === 'new-task') {
-    if (route.path === '/cepheid') {
+    return
+  }
+  if (action === 'new-task') {
+    // CEPHEID FAB context-aware: in base alla route attiva, dispatcha al
+    // tick appropriato. Replica la logica di CepheidLayout.triggerNew.
+    const p = route.path
+    if (p.startsWith('/cepheid/goal')) {
+      // su /cepheid/goals o /cepheid/goal/:id
+      if (p === '/cepheid/goals') {
+        newGoalTick.value++
+      } else {
+        sessionStorage.setItem('cepheid-pending-new-goal', '1')
+        router.push('/cepheid/goals')
+      }
+    } else if (p.startsWith('/cepheid/project/')) {
+      // dentro un project detail: il componente intercetta newTaskTick
+      // e apre il modal del tab attivo (Kanban / Milestone / Deliverable)
+      newTaskTick.value++
+    } else if (p.startsWith('/cepheid/projects')) {
+      if (p === '/cepheid/projects') {
+        newProjectTick.value++
+      } else {
+        sessionStorage.setItem('cepheid-pending-new-project', '1')
+        router.push('/cepheid/projects')
+      }
+    } else if (p === '/cepheid' || p === '/cepheid/due') {
       newTaskTick.value++
     } else {
       sessionStorage.setItem('cepheid-pending-new-task', '1')
       router.push('/cepheid')
     }
   }
-  // estensioni future: new-project, new-goal, ...
 }
 
 // Vertici Schlegel: posizioni nel viewBox 680×480

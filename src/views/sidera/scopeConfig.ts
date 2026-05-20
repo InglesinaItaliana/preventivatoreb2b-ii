@@ -71,7 +71,7 @@ export const SCOPE_CONFIGS: Record<Exclude<ScopeId, 'sidera'>, ScopeConfig> = {
       { path: '/cepheid/goals',    exact: false, label: 'Obiettivi', icon: 'flag' },
       { path: '/cepheid/due',      exact: false, label: 'Scadenze',  icon: 'event' },
     ],
-    fab: { icon: 'add', action: 'new-task', ariaLabel: 'Nuova azione' },
+    fab: { icon: 'add_circle', action: 'new-task', ariaLabel: 'Nuova azione' },
     isTopLevelPath: (p) =>
       ['/cepheid', '/cepheid/projects', '/cepheid/goals', '/cepheid/due'].includes(p),
     loginPath: '/cepheid/login',

@@ -129,7 +129,7 @@ const router = createRouter({
     },
     {
       path: '/cepheid',
-      component: () => import('../views/cepheid/CepheidShell.vue'),
+      component: () => import('../views/sidera/SideraLayout.vue'),
       meta: { requiresAuth: true, cepheidScope: true },
       children: [
         { path: '',           name: 'cepheid-actions',  component: () => import('../views/cepheid/CepheidActionsView.vue') },
