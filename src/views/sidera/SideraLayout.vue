@@ -1,9 +1,13 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, provide } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { signOut } from 'firebase/auth'
 import { auth } from '../../firebase'
 import MaterialIcon from '../../components/MaterialIcon.vue'
+import ContextualMobileHeader from '../../components/shared/ContextualMobileHeader.vue'
+import ContextualBottomNav from '../../components/shared/ContextualBottomNav.vue'
+import ContextualFab from '../../components/shared/ContextualFab.vue'
+import { detectScope, getScopeConfig, type ScopeId } from './scopeConfig'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
 import { useTeamMembers, displayName, avatarColor } from '../../composables/sidera/useTeamMembers'
 import { useChats } from '../../composables/pulsar/useChats'
@@ -14,11 +18,67 @@ const router = useRouter()
 const { currentUser } = useCurrentUser()
 const { members } = useTeamMembers()
 const { chats } = useChats()
-const { requestPermission, notify, setupForegroundMessages } = useNotifications('sidera')
+
+// ── Adaptive mode detection (standalone / mobile viewport) ──────────────────
+const isStandalone = ref(false)
+const isMobileViewport = ref(false)
+let standaloneMql: MediaQueryList | null = null
+let mobileMql: MediaQueryList | null = null
+
+function syncStandalone() {
+  isStandalone.value = standaloneMql?.matches === true || (window.navigator as any).standalone === true
+}
+function syncMobile() {
+  isMobileViewport.value = mobileMql?.matches === true
+}
+
+const isMobileLayout = computed(() => isStandalone.value || isMobileViewport.value)
+const currentScope = computed<ScopeId>(() => detectScope(route.path))
+const currentScopeConfig = computed(() => getScopeConfig(currentScope.value))
+
+// ── FCM scope: 'sidera' (wildcard desktop) o lo scope del modulo se in mobile-layout ─
+// Determinato al mount-time (non reattivo: useNotifications non supporta swap dinamico).
+function pickFcmScope(): 'pulsar' | 'cepheid' | 'sidera' {
+  const onMobile = window.matchMedia('(display-mode: standalone)').matches ||
+                   (window.navigator as any).standalone === true ||
+                   window.matchMedia('(max-width: 768px)').matches
+  if (onMobile) {
+    const cfg = getScopeConfig(detectScope(route.path))
+    if (cfg) return cfg.notificationScope
+  }
+  return 'sidera'
+}
+const { requestPermission, notify, setupForegroundMessages } = useNotifications(pickFcmScope())
 
 async function logout() {
   await signOut(auth)
   router.push('/')
+}
+
+// ── FAB action handlers (one per scope) ─────────────────────────────────────
+// I tick reattivi sono forniti via provide/inject; i view figli del scope li ascoltano.
+const newChatTick = ref(0)
+const newTaskTick = ref(0)
+provide('pulsar-new-chat-tick', newChatTick)
+provide('cepheid-new-task-tick', newTaskTick)
+
+function onFabTrigger(action: 'new-chat' | 'new-task' | 'new-project' | 'new-goal' | 'none') {
+  if (action === 'new-chat') {
+    if (route.path === '/pulsar') {
+      newChatTick.value++
+    } else {
+      sessionStorage.setItem('pulsar-pending-new-chat', '1')
+      router.push('/pulsar')
+    }
+  } else if (action === 'new-task') {
+    if (route.path === '/cepheid') {
+      newTaskTick.value++
+    } else {
+      sessionStorage.setItem('cepheid-pending-new-task', '1')
+      router.push('/cepheid')
+    }
+  }
+  // estensioni future: new-project, new-goal, ...
 }
 
 // Vertici Schlegel: posizioni nel viewBox 680×480
@@ -131,8 +191,19 @@ const initialized   = ref(false)
 const lastSeenTimes = new Map<string, number>()
 
 onMounted(async () => {
+  standaloneMql = window.matchMedia('(display-mode: standalone)')
+  mobileMql = window.matchMedia('(max-width: 768px)')
+  syncStandalone()
+  syncMobile()
+  standaloneMql.addEventListener('change', syncStandalone)
+  mobileMql.addEventListener('change', syncMobile)
   await requestPermission()
   await setupForegroundMessages()
+})
+
+onBeforeUnmount(() => {
+  standaloneMql?.removeEventListener('change', syncStandalone)
+  mobileMql?.removeEventListener('change', syncMobile)
 })
 
 watch(chats, (newChats) => {
@@ -169,7 +240,10 @@ const roleLabel: Record<string, string> = {
 </script>
 
 <template>
-  <div class="s-shell" :style="{ '--module-accent': activeModule?.accent ?? 'var(--s-green)', '--module-accent-light': (activeModule?.accent ?? 'var(--s-green)') + 'DD' }">
+  <div
+    :class="['s-shell', `s-scope-${currentScope}`, { 's-mobile-layout': isMobileLayout }]"
+    :style="{ '--module-accent': activeModule?.accent ?? 'var(--s-green)', '--module-accent-light': (activeModule?.accent ?? 'var(--s-green)') + 'DD' }"
+  >
     <!-- ── SIDEBAR ── -->
     <aside class="s-sidebar">
       <div class="s-logo" style="cursor: pointer" @click="router.push('/sidera/hub')">
@@ -266,9 +340,28 @@ const roleLabel: Record<string, string> = {
     </aside>
 
     <!-- ── MAIN ── -->
-    <main class="s-main">
-      <RouterView />
-    </main>
+    <div class="s-main-wrap">
+      <!-- Mobile-only: header contestuale del modulo corrente (visibile solo in mobile-layout su scope modulare) -->
+      <ContextualMobileHeader
+        v-if="isMobileLayout && currentScopeConfig"
+        :scope="currentScope as Exclude<ScopeId, 'sidera'>"
+        :config="currentScopeConfig"
+      />
+
+      <main class="s-main">
+        <RouterView />
+      </main>
+
+      <!-- Mobile-only: bottom-nav + FAB contestuali -->
+      <ContextualBottomNav
+        v-if="isMobileLayout && currentScopeConfig"
+        :config="currentScopeConfig"
+      >
+        <template #fab>
+          <ContextualFab :config="currentScopeConfig" @trigger="onFabTrigger" />
+        </template>
+      </ContextualBottomNav>
+    </div>
   </div>
 </template>
 
@@ -425,10 +518,35 @@ const roleLabel: Record<string, string> = {
 .s-logout-btn:hover { color: #C8521A; }
 
 /* ─── Main ─── */
+.s-main-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  position: relative;  /* permette posizionamento absolute del bottom-nav contextual */
+}
+
 .s-main {
   flex: 1;
   overflow: hidden;
   display: flex;
   flex-direction: column;
+}
+
+/* ─── Mobile-layout adattivo ─── */
+/* Quando .s-mobile-layout è attivo (standalone OR viewport ≤ 768px) e c'è uno scope modulare,
+   la sidebar SIDERA scompare e il main lascia spazio per il bottom-nav. */
+.s-shell.s-mobile-layout .s-sidebar {
+  display: none;
+}
+.s-shell.s-mobile-layout .s-main {
+  padding-bottom: calc(110px + env(safe-area-inset-bottom));
+}
+
+/* Fallback graceful per viewport ≤ 768px su scope='sidera' (no module chrome): nasconde
+   la sidebar che altrimenti taglia il main. SIDERA mobile-style standalone non è ancora
+   implementato (sarà esteso quando NEBULA/NOVA/MAGNETAR/QUASAR avranno mobile chrome). */
+@media (max-width: 768px) {
+  .s-sidebar { display: none; }
 }
 </style>
