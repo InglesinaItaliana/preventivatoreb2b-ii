@@ -213,7 +213,7 @@ function parseDateInput(s: string): Date {
 </script>
 
 <template>
-  <div class="tv s-fade-in">
+  <div class="tv s-fade-in s-scope-cepheid">
     <!-- Header -->
     <div class="tv-header">
       <div>

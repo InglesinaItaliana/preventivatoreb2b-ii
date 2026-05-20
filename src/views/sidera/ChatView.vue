@@ -37,7 +37,7 @@ const currentLabel = () => channels.find(c => c.id === channel.value)?.label ?? 
 </script>
 
 <template>
-  <div class="cv s-fade-in">
+  <div class="cv s-fade-in s-scope-pulsar">
     <!-- Channel sidebar -->
     <aside class="cv-sidebar">
       <p class="cv-section-label">Canali</p>

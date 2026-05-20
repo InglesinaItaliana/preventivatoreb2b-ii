@@ -283,7 +283,7 @@ async function deleteCurrentTask() {
 </script>
 
 <template>
-  <div class="bv s-fade-in">
+  <div class="bv s-fade-in s-scope-cepheid">
     <!-- Sticky header -->
     <div class="bv-header">
       <div class="bv-breadcrumb">
@@ -1188,7 +1188,7 @@ async function deleteCurrentTask() {
 .milestone-circle {
   width: 22px; height: 22px;
   border-radius: 50%;
-  border: 2px solid #B4B0AA;
+  border: 2px solid var(--s-text-dim);
   background: var(--s-surface);
   display: flex; align-items: center; justify-content: center;
   cursor: pointer;
@@ -1200,8 +1200,8 @@ async function deleteCurrentTask() {
 }
 .milestone-circle:hover { border-color: #D4A020; }
 .milestone-circle.is-done {
-  background: #2F6B4A;
-  border-color: #2F6B4A;
+  background: var(--s-green);
+  border-color: var(--s-green);
 }
 
 .milestone-body {
@@ -1222,7 +1222,7 @@ async function deleteCurrentTask() {
 }
 .milestone-title.is-done { text-decoration: line-through; color: var(--s-text-dim); }
 
-.milestone-date { font-size: 11px; font-weight: 600; color: #2F6B4A; }
+.milestone-date { font-size: 11px; font-weight: 600; color: var(--s-green); }
 .milestone-date--missing { color: var(--s-text-dim); font-style: italic; font-weight: 400; }
 
 /* ── Deliverable cards ──────────────────────────────────────────────── */
@@ -1310,10 +1310,10 @@ async function deleteCurrentTask() {
 .subtask-dot {
   width: 10px; height: 10px;
   border-radius: 50%;
-  border: 1.5px solid #B4B0AA;
+  border: 1.5px solid var(--s-text-dim);
   flex-shrink: 0;
 }
-.subtask-dot.is-done { background: #2F6B4A; border-color: #2F6B4A; }
+.subtask-dot.is-done { background: var(--s-green); border-color: var(--s-green); }
 
 .subtask-title {
   flex: 1;
@@ -1321,7 +1321,7 @@ async function deleteCurrentTask() {
   color: var(--s-text-mid);
   min-width: 0;
 }
-.subtask-title.is-done { text-decoration: line-through; color: #B4B0AA; }
+.subtask-title.is-done { text-decoration: line-through; color: var(--s-text-dim); }
 .subtask-due { font-size: 10px; color: var(--s-text-dim); flex-shrink: 0; }
 
 .deliverable-no-sub {

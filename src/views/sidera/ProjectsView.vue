@@ -102,7 +102,7 @@ function formatDue(d: Date | null) {
 </script>
 
 <template>
-  <div class="pv s-fade-in" @click="closeMenu">
+  <div class="pv s-fade-in s-scope-cepheid" @click="closeMenu">
     <!-- Header -->
     <div class="pv-header">
       <div>
