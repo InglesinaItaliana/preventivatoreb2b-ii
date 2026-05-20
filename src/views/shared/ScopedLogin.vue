@@ -193,10 +193,10 @@ const footerText = computed(() => `Modulo ${props.title} · Sistema SIDERA · In
 
 .sl-sphere {
   position: absolute;
-  border-radius: 50%;
+  border-radius: var(--md-sys-shape-corner-full);
   opacity: 0;
   will-change: transform;
-  transition: opacity 2s ease;
+  transition: opacity 2s var(--md-sys-motion-easing-standard); /* 2s e' fuori scala M3 ma intenzionale: fade-in spazioso */
 }
 .sl-sphere.on { opacity: 1; }
 
@@ -230,7 +230,10 @@ const footerText = computed(() => `Modulo ${props.title} · Sistema SIDERA · In
   max-width: 380px;
   opacity: 0;
   transform: translateY(14px);
-  transition: opacity 0.9s ease, transform 0.9s ease;
+  /* enter animation 900ms ~= long4 (600ms) doppio. M3 prevede long4 max,
+     ma per il "splash entrance" mantengo 900ms per coerenza con animazione spheres. */
+  transition: opacity   900ms var(--md-sys-motion-easing-emphasized-decelerate),
+              transform 900ms var(--md-sys-motion-easing-emphasized-decelerate);
 }
 .sl-content.on { opacity: 1; transform: translateY(0); }
 
@@ -286,14 +289,15 @@ const footerText = computed(() => `Modulo ${props.title} · Sistema SIDERA · In
   width: 100%;
   background: rgba(255,255,255,0.03);
   border: 1px solid rgba(255,255,255,0.08);
-  border-radius: 8px;
+  border-radius: var(--md-sys-shape-corner-small);
   padding: 0.95rem 1rem;
   color: rgba(255,255,255,0.92);
-  font-family: 'Outfit', sans-serif;
-  font-size: 1rem;
+  font-family: var(--md-sys-typescale-body-large-font);
+  font-size: var(--md-sys-typescale-body-large-size);
   font-weight: 300;
   outline: none;
-  transition: border-color 0.25s, background 0.25s;
+  transition: border-color var(--md-sys-motion-duration-medium1) var(--md-sys-motion-easing-standard),
+              background    var(--md-sys-motion-duration-medium1) var(--md-sys-motion-easing-standard);
   -webkit-appearance: none;
   appearance: none;
 }
@@ -310,14 +314,15 @@ const footerText = computed(() => `Modulo ${props.title} · Sistema SIDERA · In
   background: var(--sl-primary);
   border: 1px solid var(--sl-primary);
   color: #05090F;
-  font-family: 'Outfit', sans-serif;
+  font-family: var(--md-sys-typescale-label-large-font);
   font-weight: 600;
-  font-size: 0.78rem;
+  font-size: 0.78rem; /* leggermente piu' piccolo del label-large M3 standard (14px) per dare aria al letter-spacing */
   letter-spacing: 0.28em;
   text-transform: uppercase;
-  border-radius: 8px;
+  border-radius: var(--md-sys-shape-corner-small);
   cursor: pointer;
-  transition: opacity 0.2s, filter 0.2s;
+  transition: opacity var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard),
+              filter  var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard);
 }
 .sl-btn:disabled { opacity: 0.5; cursor: default; }
 .sl-btn:not(:disabled):active { filter: brightness(0.85); }
@@ -326,13 +331,13 @@ const footerText = computed(() => `Modulo ${props.title} · Sistema SIDERA · In
   background: none;
   border: none;
   color: rgba(255,255,255,0.42);
-  font-family: 'Outfit', sans-serif;
+  font-family: var(--md-sys-typescale-label-medium-font);
   font-size: 0.72rem;
   letter-spacing: 0.12em;
   text-align: center;
   padding: 0.4rem;
   cursor: pointer;
-  transition: color 0.2s;
+  transition: color var(--md-sys-motion-duration-short4) var(--md-sys-motion-easing-standard);
 }
 .sl-link:hover, .sl-link:active { color: var(--sl-primary); }
 
@@ -341,7 +346,7 @@ const footerText = computed(() => `Modulo ${props.title} · Sistema SIDERA · In
   text-align: center;
   margin: 0;
   padding: 0.5rem 0.6rem;
-  border-radius: 6px;
+  border-radius: var(--md-sys-shape-corner-extra-small);
 }
 .sl-msg-err {
   color: #ff8a72;
