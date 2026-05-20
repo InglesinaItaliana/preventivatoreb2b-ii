@@ -340,6 +340,18 @@ onMounted(() => {
 
 .av-content { padding: 16px 16px; }
 
+/* Desktop wide: container centrato + padding generoso. La lista resta
+   verticale (pattern Asana inbox). Per multi-colonna serve redesign,
+   ProjectBoard SIDERA resta accessibile via /sidera/tasks come power-view. */
+@media (min-width: 1024px) {
+  .av-header   { padding: 24px 40px 18px; }
+  .av-content  { padding: 24px 40px; max-width: 960px; margin: 0 auto; }
+  .filter-pills { margin-bottom: 24px; }
+}
+@media (min-width: 1440px) {
+  .av-content  { max-width: 1120px; padding: 32px 56px; }
+}
+
 .filter-pills {
   display: flex;
   gap: 6px;

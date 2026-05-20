@@ -715,6 +715,18 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
 
 .pd-content { padding: 16px; }
 
+/* Desktop wide: container centrato + padding generoso. Le tabs interne
+   (kanban/milestone/deliverable) sono gia' responsive multi-colonna.
+   ProjectBoard SIDERA (/sidera/projects/:id) ha viste aggiuntive
+   list/cal/notes — power-view, accessibile via URL diretto. */
+@media (min-width: 1024px) {
+  .pd-header  { padding: 24px 40px 18px; }
+  .pd-content { padding: 24px 40px; max-width: 1280px; margin: 0 auto; }
+}
+@media (min-width: 1440px) {
+  .pd-content { max-width: 1440px; padding: 32px 56px; }
+}
+
 .loading-rows { display: flex; flex-direction: column; gap: 6px; }
 .row-skel { height: 48px; border-radius: 10px; background: #E8E5DF; animation: pulse 1.4s ease-in-out infinite; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }

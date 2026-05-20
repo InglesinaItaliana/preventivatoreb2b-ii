@@ -256,6 +256,28 @@ onMounted(() => {
 
 .pv-content { padding: 16px; display: flex; flex-direction: column; gap: 8px; }
 
+/* Desktop wide: grid 2 colonne di project card, container centrato.
+   Su mobile/tablet resta lista verticale singola. */
+@media (min-width: 1024px) {
+  .pv-header   { padding: 24px 40px 18px; }
+  .pv-content  {
+    padding: 24px 40px;
+    max-width: 1280px;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+  .pv-filter,
+  .loading-rows,
+  .empty-state {
+    grid-column: 1 / -1; /* questi span full-width nella grid */
+  }
+}
+@media (min-width: 1440px) {
+  .pv-content { grid-template-columns: repeat(3, 1fr); padding: 32px 56px; }
+}
+
 .pv-filter {
   display: flex;
   align-items: center;
