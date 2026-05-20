@@ -142,7 +142,7 @@ function metricaCorrenteVsTarget(): string {
 </script>
 
 <template>
-  <div class="gd">
+  <div class="gd s-scope-cepheid">
     <template v-if="loadingGoals">
       <div class="loading-rows">
         <div class="row-skel" />
@@ -507,17 +507,17 @@ function metricaCorrenteVsTarget(): string {
   align-items: center;
   gap: 3px;
   padding: 5px 10px;
-  background: rgba(212, 160, 32, 0.10);
-  border: 1px solid rgba(212, 160, 32, 0.30);
+  background: color-mix(in srgb, var(--md-sys-color-primary) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--md-sys-color-primary) 30%, transparent);
   border-radius: 999px;
   font-family: 'Outfit', sans-serif;
   font-size: 11px;
   font-weight: 600;
-  color: #8C6A14;
+  color: var(--md-sys-color-primary-hover);
   cursor: pointer;
   transition: all 0.15s;
 }
-.gd-add-btn:hover { background: rgba(212, 160, 32, 0.18); }
+.gd-add-btn:hover { background: color-mix(in srgb, var(--md-sys-color-primary) 18%, transparent); }
 
 .gd-empty {
   padding: 24px 8px;
@@ -536,7 +536,7 @@ function metricaCorrenteVsTarget(): string {
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s;
 }
-.proj-row:hover { border-color: #D4A020; background: rgba(212, 160, 32, 0.04); }
+.proj-row:hover { border-color: var(--md-sys-color-primary); background: color-mix(in srgb, var(--md-sys-color-primary) 4%, transparent); }
 .proj-stripe { width: 6px; flex-shrink: 0; }
 .proj-body { padding: 12px 14px; flex: 1; min-width: 0; }
 .proj-name { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
@@ -568,7 +568,7 @@ function metricaCorrenteVsTarget(): string {
 .link-info { flex: 1; }
 .link-name { font-size: 13px; font-weight: 600; color: #1A1917; }
 .link-stats { font-size: 11px; color: #9B9590; }
-.link-add { color: #D4A020; }
+.link-add { color: var(--md-sys-color-primary); }
 
 .modal-empty {
   padding: 24px 8px;
@@ -613,7 +613,7 @@ function metricaCorrenteVsTarget(): string {
   color: #1A1917; outline: none;
   transition: border-color 0.15s; resize: vertical;
 }
-.field-input:focus { border-color: #D4A020; }
+.field-input:focus { border-color: var(--md-sys-color-primary); }
 
 .color-picker { display: flex; gap: 8px; }
 .color-swatch {
@@ -638,7 +638,7 @@ function metricaCorrenteVsTarget(): string {
 }
 .btn-primary {
   flex: 2; padding: 12px;
-  background: #D4A020; border: none;
+  background: var(--md-sys-color-primary); border: none;
   border-radius: 12px;
   font-size: 14px; font-weight: 600;
   cursor: pointer; color: #fff;

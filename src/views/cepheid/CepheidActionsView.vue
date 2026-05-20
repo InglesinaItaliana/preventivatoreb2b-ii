@@ -149,7 +149,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="av">
+  <div class="av s-scope-cepheid">
     <header class="av-header">
       <div class="av-header-text">
         <h2 class="p-page-title">Azioni</h2>
@@ -312,7 +312,7 @@ onMounted(() => {
   align-items: center;
   gap: 5px;
   padding: 9px 14px;
-  background: #D4A020;
+  background: var(--md-sys-color-primary);
   border: none;
   border-radius: 10px;
   font-family: 'Outfit', sans-serif;
@@ -350,15 +350,15 @@ onMounted(() => {
   padding: 6px 14px;
   border-radius: 999px;
   border: 1px solid transparent;
-  background: #F1EEE8;
+  background: var(--md-sys-color-surface-container);
   font-size: 12px;
   font-weight: 600;
   font-family: 'Outfit', sans-serif;
-  color: #D4A020;
+  color: var(--md-sys-color-primary);
   cursor: pointer;
   transition: all 0.15s;
 }
-.filter-pill.is-active { background: rgba(212, 160, 32, 0.22); color: #8C6A14; }
+.filter-pill.is-active { background: color-mix(in srgb, var(--md-sys-color-primary) 22%, transparent); color: var(--md-sys-color-primary-hover); }
 
 /* Loading */
 .loading-rows { display: flex; flex-direction: column; gap: 6px; }
@@ -366,7 +366,7 @@ onMounted(() => {
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 
 .empty-state { font-size: 14px; color: #9B9590; padding: 20px 0; }
-.empty-state-icon { color: #D4A020; margin-right: 6px; vertical-align: -4px; }
+.empty-state-icon { color: var(--md-sys-color-primary); margin-right: 6px; vertical-align: -4px; }
 
 /* Task rows */
 .task-row {
@@ -391,8 +391,8 @@ onMounted(() => {
   transition: all 0.15s;
 }
 
-.checkbox:hover { border-color: #D4A020; }
-.check-icon { color: #D4A020; }
+.checkbox:hover { border-color: var(--md-sys-color-primary); }
+.check-icon { color: var(--md-sys-color-primary); }
 
 .row-body { flex: 1; min-width: 0; }
 .row-title { font-size: 14px; color: #1A1917; }
@@ -410,7 +410,7 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
-.undo-btn:hover { color: #8C6A14; }
+.undo-btn:hover { color: var(--md-sys-color-primary-hover); }
 
 /* Collapsible "Completate di recente" */
 .collapse-toggle {
@@ -433,7 +433,7 @@ onMounted(() => {
   transition: color 0.15s;
 }
 
-.collapse-toggle:hover { color: #8C6A14; }
+.collapse-toggle:hover { color: var(--md-sys-color-primary-hover); }
 
 .collapse-meta { display: inline-flex; align-items: center; gap: 6px; }
 
@@ -520,7 +520,7 @@ onMounted(() => {
   outline: none;
   transition: border-color 0.15s;
 }
-.field-input:focus { border-color: #D4A020; }
+.field-input:focus { border-color: var(--md-sys-color-primary); }
 .field-date { color-scheme: light; }
 
 .assignees-chips {
@@ -595,7 +595,7 @@ onMounted(() => {
 .btn-primary {
   flex: 2;
   padding: 12px;
-  background: #D4A020;
+  background: var(--md-sys-color-primary);
   border: none;
   border-radius: 12px;
   font-size: 14px;

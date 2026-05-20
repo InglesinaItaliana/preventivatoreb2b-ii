@@ -233,7 +233,7 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
 </script>
 
 <template>
-  <div class="pd">
+  <div class="pd s-scope-cepheid">
     <header class="pd-header" v-if="project">
       <div class="pd-stripe" :style="{ background: project.color }" />
       <div class="pd-titles">
@@ -661,7 +661,7 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
   gap: 5px;
   padding: 7px 12px;
   margin-bottom: 6px;
-  background: #D4A020;
+  background: var(--md-sys-color-primary);
   border: none;
   border-radius: 10px;
   font-family: 'Outfit', sans-serif;
@@ -692,8 +692,8 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
 }
 .pd-tab:hover { color: #6A6560; }
 .pd-tab.is-active {
-  color: #D4A020;
-  border-bottom-color: #D4A020;
+  color: var(--md-sys-color-primary);
+  border-bottom-color: var(--md-sys-color-primary);
 }
 .pd-tab-count {
   display: inline-flex;
@@ -709,8 +709,8 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
   color: #6A6560;
 }
 .pd-tab.is-active .pd-tab-count {
-  background: rgba(212, 160, 32, 0.18);
-  color: #8C6A14;
+  background: color-mix(in srgb, var(--md-sys-color-primary) 18%, transparent);
+  color: var(--md-sys-color-primary-hover);
 }
 
 .pd-content { padding: 16px; }
@@ -730,7 +730,7 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
   align-items: center;
   gap: 8px;
 }
-.empty-tab-icon { color: #D4A020; opacity: 0.35; margin-bottom: 4px; }
+.empty-tab-icon { color: var(--md-sys-color-primary); opacity: 0.35; margin-bottom: 4px; }
 .empty-tab-hint {
   font-size: 12px;
   color: #B4B0AA;
@@ -796,8 +796,8 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
 }
 .checkbox--sm { width: 14px; height: 14px; border-radius: 4px; }
 
-.checkbox:hover { border-color: #D4A020; }
-.check-icon { color: #D4A020; }
+.checkbox:hover { border-color: var(--md-sys-color-primary); }
+.check-icon { color: var(--md-sys-color-primary); }
 
 .row-title { flex: 1; font-size: 14px; min-width: 0; }
 .row-title--done { text-decoration: line-through; color: #9B9590; }
@@ -867,7 +867,7 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
   flex-shrink: 0;
 }
 
-.undo-btn:hover { color: #8C6A14; }
+.undo-btn:hover { color: var(--md-sys-color-primary-hover); }
 
 .collapse-toggle {
   width: 100%;
@@ -936,7 +936,7 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
   flex-shrink: 0;
   transition: all 0.15s;
 }
-.milestone-circle:hover { border-color: #D4A020; }
+.milestone-circle:hover { border-color: var(--md-sys-color-primary); }
 .milestone-circle.is-done {
   background: #2F6B4A;
   border-color: #2F6B4A;
@@ -1121,7 +1121,7 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
   outline: none;
   transition: border-color 0.15s;
 }
-.field-input:focus { border-color: #D4A020; }
+.field-input:focus { border-color: var(--md-sys-color-primary); }
 .field-date { color-scheme: light; }
 
 .assignees-chips { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -1194,8 +1194,8 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
   transition: background 0.15s;
 }
 .subtask-picker-item:hover { background: #FAF8F4; }
-.subtask-picker-item.is-sel { background: rgba(212, 160, 32, 0.10); color: #1A1917; font-weight: 500; }
-.subtask-picker-item input { accent-color: #D4A020; }
+.subtask-picker-item.is-sel { background: color-mix(in srgb, var(--md-sys-color-primary) 10%, transparent); color: #1A1917; font-weight: 500; }
+.subtask-picker-item input { accent-color: var(--md-sys-color-primary); }
 
 .modal-footer {
   display: flex;
@@ -1220,7 +1220,7 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
 .btn-primary {
   flex: 2;
   padding: 12px;
-  background: #D4A020;
+  background: var(--md-sys-color-primary);
   border: none;
   border-radius: 12px;
   font-size: 14px;

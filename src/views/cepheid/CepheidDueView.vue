@@ -150,7 +150,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="dv">
+  <div class="dv s-scope-cepheid">
     <header class="dv-header">
       <div class="dv-header-text">
         <h2 class="p-page-title">Scadenze</h2>
@@ -292,7 +292,7 @@ onMounted(() => {
   align-items: center;
   gap: 5px;
   padding: 9px 14px;
-  background: #D4A020;
+  background: var(--md-sys-color-primary);
   border: none;
   border-radius: 10px;
   font-family: 'Outfit', sans-serif;
@@ -334,7 +334,7 @@ onMounted(() => {
   align-items: center;
   gap: 12px;
 }
-.empty-icon { color: #D4A020; opacity: 0.35; }
+.empty-icon { color: var(--md-sys-color-primary); opacity: 0.35; }
 
 .bucket { margin-bottom: 18px; }
 
@@ -387,8 +387,8 @@ onMounted(() => {
   transition: all 0.15s;
 }
 
-.checkbox:hover { border-color: #D4A020; }
-.check-icon { color: #D4A020; }
+.checkbox:hover { border-color: var(--md-sys-color-primary); }
+.check-icon { color: var(--md-sys-color-primary); }
 
 .row-body { flex: 1; min-width: 0; }
 .row-title { font-size: 14px; color: #1A1917; }
@@ -453,7 +453,7 @@ onMounted(() => {
   outline: none;
   transition: border-color 0.15s;
 }
-.field-input:focus { border-color: #D4A020; }
+.field-input:focus { border-color: var(--md-sys-color-primary); }
 .field-date { color-scheme: light; }
 
 .assignees-chips { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -513,7 +513,7 @@ onMounted(() => {
 
 .btn-primary {
   flex: 2; padding: 12px;
-  background: #D4A020; border: none;
+  background: var(--md-sys-color-primary); border: none;
   border-radius: 12px;
   font-size: 14px; font-weight: 600;
   cursor: pointer; color: #fff;

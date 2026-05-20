@@ -95,7 +95,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="pv">
+  <div class="pv s-scope-cepheid">
     <header class="pv-header">
       <div class="pv-header-text">
         <h2 class="p-page-title">Progetti</h2>
@@ -228,7 +228,7 @@ onMounted(() => {
   align-items: center;
   gap: 5px;
   padding: 9px 14px;
-  background: #D4A020;
+  background: var(--md-sys-color-primary);
   border: none;
   border-radius: 10px;
   font-family: 'Outfit', sans-serif;
@@ -281,7 +281,7 @@ onMounted(() => {
   outline: none;
   cursor: pointer;
 }
-.pv-filter-select:focus { border-color: #D4A020; }
+.pv-filter-select:focus { border-color: var(--md-sys-color-primary); }
 
 .proj-top {
   display: flex;
@@ -306,7 +306,7 @@ onMounted(() => {
   align-items: center;
   gap: 12px;
 }
-.empty-icon { color: #D4A020; opacity: 0.35; }
+.empty-icon { color: var(--md-sys-color-primary); opacity: 0.35; }
 
 .proj-row {
   display: flex;
@@ -318,7 +318,7 @@ onMounted(() => {
   transition: border-color 0.15s, background 0.15s;
 }
 
-.proj-row:hover { border-color: #D4A020; background: rgba(212, 160, 32, 0.04); }
+.proj-row:hover { border-color: var(--md-sys-color-primary); background: color-mix(in srgb, var(--md-sys-color-primary) 4%, transparent); }
 
 .proj-stripe { width: 6px; flex-shrink: 0; }
 
@@ -388,7 +388,7 @@ onMounted(() => {
   transition: border-color 0.15s;
   resize: vertical;
 }
-.field-input:focus { border-color: #D4A020; }
+.field-input:focus { border-color: var(--md-sys-color-primary); }
 .field-date { color-scheme: light; }
 
 .color-picker { display: flex; gap: 8px; }
@@ -426,7 +426,7 @@ onMounted(() => {
 .btn-primary {
   flex: 2;
   padding: 12px;
-  background: #D4A020;
+  background: var(--md-sys-color-primary);
   border: none;
   border-radius: 12px;
   font-size: 14px;

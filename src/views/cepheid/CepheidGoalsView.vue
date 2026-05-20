@@ -108,7 +108,7 @@ const totalActive = computed(() => obiettiviAttivi.value.length)
 </script>
 
 <template>
-  <div class="gv">
+  <div class="gv s-scope-cepheid">
     <header class="gv-header">
       <div class="gv-header-text">
         <h2 class="p-page-title">Obiettivi</h2>
@@ -255,7 +255,7 @@ const totalActive = computed(() => obiettiviAttivi.value.length)
   align-items: center;
   gap: 5px;
   padding: 9px 14px;
-  background: #D4A020;
+  background: var(--md-sys-color-primary);
   border: none;
   border-radius: 10px;
   font-family: 'Outfit', sans-serif;
@@ -297,7 +297,7 @@ const totalActive = computed(() => obiettiviAttivi.value.length)
   align-items: center;
   gap: 8px;
 }
-.empty-icon { color: #D4A020; opacity: 0.35; margin-bottom: 4px; }
+.empty-icon { color: var(--md-sys-color-primary); opacity: 0.35; margin-bottom: 4px; }
 .empty-hint { font-size: 12px; color: #B4B0AA; max-width: 280px; line-height: 1.5; }
 
 .goal-card {
@@ -311,8 +311,8 @@ const totalActive = computed(() => obiettiviAttivi.value.length)
 }
 
 .goal-card:hover {
-  border-color: #D4A020;
-  background: rgba(212, 160, 32, 0.04);
+  border-color: var(--md-sys-color-primary);
+  background: color-mix(in srgb, var(--md-sys-color-primary) 4%, transparent);
   box-shadow: 0 2px 8px rgba(0,0,0,.04);
 }
 
@@ -440,7 +440,7 @@ const totalActive = computed(() => obiettiviAttivi.value.length)
   transition: border-color 0.15s;
   resize: vertical;
 }
-.field-input:focus { border-color: #D4A020; }
+.field-input:focus { border-color: var(--md-sys-color-primary); }
 
 .color-picker { display: flex; gap: 8px; }
 .color-swatch {
@@ -475,7 +475,7 @@ const totalActive = computed(() => obiettiviAttivi.value.length)
 .btn-primary {
   flex: 2;
   padding: 12px;
-  background: #D4A020;
+  background: var(--md-sys-color-primary);
   border: none;
   border-radius: 12px;
   font-size: 14px;
