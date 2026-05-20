@@ -19,13 +19,22 @@ const { projects } = useProjects()
 const { chats } = useChats()
 const myEmail = (auth.currentUser?.email ?? '').toLowerCase().trim()
 
-// Mappa chatId -> {name, isGroup} popolata dallo snapshot di useChats.
+// Mappa chatId -> {name, isGroup, members} popolata dallo snapshot di useChats.
 // Permette di leggere chatName/chatIsGroup senza fare getDoc per ogni messaggio (elimina N+1).
 const chatCache = computed(() => {
-  const m = new Map<string, { name: string; isGroup: boolean }>()
-  for (const c of chats.value) m.set(c.id, { name: c.name, isGroup: c.isGroup })
+  const m = new Map<string, { name: string; isGroup: boolean; members: string[] }>()
+  for (const c of chats.value) m.set(c.id, { name: c.name, isGroup: c.isGroup, members: c.members })
   return m
 })
+
+// Risolve il LABEL visivo della chat: per chat di gruppo usa il nome, per DM
+// usa il displayName dell'altro membro (stessa logica di PulsarChatsView.chatName).
+function computeChatLabel(info: { name: string; isGroup: boolean; members: string[] } | null): string {
+  if (!info) return ''
+  if (info.isGroup && info.name) return info.name
+  const other = info.members?.find((m) => (m || '').toLowerCase().trim() !== myEmail) ?? ''
+  return other ? displayName(other, members.value) : (info.name || '')
+}
 
 interface PendingMsg {
   id: string
@@ -69,8 +78,9 @@ const q = query(
 // Cache fallback per chat NON in chatCache (es. utente non è membro,
 // caso raro dato che la query Firestore filtra per flags, non per membership).
 // Popolata lazy via getDoc, deduplica le richieste.
-const chatLookupFallback = new Map<string, Promise<{ name: string; isGroup: boolean } | null>>()
-function resolveChat(chatId: string, chatRef: any): Promise<{ name: string; isGroup: boolean } | null> {
+type ChatInfo = { name: string; isGroup: boolean; members: string[] }
+const chatLookupFallback = new Map<string, Promise<ChatInfo | null>>()
+function resolveChat(chatId: string, chatRef: any): Promise<ChatInfo | null> {
   const cached = chatCache.value.get(chatId)
   if (cached) return Promise.resolve(cached)
   const pending = chatLookupFallback.get(chatId)
@@ -80,7 +90,7 @@ function resolveChat(chatId: string, chatRef: any): Promise<{ name: string; isGr
       const snap = await getDoc(chatRef)
       const data = snap.data()
       if (!data) return null
-      return { name: data.name ?? '', isGroup: data.isGroup ?? false }
+      return { name: data.name ?? '', isGroup: data.isGroup ?? false, members: data.members ?? [] }
     } catch (_) {
       return null
     }
@@ -101,7 +111,9 @@ const unsubscribe = onSnapshot(q, async (snap) => {
     return {
       id:          d.id,
       chatId,
-      chatName:    chatInfo?.name || chatId.slice(0, 8),
+      // Label DM/gruppo coerente con PulsarChatsView. Niente più chatId.slice(0,8)
+      // come "codice assurdo" — fallback "Conversazione" se proprio nulla disponibile.
+      chatName:    computeChatLabel(chatInfo) || 'Conversazione',
       chatIsGroup: chatInfo?.isGroup ?? false,
       text:        data.text      ?? '',
       from:        data.from      ?? '',
@@ -316,7 +328,7 @@ async function submitTask() {
       <!-- Questions section: gruppi per chat -->
       <div v-if="pendingQuestionsByChat.length" class="section">
         <div class="section-header">
-          <MIcon name="help" filled class="section-icon section-icon--q" />
+          <MIcon name="help" filled class="section-icon" />
           <span class="section-label">Domande senza risposta</span>
           <span class="section-count">{{ pendingQuestions.length }}</span>
         </div>
@@ -330,12 +342,6 @@ async function submitTask() {
           <div v-if="isExpanded(group.chatId)" class="group-body">
             <div v-for="msg in group.msgs" :key="msg.id" class="msg-card">
               <div class="card-header">
-                <div class="card-avatar" :style="{ background: avatarColor(msg.from) }">
-                  {{ avatarInitial(msg.from) }}
-                </div>
-                <div class="card-meta">
-                  <div class="card-sender">{{ displayName(msg.from, members) }}</div>
-                </div>
                 <div class="card-time">{{ formatTime(msg.createdAt) }}</div>
               </div>
               <p class="card-text">{{ msg.text }}</p>
@@ -380,7 +386,7 @@ async function submitTask() {
       <!-- Tasks section: gruppi per chat -->
       <div v-if="pendingTasksByChat.length" class="section">
         <div class="section-header">
-          <MIcon name="check_circle" filled class="section-icon section-icon--t" />
+          <MIcon name="check_circle" filled class="section-icon" />
           <span class="section-label">Azioni da creare</span>
           <span class="section-count">{{ pendingTasks.length }}</span>
         </div>
@@ -394,12 +400,6 @@ async function submitTask() {
           <div v-if="isExpanded(group.chatId)" class="group-body">
             <div v-for="msg in group.msgs" :key="msg.id" class="msg-card">
               <div class="card-header">
-                <div class="card-avatar" :style="{ background: avatarColor(msg.from) }">
-                  {{ avatarInitial(msg.from) }}
-                </div>
-                <div class="card-meta">
-                  <div class="card-sender">{{ displayName(msg.from, members) }}</div>
-                </div>
                 <div class="card-time">{{ formatTime(msg.createdAt) }}</div>
               </div>
               <p class="card-text">{{ msg.text }}</p>
@@ -552,32 +552,36 @@ async function submitTask() {
 .section-header {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 12px 20px 8px;
-  background: #F4F2EE;
-  border-bottom: 1px solid #E8E5DF;
+  gap: 10px;
+  padding: 16px 20px 12px;
+  background: var(--md-sys-color-surface-container);
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
 }
 
-.section-icon { font-size: 18px; flex-shrink: 0; }
-.section-icon--q { color: #F59E0B; }
-.section-icon--t { color: #10B981; }
+.section-icon {
+  font-size: 22px;
+  flex-shrink: 0;
+  color: var(--md-sys-color-primary);
+}
 
 .section-label {
-  font-size: 10px;
+  font-size: 14px;
   font-weight: 700;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: #6A6560;
+  color: var(--md-sys-color-on-surface);
   flex: 1;
 }
 
 .section-count {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
-  color: #9B9590;
-  background: #E8E5DF;
-  padding: 2px 7px;
+  color: var(--md-sys-color-primary);
+  background: color-mix(in srgb, var(--md-sys-color-primary) 14%, transparent);
+  padding: 3px 10px;
   border-radius: 20px;
+  min-width: 28px;
+  text-align: center;
 }
 
 /* ── Gruppi per chat dentro le sezioni ────────────────────────────────── */
