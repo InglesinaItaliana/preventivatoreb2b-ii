@@ -1,0 +1,153 @@
+<script setup lang="ts">
+/**
+ * Pagina admin per task di manutenzione una-tantum.
+ * Accessibile solo a info@inglesinaitaliana.it (guardia client-side; la function
+ * stessa rivalida l'identità lato server).
+ *
+ * Aggiungere qui altri task di manutenzione futuri (es. backfill schema, fix indici).
+ */
+import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
+import { httpsCallable } from 'firebase/functions'
+import { auth, functions } from '../../firebase'
+
+const router = useRouter()
+const userEmail = computed(() => (auth.currentUser?.email ?? '').toLowerCase().trim())
+const isAdmin = computed(() => userEmail.value === 'info@inglesinaitaliana.it')
+
+interface CleanupResult {
+  orphanChatsCount: number
+  deletedMessagesCount: number
+  totalMessagesScanned: number
+  totalChatsScanned: number
+}
+
+const running = ref(false)
+const result = ref<CleanupResult | null>(null)
+const errorMsg = ref<string>('')
+
+async function runCleanup() {
+  if (running.value) return
+  if (!confirm('Eseguire cleanup delle pendenze orfane? L\'operazione può richiedere fino a 9 minuti su workspace grandi.')) return
+  running.value = true
+  result.value = null
+  errorMsg.value = ''
+  try {
+    const fn = httpsCallable<Record<string, never>, CleanupResult>(functions, 'cleanupOrphanPendingMessages')
+    const res = await fn({})
+    result.value = res.data
+  } catch (e: any) {
+    console.error('[cleanupOrphanPendingMessages]', e)
+    errorMsg.value = e?.message || 'Errore sconosciuto. Vedi console.'
+  } finally {
+    running.value = false
+  }
+}
+</script>
+
+<template>
+  <div class="m-page">
+    <header class="m-header">
+      <button class="m-back" @click="router.push('/sidera/hub')" aria-label="Indietro">←</button>
+      <div>
+        <h2 class="m-title">Manutenzione</h2>
+        <p class="m-sub">Task admin una-tantum</p>
+      </div>
+    </header>
+
+    <div v-if="!isAdmin" class="m-empty">
+      <p>Pagina riservata all'amministratore.</p>
+    </div>
+
+    <div v-else class="m-task">
+      <h3 class="m-task-title">Pulisci pendenze orfane (PULSAR)</h3>
+      <p class="m-task-desc">
+        Elimina i messaggi rimasti in <code>chats/{id}/messages/</code> dove la chat
+        parent è stata cancellata prima del deploy di <code>onChatDeleted</code>.
+        Idempotente: rieseguibile senza danni.
+      </p>
+
+      <button class="m-btn" :disabled="running" @click="runCleanup">
+        {{ running ? 'In esecuzione…' : 'Esegui cleanup' }}
+      </button>
+
+      <div v-if="result" class="m-result">
+        <h4>Risultato</h4>
+        <ul>
+          <li><strong>{{ result.orphanChatsCount }}</strong> chat orfane trovate</li>
+          <li><strong>{{ result.deletedMessagesCount }}</strong> messaggi cancellati</li>
+          <li>{{ result.totalMessagesScanned }} messaggi scansionati su {{ result.totalChatsScanned }} chat totali</li>
+        </ul>
+      </div>
+
+      <div v-if="errorMsg" class="m-error">
+        <strong>Errore:</strong> {{ errorMsg }}
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.m-page {
+  font-family: 'Outfit', sans-serif;
+  background: var(--md-sys-color-surface, #FFF8F0);
+  color: var(--md-sys-color-on-surface, #1A1917);
+  min-height: 100vh;
+  padding: 24px 32px;
+}
+.m-header { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
+.m-back {
+  background: none; border: 1px solid var(--md-sys-color-outline-variant, #CEC6B4);
+  width: 36px; height: 36px; border-radius: 50%;
+  cursor: pointer; font-size: 18px; color: inherit;
+}
+.m-back:hover { background: var(--md-sys-color-surface-container, #F5EDDF); }
+.m-title { font-size: 22px; font-weight: 700; margin: 0; letter-spacing: 0.04em; text-transform: uppercase; }
+.m-sub { font-size: 13px; color: var(--md-sys-color-on-surface-variant, #6A6560); margin: 2px 0 0; }
+
+.m-empty {
+  background: var(--md-sys-color-surface-container, #F5EDDF);
+  padding: 32px; border-radius: 12px; text-align: center;
+}
+
+.m-task {
+  background: var(--md-sys-color-surface-container-lowest, #FFFFFF);
+  border: 1px solid var(--md-sys-color-outline-variant, #CEC6B4);
+  border-radius: 14px; padding: 24px; max-width: 640px;
+}
+.m-task-title { font-size: 16px; font-weight: 700; margin: 0 0 8px; }
+.m-task-desc { font-size: 14px; line-height: 1.5; color: var(--md-sys-color-on-surface-variant, #6A6560); margin: 0 0 16px; }
+.m-task-desc code {
+  font-family: 'JetBrains Mono', 'SF Mono', monospace;
+  font-size: 12px;
+  background: var(--md-sys-color-surface-container-high, #EFE7DA);
+  padding: 1px 6px; border-radius: 4px;
+}
+
+.m-btn {
+  background: var(--md-sys-color-primary, #D4C498);
+  color: var(--md-sys-color-on-primary, #FFFFFF);
+  border: none; border-radius: 10px;
+  padding: 11px 22px; font-size: 14px; font-weight: 600;
+  cursor: pointer; transition: background 0.15s;
+  font-family: inherit;
+}
+.m-btn:hover:not(:disabled) { background: var(--md-sys-color-primary-hover, #B0A580); }
+.m-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.m-result {
+  margin-top: 20px; padding: 16px;
+  background: color-mix(in srgb, var(--md-sys-color-primary, #D4C498) 10%, transparent);
+  border-radius: 10px;
+  border-left: 3px solid var(--md-sys-color-primary, #D4C498);
+}
+.m-result h4 { font-size: 13px; font-weight: 700; margin: 0 0 8px; letter-spacing: 0.04em; text-transform: uppercase; }
+.m-result ul { margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.6; }
+
+.m-error {
+  margin-top: 20px; padding: 14px;
+  background: var(--md-sys-color-error-container, #FFDAD6);
+  color: var(--md-sys-color-on-error-container, #93000A);
+  border-radius: 10px; font-size: 14px;
+}
+</style>

@@ -82,6 +82,7 @@ const router = createRouter({
         { path: 'chat',       name: 'sidera-chat',    component: () => import('../views/sidera/ChatView.vue') },
         { path: 'nebula',     name: 'nebula-team',    component: () => import('../views/nebula/NebulaTeamView.vue') },
         { path: 'nova/spedizioni', name: 'nova-spedizioni', component: () => import('../views/nova/NovaSpedizioniView.vue') },
+        { path: 'admin/maintenance', name: 'sidera-admin-maintenance', component: () => import('../views/sidera/SideraAdminMaintenance.vue') },
       ]
     },
     // ── PULSAR (scope mobile, montato sotto SideraLayout adattivo) ──────────
