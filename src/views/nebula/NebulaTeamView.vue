@@ -41,11 +41,14 @@ async function confirmPosition(pos: string) {
   editingMember.value = null
 }
 
+// Role accents mappati su tonal palettes M3 dei moduli con dominio semantico
+// affine (vedi docs/ATLAS.md sez. 14). LOGISTICA resta hex custom: non esiste
+// un modulo galattico con accent viola.
 const roleAccent: Record<string, string> = {
-  ADMIN:       '#C46030',
-  COMMERCIALE: '#98A830',
-  PRODUZIONE:  '#3A8C80',
-  LOGISTICA:   '#7A5CA8',
+  ADMIN:       '#BF592A',  // var(--md-ref-palette-nebula-50)  — modulo NEBULA stesso
+  COMMERCIALE: '#707D35',  // var(--md-ref-palette-nova-50)    — palette olive M3
+  PRODUZIONE:  '#308478',  // var(--md-ref-palette-pulsar-50)  — palette teal M3
+  LOGISTICA:   '#7A5CA8',  // custom, nessun modulo viola
 }
 </script>
 
@@ -213,10 +216,16 @@ const roleAccent: Record<string, string> = {
 </template>
 
 <style scoped>
+/* ─────────────────────────────────────────────────────────────────────
+   NEBULA · Team — resa M3 (ATLAS sez. 14).
+   Lo scope NEBULA è applicato al s-shell padre da SideraLayout via
+   classe .s-scope-nebula, quindi var(--md-sys-color-primary) qui dentro
+   risolve già al brand NEBULA on-light (#B85425).
+   ───────────────────────────────────────────────────────────────────── */
 .nb-shell {
-  font-family: 'Outfit', sans-serif;
-  background: var(--s-bg);
-  color: var(--s-text);
+  font-family: var(--md-sys-typescale-body-medium-font);
+  background: var(--md-sys-color-surface);
+  color: var(--md-sys-color-on-surface);
   height: 100%;
   overflow-y: auto;
   display: flex;
@@ -229,29 +238,35 @@ const roleAccent: Record<string, string> = {
   align-items: center;
   justify-content: space-between;
   padding: 28px 32px 20px;
-  border-bottom: 1px solid var(--s-border);
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
   flex-shrink: 0;
 }
 
 .nb-title {
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 30px;
-  font-weight: 600;
+  font-family: var(--md-sys-typescale-headline-medium-font);
+  font-size: var(--md-sys-typescale-headline-medium-size);
+  line-height: var(--md-sys-typescale-headline-medium-line-height);
+  font-weight: var(--md-sys-typescale-headline-medium-weight);
   letter-spacing: 0.04em;
+  color: var(--md-sys-color-on-surface);
   margin: 0 0 2px;
 }
 
 .nb-sub {
-  font-size: 12px;
-  color: var(--s-text-dim);
+  font-family: var(--md-sys-typescale-body-small-font);
+  font-size: var(--md-sys-typescale-body-small-size);
+  line-height: var(--md-sys-typescale-body-small-line-height);
+  letter-spacing: var(--md-sys-typescale-body-small-tracking);
+  color: var(--md-sys-color-on-surface-variant);
 }
 
+/* Segmented control (M3 segmented button) */
 .nb-toggle {
   display: flex;
   gap: 4px;
-  background: var(--s-border);
+  background: var(--md-sys-color-surface-container);
   padding: 3px;
-  border-radius: 10px;
+  border-radius: var(--md-sys-shape-corner-medium);
 }
 
 .nb-toggle-btn {
@@ -261,26 +276,36 @@ const roleAccent: Record<string, string> = {
   padding: 6px 14px;
   border: none;
   background: none;
-  border-radius: 8px;
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--s-text-dim);
-  font-family: 'Outfit', sans-serif;
+  border-radius: var(--md-sys-shape-corner-small);
+  font-family: var(--md-sys-typescale-label-medium-font);
+  font-size: var(--md-sys-typescale-label-medium-size);
+  line-height: var(--md-sys-typescale-label-medium-line-height);
+  font-weight: var(--md-sys-typescale-label-medium-weight);
+  letter-spacing: var(--md-sys-typescale-label-medium-tracking);
+  color: var(--md-sys-color-on-surface-variant);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: background var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              color      var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
+}
+
+.nb-toggle-btn:hover:not(.active) {
+  background: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent);
+  color: var(--md-sys-color-on-surface);
 }
 
 .nb-toggle-btn.active {
-  background: var(--s-sidebar);
-  color: var(--s-text);
+  background: var(--md-sys-color-secondary-container, var(--md-sys-color-surface-container-highest));
+  color: var(--md-sys-color-on-surface);
 }
 
 .nb-toggle-icon { width: 14px; height: 14px; }
 
 .nb-loading, .nb-empty {
   text-align: center;
-  color: var(--s-text-dim);
-  font-size: 13px;
+  color: var(--md-sys-color-on-surface-variant);
+  font-family: var(--md-sys-typescale-body-medium-font);
+  font-size: var(--md-sys-typescale-body-medium-size);
+  line-height: var(--md-sys-typescale-body-medium-line-height);
   padding: 60px 24px;
 }
 
@@ -301,8 +326,10 @@ const roleAccent: Record<string, string> = {
 }
 
 .nb-level-label {
-  font-size: 10px;
-  font-weight: 700;
+  font-family: var(--md-sys-typescale-label-small-font);
+  font-size: var(--md-sys-typescale-label-small-size);
+  line-height: var(--md-sys-typescale-label-small-line-height);
+  font-weight: var(--md-sys-typescale-label-small-weight);
   letter-spacing: 0.14em;
   text-transform: uppercase;
   margin-bottom: 14px;
@@ -315,30 +342,38 @@ const roleAccent: Record<string, string> = {
   gap: 12px;
 }
 
-/* ── Member card (org) ── */
+/* ── Member card (org) ── M3 outlined card */
 .nb-card {
   width: 118px;
-  background: var(--s-sidebar);
-  border: 1px solid var(--s-border);
-  border-radius: 14px;
+  background: var(--md-sys-color-surface-container-low);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-medium);
   padding: 18px 12px 14px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  transition: border-color 0.15s;
+  transition: border-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              background   var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              box-shadow   var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
 }
 
-.nb-card:hover { border-color: #C46030; }
+.nb-card:hover {
+  border-color: var(--md-sys-color-primary);
+  background: color-mix(in srgb, var(--md-sys-color-primary) 4%, var(--md-sys-color-surface-container-low));
+  box-shadow: var(--md-sys-elevation-level-2);
+}
 
 .nb-avatar {
   width: 42px;
   height: 42px;
-  border-radius: 50%;
+  border-radius: var(--md-sys-shape-corner-full);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 15px;
+  font-family: var(--md-sys-typescale-label-large-font);
+  font-size: var(--md-sys-typescale-label-large-size);
+  line-height: 1;
   font-weight: 700;
   color: #fff;
   flex-shrink: 0;
@@ -347,15 +382,16 @@ const roleAccent: Record<string, string> = {
 .nb-avatar--lg {
   width: 40px;
   height: 40px;
-  font-size: 14px;
+  font-size: var(--md-sys-typescale-label-large-size);
 }
 
 .nb-card-name {
-  font-size: 12px;
-  font-weight: 600;
-  text-align: center;
+  font-family: var(--md-sys-typescale-label-medium-font);
+  font-size: var(--md-sys-typescale-label-medium-size);
   line-height: 1.3;
-  color: var(--s-text);
+  font-weight: var(--md-sys-typescale-label-medium-weight);
+  text-align: center;
+  color: var(--md-sys-color-on-surface);
 }
 
 .nb-pos-trigger {
@@ -364,23 +400,31 @@ const roleAccent: Record<string, string> = {
   gap: 3px;
   background: none;
   border: none;
-  font-size: 10px;
-  color: var(--s-text-dim);
-  font-family: 'Outfit', sans-serif;
+  font-family: var(--md-sys-typescale-label-small-font);
+  font-size: var(--md-sys-typescale-label-small-size);
+  line-height: var(--md-sys-typescale-label-small-line-height);
+  font-weight: 500;
+  letter-spacing: var(--md-sys-typescale-label-small-tracking);
+  color: var(--md-sys-color-on-surface-variant);
   cursor: pointer;
   padding: 2px 6px;
-  border-radius: 5px;
-  transition: background 0.12s, color 0.12s;
+  border-radius: var(--md-sys-shape-corner-extra-small);
+  transition: background var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              color      var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
   text-align: center;
 }
 
-.nb-pos-trigger:hover { background: var(--s-border); color: #C46030; }
+.nb-pos-trigger:hover {
+  background: color-mix(in srgb, var(--md-sys-color-primary) 8%, transparent);
+  color: var(--md-sys-color-primary);
+}
 
 .nb-pen-icon { width: 10px; height: 10px; opacity: 0.6; }
 
 .nb-pos-label {
-  font-size: 10px;
-  color: var(--s-text-dim);
+  font-family: var(--md-sys-typescale-label-small-font);
+  font-size: var(--md-sys-typescale-label-small-size);
+  color: var(--md-sys-color-on-surface-variant);
   text-align: center;
 }
 
@@ -388,7 +432,7 @@ const roleAccent: Record<string, string> = {
 .nb-conn-vert {
   width: 1px;
   height: 28px;
-  background: var(--s-border);
+  background: var(--md-sys-color-outline-variant);
   margin: 0 auto;
 }
 
@@ -408,7 +452,7 @@ const roleAccent: Record<string, string> = {
   transform: translateX(-50%);
   width: 1px;
   height: 20px;
-  background: var(--s-border);
+  background: var(--md-sys-color-outline-variant);
 }
 
 .nb-conn-branch::after {
@@ -418,7 +462,7 @@ const roleAccent: Record<string, string> = {
   left: 25%;
   right: 25%;
   height: 1px;
-  background: var(--s-border);
+  background: var(--md-sys-color-outline-variant);
 }
 
 /* ── Split level ── */
@@ -438,7 +482,7 @@ const roleAccent: Record<string, string> = {
 .nb-sublevel-stub {
   width: 1px;
   height: 20px;
-  background: var(--s-border);
+  background: var(--md-sys-color-outline-variant);
   margin: 0 auto 14px;
 }
 
@@ -454,14 +498,20 @@ const roleAccent: Record<string, string> = {
   display: flex;
   align-items: center;
   gap: 14px;
-  background: var(--s-sidebar);
-  border: 1px solid var(--s-border);
-  border-radius: 12px;
+  background: var(--md-sys-color-surface-container-low);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-medium);
   padding: 14px 16px;
-  transition: border-color 0.15s;
+  transition: border-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              background   var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              box-shadow   var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
 }
 
-.nb-list-card:hover { border-color: #C4603050; }
+.nb-list-card:hover {
+  border-color: color-mix(in srgb, var(--md-sys-color-primary) 40%, transparent);
+  background: color-mix(in srgb, var(--md-sys-color-primary) 4%, var(--md-sys-color-surface-container-low));
+  box-shadow: var(--md-sys-elevation-level-1);
+}
 .nb-list-card.inactive { opacity: 0.45; }
 
 .nb-list-info {
@@ -470,85 +520,116 @@ const roleAccent: Record<string, string> = {
 }
 
 .nb-list-name {
-  font-size: 14px;
-  font-weight: 600;
+  font-family: var(--md-sys-typescale-title-small-font);
+  font-size: var(--md-sys-typescale-title-small-size);
+  line-height: var(--md-sys-typescale-title-small-line-height);
+  font-weight: var(--md-sys-typescale-title-small-weight);
+  letter-spacing: var(--md-sys-typescale-title-small-tracking);
+  color: var(--md-sys-color-on-surface);
   display: flex;
   align-items: center;
   gap: 8px;
 }
 
 .nb-list-pos {
-  font-size: 12px;
-  color: #C46030;
+  font-family: var(--md-sys-typescale-body-small-font);
+  font-size: var(--md-sys-typescale-body-small-size);
+  line-height: var(--md-sys-typescale-body-small-line-height);
+  letter-spacing: var(--md-sys-typescale-body-small-tracking);
+  color: var(--md-sys-color-primary);
   margin-top: 1px;
 }
 
 .nb-list-meta {
-  font-size: 11px;
-  color: var(--s-text-dim);
+  font-family: var(--md-sys-typescale-label-small-font);
+  font-size: var(--md-sys-typescale-label-small-size);
+  line-height: var(--md-sys-typescale-label-small-line-height);
+  color: var(--md-sys-color-on-surface-variant);
   margin-top: 3px;
 }
 
 .nb-badge-inactive {
+  font-family: var(--md-sys-typescale-label-small-font);
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.06em;
-  background: var(--s-border);
-  color: var(--s-text-dim);
+  background: var(--md-sys-color-surface-container-high);
+  color: var(--md-sys-color-on-surface-variant);
   padding: 2px 6px;
-  border-radius: 4px;
+  border-radius: var(--md-sys-shape-corner-extra-small);
   text-transform: uppercase;
 }
 
 .nb-role-badge {
-  font-size: 10px;
+  font-family: var(--md-sys-typescale-label-small-font);
+  font-size: var(--md-sys-typescale-label-small-size);
+  line-height: 1;
   font-weight: 700;
   letter-spacing: 0.08em;
   border: 1px solid;
   padding: 3px 8px;
-  border-radius: 6px;
+  border-radius: var(--md-sys-shape-corner-small);
   flex-shrink: 0;
 }
 
 .nb-list-edit {
   background: none;
   border: none;
-  color: var(--s-text-dim);
+  color: var(--md-sys-color-on-surface-variant);
   cursor: pointer;
   padding: 6px;
-  border-radius: 6px;
+  border-radius: var(--md-sys-shape-corner-small);
   display: flex;
   align-items: center;
-  transition: background 0.12s, color 0.12s;
+  transition: background var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              color      var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
   flex-shrink: 0;
 }
 
-.nb-list-edit:hover { background: var(--s-border); color: #C46030; }
+.nb-list-edit:hover {
+  background: color-mix(in srgb, var(--md-sys-color-primary) 8%, transparent);
+  color: var(--md-sys-color-primary);
+}
 
-/* ── Position editor ── */
+/* ── Position editor (M3 dialog) ── */
 .nb-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
+  background: color-mix(in srgb, var(--md-sys-color-scrim) 55%, transparent);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 9999;
+  animation: nb-overlay-fade var(--md-sys-motion-duration-medium2) var(--md-sys-motion-easing-emphasized-decelerate);
+}
+
+@keyframes nb-overlay-fade {
+  from { opacity: 0; }
+  to   { opacity: 1; }
 }
 
 .nb-popover {
-  background: var(--s-sidebar);
-  border: 1px solid var(--s-border);
-  border-radius: 16px;
+  background: var(--md-sys-color-surface-container-high);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-extra-large);
+  box-shadow: var(--md-sys-elevation-level-3);
   padding: 24px;
   width: 320px;
   max-height: 80vh;
   overflow-y: auto;
+  animation: nb-popover-pop var(--md-sys-motion-duration-medium2) var(--md-sys-motion-easing-emphasized-decelerate);
+}
+
+@keyframes nb-popover-pop {
+  from { transform: scale(0.96); opacity: 0; }
+  to   { transform: scale(1);    opacity: 1; }
 }
 
 .nb-popover-title {
-  font-size: 13px;
-  color: var(--s-text-dim);
+  font-family: var(--md-sys-typescale-body-medium-font);
+  font-size: var(--md-sys-typescale-body-medium-size);
+  line-height: var(--md-sys-typescale-body-medium-line-height);
+  color: var(--md-sys-color-on-surface-variant);
   margin-bottom: 16px;
 }
 
@@ -560,33 +641,56 @@ const roleAccent: Record<string, string> = {
 }
 
 .nb-pos-opt {
-  background: var(--s-bg);
-  border: 1px solid var(--s-border);
-  color: var(--s-text);
-  font-family: 'Outfit', sans-serif;
-  font-size: 12px;
+  background: var(--md-sys-color-surface-container-lowest);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  color: var(--md-sys-color-on-surface);
+  font-family: var(--md-sys-typescale-label-medium-font);
+  font-size: var(--md-sys-typescale-label-medium-size);
+  line-height: var(--md-sys-typescale-label-medium-line-height);
+  font-weight: 500;
+  letter-spacing: var(--md-sys-typescale-label-medium-tracking);
   padding: 8px 10px;
-  border-radius: 8px;
+  border-radius: var(--md-sys-shape-corner-small);
   cursor: pointer;
   text-align: left;
-  transition: all 0.12s;
+  transition: background var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              border-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              color        var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
 }
 
-.nb-pos-opt:hover { border-color: #C46030; color: #C46030; }
-.nb-pos-opt.selected { background: #C4603018; border-color: #C46030; color: #C46030; }
+.nb-pos-opt:hover {
+  background: color-mix(in srgb, var(--md-sys-color-primary) 8%, transparent);
+  border-color: var(--md-sys-color-primary);
+  color: var(--md-sys-color-primary);
+}
+
+.nb-pos-opt.selected {
+  background: var(--md-sys-color-primary-container);
+  border-color: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary-container);
+}
 
 .nb-pos-clear {
   width: 100%;
   background: none;
-  border: 1px solid var(--s-border);
-  color: var(--s-text-dim);
-  font-family: 'Outfit', sans-serif;
-  font-size: 12px;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  color: var(--md-sys-color-on-surface-variant);
+  font-family: var(--md-sys-typescale-label-medium-font);
+  font-size: var(--md-sys-typescale-label-medium-size);
+  line-height: var(--md-sys-typescale-label-medium-line-height);
+  font-weight: 500;
+  letter-spacing: var(--md-sys-typescale-label-medium-tracking);
   padding: 8px;
-  border-radius: 8px;
+  border-radius: var(--md-sys-shape-corner-small);
   cursor: pointer;
-  transition: all 0.12s;
+  transition: background var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              border-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              color        var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
 }
 
-.nb-pos-clear:hover { border-color: #C8521A; color: #C8521A; }
+.nb-pos-clear:hover {
+  background: color-mix(in srgb, var(--md-sys-color-error) 8%, transparent);
+  border-color: var(--md-sys-color-error);
+  color: var(--md-sys-color-error);
+}
 </style>
