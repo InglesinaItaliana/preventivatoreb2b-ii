@@ -7,7 +7,7 @@ import MaterialIcon from '../../components/MaterialIcon.vue'
 import ContextualMobileHeader from '../../components/shared/ContextualMobileHeader.vue'
 import ContextualBottomNav from '../../components/shared/ContextualBottomNav.vue'
 import ContextualFab from '../../components/shared/ContextualFab.vue'
-import { detectScope, getScopeConfig, type ScopeId } from './scopeConfig'
+import { detectScope, getScopeConfig, SCOPE_CONFIGS, type ScopeId } from './scopeConfig'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
 import { useTeamMembers, displayName, avatarColor } from '../../composables/sidera/useTeamMembers'
 import { useChats } from '../../composables/pulsar/useChats'
@@ -111,10 +111,9 @@ const modules = [
   {
     name: 'PULSAR',   accent: '#3AAF98',
     vx: 405, vy: 252, vr: 8,
-    items: [
-      { path: '/pulsar', exact: false, label: 'Messaggi', icon: 'forum', excludePaths: ['/pulsar/pending'] },
-      { path: '/pulsar/pending', exact: false, label: 'Pendenze', icon: 'inbox' },
-    ],
+    // Single source of truth: le voci della sezione PULSAR nella sidebar
+    // desktop vengono dalla stessa config del bottom-nav mobile.
+    items: SCOPE_CONFIGS.pulsar.mobileNav as any[],
   },
   {
     name: 'NOVA',     accent: '#8FAB35',

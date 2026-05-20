@@ -50,7 +50,7 @@ export const SCOPE_CONFIGS: Record<Exclude<ScopeId, 'sidera'>, ScopeConfig> = {
     wordmark: 'PULSAR',
     brandSvg: 'pulsar',
     mobileNav: [
-      { path: '/pulsar',           exact: true,  label: 'Chat',      icon: 'forum' },
+      { path: '/pulsar',           exact: true,  label: 'Messaggi',  icon: 'forum' },
       { path: '/pulsar/sequentia', exact: false, label: 'Azioni',    icon: 'check_circle' },
       { path: '/pulsar/pending',   exact: false, label: 'Pendenze',  icon: 'notifications' },
       { path: '/pulsar/tags',      exact: false, label: 'Etichette', icon: 'sell' },
