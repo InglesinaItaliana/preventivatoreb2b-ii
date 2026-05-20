@@ -21,6 +21,7 @@ interface PendingMsg {
   id: string
   chatId: string
   chatName: string
+  chatIsGroup: boolean
   text: string
   from: string
   createdAt: Date
@@ -29,8 +30,16 @@ interface PendingMsg {
   answeredAt: Date | null
 }
 
+interface ChatGroup {
+  chatId: string
+  chatName: string
+  chatIsGroup: boolean
+  msgs: PendingMsg[]
+}
+
 const allFlagged = ref<PendingMsg[]>([])
 const loading    = ref(true)
+const collapsedChats = ref<Set<string>>(new Set())  // default: espansi (set vuoto)
 
 function toDate(raw: unknown): Date | null {
   if (!raw) return null
@@ -54,16 +63,20 @@ const unsubscribe = onSnapshot(q, async (snap) => {
     const chatRef = d.ref.parent.parent
     const chatId  = chatRef?.id ?? ''
     let chatName  = ''
+    let chatIsGroup = false
     if (chatRef) {
       try {
         const chatSnap = await getDoc(chatRef)
-        chatName = chatSnap.data()?.name ?? ''
+        const chatData = chatSnap.data()
+        chatName    = chatData?.name ?? ''
+        chatIsGroup = chatData?.isGroup ?? false
       } catch (_) {}
     }
     results.push({
       id:         d.id,
       chatId,
       chatName:   chatName || chatId.slice(0, 8),
+      chatIsGroup,
       text:       data.text      ?? '',
       from:       data.from      ?? '',
       createdAt:  toDate(data.createdAt) ?? new Date(),
@@ -98,6 +111,35 @@ const pendingTasks = computed(() =>
     m.from.toLowerCase().trim() !== myEmail
   )
 )
+
+function groupByChat(msgs: PendingMsg[]): ChatGroup[] {
+  const groups = new Map<string, ChatGroup>()
+  for (const msg of msgs) {
+    let g = groups.get(msg.chatId)
+    if (!g) {
+      g = { chatId: msg.chatId, chatName: msg.chatName, chatIsGroup: msg.chatIsGroup, msgs: [] }
+      groups.set(msg.chatId, g)
+    }
+    g.msgs.push(msg)
+  }
+  // Ordine gruppi: chat con il messaggio più recente in cima
+  return [...groups.values()].sort(
+    (a, b) => b.msgs[0].createdAt.getTime() - a.msgs[0].createdAt.getTime()
+  )
+}
+
+const pendingQuestionsByChat = computed(() => groupByChat(pendingQuestions.value))
+const pendingTasksByChat     = computed(() => groupByChat(pendingTasks.value))
+
+function toggleChatCollapsed(chatId: string) {
+  const next = new Set(collapsedChats.value)
+  if (next.has(chatId)) next.delete(chatId)
+  else next.add(chatId)
+  collapsedChats.value = next
+}
+function isExpanded(chatId: string) {
+  return !collapsedChats.value.has(chatId)
+}
 
 function formatTime(d: Date) {
   return new Intl.DateTimeFormat('it-IT', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(d)
@@ -244,90 +286,107 @@ async function submitTask() {
     </div>
 
     <template v-else>
-      <!-- Questions section -->
-      <div v-if="pendingQuestions.length" class="section">
+      <!-- Questions section: gruppi per chat -->
+      <div v-if="pendingQuestionsByChat.length" class="section">
         <div class="section-header">
           <MIcon name="help" filled class="section-icon section-icon--q" />
           <span class="section-label">Domande senza risposta</span>
           <span class="section-count">{{ pendingQuestions.length }}</span>
         </div>
-        <div v-for="msg in pendingQuestions" :key="msg.id" class="msg-card">
-          <div class="card-header">
-            <div class="card-avatar" :style="{ background: avatarColor(msg.from) }">
-              {{ avatarInitial(msg.from) }}
-            </div>
-            <div class="card-meta">
-              <div class="card-sender">{{ displayName(msg.from, members) }}</div>
-              <div class="card-chat">in {{ msg.chatName }}</div>
-            </div>
-            <div class="card-time">{{ formatTime(msg.createdAt) }}</div>
-          </div>
-          <p class="card-text">{{ msg.text }}</p>
+        <div v-for="group in pendingQuestionsByChat" :key="'q-' + group.chatId" class="chat-group">
+          <button class="group-header" @click="toggleChatCollapsed(group.chatId)">
+            <MIcon :name="group.chatIsGroup ? 'group' : 'person'" filled :size="18" class="group-icon" />
+            <span class="group-name">{{ group.chatName }}</span>
+            <span class="group-count">{{ group.msgs.length }}</span>
+            <MIcon :name="isExpanded(group.chatId) ? 'expand_less' : 'expand_more'" :size="20" class="group-chevron" />
+          </button>
+          <div v-if="isExpanded(group.chatId)" class="group-body">
+            <div v-for="msg in group.msgs" :key="msg.id" class="msg-card">
+              <div class="card-header">
+                <div class="card-avatar" :style="{ background: avatarColor(msg.from) }">
+                  {{ avatarInitial(msg.from) }}
+                </div>
+                <div class="card-meta">
+                  <div class="card-sender">{{ displayName(msg.from, members) }}</div>
+                </div>
+                <div class="card-time">{{ formatTime(msg.createdAt) }}</div>
+              </div>
+              <p class="card-text">{{ msg.text }}</p>
 
-          <!-- Inline reply -->
-          <div v-if="replyingTo === msg.id" class="inline-reply">
-            <textarea
-              :id="'inline-reply-' + msg.id"
-              v-model="replyText"
-              class="inline-reply-input"
-              rows="2"
-              placeholder="Rispondi a questa domanda…"
-              @keydown.enter.exact.prevent="submitInlineReply(msg)"
-            />
-            <div class="inline-reply-actions">
-              <button class="btn-ghost-sm" :disabled="replySending" @click="cancelInlineReply">Annulla</button>
-              <button
-                class="btn-primary-sm"
-                :disabled="!replyText.trim() || replySending"
-                @click="submitInlineReply(msg)"
-              >
-                <MIcon name="send" :size="14" />
-                {{ replySending ? 'Invio…' : 'Invia risposta' }}
-              </button>
-            </div>
-          </div>
+              <div v-if="replyingTo === msg.id" class="inline-reply">
+                <textarea
+                  :id="'inline-reply-' + msg.id"
+                  v-model="replyText"
+                  class="inline-reply-input"
+                  rows="2"
+                  placeholder="Rispondi a questa domanda…"
+                  @keydown.enter.exact.prevent="submitInlineReply(msg)"
+                />
+                <div class="inline-reply-actions">
+                  <button class="btn-ghost-sm" :disabled="replySending" @click="cancelInlineReply">Annulla</button>
+                  <button
+                    class="btn-primary-sm"
+                    :disabled="!replyText.trim() || replySending"
+                    @click="submitInlineReply(msg)"
+                  >
+                    <MIcon name="send" :size="14" />
+                    {{ replySending ? 'Invio…' : 'Invia risposta' }}
+                  </button>
+                </div>
+              </div>
 
-          <div v-else class="card-actions">
-            <button class="action-btn action-btn--primary" @click="startInlineReply(msg.id)">
-              <MIcon name="help" filled class="action-icon" />
-              Rispondi qui
-            </button>
-            <button class="action-btn" @click="openInChat(msg.chatId, msg.id, true)">
-              Apri in chat
-              <MIcon name="open_in_new" :size="14" class="action-icon-trailing" />
-            </button>
+              <div v-else class="card-actions">
+                <button class="action-btn action-btn--primary" @click="startInlineReply(msg.id)">
+                  <MIcon name="help" filled class="action-icon" />
+                  Rispondi qui
+                </button>
+                <button class="action-btn" @click="openInChat(msg.chatId, msg.id, true)">
+                  Apri in chat
+                  <MIcon name="open_in_new" :size="14" class="action-icon-trailing" />
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- Tasks section -->
-      <div v-if="pendingTasks.length" class="section">
+      <!-- Tasks section: gruppi per chat -->
+      <div v-if="pendingTasksByChat.length" class="section">
         <div class="section-header">
           <MIcon name="check_circle" filled class="section-icon section-icon--t" />
           <span class="section-label">Azioni da creare</span>
           <span class="section-count">{{ pendingTasks.length }}</span>
         </div>
-        <div v-for="msg in pendingTasks" :key="msg.id" class="msg-card">
-          <div class="card-header">
-            <div class="card-avatar" :style="{ background: avatarColor(msg.from) }">
-              {{ avatarInitial(msg.from) }}
+        <div v-for="group in pendingTasksByChat" :key="'t-' + group.chatId" class="chat-group">
+          <button class="group-header" @click="toggleChatCollapsed(group.chatId)">
+            <MIcon :name="group.chatIsGroup ? 'group' : 'person'" filled :size="18" class="group-icon" />
+            <span class="group-name">{{ group.chatName }}</span>
+            <span class="group-count">{{ group.msgs.length }}</span>
+            <MIcon :name="isExpanded(group.chatId) ? 'expand_less' : 'expand_more'" :size="20" class="group-chevron" />
+          </button>
+          <div v-if="isExpanded(group.chatId)" class="group-body">
+            <div v-for="msg in group.msgs" :key="msg.id" class="msg-card">
+              <div class="card-header">
+                <div class="card-avatar" :style="{ background: avatarColor(msg.from) }">
+                  {{ avatarInitial(msg.from) }}
+                </div>
+                <div class="card-meta">
+                  <div class="card-sender">{{ displayName(msg.from, members) }}</div>
+                </div>
+                <div class="card-time">{{ formatTime(msg.createdAt) }}</div>
+              </div>
+              <p class="card-text">{{ msg.text }}</p>
+              <div class="card-actions">
+                <button class="action-btn action-btn--primary" @click="openTaskModal(msg)">
+                  <MIcon name="check_circle" filled class="action-icon" />
+                  Crea azione
+                </button>
+                <button class="action-btn" @click="openInChat(msg.chatId, msg.id)">
+                  Apri in chat
+                  <MIcon name="open_in_new" :size="14" class="action-icon-trailing" />
+                </button>
+              </div>
             </div>
-            <div class="card-meta">
-              <div class="card-sender">{{ displayName(msg.from, members) }}</div>
-              <div class="card-chat">in {{ msg.chatName }}</div>
-            </div>
-            <div class="card-time">{{ formatTime(msg.createdAt) }}</div>
-          </div>
-          <p class="card-text">{{ msg.text }}</p>
-          <div class="card-actions">
-            <button class="action-btn action-btn--primary" @click="openTaskModal(msg)">
-              <MIcon name="check_circle" filled class="action-icon" />
-              Crea azione
-            </button>
-            <button class="action-btn" @click="openInChat(msg.chatId, msg.id)">
-              Apri in chat
-              <MIcon name="open_in_new" :size="14" class="action-icon-trailing" />
-            </button>
           </div>
         </div>
       </div>
@@ -493,6 +552,73 @@ async function submitTask() {
   padding: 2px 7px;
   border-radius: 20px;
 }
+
+/* ── Gruppi per chat dentro le sezioni ────────────────────────────────── */
+.chat-group {
+  background: #fff;
+  border-bottom: 1px solid #E8E5DF;
+}
+
+.group-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 20px;
+  background: #fff;
+  border: none;
+  border-bottom: 1px solid #F4F2EE;
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+  transition: background 0.12s;
+}
+.group-header:hover {
+  background: color-mix(in srgb, var(--md-sys-color-primary) 5%, transparent);
+}
+
+.group-icon {
+  color: var(--md-sys-color-primary);
+  flex-shrink: 0;
+}
+
+.group-name {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 600;
+  color: #1A1917;
+  letter-spacing: 0.01em;
+}
+
+.group-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--md-sys-color-primary);
+  background: color-mix(in srgb, var(--md-sys-color-primary) 12%, transparent);
+  padding: 2px 8px;
+  border-radius: 20px;
+  min-width: 22px;
+  text-align: center;
+}
+
+.group-chevron {
+  color: #9B9590;
+  flex-shrink: 0;
+}
+
+.group-body {
+  background: #FAF9F6;
+  padding: 2px 0;
+}
+.group-body .msg-card {
+  background: transparent;
+  border-bottom: 1px solid #F0EDE8;
+}
+.group-body .msg-card:last-child {
+  border-bottom: none;
+}
+/* dentro un gruppo, il chat-name nella card-meta è ridondante (è nel header del gruppo) */
+.group-body .card-chat { display: none; }
 
 .msg-card {
   background: #fff;
