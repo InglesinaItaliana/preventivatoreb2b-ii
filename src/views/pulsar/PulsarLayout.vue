@@ -97,12 +97,12 @@ watch(chats, (newChats) => {
 </script>
 
 <template>
-  <div class="p-shell">
+  <div class="p-shell s-scope-pulsar">
 
     <!-- ── SIDEBAR desktop ── -->
     <aside class="p-sidebar">
       <div class="p-brand">
-        <svg class="p-brand-icon" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" style="color:#3A8C80">
+        <svg class="p-brand-icon" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" style="color: var(--md-sys-color-primary)">
           <circle cx="16" cy="16" r="8"   fill="currentColor" opacity="0.10"/>
           <g stroke="currentColor" stroke-width="1.6" stroke-linecap="round" opacity="0.7">
             <line x1="16" y1="16" x2="12"   y2="4.7"/>
@@ -167,7 +167,7 @@ watch(chats, (newChats) => {
           <MIcon name="arrow_back" :size="20" />
         </button>
         <div class="p-brand">
-          <svg class="p-brand-icon" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" style="color:#3A8C80">
+          <svg class="p-brand-icon" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" style="color: var(--md-sys-color-primary)">
             <circle cx="16" cy="16" r="8"   fill="currentColor" opacity="0.10"/>
             <g stroke="currentColor" stroke-width="1.6" stroke-linecap="round" opacity="0.7">
               <line x1="16" y1="16" x2="12"   y2="4.7"/>
@@ -310,7 +310,7 @@ watch(chats, (newChats) => {
   color: #2E7268;
 }
 
-.p-nav-item.is-active .p-nav-icon { color: #3A8C80; }
+.p-nav-item.is-active .p-nav-icon { color: var(--md-sys-color-primary); }
 .p-nav-icon { font-size: 18px; flex-shrink: 0; }
 
 /* Link SIDERA */
@@ -350,9 +350,9 @@ watch(chats, (newChats) => {
 
 .p-user-avatar {
   width: 30px; height: 30px; border-radius: 50%;
-  background: linear-gradient(135deg, #3A8C80, #265E56);
+  background: linear-gradient(135deg, var(--md-sys-color-primary), #265E56);
   display: flex; align-items: center; justify-content: center;
-  font-size: 12px; font-weight: 700; color: #fff; flex-shrink: 0;
+  font-size: 12px; font-weight: 700; color: var(--md-sys-color-on-primary); flex-shrink: 0;
 }
 
 .p-user-name { font-size: 12px; font-weight: 500; }
@@ -447,7 +447,7 @@ watch(chats, (newChats) => {
   background: none;
   border: none;
   cursor: pointer;
-  color: #3A8C80;
+  color: var(--md-sys-color-primary);
   transition: background 0.18s ease, color 0.18s ease;
   padding: 0;
 }
@@ -456,7 +456,7 @@ watch(chats, (newChats) => {
 
 .p-pill-btn.is-active {
   background: rgba(58, 175, 152, 0.20);
-  color: #3A8C80;
+  color: var(--md-sys-color-primary);
 }
 
 .p-pill-icon { font-size: 36px; }
@@ -468,8 +468,8 @@ watch(chats, (newChats) => {
   width: 66px;
   height: 66px;
   border-radius: 20px;
-  background: #3A8C80;
-  color: #fff;
+  background: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
   border: none;
   cursor: pointer;
   box-shadow: 0 3px 12px rgba(58, 140, 128, 0.35);
