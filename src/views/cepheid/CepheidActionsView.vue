@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, inject, watch, onMounted, nextTick, type Ref } from 'vue'
 import MIcon from '../../components/shared/MIcon.vue'
+import MdPageHeader from '../../components/shared/MdPageHeader.vue'
 import { useAllTasks, createStandaloneTask } from '../../composables/sidera/useAllTasks'
 import { useProjects } from '../../composables/sidera/useProjects'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
@@ -233,19 +234,18 @@ onMounted(() => {
 
 <template>
   <div class="av s-scope-cepheid">
-    <header class="av-header">
-      <div class="av-header-text">
-        <h2 class="p-page-title">Azioni</h2>
-        <p class="p-page-sub">
-          {{ dueTodayCount === 0
-            ? 'Nessuna in scadenza oggi'
-            : (dueTodayCount === 1 ? '1 in scadenza oggi' : dueTodayCount + ' in scadenza oggi') }}
-        </p>
-      </div>
-      <button class="header-cta" @click="openTaskModal">
-        <MIcon name="add" :size="16" /> Nuova azione
-      </button>
-    </header>
+    <MdPageHeader
+      title="Azioni"
+      :subtitle="dueTodayCount === 0
+        ? 'Nessuna in scadenza oggi'
+        : (dueTodayCount === 1 ? '1 in scadenza oggi' : dueTodayCount + ' in scadenza oggi')"
+    >
+      <template #cta>
+        <button class="md-btn md-btn--filled md-btn--sm md-btn--square" @click="openTaskModal">
+          <MIcon name="add" :size="16" /> Nuova azione
+        </button>
+      </template>
+    </MdPageHeader>
 
     <div class="av-content">
       <!-- Filter tabs estesi (port da TasksView SIDERA 2026-05-20) -->
@@ -423,50 +423,9 @@ onMounted(() => {
 <style scoped>
 .av {
   font-family: 'Outfit', sans-serif;
-  color: #1A1917;
+  color: var(--md-sys-color-on-surface);
   min-height: calc(100vh - 120px);
 }
-
-.av-header {
-  padding: 18px 20px 14px;
-  background: #fff;
-  border-bottom: 1px solid #E8E5DF;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.av-header-text { flex: 1; min-width: 0; }
-.header-cta {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 9px 14px;
-  background: var(--md-sys-color-primary);
-  border: none;
-  border-radius: 10px;
-  font-family: 'Outfit', sans-serif;
-  font-size: 13px;
-  font-weight: 600;
-  color: #fff;
-  cursor: pointer;
-  transition: background 0.15s;
-  flex-shrink: 0;
-}
-.header-cta:hover { background: #B8870E; }
-@media (max-width: 768px) { .header-cta { display: none; } }
-
-.p-page-title {
-  font-family: 'Outfit', sans-serif;
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: #1A1917;
-  margin: 0 0 4px 0;
-}
-
-.p-page-sub { font-size: 12px; color: #9B9590; margin: 0; }
 
 .av-content { padding: 16px 16px; }
 
@@ -474,7 +433,7 @@ onMounted(() => {
    verticale (pattern Asana inbox). Per multi-colonna serve redesign,
    ProjectBoard SIDERA resta accessibile via /sidera/tasks come power-view. */
 @media (min-width: 1024px) {
-  .av-header   { padding: 24px 40px 18px; }
+  :deep(.md-page-header) { padding: 24px 40px 18px; }
   .av-content  { padding: 24px 40px; max-width: 960px; margin: 0 auto; }
   .filter-pills { margin-bottom: 24px; }
 }
@@ -504,10 +463,10 @@ onMounted(() => {
 
 /* Loading */
 .loading-rows { display: flex; flex-direction: column; gap: 6px; }
-.row-skel { height: 48px; border-radius: 10px; background: #E8E5DF; animation: pulse 1.4s ease-in-out infinite; }
+.row-skel { height: 48px; border-radius: var(--md-sys-shape-corner-small); background: var(--md-sys-color-outline-variant); animation: pulse 1.4s ease-in-out infinite; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 
-.empty-state { font-size: 14px; color: #9B9590; padding: 20px 0; }
+.empty-state { font-size: 14px; color: var(--md-sys-color-on-surface-variant); padding: 20px 0; }
 
 /* Task group-by relative-date (port da TasksView SIDERA 2026-05-20) */
 .task-group { margin-bottom: 20px; }
@@ -559,17 +518,18 @@ onMounted(() => {
               transform    var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
 }
 .task-row:hover {
-  border-color: var(--md-sys-color-outline);
-  box-shadow: var(--md-sys-elevation-level-2);
-  transform: translateY(-1px);
+  border-color: var(--md-sys-color-primary);
+  background:   var(--md-sys-color-primary-state-hover);
+  box-shadow:   var(--md-sys-elevation-level-2);
+  transform:    translateY(-1px);
 }
 
 .task-row--done { opacity: 0.5; border-left: 6px solid var(--md-sys-color-outline-variant); }
 
 .checkbox {
   width: 18px; height: 18px;
-  border-radius: 5px;
-  border: 1.5px solid #C8C5C0;
+  border-radius: var(--md-sys-shape-corner-extra-small);
+  border: 1.5px solid var(--md-sys-color-outline);
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0; cursor: pointer;
   transition: all 0.15s;
@@ -579,16 +539,16 @@ onMounted(() => {
 .check-icon { color: var(--md-sys-color-primary); }
 
 .row-body { flex: 1; min-width: 0; }
-.row-title { font-size: 14px; color: #1A1917; }
-.row-title--done { text-decoration: line-through; color: #9B9590; flex: 1; }
+.row-title { font-size: 14px; color: var(--md-sys-color-on-surface); }
+.row-title--done { text-decoration: line-through; color: var(--md-sys-color-on-surface-variant); flex: 1; }
 .row-meta { margin-top: 3px; display: flex; gap: 6px; }
 .row-proj { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: var(--md-sys-shape-corner-extra-small); }
 
-.row-due { font-size: 11px; color: #9B9590; display: flex; align-items: center; gap: 3px; flex-shrink: 0; }
+.row-due { font-size: 11px; color: var(--md-sys-color-on-surface-variant); display: flex; align-items: center; gap: 3px; flex-shrink: 0; }
 
 .undo-btn {
   background: none; border: none; cursor: pointer;
-  color: #9B9590; padding: 2px; border-radius: var(--md-sys-shape-corner-extra-small);
+  color: var(--md-sys-color-on-surface-variant); padding: 2px; border-radius: var(--md-sys-shape-corner-extra-small);
   display: flex; align-items: center;
   transition: color 0.15s;
   flex-shrink: 0;
@@ -606,14 +566,14 @@ onMounted(() => {
   margin-top: 12px;
   background: none;
   border: none;
-  border-top: 1px solid #E8E5DF;
+  border-top: 1px solid var(--md-sys-color-outline-variant);
   cursor: pointer;
   font-family: inherit;
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: #9B9590;
+  color: var(--md-sys-color-on-surface-variant);
   transition: color 0.15s;
 }
 
@@ -622,8 +582,8 @@ onMounted(() => {
 .collapse-meta { display: inline-flex; align-items: center; gap: 6px; }
 
 .collapse-count {
-  background: #F4F2EE;
-  color: #6A6560;
+  background: var(--md-sys-color-surface-container);
+  color: var(--md-sys-color-on-surface-variant);
   font-size: 11px;
   font-weight: 600;
   padding: 1px 7px;
@@ -646,8 +606,8 @@ onMounted(() => {
 }
 
 .modal {
-  background: #fff;
-  border-radius: 20px 20px 0 0;
+  background: var(--md-sys-color-surface);
+  border-radius: var(--md-sys-shape-corner-large) var(--md-sys-shape-corner-large) 0 0;
   width: 100%;
   max-width: 540px;
   max-height: 86vh;
@@ -664,13 +624,13 @@ onMounted(() => {
   padding: 18px 20px 0;
 }
 
-.modal-title { font-size: 16px; font-weight: 600; color: #1A1917; }
+.modal-title { font-size: 16px; font-weight: 600; color: var(--md-sys-color-on-surface); }
 
 .modal-close {
   background: none;
   border: none;
   cursor: pointer;
-  color: #9B9590;
+  color: var(--md-sys-color-on-surface-variant);
   padding: 2px;
   border-radius: var(--md-sys-shape-corner-extra-small);
 }
@@ -687,20 +647,20 @@ onMounted(() => {
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #9B9590;
+  color: var(--md-sys-color-on-surface-variant);
   margin-bottom: 8px;
 }
 
 .field-input {
   width: 100%;
   box-sizing: border-box;
-  background: #F4F2EE;
-  border: 1px solid #E8E5DF;
-  border-radius: 10px;
+  background: var(--md-sys-color-surface-container);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-extra-small);
   padding: 10px 14px;
   font-size: 14px;
   font-family: 'Outfit', sans-serif;
-  color: #1A1917;
+  color: var(--md-sys-color-on-surface);
   outline: none;
   transition: border-color 0.15s;
 }
@@ -718,13 +678,13 @@ onMounted(() => {
   align-items: center;
   gap: 6px;
   padding: 4px 10px 4px 4px;
-  border: 1px solid #E8E5DF;
+  border: 1px solid var(--md-sys-color-outline-variant);
   border-radius: var(--md-sys-shape-corner-full);
   font-size: 12px;
   font-weight: 500;
-  color: #6A6560;
+  color: var(--md-sys-color-on-surface-variant);
   cursor: pointer;
-  background: #fff;
+  background: var(--md-sys-color-surface);
   transition: all 0.15s;
 }
 
@@ -744,14 +704,14 @@ onMounted(() => {
   justify-content: center;
   gap: 4px;
   padding: 8px 8px;
-  border: 1.5px solid #E8E5DF;
+  border: 1.5px solid var(--md-sys-color-outline-variant);
   border-radius: var(--md-sys-shape-corner-small);
   font-size: 12px;
   font-weight: 500;
   font-family: 'Outfit', sans-serif;
   cursor: pointer;
-  background: #fff;
-  color: #6A6560;
+  background: var(--md-sys-color-surface);
+  color: var(--md-sys-color-on-surface-variant);
 }
 
 .prio-dot { width: 8px; height: 8px; border-radius: var(--md-sys-shape-corner-full); flex-shrink: 0; }
@@ -760,19 +720,19 @@ onMounted(() => {
   display: flex;
   gap: 8px;
   padding: 14px 20px 20px;
-  border-top: 1px solid #E8E5DF;
+  border-top: 1px solid var(--md-sys-color-outline-variant);
 }
 
 .btn-ghost {
   flex: 1;
   padding: 12px;
   background: none;
-  border: 1px solid #E8E5DF;
+  border: 1px solid var(--md-sys-color-outline-variant);
   border-radius: var(--md-sys-shape-corner-medium);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
-  color: #6A6560;
+  color: var(--md-sys-color-on-surface-variant);
   font-family: 'Outfit', sans-serif;
 }
 
@@ -785,11 +745,11 @@ onMounted(() => {
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  color: #fff;
+  color: var(--md-sys-color-on-primary);
   font-family: 'Outfit', sans-serif;
   transition: background 0.15s;
 }
 
-.btn-primary:hover:not(:disabled) { background: #B8870E; }
+.btn-primary:hover:not(:disabled) { background: var(--md-sys-color-primary-hover); }
 .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>

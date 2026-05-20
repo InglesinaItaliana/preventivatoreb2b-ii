@@ -571,6 +571,15 @@ input[type=number] {
   --md-sys-state-pressed-state-layer-opacity:  0.10;
   --md-sys-state-dragged-state-layer-opacity:  0.16;
 
+  /* Overlay state-layer pre-mixati su primary (M3 8% / 10% / 10%).
+     Scope-aware: leggono --md-sys-color-primary / --md-sys-color-surface correnti.
+     Usare come `background` su elementi non-primary (card hover, list-row hover),
+     dove --md-sys-color-primary-hover (più scuro 20%) servirebbe solo su superfici
+     già primary (es. .md-btn--filled). */
+  --md-sys-color-primary-state-hover:    color-mix(in srgb, var(--md-sys-color-primary) 8%,  var(--md-sys-color-surface));
+  --md-sys-color-primary-state-focus:    color-mix(in srgb, var(--md-sys-color-primary) 10%, var(--md-sys-color-surface));
+  --md-sys-color-primary-state-pressed:  color-mix(in srgb, var(--md-sys-color-primary) 10%, var(--md-sys-color-surface));
+
   /* ── 5. MOTION ────────────────────────────────────────────────────────
      Duration + easing tokens M3 per transizioni e animazioni.
      Spec: https://m3.material.io/styles/motion/motion-tokens */
@@ -850,6 +859,74 @@ input[type=number] {
   from { transform: translateY(40px); opacity: 0; }
   to   { transform: translateY(0); opacity: 1; }
 }
+
+
+/* ── CARD (M3 sez. 14) ────────────────────────────────────────────────── */
+
+/* Tre varianti M3: Outlined, Elevated, Filled.
+   Padding 16px è il default M3; override locale via class extra o utility. */
+
+.md-card-outlined {
+  background: var(--md-sys-color-surface);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-medium);
+  box-shadow: var(--md-sys-elevation-level-0);
+  padding: 16px;
+  transition: border-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              background   var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              box-shadow   var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              transform    var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
+}
+
+.md-card-elevated {
+  background: var(--md-sys-color-surface-container-low);
+  border: 1px solid transparent;
+  border-radius: var(--md-sys-shape-corner-medium);
+  box-shadow: var(--md-sys-elevation-level-1);
+  padding: 16px;
+  transition: border-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              background   var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              box-shadow   var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              transform    var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
+}
+
+.md-card-filled {
+  background: var(--md-sys-color-surface-container-highest);
+  border: 1px solid transparent;
+  border-radius: var(--md-sys-shape-corner-medium);
+  padding: 16px;
+  transition: background   var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              box-shadow   var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              transform    var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
+}
+
+/* Hover su card interattive (row clickable, kpi-card che apre detail, ecc.).
+   Pattern POPS unificato (2026-05-20): border-color primary + background tint
+   8% (--md-sys-color-primary-state-hover) + elevation-level-2 + translateY(-1px).
+   Scope-aware: il primary è quello dello .s-scope-* corrente. */
+.md-card-outlined.is-interactive { cursor: pointer; }
+.md-card-outlined.is-interactive:hover {
+  border-color: var(--md-sys-color-primary);
+  background:   var(--md-sys-color-primary-state-hover);
+  box-shadow:   var(--md-sys-elevation-level-2);
+  transform:    translateY(-1px);
+}
+
+.md-card-elevated.is-interactive { cursor: pointer; }
+.md-card-elevated.is-interactive:hover {
+  background: var(--md-sys-color-primary-state-hover);
+  box-shadow: var(--md-sys-elevation-level-2);
+  transform:  translateY(-1px);
+}
+
+.md-card-filled.is-interactive { cursor: pointer; }
+.md-card-filled.is-interactive:hover {
+  background: var(--md-sys-color-primary-state-hover);
+  transform:  translateY(-1px);
+}
+
+/* Density utility per le card più compatte (list rows). */
+.md-card--dense { padding: 12px 14px; }
 
 
 /* ── TEXT FIELD (Outlined M3) ─────────────────────────────────────────── */

@@ -2,6 +2,7 @@
 import { ref, computed, inject, watch, onMounted, nextTick, type Ref } from 'vue'
 import { useRouter } from 'vue-router'
 import MIcon from '../../components/shared/MIcon.vue'
+import MdPageHeader from '../../components/shared/MdPageHeader.vue'
 import GoalChip from '../../components/cepheid/GoalChip.vue'
 import { useProjects, type Project } from '../../composables/sidera/useProjects'
 import { useObiettivi } from '../../composables/sidera/useObiettivi'
@@ -156,19 +157,18 @@ onMounted(() => {
 
 <template>
   <div class="pv s-scope-cepheid" @click="closeMenu">
-    <header class="pv-header">
-      <div class="pv-header-text">
-        <h2 class="p-page-title">Progetti</h2>
-        <p class="p-page-sub">
-          {{ activeProjects.length === 0
-            ? 'Nessun progetto attivo'
-            : (activeProjects.length === 1 ? '1 progetto attivo' : activeProjects.length + ' progetti attivi') }}
-        </p>
-      </div>
-      <button class="header-cta" @click="openProjModal">
-        <MIcon name="add" :size="16" /> Nuovo progetto
-      </button>
-    </header>
+    <MdPageHeader
+      title="Progetti"
+      :subtitle="activeProjects.length === 0
+        ? 'Nessun progetto attivo'
+        : (activeProjects.length === 1 ? '1 progetto attivo' : activeProjects.length + ' progetti attivi')"
+    >
+      <template #cta>
+        <button class="md-btn md-btn--filled md-btn--sm md-btn--square" @click="openProjModal">
+          <MIcon name="add" :size="16" /> Nuovo progetto
+        </button>
+      </template>
+    </MdPageHeader>
 
     <div class="pv-content">
       <div v-if="obiettiviAttivi.length" class="pv-filter">
@@ -301,57 +301,16 @@ onMounted(() => {
 <style scoped>
 .pv {
   font-family: 'Outfit', sans-serif;
-  color: #1A1917;
+  color: var(--md-sys-color-on-surface);
   min-height: calc(100vh - 120px);
 }
-
-.pv-header {
-  padding: 18px 20px 14px;
-  background: #fff;
-  border-bottom: 1px solid #E8E5DF;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.pv-header-text { flex: 1; min-width: 0; }
-.header-cta {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 9px 14px;
-  background: var(--md-sys-color-primary);
-  border: none;
-  border-radius: 10px;
-  font-family: 'Outfit', sans-serif;
-  font-size: 13px;
-  font-weight: 600;
-  color: #fff;
-  cursor: pointer;
-  transition: background 0.15s;
-  flex-shrink: 0;
-}
-.header-cta:hover { background: #B8870E; }
-@media (max-width: 768px) { .header-cta { display: none; } }
-
-.p-page-title {
-  font-family: 'Outfit', sans-serif;
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: #1A1917;
-  margin: 0 0 4px 0;
-}
-
-.p-page-sub { font-size: 12px; color: #9B9590; margin: 0; }
 
 .pv-content { padding: 16px; display: flex; flex-direction: column; gap: 8px; }
 
 /* Desktop wide: grid 2 colonne di project card, container centrato.
    Su mobile/tablet resta lista verticale singola. */
 @media (min-width: 1024px) {
-  .pv-header   { padding: 24px 40px 18px; }
+  :deep(.md-page-header) { padding: 24px 40px 18px; }
   .pv-content  {
     padding: 24px 40px;
     max-width: 1280px;
@@ -381,17 +340,17 @@ onMounted(() => {
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: #9B9590;
+  color: var(--md-sys-color-on-surface-variant);
 }
 .pv-filter-select {
   flex: 1;
-  background: #F4F2EE;
-  border: 1px solid #E8E5DF;
+  background: var(--md-sys-color-surface-container);
+  border: 1px solid var(--md-sys-color-outline-variant);
   border-radius: var(--md-sys-shape-corner-small);
   padding: 6px 10px;
   font-size: 12px;
   font-family: 'Outfit', sans-serif;
-  color: #1A1917;
+  color: var(--md-sys-color-on-surface);
   outline: none;
   cursor: pointer;
 }
@@ -407,13 +366,13 @@ onMounted(() => {
 .proj-top .proj-name { margin-bottom: 0; }
 
 .loading-rows { display: flex; flex-direction: column; gap: 6px; }
-.row-skel { height: 90px; border-radius: var(--md-sys-shape-corner-medium); background: #E8E5DF; animation: pulse 1.4s ease-in-out infinite; }
+.row-skel { height: 90px; border-radius: var(--md-sys-shape-corner-medium); background: var(--md-sys-color-outline-variant); animation: pulse 1.4s ease-in-out infinite; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 
 .empty-state {
   padding: 60px 20px;
   text-align: center;
-  color: #9B9590;
+  color: var(--md-sys-color-on-surface-variant);
   font-size: 14px;
   display: flex;
   flex-direction: column;
@@ -437,9 +396,9 @@ onMounted(() => {
 }
 .proj-row:hover {
   border-color: var(--md-sys-color-primary);
-  background: color-mix(in srgb, var(--md-sys-color-primary) 4%, var(--md-sys-color-surface));
-  box-shadow: var(--md-sys-elevation-level-2);
-  transform: translateY(-1px);
+  background:   var(--md-sys-color-primary-state-hover);
+  box-shadow:   var(--md-sys-elevation-level-2);
+  transform:    translateY(-1px);
 }
 
 .proj-stripe { width: 6px; flex-shrink: 0; }
@@ -543,10 +502,10 @@ onMounted(() => {
 .proj-body { padding: 12px 14px; flex: 1; min-width: 0; }
 
 .proj-name { font-size: 14px; font-weight: 600; margin-bottom: 2px; }
-.proj-desc { font-size: 12px; color: #6A6560; margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.proj-stats { font-size: 11px; color: #9B9590; margin-bottom: 6px; }
+.proj-desc { font-size: 12px; color: var(--md-sys-color-on-surface-variant); margin-bottom: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.proj-stats { font-size: 11px; color: var(--md-sys-color-on-surface-variant); margin-bottom: 6px; }
 
-.prog-track { height: 4px; background: #F0EDE8; border-radius: var(--md-sys-shape-corner-full); overflow: hidden; }
+.prog-track { height: 4px; background: var(--md-sys-color-surface-container); border-radius: var(--md-sys-shape-corner-full); overflow: hidden; }
 .prog-fill { height: 100%; border-radius: var(--md-sys-shape-corner-full); transition: width 0.3s ease; }
 
 /* Modal */
@@ -561,8 +520,8 @@ onMounted(() => {
 }
 
 .modal {
-  background: #fff;
-  border-radius: 20px 20px 0 0;
+  background: var(--md-sys-color-surface);
+  border-radius: var(--md-sys-shape-corner-large) var(--md-sys-shape-corner-large) 0 0;
   width: 100%;
   max-width: 540px;
   max-height: 86vh;
@@ -573,11 +532,11 @@ onMounted(() => {
 }
 
 .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 0; }
-.modal-title { font-size: 16px; font-weight: 600; color: #1A1917; }
+.modal-title { font-size: 16px; font-weight: 600; color: var(--md-sys-color-on-surface); }
 
 .modal-close {
   background: none; border: none; cursor: pointer;
-  color: #9B9590; padding: 2px; border-radius: var(--md-sys-shape-corner-extra-small);
+  color: var(--md-sys-color-on-surface-variant); padding: 2px; border-radius: var(--md-sys-shape-corner-extra-small);
 }
 
 .modal-body { padding: 16px 20px; overflow-y: auto; flex: 1; }
@@ -588,20 +547,20 @@ onMounted(() => {
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #9B9590;
+  color: var(--md-sys-color-on-surface-variant);
   margin-bottom: 8px;
 }
 
 .field-input {
   width: 100%;
   box-sizing: border-box;
-  background: #F4F2EE;
-  border: 1px solid #E8E5DF;
-  border-radius: 10px;
+  background: var(--md-sys-color-surface-container);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-extra-small);
   padding: 10px 14px;
   font-size: 14px;
   font-family: 'Outfit', sans-serif;
-  color: #1A1917;
+  color: var(--md-sys-color-on-surface);
   outline: none;
   transition: border-color 0.15s;
   resize: vertical;
@@ -619,25 +578,25 @@ onMounted(() => {
   transition: transform 0.15s, border-color 0.15s;
 }
 
-.color-swatch.is-sel { border-color: #1A1917; transform: scale(1.1); }
+.color-swatch.is-sel { border-color: var(--md-sys-color-on-surface); transform: scale(1.1); }
 
 .modal-footer {
   display: flex;
   gap: 8px;
   padding: 14px 20px 20px;
-  border-top: 1px solid #E8E5DF;
+  border-top: 1px solid var(--md-sys-color-outline-variant);
 }
 
 .btn-ghost {
   flex: 1;
   padding: 12px;
   background: none;
-  border: 1px solid #E8E5DF;
+  border: 1px solid var(--md-sys-color-outline-variant);
   border-radius: var(--md-sys-shape-corner-medium);
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
-  color: #6A6560;
+  color: var(--md-sys-color-on-surface-variant);
   font-family: 'Outfit', sans-serif;
 }
 
@@ -650,11 +609,11 @@ onMounted(() => {
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
-  color: #fff;
+  color: var(--md-sys-color-on-primary);
   font-family: 'Outfit', sans-serif;
   transition: background 0.15s;
 }
 
-.btn-primary:hover:not(:disabled) { background: #B8870E; }
+.btn-primary:hover:not(:disabled) { background: var(--md-sys-color-primary-hover); }
 .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>
