@@ -3,34 +3,57 @@ import { ref, computed, inject, watch, onMounted, nextTick, type Ref } from 'vue
 import { useRouter } from 'vue-router'
 import MIcon from '../../components/shared/MIcon.vue'
 import GoalChip from '../../components/cepheid/GoalChip.vue'
-import { useProjects } from '../../composables/sidera/useProjects'
+import { useProjects, type Project } from '../../composables/sidera/useProjects'
 import { useObiettivi } from '../../composables/sidera/useObiettivi'
+import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
 
 const router = useRouter()
-const { activeProjects, loading, createProject } = useProjects()
+const { projects, activeProjects, loading, createProject, updateProject, deleteProject, toggleActive } = useProjects()
 const { obiettiviAttivi } = useObiettivi()
+const { currentUser } = useCurrentUser()
+const isAdmin = computed(() => currentUser.value?.role === 'ADMIN' || currentUser.value?.email === 'info@inglesinaitaliana.it')
 
 const COLOR_PRESETS = ['#D4A020', '#2F6B4A', '#3A8C80', '#C8521A', '#7A8FA6', '#9B5BB5']
+
+// ── Visibility: admin vede anche inactive (port da ProjectsView SIDERA) ────
+const adminProjects = computed(() => projects.value.filter(p => !p.archived))
+const baseProjects = computed(() => isAdmin.value ? adminProjects.value : activeProjects.value)
 
 // ── Filtro per obiettivo ──────────────────────────────────────────────────
 const filterObiettivoId = ref<string>('') // '' = tutti
 
 const visibleProjects = computed(() => {
-  if (!filterObiettivoId.value) return activeProjects.value
+  if (!filterObiettivoId.value) return baseProjects.value
   if (filterObiettivoId.value === '__none__') {
-    return activeProjects.value.filter(p => !p.obiettivoId)
+    return baseProjects.value.filter(p => !p.obiettivoId)
   }
-  return activeProjects.value.filter(p => p.obiettivoId === filterObiettivoId.value)
+  return baseProjects.value.filter(p => p.obiettivoId === filterObiettivoId.value)
 })
+
+// ── Context menu (port ProjectsView SIDERA) ────────────────────────────────
+const menuOpen = ref<string | null>(null)
+function openMenu(id: string, e: Event) {
+  e.stopPropagation()
+  menuOpen.value = menuOpen.value === id ? null : id
+}
+function closeMenu() { menuOpen.value = null }
+async function confirmDelete(id: string, e: Event) {
+  e.stopPropagation()
+  if (!confirm("Eliminare il progetto e tutte le sue azioni? L'operazione è irreversibile.")) return
+  menuOpen.value = null
+  await deleteProject(id)
+}
 
 function obiettivoFor(id: string | null) {
   if (!id) return null
   return obiettiviAttivi.value.find(o => o.id === id) ?? null
 }
 
-// ── Nuovo progetto (modal) ─────────────────────────────────────────────────
-const showProjModal = ref(false)
-const projSaving    = ref(false)
+// ── Modal create + edit (port da ProjectsView SIDERA) ─────────────────────
+const showProjModal  = ref(false)
+const projSaving     = ref(false)
+const projDeleting   = ref(false)
+const editingProject = ref<Project | null>(null)
 const projForm = ref({
   name:         '',
   description:  '',
@@ -40,12 +63,27 @@ const projForm = ref({
 })
 
 function openProjModal() {
+  editingProject.value = null
   projForm.value = {
     name:        '',
     description: '',
     color:       COLOR_PRESETS[0],
     dueDate:     '',
     obiettivoId: filterObiettivoId.value && filterObiettivoId.value !== '__none__' ? filterObiettivoId.value : '',
+  }
+  showProjModal.value = true
+}
+
+function openEditProjModal(p: Project, e: Event) {
+  e.stopPropagation()
+  menuOpen.value = null
+  editingProject.value = p
+  projForm.value = {
+    name:        p.name,
+    description: p.description,
+    color:       p.color,
+    dueDate:     p.dueDate ? p.dueDate.toISOString().split('T')[0] : '',
+    obiettivoId: p.obiettivoId ?? '',
   }
   showProjModal.value = true
 }
@@ -60,18 +98,40 @@ async function submitProject() {
   projSaving.value = true
   try {
     const dueDate = projForm.value.dueDate ? parseDateInput(projForm.value.dueDate) : null
-    await createProject({
-      name:        projForm.value.name.trim(),
-      description: projForm.value.description.trim(),
-      color:       projForm.value.color,
-      dueDate,
-      obiettivoId: projForm.value.obiettivoId || null,
-    })
+    if (editingProject.value) {
+      await updateProject(editingProject.value.id, {
+        name:        projForm.value.name.trim(),
+        description: projForm.value.description.trim(),
+        color:       projForm.value.color,
+        dueDate,
+        obiettivoId: projForm.value.obiettivoId || null,
+      })
+    } else {
+      await createProject({
+        name:        projForm.value.name.trim(),
+        description: projForm.value.description.trim(),
+        color:       projForm.value.color,
+        dueDate,
+        obiettivoId: projForm.value.obiettivoId || null,
+      })
+    }
     showProjModal.value = false
   } catch (e) {
-    console.error('[CEPHEID] project creation error', e)
+    console.error('[CEPHEID] project save error', e)
   } finally {
     projSaving.value = false
+  }
+}
+
+async function doDeleteFromModal() {
+  if (!editingProject.value || projDeleting.value) return
+  if (!confirm("Eliminare il progetto e tutte le sue azioni? L'operazione è irreversibile.")) return
+  projDeleting.value = true
+  try {
+    await deleteProject(editingProject.value.id)
+    showProjModal.value = false
+  } finally {
+    projDeleting.value = false
   }
 }
 
@@ -95,7 +155,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="pv s-scope-cepheid">
+  <div class="pv s-scope-cepheid" @click="closeMenu">
     <header class="pv-header">
       <div class="pv-header-text">
         <h2 class="p-page-title">Progetti</h2>
@@ -133,18 +193,43 @@ onMounted(() => {
         v-for="p in visibleProjects"
         :key="p.id"
         class="proj-row"
+        :class="{ 'proj-row--inactive': p.active === false }"
         @click="router.push('/cepheid/project/' + p.id)"
       >
         <div class="proj-stripe" :style="{ background: p.color }" />
         <div class="proj-body">
           <div class="proj-top">
             <div class="proj-name">{{ p.name }}</div>
-            <GoalChip
-              v-if="obiettivoFor(p.obiettivoId)"
-              :titolo="obiettivoFor(p.obiettivoId)!.titolo"
-              :colore="obiettivoFor(p.obiettivoId)!.colore"
-              size="sm"
-            />
+            <div class="proj-top-actions">
+              <GoalChip
+                v-if="obiettivoFor(p.obiettivoId)"
+                :titolo="obiettivoFor(p.obiettivoId)!.titolo"
+                :colore="obiettivoFor(p.obiettivoId)!.colore"
+                size="sm"
+              />
+              <span v-if="p.active === false" class="badge-inactive">Inattivo</span>
+              <button
+                v-if="isAdmin"
+                class="proj-toggle-btn"
+                :title="p.active !== false ? 'Disattiva progetto' : 'Attiva progetto'"
+                @click.stop="toggleActive(p.id, p.active === false)"
+              >
+                <MIcon :name="p.active !== false ? 'pause' : 'play_arrow'" :size="16" />
+              </button>
+              <div v-if="isAdmin" class="proj-menu-wrap" @click.stop>
+                <button class="proj-more" @click="openMenu(p.id, $event)" aria-label="Menu progetto">
+                  <MIcon name="more_horiz" :size="18" />
+                </button>
+                <div v-if="menuOpen === p.id" class="proj-dropdown">
+                  <button class="proj-dropdown-item" @click="openEditProjModal(p, $event)">
+                    <MIcon name="edit" :size="14" /> Modifica progetto
+                  </button>
+                  <button class="proj-dropdown-item proj-dropdown-item--danger" @click="confirmDelete(p.id, $event)">
+                    <MIcon name="delete" :size="14" /> Elimina progetto
+                  </button>
+                </div>
+              </div>
+            </div>
           </div>
           <div v-if="p.description" class="proj-desc">{{ p.description }}</div>
           <div class="proj-stats">{{ p.doneCount }}/{{ p.taskCount }} azioni · {{ pct(p) }}%</div>
@@ -160,7 +245,7 @@ onMounted(() => {
       <div v-if="showProjModal" class="modal-backdrop md-modal-backdrop" @click.self="showProjModal = false">
         <div class="modal md-modal-dialog" @click.stop>
           <div class="modal-header md-modal-header">
-            <span class="modal-title md-modal-title">Nuovo progetto</span>
+            <span class="modal-title md-modal-title">{{ editingProject ? 'Modifica progetto' : 'Nuovo progetto' }}</span>
             <button class="modal-close md-modal-close" @click="showProjModal = false"><MIcon name="close" :size="18" /></button>
           </div>
           <div class="modal-body md-modal-body">
@@ -193,12 +278,19 @@ onMounted(() => {
             <input v-model="projForm.dueDate" type="date" class="field-input field-date" />
           </div>
           <div class="modal-footer md-modal-footer">
+            <button
+              v-if="editingProject"
+              class="btn-danger md-btn md-btn--danger md-btn--rounded"
+              :disabled="projDeleting"
+              style="margin-right: auto"
+              @click="doDeleteFromModal"
+            >{{ projDeleting ? 'Eliminazione…' : 'Elimina' }}</button>
             <button class="btn-ghost md-btn md-btn--outlined md-btn--rounded" @click="showProjModal = false">Annulla</button>
             <button
               class="btn-primary md-btn md-btn--filled md-btn--rounded"
               :disabled="!projForm.name.trim() || projSaving"
               @click="submitProject"
-            >{{ projSaving ? 'Creazione…' : 'Crea progetto' }}</button>
+            >{{ projSaving ? 'Salvataggio…' : (editingProject ? 'Salva' : 'Crea progetto') }}</button>
           </div>
         </div>
       </div>
@@ -351,6 +443,102 @@ onMounted(() => {
 }
 
 .proj-stripe { width: 6px; flex-shrink: 0; }
+
+.proj-row--inactive { opacity: 0.55; }
+
+.proj-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 2px;
+}
+.proj-top-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.badge-inactive {
+  font-family: var(--md-sys-typescale-label-small-font);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--md-sys-color-on-surface-variant);
+  background: var(--md-sys-color-surface-container);
+  padding: 2px 7px;
+  border-radius: var(--md-sys-shape-corner-full);
+}
+.proj-toggle-btn {
+  background: none;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-full);
+  cursor: pointer;
+  color: var(--md-sys-color-on-surface-variant);
+  padding: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              color      var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
+}
+.proj-toggle-btn:hover {
+  background: color-mix(in srgb, var(--md-sys-color-primary) 8%, transparent);
+  color: var(--md-sys-color-primary);
+}
+
+.proj-menu-wrap { position: relative; }
+.proj-more {
+  background: none;
+  border: none;
+  padding: 4px;
+  border-radius: var(--md-sys-shape-corner-full);
+  cursor: pointer;
+  color: var(--md-sys-color-on-surface-variant);
+  display: inline-flex;
+  align-items: center;
+  transition: background var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
+}
+.proj-more:hover {
+  background: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent);
+}
+.proj-dropdown {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 4px;
+  background: var(--md-sys-color-surface-container-low);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-medium);
+  box-shadow: var(--md-sys-elevation-level-3);
+  padding: 4px;
+  min-width: 180px;
+  z-index: 50;
+}
+.proj-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: none;
+  border: none;
+  font-family: var(--md-sys-typescale-body-medium-font);
+  font-size:   var(--md-sys-typescale-body-medium-size);
+  color: var(--md-sys-color-on-surface);
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--md-sys-shape-corner-small);
+  transition: background var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
+}
+.proj-dropdown-item:hover {
+  background: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent);
+}
+.proj-dropdown-item--danger { color: var(--md-sys-color-error); }
+.proj-dropdown-item--danger:hover {
+  background: color-mix(in srgb, var(--md-sys-color-error) 10%, transparent);
+}
 
 .proj-body { padding: 12px 14px; flex: 1; min-width: 0; }
 
