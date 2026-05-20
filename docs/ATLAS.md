@@ -133,7 +133,7 @@ Tutta la documentazione vive in `docs/` (eccetto `README.md` in root, convenzion
 - `docs/WORKFLOW.md` — processo
 - `docs/ATLAS.md` — manuale (questo file)
 - `docs/POPSnextstep.md` — roadmap POPS B2B (separata da POLARIS)
-- `docs/blueprint.md` · `docs/INSTRUCTIONS.md` · `docs/GEMINI.md` — documenti storici/strumentali
+- `docs/blueprint.md` — documento storico (panoramica POPS pre-suite, tenuto come archeologia)
 - `README.md` (root) — landing page del repo per GitHub
 
 ---
