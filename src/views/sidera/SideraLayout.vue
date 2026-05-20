@@ -205,6 +205,29 @@ const activeEdges = computed(() => {
     })
 })
 
+// Stroke per il base edge EDGES_HUB[i] = [a, b]:
+// - se attivo (adiacente al modulo attivo) → url(#gradient) con fade m.color → NE
+// - altrimenti → NE_COLOR (gray-blu fisso)
+// Replica esatta del pattern HubView: niente layer separato "glow" sovrapposto,
+// è il base edge stesso che cambia stroke quando il modulo è attivo.
+function edgeStrokeFor(a: string, b: string): string {
+  const am = activeLogoModule.value
+  if (!am) return NE_COLOR
+  if (a !== am.name && b !== am.name) return NE_COLOR
+  const ae = activeEdges.value.find(e =>
+    (e.from.name === a && e.to.name === b) || (e.from.name === b && e.to.name === a)
+  )
+  return ae ? `url(#${ae.id})` : NE_COLOR
+}
+
+// Width per il base edge: edge attivi più spessi per compensare il fatto che
+// la sidebar SVG è renderizzata piccola (116×82 su viewBox 680×480 → fattore ~0.17).
+function edgeWidthFor(a: string, b: string): number {
+  const am = activeLogoModule.value
+  if (!am) return 1.2
+  return (a === am.name || b === am.name) ? 2.5 : 1.2
+}
+
 // Dimensioni halo per il vertice attivo: outer più grandi, inner più piccoli
 // (replica HubView: outer halo-lg=42 / md=24, inner halo-lg=34 / md=19).
 const activeHaloLg = computed(() => {
@@ -330,7 +353,11 @@ const roleLabel: Record<string, string> = {
         <!-- Schlegel diagram ricco — replica HubView (no cycle, attivo in base alla route) -->
         <svg class="s-logo-icon" width="116" height="82" viewBox="0 0 680 480" fill="none" xmlns="http://www.w3.org/2000/svg" style="overflow: visible">
           <defs>
-            <filter id="s-hv-gf-sm" x="-80%" y="-80%" width="260%" height="260%">
+            <!-- filterUnits=userSpaceOnUse: regione del filtro in coord viewBox.
+                 Le % default sono relative al bbox dell'elemento, che ha altezza 0
+                 per le linee perfettamente orizzontali (NEBULA-CEPHEID, NOVA-PULSAR)
+                 → il blur veniva clippato e le linee sparivano in all-mode. -->
+            <filter id="s-hv-gf-sm" filterUnits="userSpaceOnUse" x="0" y="0" width="680" height="480">
               <feGaussianBlur stdDeviation="4.5" result="b"/>
               <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
             </filter>
@@ -342,29 +369,36 @@ const roleLabel: Record<string, string> = {
               <feGaussianBlur stdDeviation="18" result="b"/>
               <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
             </filter>
-            <!-- Gradient per ogni edge attivo: 0%/75% color modulo, 100% accent@0.45.
-                 NOTA: fadiamo in opacity sullo stesso color (no fade-to-NE) per evitare
-                 che gli edges lunghi (NEBULA-CEPHEID, PULSAR-NOVA orizzontali) sembrino
-                 sparire vicino al vertice opposto — bug riscontrato anche su ScopedLogin. -->
+            <!-- Gradient per ogni edge attivo: 0%/75% color modulo, 100% NE_COLOR.
+                 Replica del pattern HubView: fade-to-NE color a piena opacità.
+                 Il gradient viene applicato direttamente al base edge (non a un
+                 layer "glow" sovrapposto), così che l'edge rimanga visibile
+                 end-to-end anche sugli edges lunghi orizzontali (NEBULA-CEPHEID,
+                 NOVA-PULSAR). -->
             <linearGradient
               v-for="e in activeEdges" :key="e.id"
               :id="e.id"
               gradientUnits="userSpaceOnUse"
               :x1="e.from.vx" :y1="e.from.vy" :x2="e.to.vx" :y2="e.to.vy"
             >
-              <stop offset="0%"   :stop-color="activeLogoModule!.accent" stop-opacity="1"/>
-              <stop offset="75%"  :stop-color="activeLogoModule!.accent" stop-opacity="0.85"/>
-              <stop offset="100%" :stop-color="activeLogoModule!.accent" stop-opacity="0.45"/>
+              <stop offset="0%"   :stop-color="activeLogoModule!.accent"/>
+              <stop offset="75%"  :stop-color="activeLogoModule!.accent"/>
+              <stop offset="100%" :stop-color="NE_COLOR"/>
             </linearGradient>
           </defs>
 
-          <!-- Edges base (sempre visibili, sottili) -->
+          <!-- Edges base: stroke gradient se adiacente al modulo attivo, NE altrimenti.
+               Replica HubView: niente layer "glow" sovrapposto — il base edge
+               stesso cambia stroke quando il modulo è attivo.
+               shape-rendering=geometricPrecision evita aliasing visibile per le
+               linee sottili (1.2px in viewBox 680×480 renderizzato a 116×82). -->
           <line
             v-for="([a, b], i) in EDGES_HUB" :key="`e-${i}`"
             :x1="moduleByName(a)!.vx" :y1="moduleByName(a)!.vy"
             :x2="moduleByName(b)!.vx" :y2="moduleByName(b)!.vy"
-            :stroke="NE_COLOR" stroke-width="1.2"
-            style="transition: stroke 0.5s ease"
+            :stroke="edgeStrokeFor(a, b)" :stroke-width="edgeWidthFor(a, b)"
+            shape-rendering="geometricPrecision"
+            style="transition: stroke 0.5s ease, stroke-width 0.5s ease"
           />
 
           <!-- Halo grande (vertice attivo, modulo singolo) — SOTTO l'edge glow -->
@@ -384,12 +418,8 @@ const roleLabel: Record<string, string> = {
             style="transition: fill 0.5s ease, fill-opacity 0.5s ease"
           />
 
-          <!-- All-mode (route /sidera/hub): tutti gli edges glow color SIDERA.
-               Opacity 0.65 + stroke-width 4 per renderli ben visibili sui lati
-               orizzontali (NOVA-PULSAR, NEBULA-CEPHEID) che altrimenti si
-               fondono con i halo dei vertici adiacenti.
-               NIENTE halo md SIDERA su ciascun vertice — sono superflui e
-               coprono le linee orizzontali fondendosi con gli edges. -->
+          <!-- All-mode (route /sidera/hub): tutti gli edges glow color SIDERA +
+               halo md SIDERA su ogni vertice (replica HubView "cycle null" branch). -->
           <g v-if="isAllMode" style="opacity: 0.65">
             <line
               v-for="([a, b], i) in EDGES_HUB" :key="`ea-${i}`"
@@ -398,18 +428,15 @@ const roleLabel: Record<string, string> = {
               stroke="#D4C498" stroke-width="4" filter="url(#s-hv-gf-sm)"
             />
           </g>
-
-          <!-- Edge glow gradient (solo edges adiacenti al modulo attivo).
-               Renderizzato DOPO i halo lg/md, quindi sopra. -->
-          <g v-if="activeLogoModule" style="transition: opacity 0.6s ease">
-            <line
-              v-for="e in activeEdges" :key="`eg-${e.id}`"
-              :x1="e.from.vx" :y1="e.from.vy"
-              :x2="e.to.vx" :y2="e.to.vy"
-              :stroke="`url(#${e.id})`"
-              stroke-width="4" filter="url(#s-hv-gf-sm)"
+          <!-- Halo md SIDERA su ogni vertice in all-mode (sotto i vertici, dopo gli edges) -->
+          <template v-if="isAllMode">
+            <circle
+              v-for="mod in modules" :key="`alm-${mod.name}`"
+              :cx="mod.vx" :cy="mod.vy" :r="haloMdSize(mod)"
+              fill="#D4C498" fill-opacity="0.18"
+              filter="url(#s-hv-gf-md)"
             />
-          </g>
+          </template>
 
           <!-- Vertici: all-mode → tutti SIDERA / single → solo attivo color modulo -->
           <circle
