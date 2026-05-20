@@ -428,6 +428,218 @@ input[type=number] {
   --md-sys-color-on-primary-container:  var(--md-ref-palette-quasar-90);
 }
 
+/* ════════════════════════════════════════════════════════════════════════
+   M3 LAYERS 1-5 — Typography, Shape, Elevation, State, Motion
+   Vedi docs/ATLAS.md sez. 14. Tokens conformi a Material Design 3
+   (https://m3.material.io). Mapping fonts della suite: Outfit per body/title/
+   label, Cormorant Garamond per display/headline.
+
+   Pattern d'uso: i componenti referenziano var(--md-sys-*) direttamente,
+   oppure applicano le utility class .md-typescale-* / .md-state-*.
+   ════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── 1. TYPE SCALE ────────────────────────────────────────────────────
+     15 stili M3 standard (display/headline/title/body/label × large/medium/
+     small). Fonti: Cormorant Garamond per display+headline (serif elegante);
+     Outfit per title+body+label (sans-serif UI).
+     Spec: https://m3.material.io/styles/typography/type-scale-tokens */
+
+  --md-sys-typescale-display-large-font:         'Cormorant Garamond', serif;
+  --md-sys-typescale-display-large-size:         57px;
+  --md-sys-typescale-display-large-line-height:  64px;
+  --md-sys-typescale-display-large-tracking:     -0.25px;
+  --md-sys-typescale-display-large-weight:       400;
+
+  --md-sys-typescale-display-medium-font:        'Cormorant Garamond', serif;
+  --md-sys-typescale-display-medium-size:        45px;
+  --md-sys-typescale-display-medium-line-height: 52px;
+  --md-sys-typescale-display-medium-tracking:    0;
+  --md-sys-typescale-display-medium-weight:      400;
+
+  --md-sys-typescale-display-small-font:         'Cormorant Garamond', serif;
+  --md-sys-typescale-display-small-size:         36px;
+  --md-sys-typescale-display-small-line-height:  44px;
+  --md-sys-typescale-display-small-tracking:     0;
+  --md-sys-typescale-display-small-weight:       400;
+
+  --md-sys-typescale-headline-large-font:        'Cormorant Garamond', serif;
+  --md-sys-typescale-headline-large-size:        32px;
+  --md-sys-typescale-headline-large-line-height: 40px;
+  --md-sys-typescale-headline-large-tracking:    0;
+  --md-sys-typescale-headline-large-weight:      500;
+
+  --md-sys-typescale-headline-medium-font:        'Cormorant Garamond', serif;
+  --md-sys-typescale-headline-medium-size:        28px;
+  --md-sys-typescale-headline-medium-line-height: 36px;
+  --md-sys-typescale-headline-medium-tracking:    0;
+  --md-sys-typescale-headline-medium-weight:      500;
+
+  --md-sys-typescale-headline-small-font:        'Cormorant Garamond', serif;
+  --md-sys-typescale-headline-small-size:        24px;
+  --md-sys-typescale-headline-small-line-height: 32px;
+  --md-sys-typescale-headline-small-tracking:    0;
+  --md-sys-typescale-headline-small-weight:      500;
+
+  --md-sys-typescale-title-large-font:           'Outfit', sans-serif;
+  --md-sys-typescale-title-large-size:           22px;
+  --md-sys-typescale-title-large-line-height:    28px;
+  --md-sys-typescale-title-large-tracking:       0;
+  --md-sys-typescale-title-large-weight:         500;
+
+  --md-sys-typescale-title-medium-font:          'Outfit', sans-serif;
+  --md-sys-typescale-title-medium-size:          16px;
+  --md-sys-typescale-title-medium-line-height:   24px;
+  --md-sys-typescale-title-medium-tracking:      0.15px;
+  --md-sys-typescale-title-medium-weight:        600;
+
+  --md-sys-typescale-title-small-font:           'Outfit', sans-serif;
+  --md-sys-typescale-title-small-size:           14px;
+  --md-sys-typescale-title-small-line-height:    20px;
+  --md-sys-typescale-title-small-tracking:       0.1px;
+  --md-sys-typescale-title-small-weight:         600;
+
+  --md-sys-typescale-body-large-font:            'Outfit', sans-serif;
+  --md-sys-typescale-body-large-size:            16px;
+  --md-sys-typescale-body-large-line-height:     24px;
+  --md-sys-typescale-body-large-tracking:        0.5px;
+  --md-sys-typescale-body-large-weight:          400;
+
+  --md-sys-typescale-body-medium-font:           'Outfit', sans-serif;
+  --md-sys-typescale-body-medium-size:           14px;
+  --md-sys-typescale-body-medium-line-height:    20px;
+  --md-sys-typescale-body-medium-tracking:       0.25px;
+  --md-sys-typescale-body-medium-weight:         400;
+
+  --md-sys-typescale-body-small-font:            'Outfit', sans-serif;
+  --md-sys-typescale-body-small-size:            12px;
+  --md-sys-typescale-body-small-line-height:     16px;
+  --md-sys-typescale-body-small-tracking:        0.4px;
+  --md-sys-typescale-body-small-weight:          400;
+
+  --md-sys-typescale-label-large-font:           'Outfit', sans-serif;
+  --md-sys-typescale-label-large-size:           14px;
+  --md-sys-typescale-label-large-line-height:    20px;
+  --md-sys-typescale-label-large-tracking:       0.1px;
+  --md-sys-typescale-label-large-weight:         600;
+
+  --md-sys-typescale-label-medium-font:          'Outfit', sans-serif;
+  --md-sys-typescale-label-medium-size:          12px;
+  --md-sys-typescale-label-medium-line-height:   16px;
+  --md-sys-typescale-label-medium-tracking:      0.5px;
+  --md-sys-typescale-label-medium-weight:        600;
+
+  --md-sys-typescale-label-small-font:           'Outfit', sans-serif;
+  --md-sys-typescale-label-small-size:           11px;
+  --md-sys-typescale-label-small-line-height:    16px;
+  --md-sys-typescale-label-small-tracking:       0.5px;
+  --md-sys-typescale-label-small-weight:         600;
+
+  /* ── 2. SHAPE SCALE ───────────────────────────────────────────────────
+     Border-radius standardizzati M3.
+     Spec: https://m3.material.io/styles/shape/shape-scale-tokens */
+
+  --md-sys-shape-corner-none:        0;
+  --md-sys-shape-corner-extra-small: 4px;
+  --md-sys-shape-corner-small:       8px;
+  --md-sys-shape-corner-medium:      12px;
+  --md-sys-shape-corner-large:       16px;
+  --md-sys-shape-corner-extra-large: 28px;
+  --md-sys-shape-corner-full:        9999px;
+
+  /* ── 3. ELEVATION ─────────────────────────────────────────────────────
+     6 livelli M3 (box-shadow). M3 usa anche "tonal elevation" (cambia
+     surface-tint con primary), gestito separatamente via --md-sys-color-surface-tint.
+     Spec: https://m3.material.io/styles/elevation/tokens */
+
+  --md-sys-elevation-level-0: none;
+  --md-sys-elevation-level-1: 0 1px 2px 0 rgba(0,0,0,0.30), 0 1px 3px 1px rgba(0,0,0,0.15);
+  --md-sys-elevation-level-2: 0 1px 2px 0 rgba(0,0,0,0.30), 0 2px 6px 2px rgba(0,0,0,0.15);
+  --md-sys-elevation-level-3: 0 1px 3px 0 rgba(0,0,0,0.30), 0 4px 8px 3px rgba(0,0,0,0.15);
+  --md-sys-elevation-level-4: 0 2px 3px 0 rgba(0,0,0,0.30), 0 6px 10px 4px rgba(0,0,0,0.15);
+  --md-sys-elevation-level-5: 0 4px 4px 0 rgba(0,0,0,0.30), 0 8px 12px 6px rgba(0,0,0,0.15);
+
+  /* ── 4. STATE LAYERS ──────────────────────────────────────────────────
+     Opacità standard M3 per overlay di interaction state. Si applicano
+     come overlay del colore "on-{role}" sopra il colore "{role}".
+     Spec: https://m3.material.io/foundations/interaction/states */
+
+  --md-sys-state-hover-state-layer-opacity:    0.08;
+  --md-sys-state-focus-state-layer-opacity:    0.10;
+  --md-sys-state-pressed-state-layer-opacity:  0.10;
+  --md-sys-state-dragged-state-layer-opacity:  0.16;
+
+  /* ── 5. MOTION ────────────────────────────────────────────────────────
+     Duration + easing tokens M3 per transizioni e animazioni.
+     Spec: https://m3.material.io/styles/motion/motion-tokens */
+
+  /* Durations */
+  --md-sys-motion-duration-short1:        50ms;
+  --md-sys-motion-duration-short2:        100ms;
+  --md-sys-motion-duration-short3:        150ms;
+  --md-sys-motion-duration-short4:        200ms;
+  --md-sys-motion-duration-medium1:       250ms;
+  --md-sys-motion-duration-medium2:       300ms;
+  --md-sys-motion-duration-medium3:       350ms;
+  --md-sys-motion-duration-medium4:       400ms;
+  --md-sys-motion-duration-long1:         450ms;
+  --md-sys-motion-duration-long2:         500ms;
+  --md-sys-motion-duration-long3:         550ms;
+  --md-sys-motion-duration-long4:         600ms;
+  --md-sys-motion-duration-extra-long1:   700ms;
+  --md-sys-motion-duration-extra-long2:   800ms;
+  --md-sys-motion-duration-extra-long3:   900ms;
+  --md-sys-motion-duration-extra-long4:   1000ms;
+
+  /* Easing curves */
+  --md-sys-motion-easing-linear:                  cubic-bezier(0,0,1,1);
+  --md-sys-motion-easing-standard:                cubic-bezier(0.2, 0, 0, 1);
+  --md-sys-motion-easing-standard-accelerate:     cubic-bezier(0.3, 0, 1, 1);
+  --md-sys-motion-easing-standard-decelerate:     cubic-bezier(0, 0, 0, 1);
+  --md-sys-motion-easing-emphasized:              cubic-bezier(0.2, 0, 0, 1);
+  --md-sys-motion-easing-emphasized-accelerate:   cubic-bezier(0.3, 0, 0.8, 0.15);
+  --md-sys-motion-easing-emphasized-decelerate:   cubic-bezier(0.05, 0.7, 0.1, 1);
+  --md-sys-motion-easing-legacy:                  cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── M3 typography utility classes ─────────────────────────────────────
+   Applicare con class="md-typescale-{stile}". Esempio:
+     <h1 class="md-typescale-headline-large">Titolo sezione</h1>
+     <p class="md-typescale-body-medium">Testo paragrafo</p> */
+
+.md-typescale-display-large    { font-family: var(--md-sys-typescale-display-large-font);    font-size: var(--md-sys-typescale-display-large-size);    line-height: var(--md-sys-typescale-display-large-line-height);    letter-spacing: var(--md-sys-typescale-display-large-tracking);    font-weight: var(--md-sys-typescale-display-large-weight); }
+.md-typescale-display-medium   { font-family: var(--md-sys-typescale-display-medium-font);   font-size: var(--md-sys-typescale-display-medium-size);   line-height: var(--md-sys-typescale-display-medium-line-height);   letter-spacing: var(--md-sys-typescale-display-medium-tracking);   font-weight: var(--md-sys-typescale-display-medium-weight); }
+.md-typescale-display-small    { font-family: var(--md-sys-typescale-display-small-font);    font-size: var(--md-sys-typescale-display-small-size);    line-height: var(--md-sys-typescale-display-small-line-height);    letter-spacing: var(--md-sys-typescale-display-small-tracking);    font-weight: var(--md-sys-typescale-display-small-weight); }
+.md-typescale-headline-large   { font-family: var(--md-sys-typescale-headline-large-font);   font-size: var(--md-sys-typescale-headline-large-size);   line-height: var(--md-sys-typescale-headline-large-line-height);   letter-spacing: var(--md-sys-typescale-headline-large-tracking);   font-weight: var(--md-sys-typescale-headline-large-weight); }
+.md-typescale-headline-medium  { font-family: var(--md-sys-typescale-headline-medium-font);  font-size: var(--md-sys-typescale-headline-medium-size);  line-height: var(--md-sys-typescale-headline-medium-line-height);  letter-spacing: var(--md-sys-typescale-headline-medium-tracking);  font-weight: var(--md-sys-typescale-headline-medium-weight); }
+.md-typescale-headline-small   { font-family: var(--md-sys-typescale-headline-small-font);   font-size: var(--md-sys-typescale-headline-small-size);   line-height: var(--md-sys-typescale-headline-small-line-height);   letter-spacing: var(--md-sys-typescale-headline-small-tracking);   font-weight: var(--md-sys-typescale-headline-small-weight); }
+.md-typescale-title-large      { font-family: var(--md-sys-typescale-title-large-font);      font-size: var(--md-sys-typescale-title-large-size);      line-height: var(--md-sys-typescale-title-large-line-height);      letter-spacing: var(--md-sys-typescale-title-large-tracking);      font-weight: var(--md-sys-typescale-title-large-weight); }
+.md-typescale-title-medium     { font-family: var(--md-sys-typescale-title-medium-font);     font-size: var(--md-sys-typescale-title-medium-size);     line-height: var(--md-sys-typescale-title-medium-line-height);     letter-spacing: var(--md-sys-typescale-title-medium-tracking);     font-weight: var(--md-sys-typescale-title-medium-weight); }
+.md-typescale-title-small      { font-family: var(--md-sys-typescale-title-small-font);      font-size: var(--md-sys-typescale-title-small-size);      line-height: var(--md-sys-typescale-title-small-line-height);      letter-spacing: var(--md-sys-typescale-title-small-tracking);      font-weight: var(--md-sys-typescale-title-small-weight); }
+.md-typescale-body-large       { font-family: var(--md-sys-typescale-body-large-font);       font-size: var(--md-sys-typescale-body-large-size);       line-height: var(--md-sys-typescale-body-large-line-height);       letter-spacing: var(--md-sys-typescale-body-large-tracking);       font-weight: var(--md-sys-typescale-body-large-weight); }
+.md-typescale-body-medium      { font-family: var(--md-sys-typescale-body-medium-font);      font-size: var(--md-sys-typescale-body-medium-size);      line-height: var(--md-sys-typescale-body-medium-line-height);      letter-spacing: var(--md-sys-typescale-body-medium-tracking);      font-weight: var(--md-sys-typescale-body-medium-weight); }
+.md-typescale-body-small       { font-family: var(--md-sys-typescale-body-small-font);       font-size: var(--md-sys-typescale-body-small-size);       line-height: var(--md-sys-typescale-body-small-line-height);       letter-spacing: var(--md-sys-typescale-body-small-tracking);       font-weight: var(--md-sys-typescale-body-small-weight); }
+.md-typescale-label-large      { font-family: var(--md-sys-typescale-label-large-font);      font-size: var(--md-sys-typescale-label-large-size);      line-height: var(--md-sys-typescale-label-large-line-height);      letter-spacing: var(--md-sys-typescale-label-large-tracking);      font-weight: var(--md-sys-typescale-label-large-weight); }
+.md-typescale-label-medium     { font-family: var(--md-sys-typescale-label-medium-font);     font-size: var(--md-sys-typescale-label-medium-size);     line-height: var(--md-sys-typescale-label-medium-line-height);     letter-spacing: var(--md-sys-typescale-label-medium-tracking);     font-weight: var(--md-sys-typescale-label-medium-weight); }
+.md-typescale-label-small      { font-family: var(--md-sys-typescale-label-small-font);      font-size: var(--md-sys-typescale-label-small-size);      line-height: var(--md-sys-typescale-label-small-line-height);      letter-spacing: var(--md-sys-typescale-label-small-tracking);      font-weight: var(--md-sys-typescale-label-small-weight); }
+
+/* ── M3 state layer helpers ────────────────────────────────────────────
+   Pattern d'uso (M3 ortodosso, hover su primary):
+     .btn:hover {
+       background-image: linear-gradient(
+         color-mix(in srgb, var(--md-sys-color-on-primary) calc(var(--md-sys-state-hover-state-layer-opacity) * 100%), transparent),
+         color-mix(in srgb, var(--md-sys-color-on-primary) calc(var(--md-sys-state-hover-state-layer-opacity) * 100%), transparent)
+       );
+     }
+   Alternativa più pragmatica (già usata oggi nei componenti shared):
+     .btn:hover {
+       background: color-mix(in srgb, var(--md-sys-color-primary) 8%, transparent);
+     }
+   I token --md-sys-state-* permettono di centralizzare i valori opacità.
+   Quando si introdurranno componenti M3 standardizzati (Button, Card, ecc.)
+   il pattern definitivo userà overlay (M3 ortodosso) o color-mix (più semplice).
+*/
+
 @keyframes s-fade-in {
   from { opacity: 0; transform: translateY(7px); }
   to   { opacity: 1; transform: translateY(0); }

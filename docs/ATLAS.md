@@ -936,20 +936,242 @@ Lo script:
 3. **QUASAR/SIDERA** non hanno varianti — se in futuro emergessero problemi di contrasto, si aggiungeranno e si aggiornerà questa sezione (mai aggiungere varianti in silenzio).
 4. **L'accent è accent, non sfondo**: il brand color sta in CTA primaria, link attivi, focus ring, icone hover, vertice attivo. Lo sfondo della PWA resta neutro (vedi token `--md-sys-color-surface` in arrivo).
 
-### Roadmap design tokens (next steps, non implementati qui)
+### Type Scale (15 stili) ✅ implementata 2026-05-20
 
-**Regola fondamentale**: ogni layer di token deve seguire **M3 letterale** — naming, valori di default, scale, ratio. Le **varianti** dei colori-modulo (toni, container, on-container) NON vanno inventate a istinto: si generano con il [Material Theme Builder](https://material-foundation.github.io/material-theme-builder/) usando ciascun colore-modulo come *key color*. Il Builder produce una tonal palette di 13 toni (0/10/20/30/40/50/60/70/80/90/95/99/100) che è la fonte di verità per tutti i valori derivati.
+Token format: `--md-sys-typescale-{stile}-{property}` dove property è `font`/`size`/`line-height`/`tracking`/`weight`.
 
-- **Tonal palettes per modulo**: per ogni key color (PULSAR `#3A8C80`, CEPHEID `#C4941C`, ecc.) generare via Material Theme Builder i 13 toni → esporre come `--md-ref-palette-{module}-{0..100}`. Da qui derivano tutti i ruoli.
-- **Mapping ruoli M3 per scope**: per ogni scope, definire `--md-sys-color-primary`, `--on-primary`, `--primary-container`, `--on-primary-container` (+ `secondary` / `tertiary` se servono) assegnando i toni M3 corretti — light scheme `40/100/90/10`, dark scheme `80/20/30/90`. Esattamente come da specifica M3.
-- **Neutri & semantici**: `--md-sys-color-surface`, `--surface-variant`, `--outline`, `--outline-variant`, `--text-on-surface`, `--text-on-surface-variant`, + ruolo `error` M3. Eventuale estensione `success`/`warning`/`info` per business UX, fuori spec M3 ma nominata con la stessa convenzione (`--md-sys-color-success`, ecc.).
-- **Type scale M3**: `--md-sys-typescale-display-{large,medium,small}`, `--headline-*`, `--title-*`, `--body-*`, `--label-*` (15 stili totali) — mappate sulla coppia Outfit + Cormorant Garamond.
-- **Shape scale**: `--md-sys-shape-corner-{none,extra-small,small,medium,large,extra-large,full}` — radius standardizzati M3.
-- **Elevation**: `--md-sys-elevation-level-{0,1,2,3,4,5}` — shadow tokens M3 (NB: M3 usa "tonal elevation" su superfici, non solo shadow — tenerlo presente in dark mode).
-- **State layers**: opacità standard M3 — hover 8%, focus 10%, pressed 10%, dragged 16%. Applicate come overlay del colore di ruolo (es. `on-primary` al 8% sopra `primary` per hover).
-- **Motion**: easing `standard` (`cubic-bezier(0.2, 0, 0, 1)`), `emphasized` (`cubic-bezier(0.2, 0, 0, 1)`), `emphasized-decelerate`, `emphasized-accelerate` + duration tokens short1-4, medium1-4, long1-4, extra-long1-4.
+| Categoria | Stili | Font | Quando usarlo |
+|---|---|---|---|
+| **Display** (large/medium/small) | 57/45/36px | Cormorant Garamond | Hero pages, splash screen, marketing landing |
+| **Headline** (large/medium/small) | 32/28/24px | Cormorant Garamond | Titoli pagina e sezione principali |
+| **Title** (large/medium/small) | 22/16/14px | Outfit | Titoli card, header modale, intestazioni list |
+| **Body** (large/medium/small) | 16/14/12px | Outfit | Testo paragrafo, descrizioni, contenuto principale |
+| **Label** (large/medium/small) | 14/12/11px | Outfit | Bottoni, chip, tag, link inline, meta info |
 
-Ogni step va affrontato in branch dedicato `polaris/design-tokens-{layer}` per evitare diff giganteschi.
+Pattern d'uso (utility class):
+
+```vue
+<h1 class="md-typescale-headline-large">Titolo pagina</h1>
+<p class="md-typescale-body-medium">Paragrafo standard.</p>
+<button class="md-typescale-label-large">CTA</button>
+```
+
+Oppure tokens diretti in CSS scoped:
+
+```css
+.my-title {
+  font-family: var(--md-sys-typescale-title-large-font);
+  font-size: var(--md-sys-typescale-title-large-size);
+  line-height: var(--md-sys-typescale-title-large-line-height);
+  letter-spacing: var(--md-sys-typescale-title-large-tracking);
+  font-weight: var(--md-sys-typescale-title-large-weight);
+}
+```
+
+Spec ufficiale: https://m3.material.io/styles/typography/type-scale-tokens
+
+### Shape Scale (7 valori) ✅ implementata 2026-05-20
+
+Token: `--md-sys-shape-corner-{name}`.
+
+| Token | Valore | Quando usarlo |
+|---|---|---|
+| `none` | 0 | Bordi netti, banner full-bleed |
+| `extra-small` | 4px | Chip, badge, snackbar |
+| `small` | 8px | Bottoni standard, text field outlined |
+| `medium` | 12px | Card, dropdown, menu |
+| `large` | 16px | Bottom sheet, dialog, navigation drawer |
+| `extra-large` | 28px | Hero card, FAB extended |
+| `full` | 9999px | Pillole, FAB rotondo, switch toggle |
+
+Esempio:
+
+```css
+.my-card {
+  border-radius: var(--md-sys-shape-corner-medium); /* 12px */
+}
+.my-fab {
+  border-radius: var(--md-sys-shape-corner-extra-large); /* 28px */
+}
+.my-pill-btn {
+  border-radius: var(--md-sys-shape-corner-full); /* round */
+}
+```
+
+Spec: https://m3.material.io/styles/shape/shape-scale-tokens
+
+### Elevation (6 livelli) ✅ implementata 2026-05-20
+
+Token: `--md-sys-elevation-level-{0..5}` (shadow). M3 prevede anche **tonal elevation** (la surface si tinge col primary via `--md-sys-color-surface-tint`) — già esposto, va combinato manualmente quando serve.
+
+| Livello | Uso tipico |
+|---|---|
+| 0 | flush, no shadow |
+| 1 | Card riposo |
+| 2 | Card hover |
+| 3 | Search bar, Bottom App Bar |
+| 4 | FAB, Navigation drawer aperta |
+| 5 | Modal Bottom Sheet |
+
+Esempio:
+
+```css
+.my-card {
+  box-shadow: var(--md-sys-elevation-level-1);
+  transition: box-shadow var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
+}
+.my-card:hover {
+  box-shadow: var(--md-sys-elevation-level-2);
+}
+```
+
+Spec: https://m3.material.io/styles/elevation/tokens
+
+### State Layers (4 opacità) ✅ implementata 2026-05-20
+
+Token: `--md-sys-state-{hover,focus,pressed,dragged}-state-layer-opacity`.
+
+| State | Opacità | Trigger |
+|---|---|---|
+| hover | 0.08 (8%) | `:hover` (desktop) |
+| focus | 0.10 (10%) | `:focus-visible` |
+| pressed | 0.10 (10%) | `:active` |
+| dragged | 0.16 (16%) | drag handles, drag-over |
+
+**Pattern M3 ortodosso** (overlay del colore "on-X" sopra il colore "X"):
+
+```css
+.btn-primary {
+  background: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
+  position: relative;
+  overflow: hidden;
+}
+.btn-primary::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--md-sys-color-on-primary);
+  opacity: 0;
+  transition: opacity var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
+  pointer-events: none;
+}
+.btn-primary:hover::before  { opacity: var(--md-sys-state-hover-state-layer-opacity); }
+.btn-primary:focus::before  { opacity: var(--md-sys-state-focus-state-layer-opacity); }
+.btn-primary:active::before { opacity: var(--md-sys-state-pressed-state-layer-opacity); }
+```
+
+**Pattern pragmatico** (già usato nei componenti shared, meno ortodosso ma più semplice):
+
+```css
+.btn-primary:hover {
+  background: color-mix(in srgb, var(--md-sys-color-primary) 92%, var(--md-sys-color-on-primary));
+}
+```
+
+Per ora il pattern pragmatico convive col ortodosso. Quando introdurremo `Button.vue` standardizzato, sarà l'occasione per scegliere uno solo.
+
+Spec: https://m3.material.io/foundations/interaction/states
+
+### Motion (16 durations + 8 easing) ✅ implementata 2026-05-20
+
+Token: `--md-sys-motion-duration-{name}`, `--md-sys-motion-easing-{name}`.
+
+**Durations** raggruppate per categoria:
+- `short1..short4` (50/100/150/200ms) — micro-feedback, hover, focus
+- `medium1..medium4` (250/300/350/400ms) — espansione menu, modal open/close
+- `long1..long4` (450/500/550/600ms) — transizioni di pagina, scroll-into-view
+- `extra-long1..extra-long4` (700-1000ms) — onboarding, hero animations
+
+**Easing** (curves):
+- `linear` — `cubic-bezier(0,0,1,1)`
+- `standard` — `cubic-bezier(0.2, 0, 0, 1)` — default per transizioni
+- `standard-accelerate` — pop-out / exit
+- `standard-decelerate` — pop-in / enter
+- `emphasized` — versione enfatica di standard (usata per elementi di forte rilievo)
+- `emphasized-accelerate` / `emphasized-decelerate` — varianti enter/exit enfatiche
+- `legacy` — pre-M3 compatibility (cubic-bezier(0.4, 0, 0.2, 1))
+
+Esempio:
+
+```css
+.btn {
+  transition: background var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
+}
+.modal-enter {
+  transition: opacity var(--md-sys-motion-duration-medium2) var(--md-sys-motion-easing-emphasized-decelerate),
+              transform var(--md-sys-motion-duration-medium2) var(--md-sys-motion-easing-emphasized-decelerate);
+}
+```
+
+Spec: https://m3.material.io/styles/motion/motion-tokens
+
+### Pattern UI standardizzati (linee guida per sviluppo futuro)
+
+I 5 layer di token sopra sono i mattoni; questa sezione spiega **come combinarli** per i pattern UI ricorrenti. Da seguire ogni volta che si introducono nuovi componenti.
+
+#### Bottoni
+
+M3 prevede 5 stili. Suite oggi:
+
+| Stile | Quando | CSS pattern |
+|---|---|---|
+| **Filled** | CTA primaria della pagina (es. "Salva", "Crea") | `background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); border-radius: var(--md-sys-shape-corner-full); height: 40px; padding: 0 24px;` |
+| **Filled Tonal** | CTA secondaria contestuale (meno enfatica del Filled, più del Outlined) | `background: var(--md-sys-color-primary-container); color: var(--md-sys-color-on-primary-container);` (altrimenti come Filled) |
+| **Outlined** | Azioni secondarie, "Annulla" in modal | `background: transparent; color: var(--md-sys-color-primary); border: 1px solid var(--md-sys-color-outline);` |
+| **Text** | Link inline, "Mostra altro", "Annulla" minimale | `background: transparent; color: var(--md-sys-color-primary); padding: 0 12px;` (no bordo) |
+| **Elevated** | Bottone su immagine/colore (raro nella suite) | Come Filled Tonal + `box-shadow: var(--md-sys-elevation-level-1);` |
+
+Tipografia bottoni: sempre `var(--md-sys-typescale-label-large)`.
+
+#### Card
+
+| Stile | Quando | CSS pattern |
+|---|---|---|
+| **Elevated** | Card che "galleggiano" su background (es. project card, dashboard widget) | `background: var(--md-sys-color-surface-container-low); border-radius: var(--md-sys-shape-corner-medium); box-shadow: var(--md-sys-elevation-level-1);` |
+| **Filled** | Card densa, in grid affollata | `background: var(--md-sys-color-surface-container-highest); border-radius: var(--md-sys-shape-corner-medium);` (no shadow) |
+| **Outlined** | Card che competono per attenzione (lista densa) | `background: var(--md-sys-color-surface); border: 1px solid var(--md-sys-color-outline-variant); border-radius: var(--md-sys-shape-corner-medium);` |
+
+#### Dialog vs Bottom Sheet — quando usare quale
+
+| Component | Uso | Posizione | Shape |
+|---|---|---|---|
+| **Dialog** (centered modal) | Conferme critiche, scelte di pochi item, alerts | Centro schermo, overlay | `var(--md-sys-shape-corner-extra-large)` |
+| **Bottom Sheet** | Azioni contestuali in modalità mobile, form medio-lunghi, picker | Bottom slide-up | `var(--md-sys-shape-corner-large)` su top corners, none su bottom |
+
+Suite oggi usa entrambi senza convenzione netta. **Regola da adottare**: Dialog sempre su desktop browser, Bottom Sheet sempre su mobile/standalone. Il pattern adattivo del `SideraLayout` può supportare entrambi con CSS responsive.
+
+#### Input field (Text Field)
+
+M3 prevede `Outlined` (più comune) e `Filled` (più denso). Pattern Outlined consigliato:
+
+```css
+.md-text-field {
+  background: transparent;
+  color: var(--md-sys-color-on-surface);
+  border: 1px solid var(--md-sys-color-outline);
+  border-radius: var(--md-sys-shape-corner-extra-small);
+  padding: 12px 16px;
+  font: var(--md-sys-typescale-body-large-weight) var(--md-sys-typescale-body-large-size)/var(--md-sys-typescale-body-large-line-height) var(--md-sys-typescale-body-large-font);
+  transition: border-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
+}
+.md-text-field:hover  { border-color: var(--md-sys-color-on-surface); }
+.md-text-field:focus  { border-color: var(--md-sys-color-primary); border-width: 2px; outline: none; }
+```
+
+#### Linea guida finale per sviluppo futuro
+
+Quando aggiungi un componente UI:
+
+1. **Tipografia** → mai `font-size` hardcoded, usa `var(--md-sys-typescale-*)` o `class="md-typescale-*"`
+2. **Colori** → mai hex inline (eccetto JS arrays di valori semantici tipo priority), usa `var(--md-sys-color-*)`
+3. **Border-radius** → usa `var(--md-sys-shape-corner-*)`
+4. **Shadow** → usa `var(--md-sys-elevation-level-*)`
+5. **Hover/focus/pressed** → usa `var(--md-sys-state-*-state-layer-opacity)` con pattern overlay o `color-mix` con percentuale uguale
+6. **Transition** → usa `var(--md-sys-motion-duration-*) var(--md-sys-motion-easing-*)`
+7. **Brand color**: lascia che venga dallo scope (`s-scope-{module}`), non hardcodare. Per pure-SIDERA UI ometti lo scope-class (default oro tenue).
+
+Quando trovi codice non-M3-compliant durante un fix: migra solo se è nello scope del fix corrente; altrimenti annota in [POLARIS](POLARIS.md) come "M3 cleanup pending".
 
 ### Riferimenti
 
@@ -973,3 +1195,4 @@ Ogni step va affrontato in branch dedicato `polaris/design-tokens-{layer}` per e
 - **2026-05-20** — Sez. 14 estesa con **ruoli M3 system color** in `src/style.css` (branch `polaris/design-tokens-roles`): light scheme + `.s-surface-dark` per i ruoli neutri/surface/error/outline (scope-agnostic, valori dal MTB export con seed SIDERA), + `.s-scope-{module}` per primary/on-primary/primary-container/on-primary-container scope-aware su 7 moduli con dual surface. I componenti esistenti NON sono toccati — migrazione modulo-per-modulo in branch successivi (`polaris/{module}-m3-migration`).
 - **2026-05-20** — **Unified shell pattern** (branch `polaris/pulsar-unified-shell`): eliminato lo switching tra `SideraLayout` e `*Layout` modulare via `*Shell.vue`. Ora `SideraLayout.vue` è il **layout unificato e adattivo** per tutti gli scope sotto la suite (`/sidera/*`, `/pulsar/*`, `/cepheid/*`, futuri). Rileva `display-mode: standalone` o viewport `≤ 768px` e mostra il chrome mobile (`ContextualMobileHeader`, `ContextualBottomNav`, `ContextualFab` in `src/components/shared/`) leggendo la config dello scope corrente da `src/views/sidera/scopeConfig.ts`. **Eliminati**: `PulsarShell.vue`, `PulsarLayout.vue` (assorbiti da SideraLayout). **Sez. 3 step 5-7 riscritti** per riflettere il nuovo pattern. **Sez. 13 quick start** aggiornata: niente più `*Shell.vue` / `*Layout.vue` da copiare — basta un'entry in `scopeConfig.ts` + classe scope in `style.css` + rotte router che montano `SideraLayout`. Beneficio: niente remount al resize, stato locale preservato, riduzione duplicazione codice. Effort per nuovo scope: ~30 minuti invece di 2-4 ore. CEPHEID rimane da migrare in un branch separato (`polaris/cepheid-unified-shell`).
 - **2026-05-20** — **CEPHEID unified shell** (branch `polaris/cepheid-unified-shell`): replicato il pattern PULSAR per CEPHEID. **Eliminati**: `CepheidShell.vue` (47 righe) e `CepheidLayout.vue` (501 righe). Router `/cepheid` ora monta `SideraLayout`. Aggiunto `cepheid-new-project-tick` e `cepheid-new-goal-tick` ai provide di SideraLayout (oltre a `cepheid-new-task-tick` già esistente). `onFabTrigger` esteso con la logica context-aware originaria di `CepheidLayout.triggerNew`: in base alla route attiva (`/cepheid/goals`, `/cepheid/projects`, `/cepheid/project/:id`, ...) dispatcha al tick giusto. Icona FAB CEPHEID aggiornata a `'add_circle'` (era `'add'`) per coerenza con CepheidLayout precedente. Restano da migrare: NEBULA, NOVA, MAGNETAR, QUASAR (oggi non ancora promossi a PWA con layout dedicato — basta seguire la stessa ricetta).
+- **2026-05-20** — **M3 layers 1-5 implementati** (branch `polaris/m3-layers-typography-shape-elevation-state-motion`): completati gli ultimi 5 strati dei design tokens M3. **Typography**: 15 stili `--md-sys-typescale-*` (display/headline/title/body/label × large/medium/small) + utility class `.md-typescale-*`, font mapping: Cormorant Garamond per display+headline, Outfit per title+body+label. **Shape**: 7 token `--md-sys-shape-corner-{none,extra-small,small,medium,large,extra-large,full}`. **Elevation**: 6 token `--md-sys-elevation-level-{0..5}` (box-shadow M3). **State layers**: 4 token opacità (`--md-sys-state-{hover,focus,pressed,dragged}-state-layer-opacity`). **Motion**: 16 duration + 8 easing token `--md-sys-motion-*`. Sez. 14 estesa con sotto-sezioni dettagliate per ogni layer + **pattern guide UI** (Bottoni Filled/Filled Tonal/Outlined/Text/Elevated, Card Elevated/Filled/Outlined, Dialog vs Bottom Sheet, Input Text Field) che diventano la base per lo sviluppo futuro. I componenti esistenti NON sono migrati ai nuovi token tipografici/shape/elevation — l'adozione è incrementale: ogni nuovo componente o refactor li userà.
