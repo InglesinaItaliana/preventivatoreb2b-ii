@@ -67,8 +67,8 @@ const wordmarkLetters = computed(() => props.config.wordmark.split(''))
   display: flex;
   align-items: center;
   padding: 4px;
-  border-radius: 8px;
-  transition: background 0.15s;
+  border-radius: var(--md-sys-shape-corner-small);
+  transition: background var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
 }
 .cm-back-btn:hover { background: var(--md-sys-color-surface-container); }
 
@@ -79,11 +79,14 @@ const wordmarkLetters = computed(() => props.config.wordmark.split(''))
 }
 
 .cm-brand-text {
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 26px;
+  /* tipografia M3: headline-small (24px) per il wordmark mobile, family override
+     a Cormorant Garamond per identità di brand suite (default M3 typescale di
+     display/headline è Cormorant — corretto già di base). */
+  font-family: var(--md-sys-typescale-headline-small-font);
+  font-size: var(--md-sys-typescale-headline-small-size);
+  line-height: var(--md-sys-typescale-headline-small-line-height);
+  letter-spacing: 0.02em; /* override: tracking wordmark dotted */
   font-weight: 700;
-  letter-spacing: 0.02em;
-  line-height: 1;
   color: var(--md-sys-color-on-surface);
 }
 

@@ -44,18 +44,20 @@ function onClick() {
   justify-content: center;
   width: 66px;
   height: 66px;
-  border-radius: 20px;
+  border-radius: var(--md-sys-shape-corner-large);
   background: var(--md-sys-color-primary);
   color: var(--md-sys-color-on-primary);
   border: none;
   cursor: pointer;
-  box-shadow: 0 3px 12px color-mix(in srgb, var(--md-sys-color-primary) 35%, transparent);
-  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+  box-shadow: var(--md-sys-elevation-level-3);
+  transition: transform   var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              box-shadow  var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              background  var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
   flex-shrink: 0;
 }
 .cm-fab:hover {
   background: var(--md-sys-color-primary-hover);
-  box-shadow: 0 4px 14px color-mix(in srgb, var(--md-sys-color-primary) 45%, transparent);
+  box-shadow: var(--md-sys-elevation-level-4);
 }
 .cm-fab:active { transform: scale(0.96); }
 </style>

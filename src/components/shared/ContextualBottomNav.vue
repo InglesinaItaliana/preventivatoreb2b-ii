@@ -72,9 +72,9 @@ const items = computed(() => props.config.mobileNav)
   align-items: center;
   gap: 4px;
   background: var(--md-sys-color-surface-container);
-  border-radius: 999px;
+  border-radius: var(--md-sys-shape-corner-full);
   padding: 9px 12px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--md-sys-elevation-level-1);
 }
 
 .cm-pill-btn {
@@ -83,12 +83,13 @@ const items = computed(() => props.config.mobileNav)
   justify-content: center;
   width: 56px;
   height: 52px;
-  border-radius: 999px;
+  border-radius: var(--md-sys-shape-corner-full);
   background: none;
   border: none;
   cursor: pointer;
   color: var(--md-sys-color-primary);
-  transition: background 0.18s ease, color 0.18s ease;
+  transition: background var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              color      var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
   padding: 0;
 }
 .cm-pill-btn:hover {
