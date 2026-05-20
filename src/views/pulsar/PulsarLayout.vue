@@ -4,6 +4,11 @@ import { useRoute, useRouter } from 'vue-router'
 import { signOut } from 'firebase/auth'
 import { auth } from '../../firebase'
 import MIcon from '../../components/pulsar/MIcon.vue'
+import ScopeBrandIcon from '../../components/shared/ScopeBrandIcon.vue'
+import ContextualMobileHeader from '../../components/shared/ContextualMobileHeader.vue'
+import ContextualBottomNav from '../../components/shared/ContextualBottomNav.vue'
+import ContextualFab from '../../components/shared/ContextualFab.vue'
+import { SCOPE_CONFIGS } from '../sidera/scopeConfig'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
 import { useTeamMembers, displayName, avatarColor } from '../../composables/sidera/useTeamMembers'
 import { useChats } from '../../composables/pulsar/useChats'
@@ -16,17 +21,12 @@ const { members } = useTeamMembers()
 const { chats } = useChats()
 const { requestPermission, notify, setupForegroundMessages } = useNotifications('pulsar')
 
+const config = SCOPE_CONFIGS.pulsar
+
 async function logout() {
   await signOut(auth)
   router.push('/pulsar/login')
 }
-
-const navItems = [
-  { path: '/pulsar',           exact: true,  label: 'Chat',      icon: 'forum' },
-  { path: '/pulsar/sequentia', exact: false, label: 'Azioni',    icon: 'check_circle' },
-  { path: '/pulsar/pending',   exact: false, label: 'Pendenze',  icon: 'notifications' },
-  { path: '/pulsar/tags',      exact: false, label: 'Etichette', icon: 'sell' },
-]
 
 const newChatTick = ref(0)
 provide('pulsar-new-chat-tick', newChatTick)
@@ -37,6 +37,10 @@ function triggerNewChat() {
     sessionStorage.setItem('pulsar-pending-new-chat', '1')
     router.push('/pulsar')
   }
+}
+
+function onFabTrigger(action: 'new-chat' | 'new-task' | 'new-project' | 'new-goal' | 'none') {
+  if (action === 'new-chat') triggerNewChat()
 }
 
 function isActive(path: string, exact: boolean) {
@@ -102,24 +106,14 @@ watch(chats, (newChats) => {
     <!-- ── SIDEBAR desktop ── -->
     <aside class="p-sidebar">
       <div class="p-brand">
-        <svg class="p-brand-icon" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" style="color: var(--md-sys-color-primary)">
-          <circle cx="16" cy="16" r="8"   fill="currentColor" opacity="0.10"/>
-          <g stroke="currentColor" stroke-width="1.6" stroke-linecap="round" opacity="0.7">
-            <line x1="16" y1="16" x2="12"   y2="4.7"/>
-            <line x1="16" y1="16" x2="23.6" y2="25.3"/>
-            <line x1="16" y1="16" x2="4"    y2="16"/>
-            <line x1="16" y1="16" x2="10"   y2="26.4"/>
-          </g>
-          <circle cx="16" cy="16" r="4.4" fill="currentColor" opacity="0.28"/>
-          <circle cx="16" cy="16" r="2.9" fill="currentColor"/>
-        </svg>
+        <ScopeBrandIcon scope="pulsar" :size="32" />
         <span class="p-brand-text">P<span class="p-brand-dot">·</span>U<span class="p-brand-dot">·</span>L<span class="p-brand-dot">·</span>S<span class="p-brand-dot">·</span>A<span class="p-brand-dot">·</span>R</span>
       </div>
 
       <nav class="p-nav">
         <p class="p-section-label">Workspace</p>
         <RouterLink
-          v-for="item in navItems"
+          v-for="item in config.mobileNav"
           :key="item.path"
           :to="item.path"
           class="p-nav-item"
@@ -157,62 +151,19 @@ watch(chats, (newChats) => {
     <!-- ── CONTENUTO ── -->
     <div class="p-main-wrap">
 
-      <!-- Header solo mobile -->
-      <header class="p-mobile-header">
-        <button
-          v-if="route.path !== '/pulsar' && route.path !== '/pulsar/sequentia' && route.path !== '/pulsar/pending' && route.path !== '/pulsar/tags'"
-          class="p-back-btn"
-          @click="router.back()"
-        >
-          <MIcon name="arrow_back" :size="20" />
-        </button>
-        <div class="p-brand">
-          <svg class="p-brand-icon" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" style="color: var(--md-sys-color-primary)">
-            <circle cx="16" cy="16" r="8"   fill="currentColor" opacity="0.10"/>
-            <g stroke="currentColor" stroke-width="1.6" stroke-linecap="round" opacity="0.7">
-              <line x1="16" y1="16" x2="12"   y2="4.7"/>
-              <line x1="16" y1="16" x2="23.6" y2="25.3"/>
-              <line x1="16" y1="16" x2="4"    y2="16"/>
-              <line x1="16" y1="16" x2="10"   y2="26.4"/>
-            </g>
-            <circle cx="16" cy="16" r="4.4" fill="currentColor" opacity="0.28"/>
-            <circle cx="16" cy="16" r="2.9" fill="currentColor"/>
-          </svg>
-          <span class="p-brand-text">P<span class="p-brand-dot">·</span>U<span class="p-brand-dot">·</span>L<span class="p-brand-dot">·</span>S<span class="p-brand-dot">·</span>A<span class="p-brand-dot">·</span>R</span>
-        </div>
-      </header>
+      <!-- Header solo mobile (contextual: gestito tramite scopeConfig) -->
+      <ContextualMobileHeader scope="pulsar" :config="config" />
 
       <main class="p-main">
         <RouterView />
       </main>
 
-      <!-- Bottom nav solo mobile -->
-      <nav class="p-bottom-nav">
-        <div class="p-nav-pill">
-          <button
-            v-for="item in navItems"
-            :key="item.path"
-            class="p-pill-btn"
-            :class="{ 'is-active': isActive(item.path, item.exact) }"
-            :aria-label="item.label"
-            @click="router.push(item.path)"
-          >
-            <MIcon
-              :name="item.icon"
-              :filled="isActive(item.path, item.exact)"
-              class="p-pill-icon"
-            />
-          </button>
-        </div>
-
-        <button
-          class="p-new-chat-btn"
-          aria-label="Nuova conversazione"
-          @click="triggerNewChat"
-        >
-          <MIcon name="chat_add_on" filled :size="28" />
-        </button>
-      </nav>
+      <!-- Bottom nav + FAB solo mobile (contextual) -->
+      <ContextualBottomNav :config="config">
+        <template #fab>
+          <ContextualFab :config="config" @trigger="onFabTrigger" />
+        </template>
+      </ContextualBottomNav>
 
     </div>
   </div>
@@ -387,107 +338,6 @@ watch(chats, (newChats) => {
 /* Mobile: lascia spazio in fondo per la bottom bar che galleggia sopra il contenuto */
 @media (max-width: 768px) {
   .p-main { padding-bottom: calc(110px + env(safe-area-inset-bottom)); }
-}
-
-/* ── Mobile: header e bottom nav, nascosti su desktop ── */
-.p-mobile-header {
-  display: none;
-  align-items: center;
-  gap: 10px;
-  padding: 14px 20px;
-  background: var(--s-surface);
-  border-bottom: 1px solid var(--s-border);
-  flex-shrink: 0;
-}
-
-.p-back-btn {
-  background: none; border: none; cursor: pointer;
-  color: var(--s-text-dim); display: flex; align-items: center;
-  padding: 4px; border-radius: 8px; transition: background 0.15s;
-}
-
-.p-back-btn:hover { background: var(--s-border); }
-
-
-.p-bottom-nav {
-  display: none;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  padding: 8px 16px calc(30px + env(safe-area-inset-bottom));
-  background: transparent;
-  flex-shrink: 0;
-  pointer-events: none;
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  z-index: 5;
-}
-
-.p-bottom-nav > * { pointer-events: auto; }
-
-.p-nav-pill {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  background: var(--md-sys-color-surface-container);
-  border-radius: 999px;
-  padding: 9px 12px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
-}
-
-.p-pill-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 56px;
-  height: 52px;
-  border-radius: 999px;
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: var(--md-sys-color-primary);
-  transition: background 0.18s ease, color 0.18s ease;
-  padding: 0;
-}
-
-.p-pill-btn:hover { background: color-mix(in srgb, var(--md-sys-color-primary) 8%, transparent); }
-
-.p-pill-btn.is-active {
-  background: color-mix(in srgb, var(--md-sys-color-primary) 20%, transparent);
-  color: var(--md-sys-color-primary);
-}
-
-.p-pill-icon { font-size: 36px; }
-
-.p-new-chat-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 66px;
-  height: 66px;
-  border-radius: 20px;
-  background: var(--md-sys-color-primary);
-  color: var(--md-sys-color-on-primary);
-  border: none;
-  cursor: pointer;
-  box-shadow: 0 3px 12px color-mix(in srgb, var(--md-sys-color-primary) 35%, transparent);
-  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
-  flex-shrink: 0;
-}
-
-.p-new-chat-btn:hover {
-  background: #338076;
-  box-shadow: 0 4px 14px color-mix(in srgb, var(--md-sys-color-primary) 45%, transparent);
-}
-
-.p-new-chat-btn:active { transform: scale(0.96); }
-
-/* ── Mobile ≤ 768px ── */
-@media (max-width: 768px) {
-  .p-sidebar       { display: none; }
-  .p-mobile-header { display: flex; }
-  .p-bottom-nav    { display: flex; }
+  .p-sidebar { display: none; }
 }
 </style>
