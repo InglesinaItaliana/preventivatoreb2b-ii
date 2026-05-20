@@ -5,9 +5,14 @@ import GlobalBugReporter from './components/GlobalBugReporter.vue'; // <--- Impo
 import UpdateBanner from './components/UpdateBanner.vue';
 
 const route = useRoute();
+// Scope della suite-of-webapps (SIDERA + PWA mobile). Il GlobalBugReporter è
+// uno strumento POPS — non deve apparire dentro questi scope, dove il chrome
+// del modulo (ContextualFab / sidebar) gestisce le proprie azioni primarie.
+const SUITE_PREFIXES = ['/sidera', '/pulsar', '/cepheid', '/nebula', '/nova', '/magnetar', '/quasar'];
 const showFab = computed(() => {
-  // Nascondi se il path è la root '/' oppure se il nome della rotta è 'login'
-  return route.path !== '/' && route.name !== 'login';
+  if (route.path === '/' || route.name === 'login') return false;
+  if (SUITE_PREFIXES.some(p => route.path.startsWith(p))) return false;
+  return true;
 });
 
 onMounted(() => {
