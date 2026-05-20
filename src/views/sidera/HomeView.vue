@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
-import MIcon from '../../components/pulsar/MIcon.vue'
+import MIcon from '../../components/shared/MIcon.vue'
 import { usePopsMetrics }  from '../../composables/sidera/usePopsMetrics'
 import { useAllTasks }     from '../../composables/sidera/useAllTasks'
 import { useProjects }     from '../../composables/sidera/useProjects'

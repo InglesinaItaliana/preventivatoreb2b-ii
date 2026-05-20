@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, inject, watch, onMounted, nextTick, type Ref } from 'vue'
 import { useRouter } from 'vue-router'
-import MIcon from '../../components/pulsar/MIcon.vue'
+import MIcon from '../../components/shared/MIcon.vue'
 import { useChats } from '../../composables/pulsar/useChats'
 import { useUnreadChats } from '../../composables/pulsar/usePulsarUnread'
 import { useTeamMembers, avatarInitial, displayName } from '../../composables/sidera/useTeamMembers'

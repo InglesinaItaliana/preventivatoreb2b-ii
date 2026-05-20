@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, inject, watch, type Ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import MIcon from '../../components/pulsar/MIcon.vue'
+import MIcon from '../../components/shared/MIcon.vue'
 import GoalChip from '../../components/cepheid/GoalChip.vue'
 import { useProjects, DEFAULT_STATES } from '../../composables/sidera/useProjects'
 import { useProjectTasks } from '../../composables/sidera/useProjectTasks'

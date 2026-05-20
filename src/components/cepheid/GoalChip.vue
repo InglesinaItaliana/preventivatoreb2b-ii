@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import MIcon from '../pulsar/MIcon.vue'
+import MIcon from '../shared/MIcon.vue'
 
 defineProps<{
   titolo: string

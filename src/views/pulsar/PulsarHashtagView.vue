@@ -5,7 +5,7 @@ import { collectionGroup, query, where, orderBy, onSnapshot, getDoc, doc, setDoc
 import { db } from '../../firebase'
 import { avatarInitial, displayName, useTeamMembers } from '../../composables/sidera/useTeamMembers'
 import { pulsarAvatarColor as avatarColor } from '../../composables/pulsar/usePulsarAvatar'
-import MIcon from '../../components/pulsar/MIcon.vue'
+import MIcon from '../../components/shared/MIcon.vue'
 
 const route  = useRoute()
 const router = useRouter()

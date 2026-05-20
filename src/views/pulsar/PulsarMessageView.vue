@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, nextTick, onMounted, onBeforeUnmount, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import MIcon from '../../components/pulsar/MIcon.vue'
+import MIcon from '../../components/shared/MIcon.vue'
 import { doc, onSnapshot } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useMessages } from '../../composables/pulsar/useMessages'

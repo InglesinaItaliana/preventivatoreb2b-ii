@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, inject, watch, onMounted, nextTick, type Ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import MIcon from '../../components/pulsar/MIcon.vue'
+import MIcon from '../../components/shared/MIcon.vue'
 import GoalProgressBar from '../../components/cepheid/GoalProgressBar.vue'
 import { useObiettivi, GOAL_COLOR_PRESETS } from '../../composables/sidera/useObiettivi'
 import { useProjects } from '../../composables/sidera/useProjects'

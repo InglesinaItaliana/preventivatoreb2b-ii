@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import MIcon from '../../components/pulsar/MIcon.vue'
+import MIcon from '../../components/shared/MIcon.vue'
 import GoalChip from '../../components/cepheid/GoalChip.vue'
 import { doc, getDoc } from 'firebase/firestore'
 import { db } from '../../firebase'

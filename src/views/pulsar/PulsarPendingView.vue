@@ -11,7 +11,7 @@ import { pulsarAvatarColor as avatarColor } from '../../composables/pulsar/usePu
 import { useProjects } from '../../composables/sidera/useProjects'
 import { useChats } from '../../composables/pulsar/useChats'
 import { createStandaloneTask } from '../../composables/sidera/useAllTasks'
-import MIcon from '../../components/pulsar/MIcon.vue'
+import MIcon from '../../components/shared/MIcon.vue'
 
 const router = useRouter()
 const { members } = useTeamMembers()

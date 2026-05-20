@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import MIcon from '../../components/pulsar/MIcon.vue'
+import MIcon from '../../components/shared/MIcon.vue'
 import { useAllTasks }    from '../../composables/sidera/useAllTasks'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
 

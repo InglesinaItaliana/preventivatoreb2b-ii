@@ -912,7 +912,7 @@ input[type=number] {
 }
 
 /* Material Symbols Outlined — unico wrapper della suite, usato dal componente
-   shared src/components/pulsar/MIcon.vue (post-unificazione 2026-05-20). */
+   shared src/components/shared/MIcon.vue (post-unificazione 2026-05-20). */
 .m-icon {
   font-family: 'Material Symbols Outlined';
   font-weight: normal;

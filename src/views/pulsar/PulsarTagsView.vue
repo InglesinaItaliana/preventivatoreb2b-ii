@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useChatHashtags } from '../../composables/pulsar/useChatHashtags'
-import MIcon from '../../components/pulsar/MIcon.vue'
+import MIcon from '../../components/shared/MIcon.vue'
 
 const router = useRouter()
 const { hashtags } = useChatHashtags()

@@ -8,7 +8,7 @@
  */
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import MIcon from '../pulsar/MIcon.vue'
+import MIcon from './MIcon.vue'
 import ScopeBrandIcon from './ScopeBrandIcon.vue'
 import type { ScopeId, ScopeConfig } from '../../views/sidera/scopeConfig'
 

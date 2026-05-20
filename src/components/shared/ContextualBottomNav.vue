@@ -10,7 +10,7 @@
  */
 import { computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import MIcon from '../pulsar/MIcon.vue'
+import MIcon from './MIcon.vue'
 import type { ScopeConfig } from '../../views/sidera/scopeConfig'
 
 const props = defineProps<{
