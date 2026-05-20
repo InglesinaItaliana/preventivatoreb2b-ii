@@ -7,14 +7,20 @@ import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
 import { useTeamMembers, displayName, avatarInitial } from '../../composables/sidera/useTeamMembers'
 import { pulsarAvatarColor as avatarColor } from '../../composables/pulsar/usePulsarAvatar'
 
-const { tasks, loading: tasksLoading, completeTask, uncompleteTask } = useAllTasks()
+const { tasks, loading: tasksLoading, completeTask, uncompleteTask, updateTask, deleteTask } = useAllTasks()
 const { activeProjects } = useProjects()
 const { currentUser } = useCurrentUser()
 const { members } = useTeamMembers()
 
-// ── Filtri ────────────────────────────────────────────────────────────────
-type Filter = 'mine' | 'all'
+// ── Filtri (port da TasksView SIDERA 2026-05-20) ───────────────────────────
+type Filter = 'mine' | 'all' | 'late' | 'done'
 const filter = ref<Filter>('mine')
+const filterTabs: { id: Filter; label: string }[] = [
+  { id: 'mine', label: 'Le mie' },
+  { id: 'all',  label: 'Tutte' },
+  { id: 'late', label: '⚠ In ritardo' },
+  { id: 'done', label: '✓ Completate' },
+]
 
 // ── Tasks ─────────────────────────────────────────────────────────────────
 const pendingDone = ref<Set<string>>(new Set())
@@ -32,29 +38,67 @@ async function doUncomplete(t: { id: string; projectId: string }) {
   await uncompleteTask(t.projectId, t.id)
 }
 
+const realTasks = computed(() => tasks.value.filter(t => !t.type || t.type === 'task'))
+
+const activeTasks = computed(() => realTasks.value.filter(t => !t.completedAt && !pendingDone.value.has(t.id)))
+
 const visibleOpen = computed(() => {
   const myEmail = currentUser.value?.email ?? ''
   const myUid   = currentUser.value?.uid ?? ''
-  return tasks.value.filter(t => {
-    if (t.type && t.type !== 'task') return false
-    if (t.completedAt || pendingDone.value.has(t.id)) return false
-    if (filter.value === 'all') return true
-    return t.assignees.includes(myEmail) || t.createdBy === myUid
-  })
+  const oggi = new Date(); oggi.setHours(0, 0, 0, 0)
+  const base = activeTasks.value
+  if (filter.value === 'late') return base.filter(t => t.dueDate && t.dueDate < oggi)
+  if (filter.value === 'all')  return base
+  if (filter.value === 'mine') return base.filter(t => t.assignees.includes(myEmail) || t.createdBy === myUid)
+  return []
 })
 
 const doneTasks = computed(() =>
-  tasks.value.filter(t =>
-    (!t.type || t.type === 'task') &&
+  realTasks.value.filter(t =>
     (t.completedAt || pendingDone.value.has(t.id)) &&
     !pendingUndo.value.has(t.id)
-  ).slice(0, 10)
+  )
 )
+
+const visibleDone = computed(() => filter.value === 'done' ? doneTasks.value : doneTasks.value.slice(0, 10))
+
+// ── Group-by-date relativo (port da TasksView SIDERA) ─────────────────────
+type GroupKey = 'late' | 'oggi' | 'week' | 'later' | 'nodate'
+function taskGroup(dueDate: Date | null): GroupKey {
+  if (!dueDate) return 'nodate'
+  const oggi = new Date(); oggi.setHours(0, 0, 0, 0)
+  const diff = Math.ceil((dueDate.getTime() - oggi.getTime()) / 86400000)
+  if (diff < 0)  return 'late'
+  if (diff === 0) return 'oggi'
+  if (diff <= 7)  return 'week'
+  return 'later'
+}
+
+const groups = computed<{ key: GroupKey; label: string; color: string }[]>(() => {
+  if (filter.value === 'late') return [{ key: 'late', label: 'In ritardo', color: '#C8521A' }]
+  if (filter.value === 'done') return [] // done usa rendering flat
+  return [
+    { key: 'late',   label: 'In ritardo',       color: '#C8521A' },
+    { key: 'oggi',   label: 'Oggi',             color: 'var(--md-sys-color-primary)' },
+    { key: 'week',   label: 'Questa settimana', color: 'var(--md-sys-color-on-surface-variant)' },
+    { key: 'later',  label: 'Più avanti',       color: 'var(--md-sys-color-outline)' },
+    { key: 'nodate', label: 'Senza scadenza',   color: 'var(--md-sys-color-outline)' },
+  ]
+})
+
+function tasksInGroup(key: GroupKey) {
+  return visibleOpen.value.filter(t => taskGroup(t.dueDate) === key)
+}
 
 const prioColor: Record<string, string> = { alta: '#C8521A', media: '#D4A020', bassa: '#7A8FA6' }
 
-function formatDue(d: Date | null) {
+function formatDue(d: Date | null): string {
   if (!d) return ''
+  const now = new Date(); now.setHours(0, 0, 0, 0)
+  const diff = Math.ceil((d.getTime() - now.getTime()) / 86400000)
+  if (diff === 0)  return 'Oggi'
+  if (diff === 1)  return 'Domani'
+  if (diff === -1) return 'Ieri'
   return new Intl.DateTimeFormat('it-IT', { day: 'numeric', month: 'short' }).format(d)
 }
 
@@ -75,9 +119,12 @@ const dueTodayCount = computed(() => {
 // Completate di recente: collassabile, collassate di default
 const showDone = ref(false)
 
-// ── Nuova azione (modal) ───────────────────────────────────────────────────
+// ── Modal create + edit (port da TasksView SIDERA 2026-05-20) ───────────────
+type TaskLike = { id: string; projectId: string | null; title: string; priority: 'alta' | 'media' | 'bassa'; dueDate: Date | null; assignees: string[]; completedAt: Date | null }
 const showTaskModal = ref(false)
 const taskSaving    = ref(false)
+const taskDeleting  = ref(false)
+const editingTask   = ref<TaskLike | null>(null)
 const taskForm = ref({
   title:     '',
   projectId: '',
@@ -93,12 +140,25 @@ const prioOptions = [
 ] as const
 
 function openTaskModal() {
+  editingTask.value = null
   taskForm.value = {
     title:     '',
     projectId: '',
     priority:  'media',
     dueDate:   '',
     assignees: currentUser.value?.email ? [currentUser.value.email] : [],
+  }
+  showTaskModal.value = true
+}
+
+function openEditTaskModal(t: TaskLike) {
+  editingTask.value = t
+  taskForm.value = {
+    title:     t.title,
+    projectId: t.projectId ?? '',
+    priority:  t.priority,
+    dueDate:   t.dueDate ? t.dueDate.toISOString().split('T')[0] : '',
+    assignees: [...t.assignees],
   }
   showTaskModal.value = true
 }
@@ -119,18 +179,41 @@ async function submitTask() {
   taskSaving.value = true
   try {
     const dueDate = taskForm.value.dueDate ? parseDateInput(taskForm.value.dueDate) : null
-    await createStandaloneTask({
-      title:     taskForm.value.title.trim(),
-      projectId: taskForm.value.projectId || null,
-      priority:  taskForm.value.priority,
-      dueDate,
-      assignees: taskForm.value.assignees,
-    })
+    if (editingTask.value) {
+      await updateTask(editingTask.value.projectId, editingTask.value.id, {
+        title:     taskForm.value.title.trim(),
+        priority:  taskForm.value.priority,
+        dueDate,
+        assignees: taskForm.value.assignees,
+      })
+    } else {
+      await createStandaloneTask({
+        title:     taskForm.value.title.trim(),
+        projectId: taskForm.value.projectId || null,
+        priority:  taskForm.value.priority,
+        dueDate,
+        assignees: taskForm.value.assignees,
+      })
+    }
     showTaskModal.value = false
   } catch (e) {
-    console.error('[CEPHEID] task creation error', e)
+    console.error('[CEPHEID] task save error', e)
   } finally {
     taskSaving.value = false
+  }
+}
+
+async function doDeleteTask() {
+  if (!editingTask.value || taskDeleting.value) return
+  if (!confirm('Eliminare questa azione?')) return
+  taskDeleting.value = true
+  try {
+    await deleteTask(editingTask.value.projectId, editingTask.value.id, !!editingTask.value.completedAt)
+    showTaskModal.value = false
+  } catch (e) {
+    console.error('[CEPHEID] task delete error', e)
+  } finally {
+    taskDeleting.value = false
   }
 }
 
@@ -165,58 +248,98 @@ onMounted(() => {
     </header>
 
     <div class="av-content">
-      <!-- Filtro Le mie / Tutte -->
+      <!-- Filter tabs estesi (port da TasksView SIDERA 2026-05-20) -->
       <div class="filter-pills">
-        <button :class="['filter-pill', { 'is-active': filter === 'mine' }]" @click="filter = 'mine'">Le mie</button>
-        <button :class="['filter-pill', { 'is-active': filter === 'all' }]"  @click="filter = 'all'">Tutte</button>
+        <button
+          v-for="t in filterTabs"
+          :key="t.id"
+          :class="['filter-pill', { 'is-active': filter === t.id }]"
+          @click="filter = t.id"
+        >{{ t.label }}</button>
       </div>
 
       <div v-if="tasksLoading" class="loading-rows">
         <div v-for="i in 4" :key="i" class="row-skel" />
       </div>
 
-      <div v-else-if="!visibleOpen.length" class="empty-state">
-        <MIcon name="check_circle" filled :size="20" class="empty-state-icon" />
-        {{ filter === 'mine' ? 'Nessuna azione assegnata.' : 'Nessuna azione aperta.' }}
-      </div>
-
-      <div v-for="t in visibleOpen" :key="t.id" class="task-row" :style="{ borderLeftColor: prioColor[t.priority] }">
-        <div class="checkbox" @click="doComplete(t)">
-          <MIcon v-if="pendingDone.has(t.id)" name="check" :size="14" class="check-icon" />
+      <!-- Tab 'done': rendering flat completate -->
+      <template v-else-if="filter === 'done'">
+        <div v-if="!visibleDone.length" class="empty-state">
+          <MIcon name="check_circle" filled :size="20" class="empty-state-icon" />
+          Nessuna azione completata.
         </div>
-        <div class="row-body">
-          <div class="row-title">{{ t.title }}</div>
-          <div v-if="t.projectId" class="row-meta">
-            <span class="row-proj" :style="{ background: projectColor(t.projectId) + '20', color: projectColor(t.projectId) }">{{ projectName(t.projectId) }}</span>
-          </div>
-        </div>
-        <div v-if="t.dueDate" class="row-due">
-          <MIcon name="schedule" :size="12" />{{ formatDue(t.dueDate) }}
-        </div>
-      </div>
-
-      <!-- Completate di recente -->
-      <button
-        v-if="doneTasks.length"
-        class="collapse-toggle"
-        :class="{ 'is-open': showDone }"
-        @click="showDone = !showDone"
-      >
-        <span>Completate di recente</span>
-        <span class="collapse-meta">
-          <span class="collapse-count">{{ doneTasks.length }}</span>
-          <MIcon :name="showDone ? 'expand_less' : 'expand_more'" :size="20" class="collapse-chevron" />
-        </span>
-      </button>
-
-      <div v-if="showDone" class="done-list">
-        <div v-for="t in doneTasks" :key="t.id" class="task-row task-row--done">
+        <div v-for="t in visibleDone" :key="t.id" class="task-row task-row--done">
           <button class="undo-btn" @click="doUncomplete(t)">
             <MIcon name="undo" :size="14" />
           </button>
-          <div class="row-title row-title--done">{{ t.title }}</div>
+          <div class="row-title row-title--done" @click="openEditTaskModal(t as TaskLike)">{{ t.title }}</div>
         </div>
-      </div>
+      </template>
+
+      <!-- Tab mine/all/late: rendering group-by relative-date -->
+      <template v-else>
+        <div v-if="!visibleOpen.length" class="empty-state">
+          <MIcon name="check_circle" filled :size="20" class="empty-state-icon" />
+          {{
+            filter === 'mine' ? 'Nessuna azione assegnata.'
+            : filter === 'late' ? 'Nessuna azione in ritardo. 🎉'
+            : 'Nessuna azione aperta.'
+          }}
+        </div>
+
+        <template v-for="g in groups" :key="g.key">
+          <div v-if="tasksInGroup(g.key).length" class="task-group">
+            <div class="task-group-header">
+              <span class="task-group-dot" :style="{ background: g.color }" />
+              <span class="task-group-label">{{ g.label }}</span>
+              <span class="task-group-count">{{ tasksInGroup(g.key).length }}</span>
+            </div>
+            <div
+              v-for="t in tasksInGroup(g.key)"
+              :key="t.id"
+              class="task-row"
+              :style="{ borderLeftColor: prioColor[t.priority] }"
+              @click="openEditTaskModal(t as TaskLike)"
+            >
+              <div class="checkbox" @click.stop="doComplete(t)">
+                <MIcon v-if="pendingDone.has(t.id)" name="check" :size="14" class="check-icon" />
+              </div>
+              <div class="row-body">
+                <div class="row-title">{{ t.title }}</div>
+                <div v-if="t.projectId" class="row-meta">
+                  <span class="row-proj" :style="{ background: projectColor(t.projectId) + '20', color: projectColor(t.projectId) }">{{ projectName(t.projectId) }}</span>
+                </div>
+              </div>
+              <div v-if="t.dueDate" class="row-due">
+                <MIcon name="schedule" :size="12" />{{ formatDue(t.dueDate) }}
+              </div>
+            </div>
+          </div>
+        </template>
+
+        <!-- Completate collassabili (solo in tab mine/all, non in late) -->
+        <button
+          v-if="filter !== 'late' && doneTasks.length"
+          class="collapse-toggle"
+          :class="{ 'is-open': showDone }"
+          @click="showDone = !showDone"
+        >
+          <span>Completate di recente</span>
+          <span class="collapse-meta">
+            <span class="collapse-count">{{ doneTasks.length }}</span>
+            <MIcon :name="showDone ? 'expand_less' : 'expand_more'" :size="20" class="collapse-chevron" />
+          </span>
+        </button>
+
+        <div v-if="showDone && filter !== 'late'" class="done-list">
+          <div v-for="t in doneTasks.slice(0, 10)" :key="t.id" class="task-row task-row--done">
+            <button class="undo-btn" @click="doUncomplete(t)">
+              <MIcon name="undo" :size="14" />
+            </button>
+            <div class="row-title row-title--done" @click="openEditTaskModal(t as TaskLike)">{{ t.title }}</div>
+          </div>
+        </div>
+      </template>
     </div>
 
     <!-- Modal Nuova azione -->
@@ -224,7 +347,7 @@ onMounted(() => {
       <div v-if="showTaskModal" class="modal-backdrop md-modal-backdrop" @click.self="showTaskModal = false">
         <div class="modal md-modal-dialog" @click.stop>
           <div class="modal-header md-modal-header">
-            <span class="modal-title md-modal-title">Nuova azione</span>
+            <span class="modal-title md-modal-title">{{ editingTask ? 'Modifica azione' : 'Nuova azione' }}</span>
             <button class="modal-close md-modal-close" @click="showTaskModal = false"><MIcon name="close" :size="18" /></button>
           </div>
           <div class="modal-body md-modal-body">
@@ -277,12 +400,19 @@ onMounted(() => {
             </div>
           </div>
           <div class="modal-footer md-modal-footer">
+            <button
+              v-if="editingTask"
+              class="btn-danger md-btn md-btn--danger md-btn--rounded"
+              :disabled="taskDeleting"
+              style="margin-right: auto"
+              @click="doDeleteTask"
+            >{{ taskDeleting ? 'Eliminazione…' : 'Elimina' }}</button>
             <button class="btn-ghost md-btn md-btn--outlined md-btn--rounded" @click="showTaskModal = false">Annulla</button>
             <button
               class="btn-primary md-btn md-btn--filled md-btn--rounded"
               :disabled="!taskForm.title.trim() || taskSaving"
               @click="submitTask"
-            >{{ taskSaving ? 'Creazione…' : 'Crea azione' }}</button>
+            >{{ taskSaving ? 'Salvataggio…' : (editingTask ? 'Salva' : 'Crea azione') }}</button>
           </div>
         </div>
       </div>
@@ -378,6 +508,40 @@ onMounted(() => {
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 
 .empty-state { font-size: 14px; color: #9B9590; padding: 20px 0; }
+
+/* Task group-by relative-date (port da TasksView SIDERA 2026-05-20) */
+.task-group { margin-bottom: 20px; }
+.task-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px 6px;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+}
+.task-group-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--md-sys-shape-corner-full);
+  flex-shrink: 0;
+}
+.task-group-label {
+  font-family: var(--md-sys-typescale-label-medium-font);
+  font-size:   var(--md-sys-typescale-label-medium-size);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--md-sys-color-on-surface);
+  flex: 1;
+}
+.task-group-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--md-sys-color-primary);
+  background: color-mix(in srgb, var(--md-sys-color-primary) 14%, transparent);
+  padding: 2px 8px;
+  border-radius: var(--md-sys-shape-corner-full);
+}
 .empty-state-icon { color: var(--md-sys-color-primary); margin-right: 6px; vertical-align: -4px; }
 
 /* Task rows */
