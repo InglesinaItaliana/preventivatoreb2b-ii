@@ -354,7 +354,7 @@ function urgenzaLabel(giorni: number) {
 .row-skel {
   height: 44px;
   background: var(--s-surface);
-  border-radius: 9px;
+  border-radius: var(--md-sys-shape-corner-small);
   animation: s-pulse 1.4s ease-in-out infinite;
 }
 
@@ -391,14 +391,15 @@ function urgenzaLabel(giorni: number) {
 }
 
 .azione-row:hover {
-  border-color: var(--md-sys-color-outline);
-  box-shadow: var(--md-sys-elevation-level-2);
-  transform: translateY(-1px);
+  border-color: var(--md-sys-color-primary);
+  background:   var(--md-sys-color-primary-state-hover);
+  box-shadow:   var(--md-sys-elevation-level-2);
+  transform:    translateY(-1px);
 }
 
 .checkbox {
   width: 17px; height: 17px;
-  border-radius: 5px;
+  border-radius: var(--md-sys-shape-corner-extra-small);
   border: 1.5px solid var(--s-border-mid);
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0; transition: all 0.15s;
@@ -412,7 +413,7 @@ function urgenzaLabel(giorni: number) {
 
 .prio-pill {
   font-size: 10px; font-weight: 700;
-  padding: 2px 7px; border-radius: 20px;
+  padding: 2px 7px; border-radius: var(--md-sys-shape-corner-full);
   letter-spacing: 0.03em; flex-shrink: 0;
 }
 
@@ -432,7 +433,7 @@ function urgenzaLabel(giorni: number) {
 .proj-skel {
   height: 100px;
   background: var(--s-surface);
-  border-radius: 10px;
+  border-radius: var(--md-sys-shape-corner-medium);
   animation: s-pulse 1.4s ease-in-out infinite;
 }
 
@@ -450,14 +451,17 @@ function urgenzaLabel(giorni: number) {
 }
 
 .proj-mini:hover {
-  border-color: var(--md-sys-color-outline);
-  box-shadow: var(--s-shadow-hover);
-  transform: translateY(-1px);
+  border-color: var(--md-sys-color-primary);
+  background:   var(--md-sys-color-primary-state-hover);
+  box-shadow:   var(--s-shadow-hover);
+  transform:    translateY(-1px);
 }
 
 .proj-stripe {
   position: absolute; top: 0; left: 0; right: 0;
-  height: 3px; border-radius: 10px 10px 0 0;
+  height: 3px;
+  border-top-left-radius:  var(--md-sys-shape-corner-small);
+  border-top-right-radius: var(--md-sys-shape-corner-small);
 }
 
 .proj-inner { padding: 14px 14px 12px; padding-top: 16px; }
@@ -496,9 +500,10 @@ function urgenzaLabel(giorni: number) {
 }
 
 .kpi-card:hover {
-  border-color: var(--md-sys-color-outline);
-  box-shadow: var(--s-shadow-hover);
-  transform: translateY(-1px);
+  border-color: var(--md-sys-color-primary);
+  background:   var(--md-sys-color-primary-state-hover);
+  box-shadow:   var(--s-shadow-hover);
+  transform:    translateY(-1px);
 }
 
 .kpi-label { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; color: var(--s-text-dim); text-transform: uppercase; margin-bottom: 8px; }
@@ -510,7 +515,7 @@ function urgenzaLabel(giorni: number) {
 
 .kpi-skeleton {
   display: inline-block; width: 40px; height: 32px;
-  background: var(--s-border); border-radius: 6px;
+  background: var(--s-border); border-radius: var(--md-sys-shape-corner-extra-small);
   animation: s-pulse 1.4s ease-in-out infinite;
 }
 
@@ -543,9 +548,10 @@ function urgenzaLabel(giorni: number) {
 }
 
 .urgenza-card:hover {
-  border-color: var(--md-sys-color-outline);
-  box-shadow: var(--md-sys-elevation-level-2);
-  transform: translateY(-1px);
+  border-color: var(--md-sys-color-primary);
+  background:   var(--md-sys-color-primary-state-hover);
+  box-shadow:   var(--md-sys-elevation-level-2);
+  transform:    translateY(-1px);
 }
 
 .urgenza-commessa { font-size: 13px; font-weight: 500; color: var(--s-text); margin-bottom: 2px; }
@@ -553,7 +559,7 @@ function urgenzaLabel(giorni: number) {
 
 .urgenza-badge {
   font-size: 11px; font-weight: 700;
-  padding: 3px 9px; border-radius: 20px;
+  padding: 3px 9px; border-radius: var(--md-sys-shape-corner-full);
   flex-shrink: 0; letter-spacing: 0.02em;
 }
 
