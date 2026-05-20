@@ -245,31 +245,6 @@ function haloMdSize(mod: typeof modules[0]) {
   return mod.vr === 10 ? 24 : 19
 }
 
-const SIDERA_COLOR      = '#D4C498'
-const SIDERA_COLOR_DIM  = '#D4C49880'
-
-const isHub = computed(() => route.path === '/sidera/hub')
-
-function vertexRadius(mod: typeof modules[0]) {
-  if (isHub.value) return mod.vr
-  return activeModule.value?.name === mod.name ? mod.vr * 1.5 : mod.vr
-}
-
-function vertexStyle(mod: typeof modules[0]) {
-  if (isHub.value) {
-    return { fill: mod.accent, stroke: mod.accent }
-  }
-  const active = activeModule.value?.name === mod.name
-  return {
-    fill:   active ? mod.accent : SIDERA_COLOR_DIM,
-    stroke: active ? mod.accent : SIDERA_COLOR_DIM,
-  }
-}
-
-const edgeStroke = computed(() => isHub.value ? SIDERA_COLOR : SIDERA_COLOR_DIM)
-
-const edgeTransition = 'stroke 0.5s ease'
-
 function isActive(path: string, exact: boolean, excludePaths?: string[]) {
   if (excludePaths?.some(ep => route.path.startsWith(ep))) return false
   return exact ? route.path === path : route.path.startsWith(path)
@@ -506,7 +481,7 @@ const roleLabel: Record<string, string> = {
         <div
           class="s-user-avatar"
           :style="currentUser?.email ? { background: avatarColor(currentUser.email) } : {}"
-        >{{ currentUser?.email ? currentUser.email[0].toUpperCase() : '?' }}</div>
+        >{{ currentUser?.email ? currentUser.email.charAt(0).toUpperCase() : '?' }}</div>
         <div class="s-user-info">
           <div class="s-user-name">{{ currentUser?.email ? displayName(currentUser.email, members) : '…' }}</div>
           <div class="s-user-role">{{ roleLabel[currentUser?.role ?? ''] ?? 'Membro' }}</div>
