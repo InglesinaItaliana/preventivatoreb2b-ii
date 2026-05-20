@@ -459,7 +459,7 @@ async function submitTask() {
   display: flex; flex-direction: column; align-items: center; gap: 10px;
 }
 
-.empty-icon { color: #3A8C80; opacity: 0.35; }
+.empty-icon { color: var(--md-sys-color-primary); opacity: 0.35; }
 
 .section { margin-bottom: 4px; }
 
@@ -540,7 +540,7 @@ async function submitTask() {
   font-size: 12px;
   font-weight: 600;
   font-family: 'Outfit', sans-serif;
-  color: #3A8C80;
+  color: var(--md-sys-color-primary);
   cursor: pointer;
   transition: all 0.18s ease;
 }
@@ -548,8 +548,8 @@ async function submitTask() {
 .action-btn:hover { background: rgba(58, 175, 152, 0.20); }
 
 .action-btn--primary {
-  background: #3A8C80;
-  border-color: #3A8C80;
+  background: var(--md-sys-color-primary);
+  border-color: var(--md-sys-color-primary);
   color: #fff;
 }
 .action-btn--primary:hover { background: #2E7268; border-color: #2E7268; color: #fff; }
@@ -576,7 +576,7 @@ async function submitTask() {
   font-size: 16px;
   line-height: 1.4;
   color: #1A1917;
-  caret-color: #3A8C80;
+  caret-color: var(--md-sys-color-primary);
   resize: vertical;
   min-height: 60px;
   outline: none;
@@ -611,7 +611,7 @@ async function submitTask() {
   padding: 7px 14px;
   border-radius: 8px;
   border: none;
-  background: #3A8C80;
+  background: var(--md-sys-color-primary);
   color: #fff;
   font-size: 12px;
   font-weight: 600;
@@ -701,7 +701,7 @@ async function submitTask() {
   font-family: 'Outfit', sans-serif;
 }
 .btn-primary {
-  flex: 2; padding: 10px; background: #3A8C80;
+  flex: 2; padding: 10px; background: var(--md-sys-color-primary);
   border: none; border-radius: 10px;
   font-size: 13px; font-weight: 600;
   cursor: pointer; color: #fff;

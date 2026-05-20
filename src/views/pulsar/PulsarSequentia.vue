@@ -162,7 +162,7 @@ const showDone = ref(false)
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 
 .empty-state { font-size: 14px; color: #9B9590; padding: 20px 0; }
-.empty-state-icon { color: #3A8C80; margin-right: 6px; vertical-align: -4px; }
+.empty-state-icon { color: var(--md-sys-color-primary); margin-right: 6px; vertical-align: -4px; }
 
 /* Task rows */
 .task-row {
@@ -187,8 +187,8 @@ const showDone = ref(false)
   transition: all 0.15s;
 }
 
-.checkbox:hover { border-color: #3A8C80; }
-.check-icon { color: #3A8C80; }
+.checkbox:hover { border-color: var(--md-sys-color-primary); }
+.check-icon { color: var(--md-sys-color-primary); }
 
 .row-title { flex: 1; font-size: 14px; color: #1A1917; }
 .row-title--done { text-decoration: line-through; color: #9B9590; }

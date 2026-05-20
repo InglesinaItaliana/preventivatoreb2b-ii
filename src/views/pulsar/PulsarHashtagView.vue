@@ -225,7 +225,7 @@ function renderText(t: string) {
   font-size: 12px;
   font-weight: 600;
   font-family: 'Outfit', sans-serif;
-  color: #3A8C80;
+  color: var(--md-sys-color-primary);
   cursor: pointer;
   transition: all 0.18s ease;
 }

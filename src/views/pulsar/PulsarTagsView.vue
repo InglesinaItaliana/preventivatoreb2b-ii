@@ -75,7 +75,7 @@ const sorted = computed(() =>
   gap: 12px;
 }
 
-.empty-icon { color: #3A8C80; opacity: 0.35; }
+.empty-icon { color: var(--md-sys-color-primary); opacity: 0.35; }
 
 .tag-grid {
   padding: 16px;
@@ -102,11 +102,11 @@ const sorted = computed(() =>
 }
 
 .tag-card:hover {
-  border-color: #3A8C80;
+  border-color: var(--md-sys-color-primary);
   background: rgba(58, 175, 152, 0.05);
 }
 
-.tag-card-icon { color: #3A8C80; }
+.tag-card-icon { color: var(--md-sys-color-primary); }
 .tag-card-name { flex: 1; }
 
 .tag-card-count {

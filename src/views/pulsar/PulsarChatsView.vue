@@ -426,7 +426,7 @@ onMounted(() => {
   transition: border-color 0.15s;
 }
 
-.field-input:focus { border-color: #3A8C80; }
+.field-input:focus { border-color: var(--md-sys-color-primary); }
 
 .member-list { display: flex; flex-direction: column; gap: 4px; }
 
@@ -462,7 +462,7 @@ onMounted(() => {
   flex-shrink: 0;
 }
 
-.check-mark { margin-left: auto; color: #3A8C80; }
+.check-mark { margin-left: auto; color: var(--md-sys-color-primary); }
 
 .modal-footer {
   display: flex;
@@ -487,7 +487,7 @@ onMounted(() => {
 .btn-primary {
   flex: 2;
   padding: 12px;
-  background: #3A8C80;
+  background: var(--md-sys-color-primary);
   border: none;
   border-radius: 12px;
   font-size: 14px;

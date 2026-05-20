@@ -57,8 +57,8 @@ const chatSubtitle = computed(() => {
   return other
 })
 const chatAvatarBg = computed(() => {
-  if (!chatDoc.value) return '#3A8C80'
-  if (chatDoc.value.isGroup) return '#3A8C80'
+  if (!chatDoc.value) return 'var(--md-sys-color-primary)'
+  if (chatDoc.value.isGroup) return 'var(--md-sys-color-primary)'
   const other = chatDoc.value.members.find(m => m !== myEmail) ?? ''
   return avatarColor(other)
 })
@@ -738,7 +738,7 @@ function renderText(t: string) {
   gap: 1px;
   padding: 6px 8px 6px 10px;
   margin-bottom: 6px;
-  border-left: 3px solid #3A8C80;
+  border-left: 3px solid var(--md-sys-color-primary);
   background: rgba(58, 140, 128, 0.08);
   border-radius: 4px;
   cursor: pointer;
@@ -818,7 +818,7 @@ function renderText(t: string) {
   gap: 10px;
   background: #fff;
   border-top: 1px solid #E8E5DF;
-  border-left: 3px solid #3A8C80;
+  border-left: 3px solid var(--md-sys-color-primary);
   padding: 8px 14px;
 }
 
@@ -827,7 +827,7 @@ function renderText(t: string) {
 .reply-bar-label {
   font-size: 10px;
   font-weight: 700;
-  color: #3A8C80;
+  color: var(--md-sys-color-primary);
   letter-spacing: 0.04em;
   text-transform: uppercase;
   margin-bottom: 2px;
@@ -968,7 +968,7 @@ function renderText(t: string) {
 }
 
 .tag-option:hover:not(:disabled) { border-color: #3A8C8080; background: #3A8C8010; color: #2E7268; }
-.tag-option.is-selected { background: #3A8C8018; border-color: #3A8C80; color: #2E7268; }
+.tag-option.is-selected { background: #3A8C8018; border-color: var(--md-sys-color-primary); color: #2E7268; }
 .tag-option:disabled { opacity: 0.4; cursor: not-allowed; }
 .tag-option--new { border-style: dashed; }
 
@@ -998,10 +998,10 @@ function renderText(t: string) {
 }
 
 .pill:hover { border-color: #3A8C8080; background: #3A8C8010; }
-.pill.is-active { background: #3A8C8020; border-color: #3A8C80; }
+.pill.is-active { background: #3A8C8020; border-color: var(--md-sys-color-primary); }
 
 .pill-icon { font-size: 18px; color: #6A6560; flex-shrink: 0; }
-.pill.is-active .pill-icon { color: #3A8C80; }
+.pill.is-active .pill-icon { color: var(--md-sys-color-primary); }
 
 .input-wrap {
   flex: 1;
@@ -1027,7 +1027,7 @@ function renderText(t: string) {
   font-size: 16px;
   font-family: 'Outfit', sans-serif;
   color: #1A1917;
-  caret-color: #3A8C80;
+  caret-color: var(--md-sys-color-primary);
   resize: none;
   line-height: 1.5;
   max-height: 100px;
@@ -1044,7 +1044,7 @@ function renderText(t: string) {
 .send-btn {
   width: 34px; height: 34px;
   border-radius: 50%;
-  background: #3A8C80;
+  background: var(--md-sys-color-primary);
   border: none;
   cursor: pointer;
   color: #fff;
@@ -1163,7 +1163,7 @@ function renderText(t: string) {
 }
 
 .btn-primary {
-  flex: 2; padding: 10px; background: #3A8C80;
+  flex: 2; padding: 10px; background: var(--md-sys-color-primary);
   border: none; border-radius: 10px;
   font-size: 13px; font-weight: 600;
   cursor: pointer; color: #fff;
