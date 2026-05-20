@@ -23,6 +23,25 @@ const dmTarget   = ref('')
 const groupName  = ref('')
 const groupMembers = ref<string[]>([])
 
+// ── Delete chat confirmation ──────────────────────────────────────────────
+const chatToDelete = ref<{ id: string; name: string } | null>(null)
+const deleting     = ref(false)
+
+function askDeleteChat(chat: { id: string; name: string; members: string[]; isGroup: boolean }) {
+  chatToDelete.value = { id: chat.id, name: chatName(chat) }
+}
+
+async function confirmDelete() {
+  if (!chatToDelete.value || deleting.value) return
+  deleting.value = true
+  try {
+    await deleteChat(chatToDelete.value.id)
+    chatToDelete.value = null
+  } finally {
+    deleting.value = false
+  }
+}
+
 function openModal() {
   isGroup.value     = false
   dmTarget.value    = ''
@@ -139,7 +158,7 @@ onMounted(() => {
           </div>
           <div class="chat-preview">{{ chat.lastMessage || 'Nessun messaggio' }}</div>
         </div>
-        <button class="delete-btn" title="Elimina chat" @click.stop="deleteChat(chat.id)">
+        <button class="delete-btn" title="Elimina chat" @click.stop="askDeleteChat(chat)">
           <MIcon name="close" :size="16" />
         </button>
       </div>
@@ -206,6 +225,30 @@ onMounted(() => {
               :disabled="saving || (!isGroup && !dmTarget) || (isGroup && (!groupName.trim() || !groupMembers.length))"
               @click="submit"
             >{{ saving ? 'Creazione…' : 'Crea' }}</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Modal conferma cancellazione chat -->
+    <Teleport to="body">
+      <div v-if="chatToDelete" class="modal-backdrop" @click.self="chatToDelete = null">
+        <div class="modal modal--confirm">
+          <div class="modal-header">
+            <span class="modal-title">Eliminare la chat?</span>
+            <button class="modal-close" @click="chatToDelete = null"><MIcon name="close" :size="18" /></button>
+          </div>
+          <div class="modal-body">
+            <p class="confirm-text">
+              Stai per eliminare <strong>{{ chatToDelete.name }}</strong>.
+              L'azione è irreversibile: cronologia e pendenze della chat verranno rimosse.
+            </p>
+          </div>
+          <div class="modal-footer">
+            <button class="btn-ghost" :disabled="deleting" @click="chatToDelete = null">Annulla</button>
+            <button class="btn-danger" :disabled="deleting" @click="confirmDelete">
+              {{ deleting ? 'Eliminazione…' : 'Elimina' }}
+            </button>
           </div>
         </div>
       </div>
@@ -500,4 +543,27 @@ onMounted(() => {
 
 .btn-primary:hover:not(:disabled) { background: var(--md-sys-color-primary-hover); }
 .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Variante danger per modal di conferma cancellazione */
+.btn-danger {
+  flex: 2;
+  padding: 12px;
+  background: var(--md-sys-color-error);
+  border: none;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--md-sys-color-on-error);
+  font-family: 'Outfit', sans-serif;
+  transition: background 0.15s;
+}
+.btn-danger:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--md-sys-color-error), black 12%);
+}
+.btn-danger:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.modal--confirm { max-width: 380px; }
+.confirm-text { font-size: 14px; line-height: 1.5; color: #1A1917; margin: 0; }
+.confirm-text strong { font-weight: 600; }
 </style>
