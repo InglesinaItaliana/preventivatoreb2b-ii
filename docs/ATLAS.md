@@ -762,6 +762,71 @@ I token M3 strutturali (`--md-sys-color-surface`, `--md-sys-color-on-surface`, `
 --s-sidera: #D4C498;
 ```
 
+### Tonal palettes M3 (reference palette tokens)
+
+Per ogni modulo è disponibile la **tonal palette M3 completa** (18 toni: 0, 5, 10, 15, 20, 25, 30, 35, 40, 50, 60, 70, 80, 90, 95, 98, 99, 100), generata via [Material Color Utilities](https://github.com/material-foundation/material-color-utilities) (stesso algoritmo HCT del Material Theme Builder).
+
+Pattern di naming: `--md-ref-palette-{module}-{tone}` — es. `--md-ref-palette-pulsar-40`, `--md-ref-palette-cepheid-90`.
+
+7 moduli × 18 toni = **126 reference palette tokens** in `src/style.css`.
+
+#### Decisione "Strada B" (Brand prima di tutto)
+
+Le tonal palette servono **solo per le varianti** dei colori-modulo (container, on-container, hover, disabled, state layers). I `--md-sys-color-primary` di ogni scope **restano i valori brand** `--s-{module}-on-light` / `--s-{module}-on-dark`, NON i toni M3 standard 40 / 80.
+
+**Razionale**: i valori Crab Nebula attuali sono ≈ tone 50 / tone 70 — leggermente diversi dai tone 40 / 80 ortodossi M3, ma più riconoscibili come "stesso colore" su superficie chiara/scura. Sostituirli avrebbe attenuato l'identità "Crab".
+
+M3 stessa permette questa scelta: il *key color* di una tonal palette non deve necessariamente coincidere col *primary* della scheme. Il MTB online espone l'opzione "Custom primary tone" per lo stesso motivo.
+
+**Alternative documentate ma scartate** (vedi memoria `project-design-tokens-strada-b` per dettagli):
+- **Strada A — "M3 letterale"**: primary = tone 40 / 80 ortodossi. Massima accessibility, ma cambia visibilmente il brand-feel.
+- **Strada C — "tone 50/70"**: usa i toni M3 standard più vicini ai nostri valori. Compromesso ortodossia/coerenza.
+
+Entrambe restano sperimentabili in futuro semplicemente cambiando il mapping di `--md-sys-color-primary` nella sez. seguente.
+
+#### Mapping ai ruoli M3 per scope (esempio PULSAR)
+
+Quando i `--md-sys-color-*` saranno definiti (prossimo branch), il pattern per PULSAR sarà:
+
+```css
+/* PULSAR su surface CHIARA (PWA bianca, modali, body) */
+.s-scope-pulsar {
+  /* Primary brand (Strada B): valore Crab on-light, non tone 40 */
+  --md-sys-color-primary:               var(--s-pulsar-on-light);            /* #3A8C80 */
+  --md-sys-color-on-primary:            #FFFFFF;
+  /* Varianti dalla tonal palette M3 (Strada B: ortodosse) */
+  --md-sys-color-primary-container:     var(--md-ref-palette-pulsar-90);     /* #A1F1E3 */
+  --md-sys-color-on-primary-container:  var(--md-ref-palette-pulsar-10);     /* #00201C */
+}
+
+/* PULSAR su surface SCURA (sidebar SIDERA, Hub Schlegel, splash) */
+.s-scope-pulsar.s-surface-dark,
+.s-surface-dark .s-scope-pulsar {
+  --md-sys-color-primary:               var(--s-pulsar-on-dark);             /* #3AAF98 */
+  --md-sys-color-on-primary:            var(--md-ref-palette-pulsar-20);     /* #003731 */
+  --md-sys-color-primary-container:     var(--md-ref-palette-pulsar-30);     /* #005048 */
+  --md-sys-color-on-primary-container:  var(--md-ref-palette-pulsar-90);     /* #A1F1E3 */
+}
+```
+
+Lo stesso pattern si replica per gli altri 6 scope sostituendo `pulsar` con il nome del modulo. NB: il mapping effettivo dei `--md-sys-color-*` non è ancora in `style.css` — è in roadmap per il prossimo branch (`polaris/design-tokens-roles`).
+
+### Rigenerare le tonal palettes
+
+Le tonal palettes sono **deterministiche**: dato un key color, l'output è sempre lo stesso. Per rigenerarle:
+
+```bash
+node scripts/generate-tonal-palettes.mjs
+```
+
+Lo script:
+1. Legge i key color dalla costante `MODULES` nel file (allineata a `docs/ATLAS.md` sez. 2)
+2. Genera 126 CSS variables via `TonalPalette.fromInt()` di `@material/material-color-utilities`
+3. Scrive in `scripts/tonal-palettes-output.css` (snapshot committato per visibilità)
+4. Stampa una sanity check: confronta i tone 40 / 80 generati coi nostri valori on-light / on-dark attuali (utile se in futuro si valuta passaggio a Strada A o C)
+
+**Quando rigenerare**: se i key color cambiano in `docs/ATLAS.md` sez. 2. Dopo aver eseguito lo script, copia il blocco `:root` da `scripts/tonal-palettes-output.css` dentro `src/style.css` sostituendo le 126 variabili `--md-ref-palette-*`.
+
 ### Regole d'uso
 
 1. **Mai più hex inline per i colori-modulo** nei `.vue` — sempre `var(--s-{module}-on-{surface})`.
@@ -802,3 +867,4 @@ Ogni step va affrontato in branch dedicato `polaris/design-tokens-{layer}` per e
 - **2026-05-19** — Aggiunta sez. 10 "PWA update banner — best practice". Pattern: `registerType: 'prompt'` + banner tematizzato globale per evitare reload distruttivi durante data entry. Sezioni 11-14 rinumerate.
 - **2026-05-19** — Sez. 10 aggiornata: `useSWUpdate` ora usa `workbox-window` direttamente con filtro `event.isExternal` + fallback hard-reload, per evitare loop banner causato dalla coesistenza di `/sw.js` (workbox) e `/firebase-messaging-sw.js` (FCM) sullo stesso scope `'/'`.
 - **2026-05-19** — Sez. 2 aggiornata con palette **Crab Nebula** (estrazione da M1 Hubble) e pattern **dual-surface** (on-dark / on-light) per i moduli con lightness fuori dalla zona intermedia. QUASAR e SIDERA restano singolo valore. Aggiunta nuova sez. 14 "Design Tokens" che dichiara Material Design 3 come linguaggio grafico di riferimento per la suite e definisce il primo strato (brand tokens) — type/shape/elevation/state/motion in roadmap.
+- **2026-05-20** — Sez. 14 estesa con **tonal palettes M3** (18 toni × 7 moduli = 126 reference tokens) generate via `@material/material-color-utilities` (algoritmo HCT, stesso del MTB). Decisione **Strada B**: i `--md-sys-color-primary` restano i valori Crab on-light/on-dark, le palette servono solo per varianti container/on-container/state-layer. Strade A (M3 letterale tone 40/80) e C (tone 50/70 ibrido) documentate come esperimenti futuri. Aggiunto `scripts/generate-tonal-palettes.mjs` per rigenerare deterministicamente. Mapping `--md-sys-color-*` per scope rinviato al branch `polaris/design-tokens-roles`.

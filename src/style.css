@@ -90,6 +90,153 @@ input[type=number] {
   --s-magnetar-on-light: #7A4830;
   --s-quasar:            #98C0D0;
   --s-sidera:            #D4C498;
+
+  /* ── M3 reference tonal palettes (vedi docs/ATLAS.md sez. 14) ────────────
+     Auto-generate via `node scripts/generate-tonal-palettes.mjs`. Non
+     modificare a mano: rigenera lo script se cambi i key colors in ATLAS sez. 2.
+     Strada B (vedi memoria project-design-tokens-strada-b): le palette servono
+     SOLO per varianti (container, on-container, hover, disabled, state-layer).
+     I primary di ogni scope restano i valori --s-{module}-on-{light,dark} sopra. */
+
+  /* SIDERA — key color #D4C498 */
+  --md-ref-palette-sidera-0:   #000000;
+  --md-ref-palette-sidera-5:   #161000;
+  --md-ref-palette-sidera-10:  #231B01;
+  --md-ref-palette-sidera-15:  #2E2506;
+  --md-ref-palette-sidera-20:  #393010;
+  --md-ref-palette-sidera-25:  #453B1A;
+  --md-ref-palette-sidera-30:  #514624;
+  --md-ref-palette-sidera-35:  #5D522F;
+  --md-ref-palette-sidera-40:  #695E39;
+  --md-ref-palette-sidera-50:  #837650;
+  --md-ref-palette-sidera-60:  #9E9067;
+  --md-ref-palette-sidera-70:  #B9AA80;
+  --md-ref-palette-sidera-80:  #D6C599;
+  --md-ref-palette-sidera-90:  #F2E1B4;
+  --md-ref-palette-sidera-95:  #FFF0C9;
+  --md-ref-palette-sidera-98:  #FFF8F0;
+  --md-ref-palette-sidera-99:  #FFFBFF;
+  --md-ref-palette-sidera-100: #FFFFFF;
+
+  /* PULSAR — key color #3A8C80 */
+  --md-ref-palette-pulsar-0:   #000000;
+  --md-ref-palette-pulsar-5:   #001411;
+  --md-ref-palette-pulsar-10:  #00201C;
+  --md-ref-palette-pulsar-15:  #002C26;
+  --md-ref-palette-pulsar-20:  #003731;
+  --md-ref-palette-pulsar-25:  #00443C;
+  --md-ref-palette-pulsar-30:  #005048;
+  --md-ref-palette-pulsar-35:  #005D53;
+  --md-ref-palette-pulsar-40:  #076A5F;
+  --md-ref-palette-pulsar-50:  #308478;
+  --md-ref-palette-pulsar-60:  #4E9E92;
+  --md-ref-palette-pulsar-70:  #69B9AC;
+  --md-ref-palette-pulsar-80:  #85D5C7;
+  --md-ref-palette-pulsar-90:  #A1F1E3;
+  --md-ref-palette-pulsar-95:  #B4FFF1;
+  --md-ref-palette-pulsar-98:  #E5FFF8;
+  --md-ref-palette-pulsar-99:  #F2FFFB;
+  --md-ref-palette-pulsar-100: #FFFFFF;
+
+  /* CEPHEID — key color #C4941C */
+  --md-ref-palette-cepheid-0:   #000000;
+  --md-ref-palette-cepheid-5:   #190F00;
+  --md-ref-palette-cepheid-10:  #261900;
+  --md-ref-palette-cepheid-15:  #332300;
+  --md-ref-palette-cepheid-20:  #402D00;
+  --md-ref-palette-cepheid-25:  #4E3800;
+  --md-ref-palette-cepheid-30:  #5C4300;
+  --md-ref-palette-cepheid-35:  #6B4E00;
+  --md-ref-palette-cepheid-40:  #7A5900;
+  --md-ref-palette-cepheid-50:  #987100;
+  --md-ref-palette-cepheid-60:  #B8890C;
+  --md-ref-palette-cepheid-70:  #D5A32D;
+  --md-ref-palette-cepheid-80:  #F4BF47;
+  --md-ref-palette-cepheid-90:  #FFDEA1;
+  --md-ref-palette-cepheid-95:  #FFEFD5;
+  --md-ref-palette-cepheid-98:  #FFF8F2;
+  --md-ref-palette-cepheid-99:  #FFFBFF;
+  --md-ref-palette-cepheid-100: #FFFFFF;
+
+  /* NEBULA — key color #B85425 */
+  --md-ref-palette-nebula-0:   #000000;
+  --md-ref-palette-nebula-5:   #250700;
+  --md-ref-palette-nebula-10:  #360F00;
+  --md-ref-palette-nebula-15:  #471600;
+  --md-ref-palette-nebula-20:  #591D00;
+  --md-ref-palette-nebula-25:  #6B2500;
+  --md-ref-palette-nebula-30:  #7E2C00;
+  --md-ref-palette-nebula-35:  #8F3606;
+  --md-ref-palette-nebula-40:  #9F4213;
+  --md-ref-palette-nebula-50:  #BF592A;
+  --md-ref-palette-nebula-60:  #E07240;
+  --md-ref-palette-nebula-70:  #FF8C5A;
+  --md-ref-palette-nebula-80:  #FFB597;
+  --md-ref-palette-nebula-90:  #FFDBCD;
+  --md-ref-palette-nebula-95:  #FFEDE7;
+  --md-ref-palette-nebula-98:  #FFF8F6;
+  --md-ref-palette-nebula-99:  #FFFBFF;
+  --md-ref-palette-nebula-100: #FFFFFF;
+
+  /* NOVA — key color #5C6822 */
+  --md-ref-palette-nova-0:   #000000;
+  --md-ref-palette-nova-5:   #0F1300;
+  --md-ref-palette-nova-10:  #181E00;
+  --md-ref-palette-nova-15:  #222900;
+  --md-ref-palette-nova-20:  #2C3400;
+  --md-ref-palette-nova-25:  #364000;
+  --md-ref-palette-nova-30:  #414C06;
+  --md-ref-palette-nova-35:  #4C5812;
+  --md-ref-palette-nova-40:  #58641E;
+  --md-ref-palette-nova-50:  #707D35;
+  --md-ref-palette-nova-60:  #8A974C;
+  --md-ref-palette-nova-70:  #A4B263;
+  --md-ref-palette-nova-80:  #C0CE7C;
+  --md-ref-palette-nova-90:  #DCEA95;
+  --md-ref-palette-nova-95:  #EAF9A2;
+  --md-ref-palette-nova-98:  #F6FFC2;
+  --md-ref-palette-nova-99:  #FCFFDE;
+  --md-ref-palette-nova-100: #FFFFFF;
+
+  /* MAGNETAR — key color #7A4830 */
+  --md-ref-palette-magnetar-0:   #000000;
+  --md-ref-palette-magnetar-5:   #240800;
+  --md-ref-palette-magnetar-10:  #341101;
+  --md-ref-palette-magnetar-15:  #411B06;
+  --md-ref-palette-magnetar-20:  #4E2510;
+  --md-ref-palette-magnetar-25:  #5C3019;
+  --md-ref-palette-magnetar-30:  #6A3A24;
+  --md-ref-palette-magnetar-35:  #77462E;
+  --md-ref-palette-magnetar-40:  #855139;
+  --md-ref-palette-magnetar-50:  #A2694F;
+  --md-ref-palette-magnetar-60:  #BF8267;
+  --md-ref-palette-magnetar-70:  #DD9C7F;
+  --md-ref-palette-magnetar-80:  #FBB798;
+  --md-ref-palette-magnetar-90:  #FFDBCC;
+  --md-ref-palette-magnetar-95:  #FFEDE6;
+  --md-ref-palette-magnetar-98:  #FFF8F6;
+  --md-ref-palette-magnetar-99:  #FFFBFF;
+  --md-ref-palette-magnetar-100: #FFFFFF;
+
+  /* QUASAR — key color #98C0D0 */
+  --md-ref-palette-quasar-0:   #000000;
+  --md-ref-palette-quasar-5:   #00131A;
+  --md-ref-palette-quasar-10:  #001F28;
+  --md-ref-palette-quasar-15:  #002A35;
+  --md-ref-palette-quasar-20:  #063542;
+  --md-ref-palette-quasar-25:  #16404E;
+  --md-ref-palette-quasar-30:  #234C59;
+  --md-ref-palette-quasar-35:  #305865;
+  --md-ref-palette-quasar-40:  #3D6472;
+  --md-ref-palette-quasar-50:  #567D8B;
+  --md-ref-palette-quasar-60:  #6F97A6;
+  --md-ref-palette-quasar-70:  #8AB1C1;
+  --md-ref-palette-quasar-80:  #A4CDDD;
+  --md-ref-palette-quasar-90:  #C0E9FA;
+  --md-ref-palette-quasar-95:  #DDF5FF;
+  --md-ref-palette-quasar-98:  #F2FBFF;
+  --md-ref-palette-quasar-99:  #F9FDFF;
+  --md-ref-palette-quasar-100: #FFFFFF;
 }
 
 @keyframes s-fade-in {
