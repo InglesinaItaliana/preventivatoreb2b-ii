@@ -76,7 +76,9 @@ const router = createRouter({
         { path: 'hub',        name: 'sidera-hub',     component: () => import('../views/sidera/SideraHubView.vue') },
         { path: 'tasks',      name: 'sidera-tasks',   component: () => import('../views/sidera/TasksView.vue') },
         { path: 'projects',   name: 'sidera-projects',component: () => import('../views/sidera/ProjectsView.vue') },
-        { path: 'projects/:id', name: 'sidera-project', component: () => import('../views/sidera/ProjectBoard.vue') },
+        // Route legacy /sidera/projects/:id (ProjectBoard) eliminata 2026-05-20:
+        // ora redirect a /cepheid/project/:id (CepheidProjectDetail con tab list/cal/notes assorbite).
+        { path: 'projects/:id', redirect: (to) => `/cepheid/project/${to.params.id}` },
         { path: 'goals',      name: 'sidera-goals',   component: () => import('../views/cepheid/CepheidGoalsView.vue') },
         { path: 'goal/:id',   name: 'sidera-goal',    component: () => import('../views/cepheid/CepheidGoalDetail.vue') },
         { path: 'chat',       name: 'sidera-chat',    component: () => import('../views/sidera/ChatView.vue') },

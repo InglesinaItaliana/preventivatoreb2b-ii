@@ -29,8 +29,11 @@ const obiettivoCollegato = computed(() => {
 })
 
 // ── Tabs ──────────────────────────────────────────────────────────────────
-type Tab = 'kanban' | 'milestone' | 'deliverable'
+type Tab = 'kanban' | 'list' | 'milestone' | 'deliverable' | 'cal' | 'notes'
 const activeTab = ref<Tab>('kanban')
+
+// ── List view: tutti i task flat sortable per state/priority ──────────────
+const sortedStates = computed(() => states.value)  // alias semantico per list view
 
 // ── Filtri per tipo ───────────────────────────────────────────────────────
 const taskItems = computed(() => tasks.value.filter(t => !t.type || t.type === 'task'))
@@ -127,6 +130,75 @@ function deliverablePct(d: { deliverableTaskIds: string[] }): number {
   const done = sub.filter(t => t.completedAt).length
   return Math.round((done / sub.length) * 100)
 }
+
+// ── CALENDARIO ────────────────────────────────────────────────────────────
+// Raggruppa task per intervallo di scadenza relativa: ritardo, oggi, settimana, dopo.
+interface CalGroup { id: string; label: string; color: string; tasks: typeof taskItems.value }
+const calendarGroups = computed<CalGroup[]>(() => {
+  const now = new Date(); now.setHours(0, 0, 0, 0)
+  const tomorrow = new Date(now); tomorrow.setDate(tomorrow.getDate() + 1)
+  const weekEnd = new Date(now); weekEnd.setDate(weekEnd.getDate() + 7)
+
+  const withDue = taskItems.value.filter(t => !!t.dueDate && !t.completedAt)
+  const sorted = [...withDue].sort((a, b) => (a.dueDate?.getTime() ?? 0) - (b.dueDate?.getTime() ?? 0))
+
+  const late:    typeof sorted = []
+  const today:   typeof sorted = []
+  const week:    typeof sorted = []
+  const later:   typeof sorted = []
+  for (const t of sorted) {
+    const d = t.dueDate!
+    if (d < now)             late.push(t)
+    else if (d < tomorrow)   today.push(t)
+    else if (d < weekEnd)    week.push(t)
+    else                     later.push(t)
+  }
+  const out: CalGroup[] = []
+  if (late.length)  out.push({ id: 'late',  label: 'In ritardo',         color: '#C8521A', tasks: late })
+  if (today.length) out.push({ id: 'today', label: 'Oggi',               color: 'var(--md-sys-color-primary)', tasks: today })
+  if (week.length)  out.push({ id: 'week',  label: 'Questa settimana',   color: '#7A8FA6', tasks: week })
+  if (later.length) out.push({ id: 'later', label: 'Più avanti',         color: 'var(--md-sys-color-on-surface-variant)', tasks: later })
+  return out
+})
+
+// ── NOTE (text editor con autosave su projects/{id}.notes) ────────────────
+import { onBeforeUnmount } from 'vue'
+import { updateDoc, doc, getDoc } from 'firebase/firestore'
+import { db } from '../../firebase'
+
+const notesDraft = ref('')
+const notesSaving = ref(false)
+const notesSaved = ref(false)
+let notesLoaded = false
+let notesTimer: ReturnType<typeof setTimeout> | null = null
+
+;(async () => {
+  try {
+    const snap = await getDoc(doc(db, 'projects', projectId))
+    if (snap.exists()) notesDraft.value = snap.data().notes ?? ''
+  } catch (_) { /* ignore */ }
+  finally { notesLoaded = true }
+})()
+
+function onNotesInput() {
+  if (!notesLoaded) return
+  notesSaved.value = false
+  if (notesTimer) clearTimeout(notesTimer)
+  notesTimer = setTimeout(async () => {
+    notesSaving.value = true
+    try {
+      await updateDoc(doc(db, 'projects', projectId), { notes: notesDraft.value })
+      notesSaved.value = true
+      setTimeout(() => { notesSaved.value = false }, 2000)
+    } catch (e) {
+      console.error('[CEPHEID notes] save error', e)
+    } finally {
+      notesSaving.value = false
+    }
+  }, 1000)
+}
+
+onBeforeUnmount(() => { if (notesTimer) clearTimeout(notesTimer) })
 
 // ── Modale unificata per nuova creazione (task / milestone / deliverable) ─
 type NewKind = 'task' | 'milestone' | 'deliverable'
@@ -271,6 +343,13 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
           <span v-if="taskItems.length" class="pd-tab-count">{{ taskItems.length }}</span>
         </button>
         <button
+          :class="['pd-tab', { 'is-active': activeTab === 'list' }]"
+          @click="activeTab = 'list'"
+        >
+          <MIcon name="list" :size="14" /> Lista
+          <span v-if="taskItems.length" class="pd-tab-count">{{ taskItems.length }}</span>
+        </button>
+        <button
           :class="['pd-tab', { 'is-active': activeTab === 'milestone' }]"
           @click="activeTab = 'milestone'"
         >
@@ -283,6 +362,18 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
         >
           <MIcon name="inventory_2" :size="14" /> Deliverable
           <span v-if="deliverableItems.length" class="pd-tab-count">{{ deliverableItems.length }}</span>
+        </button>
+        <button
+          :class="['pd-tab', { 'is-active': activeTab === 'cal' }]"
+          @click="activeTab = 'cal'"
+        >
+          <MIcon name="calendar_month" :size="14" /> Calendario
+        </button>
+        <button
+          :class="['pd-tab', { 'is-active': activeTab === 'notes' }]"
+          @click="activeTab = 'notes'"
+        >
+          <MIcon name="description" :size="14" /> Note
         </button>
       </div>
       <button class="header-cta" @click="openCurrentTabModal">
@@ -468,6 +559,79 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
               </div>
               <div v-else class="deliverable-no-sub">Nessun task collegato</div>
             </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- LIST (flat list di tutti i task del progetto, sortati per stato) ─────── -->
+      <template v-else-if="activeTab === 'list'">
+        <div v-if="!taskItems.length" class="empty-tab">
+          <MIcon name="list" :filled="true" :size="32" class="empty-tab-icon" />
+          <div>Nessuna azione.</div>
+          <div class="empty-tab-hint">Le azioni create dal Kanban appaiono anche in lista, ordinabili per stato e priorità.</div>
+        </div>
+        <div v-else class="list-view">
+          <div v-for="t in taskItems" :key="t.id" class="list-row" @click="doComplete(t)">
+            <div class="checkbox" :class="{ 'is-checked': !!t.completedAt || pendingDone.has(t.id) }">
+              <MIcon v-if="t.completedAt || pendingDone.has(t.id)" name="check" :size="12" class="check-icon" />
+            </div>
+            <div class="prio-dot" :style="{ background: prioColor[t.priority] }" />
+            <div class="list-title" :class="{ 'is-done': !!t.completedAt }">{{ t.title }}</div>
+            <span
+              class="list-state"
+              :style="{ color: sortedStates.find(s => s.id === t.status)?.color }"
+            >
+              {{ sortedStates.find(s => s.id === t.status)?.label ?? t.status }}
+            </span>
+            <span v-if="t.dueDate" class="list-due">{{ formatDue(t.dueDate) }}</span>
+          </div>
+        </div>
+      </template>
+
+      <!-- CALENDARIO (group-by dueDate) ─────────────────────────────────────── -->
+      <template v-else-if="activeTab === 'cal'">
+        <div v-if="!taskItems.filter(t => t.dueDate).length" class="empty-tab">
+          <MIcon name="calendar_month" :filled="true" :size="32" class="empty-tab-icon" />
+          <div>Nessuna azione con scadenza.</div>
+          <div class="empty-tab-hint">Imposta una data di scadenza alle tue azioni per vederle nel calendario.</div>
+        </div>
+        <div v-else class="cal-view">
+          <div
+            v-for="g in calendarGroups"
+            :key="g.id"
+            class="cal-group"
+          >
+            <div class="cal-group-header">
+              <span class="cal-group-dot" :style="{ background: g.color }" />
+              <span class="cal-group-label">{{ g.label }}</span>
+              <span class="cal-group-count">{{ g.tasks.length }}</span>
+            </div>
+            <div v-for="t in g.tasks" :key="t.id" class="list-row" @click="doComplete(t)">
+              <div class="checkbox" :class="{ 'is-checked': !!t.completedAt || pendingDone.has(t.id) }">
+                <MIcon v-if="t.completedAt || pendingDone.has(t.id)" name="check" :size="12" class="check-icon" />
+              </div>
+              <div class="prio-dot" :style="{ background: prioColor[t.priority] }" />
+              <div class="list-title" :class="{ 'is-done': !!t.completedAt }">{{ t.title }}</div>
+              <span v-if="t.dueDate" class="list-due">{{ formatDue(t.dueDate) }}</span>
+            </div>
+          </div>
+        </div>
+      </template>
+
+      <!-- NOTE (markdown-style per progetto, salvate in projects/{id}.notes) ──── -->
+      <template v-else-if="activeTab === 'notes'">
+        <div class="notes-view">
+          <p class="notes-help">Note del progetto: appunti, link, riferimenti. Salvataggio automatico dopo 1s di inattività.</p>
+          <textarea
+            v-model="notesDraft"
+            class="notes-textarea md-text-field-input"
+            placeholder="Scrivi qui le note del progetto…"
+            @input="onNotesInput"
+          />
+          <div class="notes-status">
+            <span v-if="notesSaving">Salvataggio…</span>
+            <span v-else-if="notesSaved">✓ Salvato</span>
+            <span v-else>&nbsp;</span>
           </div>
         </div>
       </template>
@@ -743,6 +907,97 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
   gap: 8px;
 }
 .empty-tab-icon { color: var(--md-sys-color-primary); opacity: 0.35; margin-bottom: 4px; }
+
+/* ── LIST view (assorbita da ProjectBoard SIDERA 2026-05-20) ───────────── */
+.list-view { max-width: 720px; display: flex; flex-direction: column; gap: 6px; }
+.list-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  background: var(--md-sys-color-surface);
+  border-radius: var(--md-sys-shape-corner-small);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  cursor: pointer;
+  transition: border-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              box-shadow   var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
+}
+.list-row:hover {
+  border-color: var(--md-sys-color-outline);
+  box-shadow: var(--md-sys-elevation-level-1);
+}
+.list-title { flex: 1; font-size: 13px; color: var(--md-sys-color-on-surface); }
+.list-title.is-done { text-decoration: line-through; color: var(--md-sys-color-on-surface-variant); }
+.list-state { font-size: 11px; font-weight: 600; flex-shrink: 0; }
+.list-due {
+  font-size: 11px;
+  color: var(--md-sys-color-on-surface-variant);
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ── CAL view (group-by relative due date) ─────────────────────────────── */
+.cal-view { max-width: 720px; display: flex; flex-direction: column; gap: 20px; }
+.cal-group { display: flex; flex-direction: column; gap: 6px; }
+.cal-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px 4px;
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+}
+.cal-group-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--md-sys-shape-corner-full);
+  flex-shrink: 0;
+}
+.cal-group-label {
+  font-family: var(--md-sys-typescale-label-medium-font);
+  font-size:   var(--md-sys-typescale-label-medium-size);
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--md-sys-color-on-surface);
+  flex: 1;
+}
+.cal-group-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--md-sys-color-primary);
+  background: color-mix(in srgb, var(--md-sys-color-primary) 14%, transparent);
+  padding: 2px 8px;
+  border-radius: var(--md-sys-shape-corner-full);
+}
+
+/* ── NOTES view ─────────────────────────────────────────────────────────── */
+.notes-view {
+  max-width: 720px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.notes-help {
+  font-family: var(--md-sys-typescale-body-small-font);
+  font-size:   var(--md-sys-typescale-body-small-size);
+  color: var(--md-sys-color-on-surface-variant);
+  margin: 0;
+}
+.notes-textarea {
+  min-height: 360px;
+  resize: vertical;
+  font-family: var(--md-sys-typescale-body-large-font);
+  font-size:   var(--md-sys-typescale-body-large-size);
+  line-height: var(--md-sys-typescale-body-large-line-height);
+}
+.notes-status {
+  font-size: 11px;
+  color: var(--md-sys-color-on-surface-variant);
+  text-align: right;
+  min-height: 18px;
+}
 .empty-tab-hint {
   font-size: 12px;
   color: #B4B0AA;
