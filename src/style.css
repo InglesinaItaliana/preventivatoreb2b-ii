@@ -239,6 +239,190 @@ input[type=number] {
   --md-ref-palette-quasar-100: #FFFFFF;
 }
 
+/* ── M3 system color tokens (vedi docs/ATLAS.md sez. 14) ──────────────────
+   Valori del light/dark scheme dal Material Theme Builder (seed: SIDERA
+   #D4C498). Strada B: i `primary` di ogni scope restano i valori brand
+   --s-{module}-on-light / --s-{module}-on-dark (ref palette tones non usati
+   come primary). Le varianti container / on-container vengono dalla tonal
+   palette M3 del modulo.
+
+   Surface, neutri, error, outline, shadow restano scope-agnostic: tutti
+   gli scope condividono lo stesso "M3 SIDERA-seeded" neutral environment.
+   I componenti scrivono solo `var(--md-sys-color-{role})`. Lo scope
+   corrente è determinato dalla classe ascendente `.s-scope-{module}`,
+   la surface dalla classe `.s-surface-dark` (default = light scheme).
+
+   IMPORTANTE: questi token NON sono ancora applicati ai componenti esistenti.
+   Migrazione modulo-per-modulo in branch successivi (es. polaris/sidera-m3-migration). */
+
+:root {
+  /* Light scheme — neutri, surface, error, outline (dal MTB export, scope-agnostic) */
+  --md-sys-color-background:                #FFF8F0;
+  --md-sys-color-on-background:             #1E1B13;
+  --md-sys-color-surface:                   #FFF8F0;
+  --md-sys-color-on-surface:                #1E1B13;
+  --md-sys-color-surface-variant:           #EBE2CF;
+  --md-sys-color-on-surface-variant:        #4C4639;
+  --md-sys-color-surface-dim:               #E1D9CC;
+  --md-sys-color-surface-bright:            #FFF8F0;
+  --md-sys-color-surface-container-lowest:  #FFFFFF;
+  --md-sys-color-surface-container-low:     #FBF3E5;
+  --md-sys-color-surface-container:         #F5EDDF;
+  --md-sys-color-surface-container-high:    #EFE7DA;
+  --md-sys-color-surface-container-highest: #E9E2D4;
+  --md-sys-color-outline:                   #7D7667;
+  --md-sys-color-outline-variant:           #CEC6B4;
+  --md-sys-color-shadow:                    #000000;
+  --md-sys-color-scrim:                     #000000;
+  --md-sys-color-inverse-surface:           #343027;
+  --md-sys-color-inverse-on-surface:        #F8F0E2;
+  --md-sys-color-inverse-primary:           #E0C56D;
+  --md-sys-color-error:                     #BA1A1A;
+  --md-sys-color-on-error:                  #FFFFFF;
+  --md-sys-color-error-container:           #FFDAD6;
+  --md-sys-color-on-error-container:        #93000A;
+
+  /* Default primary = SIDERA (shell scope, applicato senza .s-scope-* esplicita) */
+  --md-sys-color-primary:                   var(--s-sidera);
+  --md-sys-color-on-primary:                #FFFFFF;
+  --md-sys-color-primary-container:         var(--md-ref-palette-sidera-90);
+  --md-sys-color-on-primary-container:      var(--md-ref-palette-sidera-10);
+  --md-sys-color-surface-tint:              var(--md-sys-color-primary);
+}
+
+/* Dark surface — sidebar SIDERA, Hub Schlegel, splash, eventuali dark sections.
+   NOTA: la sidebar SIDERA esistente usa #05090F come bg (più scuro del #16130B
+   M3 standard, mantenuto per look "spaziale"). Quando un componente è migrato
+   a .s-surface-dark, il bg diventa #16130B (M3-coerente). Per i casi in cui
+   serve preservare #05090F, applicare lo sfondo a mano sul componente. */
+.s-surface-dark {
+  --md-sys-color-background:                #16130B;
+  --md-sys-color-on-background:             #E9E2D4;
+  --md-sys-color-surface:                   #16130B;
+  --md-sys-color-on-surface:                #E9E2D4;
+  --md-sys-color-surface-variant:           #4C4639;
+  --md-sys-color-on-surface-variant:        #CEC6B4;
+  --md-sys-color-surface-dim:               #16130B;
+  --md-sys-color-surface-bright:            #3D392F;
+  --md-sys-color-surface-container-lowest:  #110E07;
+  --md-sys-color-surface-container-low:     #1E1B13;
+  --md-sys-color-surface-container:         #221F17;
+  --md-sys-color-surface-container-high:    #2D2A21;
+  --md-sys-color-surface-container-highest: #38342B;
+  --md-sys-color-outline:                   #979080;
+  --md-sys-color-outline-variant:           #4C4639;
+  --md-sys-color-inverse-surface:           #E9E2D4;
+  --md-sys-color-inverse-on-surface:        #343027;
+  --md-sys-color-inverse-primary:           #715C0D;
+  --md-sys-color-error:                     #FFB4AB;
+  --md-sys-color-on-error:                  #690005;
+  --md-sys-color-error-container:           #93000A;
+  --md-sys-color-on-error-container:        #FFDAD6;
+
+  /* Default dark scope = SIDERA */
+  --md-sys-color-primary:                   var(--s-sidera);
+  --md-sys-color-on-primary:                var(--md-ref-palette-sidera-20);
+  --md-sys-color-primary-container:         var(--md-ref-palette-sidera-30);
+  --md-sys-color-on-primary-container:      var(--md-ref-palette-sidera-90);
+  --md-sys-color-surface-tint:              var(--md-sys-color-primary);
+}
+
+/* ── Scope-aware primary (Strada B: brand Crab, varianti dai ref palette) ──
+   Pattern: applica .s-scope-{module} all'elemento radice del modulo
+   (es. PulsarLayout, CepheidLayout). I componenti figli leggono
+   `var(--md-sys-color-primary)` e ottengono automaticamente il brand del
+   modulo, con surface-aware fallback se annidato dentro .s-surface-dark. */
+
+.s-scope-pulsar {
+  --md-sys-color-primary:               var(--s-pulsar-on-light);
+  --md-sys-color-on-primary:            #FFFFFF;
+  --md-sys-color-primary-container:     var(--md-ref-palette-pulsar-90);
+  --md-sys-color-on-primary-container:  var(--md-ref-palette-pulsar-10);
+}
+.s-scope-pulsar.s-surface-dark,
+.s-surface-dark .s-scope-pulsar,
+.s-scope-pulsar .s-surface-dark {
+  --md-sys-color-primary:               var(--s-pulsar-on-dark);
+  --md-sys-color-on-primary:            var(--md-ref-palette-pulsar-20);
+  --md-sys-color-primary-container:     var(--md-ref-palette-pulsar-30);
+  --md-sys-color-on-primary-container:  var(--md-ref-palette-pulsar-90);
+}
+
+.s-scope-cepheid {
+  --md-sys-color-primary:               var(--s-cepheid-on-light);
+  --md-sys-color-on-primary:            #FFFFFF;
+  --md-sys-color-primary-container:     var(--md-ref-palette-cepheid-90);
+  --md-sys-color-on-primary-container:  var(--md-ref-palette-cepheid-10);
+}
+.s-scope-cepheid.s-surface-dark,
+.s-surface-dark .s-scope-cepheid,
+.s-scope-cepheid .s-surface-dark {
+  --md-sys-color-primary:               var(--s-cepheid-on-dark);
+  --md-sys-color-on-primary:            var(--md-ref-palette-cepheid-20);
+  --md-sys-color-primary-container:     var(--md-ref-palette-cepheid-30);
+  --md-sys-color-on-primary-container:  var(--md-ref-palette-cepheid-90);
+}
+
+.s-scope-nebula {
+  --md-sys-color-primary:               var(--s-nebula-on-light);
+  --md-sys-color-on-primary:            #FFFFFF;
+  --md-sys-color-primary-container:     var(--md-ref-palette-nebula-90);
+  --md-sys-color-on-primary-container:  var(--md-ref-palette-nebula-10);
+}
+.s-scope-nebula.s-surface-dark,
+.s-surface-dark .s-scope-nebula,
+.s-scope-nebula .s-surface-dark {
+  --md-sys-color-primary:               var(--s-nebula-on-dark);
+  --md-sys-color-on-primary:            var(--md-ref-palette-nebula-20);
+  --md-sys-color-primary-container:     var(--md-ref-palette-nebula-30);
+  --md-sys-color-on-primary-container:  var(--md-ref-palette-nebula-90);
+}
+
+.s-scope-nova {
+  --md-sys-color-primary:               var(--s-nova-on-light);
+  --md-sys-color-on-primary:            #FFFFFF;
+  --md-sys-color-primary-container:     var(--md-ref-palette-nova-90);
+  --md-sys-color-on-primary-container:  var(--md-ref-palette-nova-10);
+}
+.s-scope-nova.s-surface-dark,
+.s-surface-dark .s-scope-nova,
+.s-scope-nova .s-surface-dark {
+  --md-sys-color-primary:               var(--s-nova-on-dark);
+  --md-sys-color-on-primary:            var(--md-ref-palette-nova-20);
+  --md-sys-color-primary-container:     var(--md-ref-palette-nova-30);
+  --md-sys-color-on-primary-container:  var(--md-ref-palette-nova-90);
+}
+
+.s-scope-magnetar {
+  --md-sys-color-primary:               var(--s-magnetar-on-light);
+  --md-sys-color-on-primary:            #FFFFFF;
+  --md-sys-color-primary-container:     var(--md-ref-palette-magnetar-90);
+  --md-sys-color-on-primary-container:  var(--md-ref-palette-magnetar-10);
+}
+.s-scope-magnetar.s-surface-dark,
+.s-surface-dark .s-scope-magnetar,
+.s-scope-magnetar .s-surface-dark {
+  --md-sys-color-primary:               var(--s-magnetar-on-dark);
+  --md-sys-color-on-primary:            var(--md-ref-palette-magnetar-20);
+  --md-sys-color-primary-container:     var(--md-ref-palette-magnetar-30);
+  --md-sys-color-on-primary-container:  var(--md-ref-palette-magnetar-90);
+}
+
+.s-scope-quasar {
+  --md-sys-color-primary:               var(--s-quasar);
+  --md-sys-color-on-primary:            #FFFFFF;
+  --md-sys-color-primary-container:     var(--md-ref-palette-quasar-90);
+  --md-sys-color-on-primary-container:  var(--md-ref-palette-quasar-10);
+}
+.s-scope-quasar.s-surface-dark,
+.s-surface-dark .s-scope-quasar,
+.s-scope-quasar .s-surface-dark {
+  --md-sys-color-primary:               var(--s-quasar);
+  --md-sys-color-on-primary:            var(--md-ref-palette-quasar-20);
+  --md-sys-color-primary-container:     var(--md-ref-palette-quasar-30);
+  --md-sys-color-on-primary-container:  var(--md-ref-palette-quasar-90);
+}
+
 @keyframes s-fade-in {
   from { opacity: 0; transform: translateY(7px); }
   to   { opacity: 1; transform: translateY(0); }

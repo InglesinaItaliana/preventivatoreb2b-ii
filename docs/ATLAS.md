@@ -784,32 +784,103 @@ M3 stessa permette questa scelta: il *key color* di una tonal palette non deve n
 
 Entrambe restano sperimentabili in futuro semplicemente cambiando il mapping di `--md-sys-color-primary` nella sez. seguente.
 
-#### Mapping ai ruoli M3 per scope (esempio PULSAR)
+#### Ruoli M3 disponibili (`--md-sys-color-*` in `src/style.css`)
 
-Quando i `--md-sys-color-*` saranno definiti (prossimo branch), il pattern per PULSAR sarà:
+I componenti **leggono SEMPRE i system color tokens**, mai i ref palette tones direttamente. I ref palette servono solo come ingredienti per definire i ruoli.
+
+**Ruoli scope-agnostic** (definiti in `:root` + override in `.s-surface-dark`):
+
+| Ruolo | Light scheme | Dark scheme (`.s-surface-dark`) | Note |
+|---|---|---|---|
+| `background` | `#FFF8F0` | `#16130B` | Sfondo dell'app |
+| `on-background` | `#1E1B13` | `#E9E2D4` | Testo su background |
+| `surface` | `#FFF8F0` | `#16130B` | Card, modali, panel |
+| `on-surface` | `#1E1B13` | `#E9E2D4` | Testo su surface |
+| `surface-variant` | `#EBE2CF` | `#4C4639` | Surface di secondo livello (chip bg, input bg) |
+| `on-surface-variant` | `#4C4639` | `#CEC6B4` | Testo secondario, helper |
+| `surface-container-{lowest..highest}` | scala beige chiara | scala grigio-bruno scura | 5 livelli di profondità surface |
+| `outline` | `#7D7667` | `#979080` | Bordi visibili |
+| `outline-variant` | `#CEC6B4` | `#4C4639` | Bordi sottili / divider |
+| `error` | `#BA1A1A` | `#FFB4AB` | Stato errore |
+| `on-error` | `#FFFFFF` | `#690005` | Testo su error |
+| `error-container` / `on-error-container` | `#FFDAD6` / `#93000A` | `#93000A` / `#FFDAD6` | Banner/chip errore |
+| `inverse-surface` / `inverse-on-surface` / `inverse-primary` | tones SIDERA inversi | tones SIDERA inversi | Snackbar, tooltip dark on light, light on dark |
+| `shadow` / `scrim` | `#000000` | `#000000` | Ombre + dialog backdrop |
+
+**Ruoli scope-aware** (cambiano per `.s-scope-{module}`):
+
+| Ruolo | Comportamento |
+|---|---|
+| `primary` | `var(--s-{module}-on-light)` (light) / `var(--s-{module}-on-dark)` (dark) — **valore Crab Strada B** |
+| `on-primary` | `#FFFFFF` (light) / `var(--md-ref-palette-{module}-20)` (dark) |
+| `primary-container` | `var(--md-ref-palette-{module}-90)` (light) / `-30` (dark) |
+| `on-primary-container` | `var(--md-ref-palette-{module}-10)` (light) / `-90` (dark) |
+| `surface-tint` | uguale a `primary` (M3 lo usa per tonal elevation di card/menu/dialog) |
+
+Per QUASAR/SIDERA il `primary` è identico in light/dark (singolo valore), ma i container restano dual-surface come gli altri.
+
+#### Come si applica nei componenti
+
+**Passo 1**: identifica lo scope del componente. Aggiungi `.s-scope-{module}` all'elemento radice del layout:
+
+```vue
+<!-- src/views/pulsar/PulsarLayout.vue -->
+<template>
+  <div class="p-shell s-scope-pulsar">
+    <!-- tutto qui dentro vede primary = PULSAR teal -->
+  </div>
+</template>
+```
+
+**Passo 2**: se il componente è su superficie scura (sidebar SIDERA, Hub Schlegel), aggiungi `.s-surface-dark`. Le due classi si combinano: la più vicina nel DOM vince (CSS variables cascade).
+
+```vue
+<!-- src/views/sidera/SideraLayout.vue (sidebar dark) -->
+<aside class="s-sidebar s-surface-dark">
+  <!-- M3 dark scheme attivo qui -->
+  <a class="s-scope-pulsar" href="/pulsar">
+    <!-- primary = PULSAR on-dark (#3AAF98), container dal tone 30 -->
+  </a>
+</aside>
+```
+
+**Passo 3**: il CSS del componente legge SOLO `var(--md-sys-color-*)`:
 
 ```css
-/* PULSAR su surface CHIARA (PWA bianca, modali, body) */
-.s-scope-pulsar {
-  /* Primary brand (Strada B): valore Crab on-light, non tone 40 */
-  --md-sys-color-primary:               var(--s-pulsar-on-light);            /* #3A8C80 */
-  --md-sys-color-on-primary:            #FFFFFF;
-  /* Varianti dalla tonal palette M3 (Strada B: ortodosse) */
-  --md-sys-color-primary-container:     var(--md-ref-palette-pulsar-90);     /* #A1F1E3 */
-  --md-sys-color-on-primary-container:  var(--md-ref-palette-pulsar-10);     /* #00201C */
+/* Bottone CTA primario, agnostico allo scope */
+.btn-primary {
+  background: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
+}
+.btn-primary:hover {
+  /* state layer M3: on-primary @ 8% opacità sopra primary */
+  background-image: linear-gradient(
+    var(--md-sys-color-on-primary), var(--md-sys-color-on-primary)
+  );
+  background-blend-mode: overlay;
+  /* (vedi roadmap state layers per pattern definitivo) */
 }
 
-/* PULSAR su surface SCURA (sidebar SIDERA, Hub Schlegel, splash) */
-.s-scope-pulsar.s-surface-dark,
-.s-surface-dark .s-scope-pulsar {
-  --md-sys-color-primary:               var(--s-pulsar-on-dark);             /* #3AAF98 */
-  --md-sys-color-on-primary:            var(--md-ref-palette-pulsar-20);     /* #003731 */
-  --md-sys-color-primary-container:     var(--md-ref-palette-pulsar-30);     /* #005048 */
-  --md-sys-color-on-primary-container:  var(--md-ref-palette-pulsar-90);     /* #A1F1E3 */
+/* Chip "stato" che usa primary-container */
+.chip-status {
+  background: var(--md-sys-color-primary-container);
+  color: var(--md-sys-color-on-primary-container);
+  border: 1px solid var(--md-sys-color-outline-variant);
 }
 ```
 
-Lo stesso pattern si replica per gli altri 6 scope sostituendo `pulsar` con il nome del modulo. NB: il mapping effettivo dei `--md-sys-color-*` non è ancora in `style.css` — è in roadmap per il prossimo branch (`polaris/design-tokens-roles`).
+**Risultato**: lo stesso identico componente `.btn-primary`, montato in PulsarLayout o CepheidLayout, su PWA chiara o su sidebar SIDERA scura, si adatta automaticamente. Zero hex hardcoded.
+
+#### Migrazione esistente: cosa NON è ancora fatto
+
+I componenti `.vue` esistenti **continuano a usare i loro hex inline** — questo branch aggiunge solo l'infrastruttura. La migrazione modulo-per-modulo verrà in branch successivi:
+
+- `polaris/sidera-m3-migration` — sostituisce hex in SideraLayout/HubView/Tasks/Projects/ProjectBoard con `var(--md-sys-color-*)`
+- `polaris/pulsar-m3-migration` — idem per PULSAR
+- `polaris/cepheid-m3-migration` — idem per CEPHEID
+- ecc.
+
+Ogni branch tocca un solo scope, in modo che le regressioni siano isolabili.
 
 ### Rigenerare le tonal palettes
 
@@ -868,3 +939,4 @@ Ogni step va affrontato in branch dedicato `polaris/design-tokens-{layer}` per e
 - **2026-05-19** — Sez. 10 aggiornata: `useSWUpdate` ora usa `workbox-window` direttamente con filtro `event.isExternal` + fallback hard-reload, per evitare loop banner causato dalla coesistenza di `/sw.js` (workbox) e `/firebase-messaging-sw.js` (FCM) sullo stesso scope `'/'`.
 - **2026-05-19** — Sez. 2 aggiornata con palette **Crab Nebula** (estrazione da M1 Hubble) e pattern **dual-surface** (on-dark / on-light) per i moduli con lightness fuori dalla zona intermedia. QUASAR e SIDERA restano singolo valore. Aggiunta nuova sez. 14 "Design Tokens" che dichiara Material Design 3 come linguaggio grafico di riferimento per la suite e definisce il primo strato (brand tokens) — type/shape/elevation/state/motion in roadmap.
 - **2026-05-20** — Sez. 14 estesa con **tonal palettes M3** (18 toni × 7 moduli = 126 reference tokens) generate via `@material/material-color-utilities` (algoritmo HCT, stesso del MTB). Decisione **Strada B**: i `--md-sys-color-primary` restano i valori Crab on-light/on-dark, le palette servono solo per varianti container/on-container/state-layer. Strade A (M3 letterale tone 40/80) e C (tone 50/70 ibrido) documentate come esperimenti futuri. Aggiunto `scripts/generate-tonal-palettes.mjs` per rigenerare deterministicamente. Mapping `--md-sys-color-*` per scope rinviato al branch `polaris/design-tokens-roles`.
+- **2026-05-20** — Sez. 14 estesa con **ruoli M3 system color** in `src/style.css` (branch `polaris/design-tokens-roles`): light scheme + `.s-surface-dark` per i ruoli neutri/surface/error/outline (scope-agnostic, valori dal MTB export con seed SIDERA), + `.s-scope-{module}` per primary/on-primary/primary-container/on-primary-container scope-aware su 7 moduli con dual surface. I componenti esistenti NON sono toccati — migrazione modulo-per-modulo in branch successivi (`polaris/{module}-m3-migration`).
