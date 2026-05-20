@@ -367,38 +367,7 @@ const roleLabel: Record<string, string> = {
             style="transition: stroke 0.5s ease"
           />
 
-          <!-- All-mode (route /sidera o /sidera/hub): tutti gli edges glow color SIDERA -->
-          <g v-if="isAllMode" style="opacity: 0.45">
-            <line
-              v-for="([a, b], i) in EDGES_HUB" :key="`ea-${i}`"
-              :x1="moduleByName(a)!.vx" :y1="moduleByName(a)!.vy"
-              :x2="moduleByName(b)!.vx" :y2="moduleByName(b)!.vy"
-              stroke="#D4C498" stroke-width="3.5" filter="url(#s-hv-gf-sm)"
-            />
-          </g>
-
-          <!-- Edge glow gradient (solo edges adiacenti al modulo attivo) -->
-          <g v-if="activeLogoModule" style="transition: opacity 0.6s ease">
-            <line
-              v-for="e in activeEdges" :key="`eg-${e.id}`"
-              :x1="e.from.vx" :y1="e.from.vy"
-              :x2="e.to.vx" :y2="e.to.vy"
-              :stroke="`url(#${e.id})`"
-              stroke-width="3.5" filter="url(#s-hv-gf-sm)"
-            />
-          </g>
-
-          <!-- All-mode: halo md su TUTTI i vertici (color SIDERA tenue) -->
-          <template v-if="isAllMode">
-            <circle
-              v-for="mod in modules" :key="`ha-${mod.name}`"
-              :cx="mod.vx" :cy="mod.vy" :r="haloMdSize(mod)"
-              fill="#D4C498" fill-opacity="0.18"
-              filter="url(#s-hv-gf-md)"
-            />
-          </template>
-
-          <!-- Halo grande (vertice attivo, solo modulo singolo) -->
+          <!-- Halo grande (vertice attivo, modulo singolo) — SOTTO l'edge glow -->
           <circle
             v-if="activeLogoModule"
             :cx="activeLogoModule.vx" :cy="activeLogoModule.vy" :r="activeHaloLg"
@@ -406,7 +375,7 @@ const roleLabel: Record<string, string> = {
             filter="url(#s-hv-gf-lg)"
             style="transition: fill 0.6s ease, fill-opacity 0.6s ease"
           />
-          <!-- Halo medio (vertice attivo, solo modulo singolo) -->
+          <!-- Halo medio (vertice attivo, modulo singolo) — SOTTO l'edge glow -->
           <circle
             v-if="activeLogoModule"
             :cx="activeLogoModule.vx" :cy="activeLogoModule.vy" :r="activeHaloMd"
@@ -414,6 +383,33 @@ const roleLabel: Record<string, string> = {
             filter="url(#s-hv-gf-md)"
             style="transition: fill 0.5s ease, fill-opacity 0.5s ease"
           />
+
+          <!-- All-mode (route /sidera/hub): tutti gli edges glow color SIDERA.
+               Opacity 0.65 + stroke-width 4 per renderli ben visibili sui lati
+               orizzontali (NOVA-PULSAR, NEBULA-CEPHEID) che altrimenti si
+               fondono con i halo dei vertici adiacenti.
+               NIENTE halo md SIDERA su ciascun vertice — sono superflui e
+               coprono le linee orizzontali fondendosi con gli edges. -->
+          <g v-if="isAllMode" style="opacity: 0.65">
+            <line
+              v-for="([a, b], i) in EDGES_HUB" :key="`ea-${i}`"
+              :x1="moduleByName(a)!.vx" :y1="moduleByName(a)!.vy"
+              :x2="moduleByName(b)!.vx" :y2="moduleByName(b)!.vy"
+              stroke="#D4C498" stroke-width="4" filter="url(#s-hv-gf-sm)"
+            />
+          </g>
+
+          <!-- Edge glow gradient (solo edges adiacenti al modulo attivo).
+               Renderizzato DOPO i halo lg/md, quindi sopra. -->
+          <g v-if="activeLogoModule" style="transition: opacity 0.6s ease">
+            <line
+              v-for="e in activeEdges" :key="`eg-${e.id}`"
+              :x1="e.from.vx" :y1="e.from.vy"
+              :x2="e.to.vx" :y2="e.to.vy"
+              :stroke="`url(#${e.id})`"
+              stroke-width="4" filter="url(#s-hv-gf-sm)"
+            />
+          </g>
 
           <!-- Vertici: all-mode → tutti SIDERA / single → solo attivo color modulo -->
           <circle
