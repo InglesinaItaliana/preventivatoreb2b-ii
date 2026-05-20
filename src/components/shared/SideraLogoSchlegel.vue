@@ -40,17 +40,38 @@ const active = computed(() => MODULES[props.activeScope])
 const moduleEntries = computed(() => Object.entries(MODULES) as [ScopeKey, Vertex][])
 const isEdgeActive = (a: ScopeKey, b: ScopeKey) => a === props.activeScope || b === props.activeScope
 
-// Edges collegati al vertice attivo, normalizzati con il vertice attivo come "from" (opaco)
-// e l'altro vertice come "to" (trasparente). Replica il pattern del logo PULSAR/CEPHEID originale.
+// Edges collegati al vertice attivo, normalizzati con il vertice attivo come "from".
+// Gradient applicato direttamente al base edge (no overlay): fade-to-NE color
+// a piena opacità, replica del pattern HubView + SideraLayout sidebar.
 const activeEdges = computed(() => {
   return EDGES
     .filter(([a, b]) => isEdgeActive(a, b))
     .map(([a, b], i) => {
-      const from = a === props.activeScope ? MODULES[a] : MODULES[b]
-      const to   = a === props.activeScope ? MODULES[b] : MODULES[a]
-      return { id: `sls-edge-grad-${props.activeScope}-${i}`, from, to }
+      const fromScope = a === props.activeScope ? a : b
+      const toScope   = a === props.activeScope ? b : a
+      return {
+        id: `sls-edge-grad-${props.activeScope}-${i}`,
+        from: MODULES[fromScope],
+        to:   MODULES[toScope],
+        fromScope,
+        toScope,
+      }
     })
 })
+
+// Stroke per il base edge [a, b]: gradient se adiacente al vertice attivo, altrimenti NE.
+function edgeStrokeFor(a: ScopeKey, b: ScopeKey): string {
+  if (a !== props.activeScope && b !== props.activeScope) return COLOR_OFF_EDGE
+  const ae = activeEdges.value.find(e =>
+    (e.fromScope === a && e.toScope === b) || (e.fromScope === b && e.toScope === a)
+  )
+  return ae ? `url(#${ae.id})` : COLOR_OFF_EDGE
+}
+
+// Width per il base edge: edge attivi più spessi per visibilità.
+function edgeWidthFor(a: ScopeKey, b: ScopeKey): number {
+  return (a === props.activeScope || b === props.activeScope) ? 3.0 : 1.2
+}
 
 // Stagger animation: SVG fade-in, poi il vertice attivo "si accende"
 const svgMounted = ref(false)
@@ -76,7 +97,11 @@ const heightPx = computed(() => Math.round(props.size * 480 / 680))
     aria-hidden="true"
   >
     <defs>
-      <filter id="sls-gf-sm" x="-80%" y="-80%" width="260%" height="260%">
+      <!-- filterUnits=userSpaceOnUse: la regione del filtro è in coord viewBox.
+           Le % default sono relative al bbox dell'elemento, che ha altezza 0 per
+           le linee orizzontali (NEBULA-CEPHEID, NOVA-PULSAR) → il blur veniva
+           clippato e le linee sparivano. -->
+      <filter id="sls-gf-sm" filterUnits="userSpaceOnUse" x="0" y="0" width="680" height="480">
         <feGaussianBlur stdDeviation="4.5" result="b"/>
         <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
       </filter>
@@ -88,43 +113,32 @@ const heightPx = computed(() => Math.round(props.size * 480 / 680))
         <feGaussianBlur stdDeviation="18" result="b"/>
         <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
       </filter>
-      <!-- Gradient dinamico per ogni edge attivo: opaco al vertice attivo, trasparente all'altro -->
+      <!-- Gradient per ogni edge attivo: 0%/75% color modulo, 100% COLOR_OFF_EDGE.
+           Replica del pattern HubView + sidebar: fade-to-NE color a piena opacità.
+           Il gradient è applicato direttamente al base edge (non a un overlay)
+           così che l'edge resti visibile end-to-end anche sugli orizzontali. -->
       <linearGradient
         v-for="e in activeEdges" :key="e.id"
         :id="e.id"
         gradientUnits="userSpaceOnUse"
         :x1="e.from.x" :y1="e.from.y" :x2="e.to.x" :y2="e.to.y"
       >
-        <!-- 100% opacity 0.45 (non 0.15) per evitare che edges lunghi (es. NEBULA-CEPHEID)
-             sembrino interrotti vicino al vertice opposto. Vedi SideraLayout.vue per
-             la stessa correzione applicata al logo della sidebar. -->
-        <stop offset="0%"   :stop-color="active.color" stop-opacity="0.95"/>
-        <stop offset="75%"  :stop-color="active.color" stop-opacity="0.8"/>
-        <stop offset="100%" :stop-color="active.color" stop-opacity="0.45"/>
+        <stop offset="0%"   :stop-color="active.color"/>
+        <stop offset="75%"  :stop-color="active.color"/>
+        <stop offset="100%" :stop-color="COLOR_OFF_EDGE"/>
       </linearGradient>
     </defs>
 
-    <!-- Edges base (tenui) -->
+    <!-- Edges base: stroke gradient se adiacente al vertice attivo, NE altrimenti.
+         Replica HubView + sidebar: niente layer "glow" sovrapposto. -->
     <line
       v-for="([a, b], i) in EDGES" :key="`e-${i}`"
       :x1="MODULES[a].x" :y1="MODULES[a].y"
       :x2="MODULES[b].x" :y2="MODULES[b].y"
-      :stroke="COLOR_OFF_EDGE"
-      stroke-width="1.2"
+      :stroke="edgeStrokeFor(a, b)" :stroke-width="edgeWidthFor(a, b)"
+      stroke-linecap="round"
+      shape-rendering="geometricPrecision"
     />
-
-    <!-- Edge glow (solo edges collegati al vertice attivo, con gradient sfumato verso l'esterno) -->
-    <g class="sl-edge-glow" :class="{ on: activeOn }">
-      <line
-        v-for="e in activeEdges" :key="`eg-${e.id}`"
-        :x1="e.from.x" :y1="e.from.y"
-        :x2="e.to.x"   :y2="e.to.y"
-        :stroke="`url(#${e.id})`"
-        stroke-width="3.5"
-        stroke-linecap="round"
-        :filter="'url(#sls-gf-sm)'"
-      />
-    </g>
 
     <!-- Halo grande (solo vertice attivo) -->
     <circle
@@ -163,9 +177,6 @@ const heightPx = computed(() => Math.round(props.size * 480 / 680))
   transition: opacity 0.9s ease;
 }
 .sl-schlegel.on { opacity: 1; }
-
-.sl-edge-glow { opacity: 0; transition: opacity 0.8s ease; }
-.sl-edge-glow.on { opacity: 0.55; }
 
 .sl-halo-lg { opacity: 0; fill-opacity: 0.35; transition: opacity 1s ease; }
 .sl-halo-lg.on { opacity: 0.7; }
