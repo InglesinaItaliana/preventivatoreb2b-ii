@@ -701,8 +701,8 @@ function renderText(t: string) {
 
 /* Highlight quando arrivi a un messaggio specifico da Pendenze */
 .msg-bubble-wrap.is-highlighted .msg-bubble {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--md-sys-color-primary) 67%, transparent), 0 1px 3px rgba(0,0,0,.06);
-  transition: box-shadow 0.3s ease;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--md-sys-color-primary) 67%, transparent), var(--md-sys-elevation-level-1);
+  transition: box-shadow var(--md-sys-motion-duration-medium2) var(--md-sys-motion-easing-standard);
 }
 
 .msg-avatar {
@@ -728,7 +728,7 @@ function renderText(t: string) {
   background: #fff;
   border-radius: 16px 16px 16px 4px;
   padding: 10px 14px;
-  box-shadow: 0 1px 3px rgba(0,0,0,.06);
+  box-shadow: var(--md-sys-elevation-level-1);
 }
 
 /* Reply quote stile WhatsApp dentro la bolla */
@@ -880,7 +880,7 @@ function renderText(t: string) {
   background: #fff;
   border-radius: var(--md-sys-shape-corner-medium);
   border: 1px solid #E8E5DF;
-  box-shadow: 0 8px 24px rgba(0,0,0,.12);
+  box-shadow: var(--md-sys-elevation-level-3);
   z-index: 20;
   overflow: hidden;
 }

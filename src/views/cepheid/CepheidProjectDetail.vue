@@ -781,7 +781,7 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
   border: 1px solid #E8E5DF;
   border-left: 6px solid transparent;
   margin-bottom: 6px;
-  box-shadow: 0 1px 2px rgba(0,0,0,.03);
+  box-shadow: var(--md-sys-elevation-level-1);
 }
 
 .task-row--done { opacity: 0.5; border-left: 6px solid #E8E5DF; }
@@ -833,7 +833,7 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
   background: #fff;
   border: 1px solid #E8E5DF;
   border-radius: 10px;
-  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.10);
+  box-shadow: var(--md-sys-elevation-level-3);
   padding: 4px;
   z-index: 20;
   min-width: 160px;

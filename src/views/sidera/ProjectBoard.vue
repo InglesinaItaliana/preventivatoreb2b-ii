@@ -646,7 +646,7 @@ async function deleteCurrentTask() {
   padding: 22px 36px 0;
   border-bottom: 1px solid var(--s-border);
   background: var(--s-surface);
-  box-shadow: 0 1px 3px rgba(0,0,0,.04);
+  box-shadow: var(--md-sys-elevation-level-1);
   flex-shrink: 0;
 }
 
@@ -740,7 +740,7 @@ async function deleteCurrentTask() {
 }
 
 .view-tab:hover { color: var(--s-text-mid); background: var(--s-border); }
-.view-tab.is-active { background: var(--s-surface); color: var(--s-text); box-shadow: 0 1px 3px rgba(0,0,0,.07); }
+.view-tab.is-active { background: var(--s-surface); color: var(--s-text); box-shadow: var(--md-sys-elevation-level-1); }
 
 /* Body */
 .bv-body { flex: 1; overflow: auto; padding: 24px 36px; background: var(--s-bg); }
@@ -800,7 +800,7 @@ async function deleteCurrentTask() {
   font-size: 13px; line-height: 1.4; color: var(--s-text);
 }
 
-.kanban-card:hover { border-color: var(--s-border-mid); box-shadow: 0 2px 8px rgba(0,0,0,.05); }
+.kanban-card:hover { border-color: var(--s-border-mid); box-shadow: var(--md-sys-elevation-level-2); }
 .kanban-card.is-done { opacity: 0.35; }
 .kanban-card--done { cursor: default; }
 
@@ -866,7 +866,7 @@ async function deleteCurrentTask() {
   background: var(--s-surface);
   border: 1px solid var(--s-border);
   border-radius: var(--md-sys-shape-corner-small);
-  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  box-shadow: var(--md-sys-elevation-level-3);
   z-index: 50; min-width: 140px; padding: 4px;
 }
 
@@ -989,7 +989,7 @@ async function deleteCurrentTask() {
   border: 1px solid var(--s-border);
   border-radius: 14px;
   width: 460px;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.18);
+  box-shadow: var(--md-sys-elevation-level-4);
   font-family: 'Outfit', sans-serif;
 }
 

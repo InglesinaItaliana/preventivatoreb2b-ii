@@ -417,7 +417,7 @@ function metricaCorrenteVsTarget(): string {
   background: #fff;
   border: 1px solid #E8E5DF;
   border-radius: 10px;
-  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.10);
+  box-shadow: var(--md-sys-elevation-level-3);
   padding: 4px;
   z-index: 20;
   min-width: 150px;

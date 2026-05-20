@@ -385,7 +385,7 @@ function urgenzaLabel(giorni: number) {
   margin-bottom: 6px;
   cursor: pointer;
   transition: all 0.15s;
-  box-shadow: 0 1px 2px rgba(0,0,0,.04);
+  box-shadow: var(--md-sys-elevation-level-1);
 }
 
 .azione-row:hover { border-color: var(--s-border-mid); box-shadow: var(--s-shadow-hover); }
@@ -519,7 +519,7 @@ function urgenzaLabel(giorni: number) {
   text-decoration: none;
   color: inherit;
   transition: all 0.15s;
-  box-shadow: 0 1px 2px rgba(0,0,0,.04);
+  box-shadow: var(--md-sys-elevation-level-1);
 }
 
 .urgenza-card:hover { border-color: var(--s-border-mid); box-shadow: var(--s-shadow-hover); }

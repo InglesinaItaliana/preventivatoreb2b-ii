@@ -508,7 +508,7 @@ function parseDateInput(s: string): Date {
 }
 
 .filter-tab:hover { color: var(--s-text-mid); background: var(--s-border); }
-.filter-tab.is-active { background: var(--s-surface); color: var(--s-text); box-shadow: 0 1px 3px rgba(0,0,0,.07); }
+.filter-tab.is-active { background: var(--s-surface); color: var(--s-text); box-shadow: var(--md-sys-elevation-level-1); }
 
 /* Loading */
 .loading-rows { display: flex; flex-direction: column; gap: 6px; }
@@ -565,7 +565,7 @@ function parseDateInput(s: string): Date {
   border-left: 6px solid transparent;
   margin-bottom: 6px;
   transition: all 0.15s;
-  box-shadow: 0 1px 2px rgba(0,0,0,.04);
+  box-shadow: var(--md-sys-elevation-level-1);
 }
 
 .task-row:hover { border-color: var(--s-border-mid); box-shadow: var(--s-shadow-hover); }
@@ -745,7 +745,7 @@ function parseDateInput(s: string): Date {
   border: 1px solid var(--s-border);
   border-radius: 14px;
   width: 420px;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.18);
+  box-shadow: var(--md-sys-elevation-level-4);
   font-family: 'Outfit', sans-serif;
 }
 

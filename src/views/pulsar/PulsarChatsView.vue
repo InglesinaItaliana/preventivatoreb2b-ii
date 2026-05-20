@@ -442,7 +442,7 @@ onMounted(() => {
 .type-btn.is-active {
   background: #fff;
   color: #1A1917;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--md-sys-elevation-level-1);
 }
 
 .field-label {

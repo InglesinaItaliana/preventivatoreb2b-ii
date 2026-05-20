@@ -313,7 +313,7 @@ const totalActive = computed(() => obiettiviAttivi.value.length)
 .goal-card:hover {
   border-color: var(--md-sys-color-primary);
   background: color-mix(in srgb, var(--md-sys-color-primary) 4%, transparent);
-  box-shadow: 0 2px 8px rgba(0,0,0,.04);
+  box-shadow: var(--md-sys-elevation-level-2);
 }
 
 .goal-stripe { width: 8px; flex-shrink: 0; }

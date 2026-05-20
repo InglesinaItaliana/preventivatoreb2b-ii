@@ -402,7 +402,7 @@ function formatDue(d: Date | null) {
   background: var(--s-surface);
   border: 1px solid var(--s-border);
   border-radius: var(--md-sys-shape-corner-small);
-  box-shadow: 0 8px 24px rgba(0,0,0,0.14);
+  box-shadow: var(--md-sys-elevation-level-3);
   z-index: 50;
   min-width: 160px;
   padding: 4px;
@@ -470,7 +470,7 @@ function formatDue(d: Date | null) {
   border: 1px solid var(--s-border);
   border-radius: 14px;
   width: 420px;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.18);
+  box-shadow: var(--md-sys-elevation-level-4);
   font-family: 'Outfit', sans-serif;
 }
 

@@ -173,7 +173,7 @@ const showDone = ref(false)
   border: 1px solid #E8E5DF;
   border-left: 6px solid transparent;
   margin-bottom: 6px;
-  box-shadow: 0 1px 2px rgba(0,0,0,.03);
+  box-shadow: var(--md-sys-elevation-level-1);
 }
 
 .task-row--done { opacity: 0.5; border-left: 6px solid #E8E5DF; }
