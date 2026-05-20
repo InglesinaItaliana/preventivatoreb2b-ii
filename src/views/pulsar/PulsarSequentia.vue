@@ -203,7 +203,7 @@ const showDone = ref(false)
   flex-shrink: 0;
 }
 
-.undo-btn:hover { color: #2E7268; }
+.undo-btn:hover { color: var(--md-sys-color-primary-hover); }
 
 /* Collapsible "Completate di recente" */
 .collapse-toggle {
@@ -226,7 +226,7 @@ const showDone = ref(false)
   transition: color 0.15s;
 }
 
-.collapse-toggle:hover { color: #2E7268; }
+.collapse-toggle:hover { color: var(--md-sys-color-primary-hover); }
 
 .collapse-meta {
   display: inline-flex;

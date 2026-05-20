@@ -536,7 +536,7 @@ async function submitTask() {
   padding: 8px 16px;
   border-radius: 999px;
   border: 1px solid transparent;
-  background: #F1EEE8;
+  background: var(--md-sys-color-surface-container);
   font-size: 12px;
   font-weight: 600;
   font-family: 'Outfit', sans-serif;
@@ -545,14 +545,14 @@ async function submitTask() {
   transition: all 0.18s ease;
 }
 
-.action-btn:hover { background: rgba(58, 175, 152, 0.20); }
+.action-btn:hover { background: color-mix(in srgb, var(--md-sys-color-primary) 20%, transparent); }
 
 .action-btn--primary {
   background: var(--md-sys-color-primary);
   border-color: var(--md-sys-color-primary);
   color: #fff;
 }
-.action-btn--primary:hover { background: #2E7268; border-color: #2E7268; color: #fff; }
+.action-btn--primary:hover { background: var(--md-sys-color-primary-hover); border-color: var(--md-sys-color-primary-hover); color: #fff; }
 
 .action-icon { font-size: 16px; flex-shrink: 0; }
 .action-icon-trailing { margin-left: 2px; opacity: 0.75; }
@@ -585,7 +585,7 @@ async function submitTask() {
   -webkit-tap-highlight-color: transparent;
   transition: border-color 0.15s;
 }
-.inline-reply-input:focus { border-color: #3A8C8080; }
+.inline-reply-input:focus { border-color: color-mix(in srgb, var(--md-sys-color-primary) 50%, transparent); }
 
 .inline-reply-actions {
   display: flex;

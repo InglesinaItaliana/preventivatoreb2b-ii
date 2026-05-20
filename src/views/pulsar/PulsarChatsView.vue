@@ -445,8 +445,8 @@ onMounted(() => {
 .member-row:hover { background: #F4F2EE; }
 
 .member-row.is-selected {
-  background: rgba(58, 140, 128, 0.07);
-  color: #2E7268;
+  background: color-mix(in srgb, var(--md-sys-color-primary) 7%, transparent);
+  color: var(--md-sys-color-primary-hover);
   font-weight: 600;
 }
 
@@ -498,6 +498,6 @@ onMounted(() => {
   transition: background 0.15s;
 }
 
-.btn-primary:hover:not(:disabled) { background: #2E7268; }
+.btn-primary:hover:not(:disabled) { background: var(--md-sys-color-primary-hover); }
 .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>

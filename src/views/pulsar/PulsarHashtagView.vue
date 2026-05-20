@@ -150,7 +150,7 @@ function renderText(t: string) {
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: lowercase;
-  color: #2E7268;
+  color: var(--md-sys-color-primary-hover);
   margin: 0 0 4px 0;
 }
 
@@ -211,7 +211,7 @@ function renderText(t: string) {
   word-break: break-word;
 }
 
-:deep(.msg-hashtag) { color: #2E7268; font-weight: 600; }
+:deep(.msg-hashtag) { color: var(--md-sys-color-primary-hover); font-weight: 600; }
 :deep(.msg-mention) { color: #2F6B4A; font-weight: 600; }
 
 .open-btn {
@@ -221,7 +221,7 @@ function renderText(t: string) {
   padding: 8px 16px;
   border-radius: 999px;
   border: 1px solid transparent;
-  background: #F1EEE8;
+  background: var(--md-sys-color-surface-container);
   font-size: 12px;
   font-weight: 600;
   font-family: 'Outfit', sans-serif;
@@ -230,6 +230,6 @@ function renderText(t: string) {
   transition: all 0.18s ease;
 }
 
-.open-btn:hover { background: rgba(58, 175, 152, 0.20); }
+.open-btn:hover { background: color-mix(in srgb, var(--md-sys-color-primary) 20%, transparent); }
 .open-btn-icon { opacity: 0.8; }
 </style>

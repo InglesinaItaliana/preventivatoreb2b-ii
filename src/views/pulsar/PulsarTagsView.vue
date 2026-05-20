@@ -103,7 +103,7 @@ const sorted = computed(() =>
 
 .tag-card:hover {
   border-color: var(--md-sys-color-primary);
-  background: rgba(58, 175, 152, 0.05);
+  background: color-mix(in srgb, var(--md-sys-color-primary) 5%, transparent);
 }
 
 .tag-card-icon { color: var(--md-sys-color-primary); }

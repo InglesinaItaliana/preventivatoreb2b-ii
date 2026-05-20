@@ -288,6 +288,11 @@ input[type=number] {
   --md-sys-color-primary-container:         var(--md-ref-palette-sidera-90);
   --md-sys-color-on-primary-container:      var(--md-ref-palette-sidera-10);
   --md-sys-color-surface-tint:              var(--md-sys-color-primary);
+
+  /* Stato hover su primary — derivato via color-mix (M3 state layer
+     semplificato: ~20% black sopra primary). Funziona scope-aware perché
+     legge --md-sys-color-primary corrente. */
+  --md-sys-color-primary-hover:             color-mix(in srgb, var(--md-sys-color-primary), black 20%);
 }
 
 /* Dark surface — sidebar SIDERA, Hub Schlegel, splash, eventuali dark sections.

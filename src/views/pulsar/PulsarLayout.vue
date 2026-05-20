@@ -306,8 +306,8 @@ watch(chats, (newChats) => {
 .p-nav-item:hover { background: var(--s-border); color: var(--s-text-mid); }
 
 .p-nav-item.is-active {
-  background: rgba(58, 140, 128, 0.09);
-  color: #2E7268;
+  background: color-mix(in srgb, var(--md-sys-color-primary) 9%, transparent);
+  color: var(--md-sys-color-primary-hover);
 }
 
 .p-nav-item.is-active .p-nav-icon { color: var(--md-sys-color-primary); }
@@ -431,7 +431,7 @@ watch(chats, (newChats) => {
   display: flex;
   align-items: center;
   gap: 4px;
-  background: #F1EEE8;
+  background: var(--md-sys-color-surface-container);
   border-radius: 999px;
   padding: 9px 12px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
@@ -452,10 +452,10 @@ watch(chats, (newChats) => {
   padding: 0;
 }
 
-.p-pill-btn:hover { background: rgba(58, 175, 152, 0.08); }
+.p-pill-btn:hover { background: color-mix(in srgb, var(--md-sys-color-primary) 8%, transparent); }
 
 .p-pill-btn.is-active {
-  background: rgba(58, 175, 152, 0.20);
+  background: color-mix(in srgb, var(--md-sys-color-primary) 20%, transparent);
   color: var(--md-sys-color-primary);
 }
 
@@ -472,14 +472,14 @@ watch(chats, (newChats) => {
   color: var(--md-sys-color-on-primary);
   border: none;
   cursor: pointer;
-  box-shadow: 0 3px 12px rgba(58, 140, 128, 0.35);
+  box-shadow: 0 3px 12px color-mix(in srgb, var(--md-sys-color-primary) 35%, transparent);
   transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
   flex-shrink: 0;
 }
 
 .p-new-chat-btn:hover {
   background: #338076;
-  box-shadow: 0 4px 14px rgba(58, 140, 128, 0.45);
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--md-sys-color-primary) 45%, transparent);
 }
 
 .p-new-chat-btn:active { transform: scale(0.96); }
