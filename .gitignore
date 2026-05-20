@@ -24,3 +24,6 @@ dist-ssr
 *.sw?
 .env
 src/functions/.env
+# Console log dumps dropped into risorseesterneperclaude as scratch
+risorseesterneperclaude/log*
+risorseesterneperclaude/*.app-[0-9]*
