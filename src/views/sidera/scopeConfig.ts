@@ -41,7 +41,7 @@ export interface ScopeConfig {
   /** Login redirect when unauthenticated (PWA login flow). */
   loginPath: string
   /** Scope where to register FCM tokens via useNotifications. */
-  notificationScope: 'pulsar' | 'cepheid' | 'sidera'
+  notificationScope: 'pulsar' | 'cepheid' | 'nebula' | 'sidera'
 }
 
 export const SCOPE_CONFIGS: Record<Exclude<ScopeId, 'sidera'>, ScopeConfig> = {
@@ -77,18 +77,20 @@ export const SCOPE_CONFIGS: Record<Exclude<ScopeId, 'sidera'>, ScopeConfig> = {
     loginPath: '/cepheid/login',
     notificationScope: 'cepheid',
   },
-  // Placeholder per moduli non ancora promossi a PWA standalone.
-  // Quando NEBULA/NOVA/MAGNETAR/QUASAR avranno il loro layout mobile,
-  // si popolano mobileNav, fab, isTopLevelPath, loginPath.
   nebula: {
     name: 'NEBULA',
     wordmark: 'NEBULA',
     brandSvg: 'nebula',
-    mobileNav: [],
-    isTopLevelPath: () => true,
+    mobileNav: [
+      { path: '/nebula', exact: true, label: 'Team', icon: 'group' },
+    ],
+    isTopLevelPath: (p) => p === '/nebula',
     loginPath: '/nebula/login',
-    notificationScope: 'sidera',
+    notificationScope: 'nebula',
   },
+  // Placeholder per moduli non ancora promossi a PWA standalone.
+  // Quando NOVA/MAGNETAR/QUASAR avranno il loro layout mobile,
+  // si popolano mobileNav, fab, isTopLevelPath, loginPath.
   nova: {
     name: 'NOVA',
     wordmark: 'NOVA',

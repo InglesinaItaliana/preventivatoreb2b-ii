@@ -3,8 +3,8 @@
 > Roadmap strategica per l'evoluzione strutturale della suite-of-webapps.
 > Documento "vivo": va aggiornato dopo ogni step completato o decisione esplicita.
 
-**Ultima revisione:** 2026-05-19
-**Stato globale:** azioni 1, 2, 3, 4, 5 deployate in produzione (5/7 completate). Restano solo azione 6 (rimandata al 4° modulo PWA) e azione 7 (differita 6-12 mesi). POPS = 3ª PWA installabile, login con Schlegel + vertice attivo live, Firebase chunk splittato granulare con risparmio reale ~16 KB su POPS.
+**Ultima revisione:** 2026-05-20
+**Stato globale:** azioni 1, 2, 3, 4, 5 deployate in produzione (5/7 completate). Resta azione 6 (in lavorazione: pianificata insieme alla promozione NEBULA a 4ª PWA) e azione 7 (differita 6-12 mesi). POPS = 3ª PWA installabile, login con Schlegel + vertice attivo live, Firebase chunk splittato granulare con risparmio reale ~16 KB su POPS. **NEBULA promossa a 4ª PWA installabile** (branch `feature/nebula-pwa`) — sblocca il trigger di azione 6 ("da 4+ PWA in poi").
 
 ---
 
@@ -35,7 +35,7 @@ POLARIS è la roadmap che governa l'evoluzione architetturale di `preventivatore
 | QUASAR | `/sidera` (home) | — | "Il Mio Giorno", solo desktop |
 | CEPHEID | `/cepheid/*` | ✅ PWA attiva | Azioni / Progetti / Scadenze. Manifest statico in `/public/cepheid.webmanifest`, swap runtime in `index.html` |
 | PULSAR | `/pulsar/*` | ✅ PWA attiva | Chat + FCM push. Manifest via VitePWA. Notifiche data-only |
-| NEBULA | `/sidera/nebula` | ☐ Solo view SIDERA | Team — non ancora PWA |
+| NEBULA | `/nebula/*` | ✅ PWA attiva | Team. Manifest statico in `/public/nebula.webmanifest`, scope token FCM `'nebula'` (no eventi ancora) |
 | NOVA | `/sidera/nova/spedizioni` | ☐ Solo view SIDERA | Spedizioni — non ancora PWA |
 | 6° modulo | TBD | ☐ Non definito | — |
 
@@ -358,3 +358,4 @@ Quando si decide di lavorare su un'azione POLARIS:
 - **2026-05-19** — Azione 4 fix dynamic import: `src/firebase.ts` rimosso import statico di `firebase/messaging`; `useNotifications.ts` lazy-load il modulo via `import('firebase/messaging')`. Verifica post-fix: chunk `firebase-messaging` NON più nei `<link rel="modulepreload">` di POPS. Risparmio reale POPS: ~16 KB ogni first load.
 - **2026-05-19** — Azione 4 mergiata (PR #6) e deployata in produzione. 5 azioni POLARIS su 7 completate.
 - **2026-05-19** — Feature extra (fuori-azioni POLARIS): **CEPHEID Asana-flavored** (PR #8, branch `feature/cepheid-asana`). Introdotta gerarchia Obiettivi → Progetti → (task | milestone | deliverable) con schema retrocompatibile. Nuova collection `obiettivi/` (regole Firestore deployate). Discriminator `tasks/{id}.type` aggiunto alla collection condivisa con SIDERA: filtri lato view in SIDERA TasksView/ProjectBoard per non mostrare milestone/deliverable come task. ProjectBoard SIDERA esteso con 2 view tab Milestone+Deliverable. File POPS toccati: zero. **Mergiata (PR #8) e deployata in produzione** (Hosting + Rules).
+- **2026-05-20** — **NEBULA promossa a 4ª PWA installabile** (branch `feature/nebula-pwa`, feature extra ATLAS — ricetta sez. 3). Manifest statico `/public/nebula.webmanifest` (scope `/nebula/`, name "NEBULA — Team Inglesina"). Icone single-vertex generate da `scripts/nebula-icon.svg` (palette `#C46030`, 4 raggi verso QUASAR/NOVA/MAGNETAR/CEPHEID coerenti col Schlegel) → `public/icons/nebula-{180,192,512}.png` via sharp-cli. Ramo `/nebula` aggiunto allo script inline `index.html`. `scopeConfig.ts` aggiornato: `SCOPE_CONFIGS.nebula` ora popolato (mobileNav: Team, `notificationScope: 'nebula'`, `isTopLevelPath`); type `notificationScope` esteso con `'nebula'` (anche in `useNotifications.ts`). Router: nuova rotta `/nebula/login` (ScopedLogin, primary `#B85425`) + `/nebula` (SideraLayout child → NebulaTeamView, name `nebula-team` preservato), `meta: { nebulaScope: true }`. Rotta legacy `/sidera/nebula` **rimossa** (no redirect: bookmark da rigenerare). Guard `beforeEach` esteso con `isNebulaScope` per redirect login fallback. `SideraLayout` desktop sidebar ora legge `SCOPE_CONFIGS.nebula.mobileNav` come single source of truth (parità con pattern CEPHEID). Cloud Function FCM: **non aggiunta** (NEBULA non ha eventi di notifica per ora). File POPS toccati: `index.html` + `src/router/index.ts` (rischio basso — solo aggiunte/rami isolati per `/nebula`). **Sblocca azione 6**: ora siamo a 4 PWA e il refactor `meta.scope` ha trigger reale. Deploy + test PWA reali (iOS/Android Add-to-Home) pendenti.

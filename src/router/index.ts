@@ -84,7 +84,6 @@ const router = createRouter({
         { path: 'goals',      name: 'sidera-goals',   component: () => import('../views/cepheid/CepheidGoalsView.vue') },
         { path: 'goal/:id',   name: 'sidera-goal',    component: () => import('../views/cepheid/CepheidGoalDetail.vue') },
         { path: 'chat',       name: 'sidera-chat',    component: () => import('../views/sidera/ChatView.vue') },
-        { path: 'nebula',     name: 'nebula-team',    component: () => import('../views/nebula/NebulaTeamView.vue') },
         { path: 'nova/spedizioni', name: 'nova-spedizioni', component: () => import('../views/nova/NovaSpedizioniView.vue') },
         { path: 'admin/maintenance', name: 'sidera-admin-maintenance', component: () => import('../views/sidera/SideraAdminMaintenance.vue') },
       ]
@@ -114,6 +113,29 @@ const router = createRouter({
         { path: 'tag/:tag', name: 'pulsar-hashtag', component: () => import('../views/pulsar/PulsarHashtagView.vue') },
         { path: 'sequentia',name: 'pulsar-seq',     component: () => import('../views/pulsar/PulsarSequentia.vue') },
         { path: 'pending',  name: 'pulsar-pending', component: () => import('../views/pulsar/PulsarPendingView.vue') },
+      ]
+    },
+
+    // ── NEBULA (PWA indipendente: HR · Anagrafiche · Documentale) ───────────
+    {
+      path: '/nebula/login',
+      name: 'nebula-login',
+      component: () => import('../views/shared/ScopedLogin.vue'),
+      props: {
+        scope: 'nebula',
+        primaryColor: '#B85425',
+        title: 'NEBULA',
+        tagline: 'HR · Anagrafiche · Documentale',
+        redirectPath: '/nebula',
+      },
+      meta: { nebulaScope: true }
+    },
+    {
+      path: '/nebula',
+      component: () => import('../views/sidera/SideraLayout.vue'),
+      meta: { requiresAuth: true, nebulaScope: true },
+      children: [
+        { path: '', name: 'nebula-team', component: () => import('../views/nebula/NebulaTeamView.vue') },
       ]
     },
 
@@ -162,7 +184,13 @@ router.beforeEach(async (to, _from, next) => {
   if (!currentUser) {
     const isPulsarScope = to.matched.some(r => r.meta.pulsarScope);
     const isCepheidScope = to.matched.some(r => r.meta.cepheidScope);
-    next(isCepheidScope ? '/cepheid/login' : (isPulsarScope ? '/pulsar/login' : '/'));
+    const isNebulaScope = to.matched.some(r => r.meta.nebulaScope);
+    next(
+      isCepheidScope ? '/cepheid/login' :
+      isPulsarScope  ? '/pulsar/login'  :
+      isNebulaScope  ? '/nebula/login'  :
+      '/'
+    );
     return;
   }
 

@@ -51,6 +51,10 @@
             addManifest('/cepheid.webmanifest');
             addAppleIcons('/icons/cepheid', '2');
             if (titleMeta) titleMeta.setAttribute('content', 'CEPHEID');
+          } else if (path.indexOf('/nebula') === 0) {
+            addManifest('/nebula.webmanifest');
+            addAppleIcons('/icons/nebula', null);
+            if (titleMeta) titleMeta.setAttribute('content', 'NEBULA');
           } else {
             // POPS default (qualsiasi altro path: /, /preventivatore, /production, /delivery, ...)
             addManifest('/pops.webmanifest');
