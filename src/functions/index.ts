@@ -1487,6 +1487,43 @@ exports.onNewPulsarMessage = functions
     });
 
 // ──────────────────────────────────────────────────────────────────
+// PULSAR — chat eliminata: cancella ricorsivamente la subcollection messages
+// Trigger: onDelete chats/{chatId}.
+// Senza questa pulizia i messaggi restavano orfani e continuavano a
+// comparire in PulsarPendingView via collectionGroup('messages').
+// ──────────────────────────────────────────────────────────────────
+exports.onChatDeleted = functions
+    .region('europe-west1')
+    .firestore.document('chats/{chatId}')
+    .onDelete(async (_snap, context) => {
+        const chatId = context.params.chatId as string;
+        const db = admin.firestore();
+        const messagesRef = db.collection('chats').doc(chatId).collection('messages');
+        const BATCH_SIZE = 500;
+
+        let totalDeleted = 0;
+        try {
+            // Loop: scarica fino a BATCH_SIZE docs, cancellali in batch atomico, ripeti.
+            // Il while si ferma quando la subcollection è vuota (snapshot.empty).
+            // Pattern ufficiale Google per recursive collection delete via Admin SDK.
+            // eslint-disable-next-line no-constant-condition
+            while (true) {
+                const snapshot = await messagesRef.orderBy('__name__').limit(BATCH_SIZE).get();
+                if (snapshot.empty) break;
+                const batch = db.batch();
+                snapshot.docs.forEach((d) => batch.delete(d.ref));
+                await batch.commit();
+                totalDeleted += snapshot.size;
+                if (snapshot.size < BATCH_SIZE) break;
+            }
+            console.log(`[onChatDeleted] chat ${chatId}: cancellati ${totalDeleted} messaggi orfani.`);
+        } catch (e) {
+            console.error(`[onChatDeleted] chat ${chatId}: errore durante cleanup:`, e);
+        }
+        return null;
+    });
+
+// ──────────────────────────────────────────────────────────────────
 // CRON: SHIPPED → DELIVERED dopo 7 giorni dalla spedizione
 // Risolve i casi in cui il cliente B2B non clicca "Conferma Ricezione"
 // in ClientDashboard, lasciando l'ordine bloccato in SHIPPED.
