@@ -1,0 +1,53 @@
+<!--
+  NEBULA PWA icon (sorgente). 1024x1024.
+  Vertice NEBULA (155, 400) del Schlegel ottaedro di SIDERA, centrato a (512,512).
+  Trasformazione: scala uniforme k = 1.21 attorno a NEBULA (così l'edge piu' lungo
+  arriva a ~448 dal centro, dentro la canvas 1024). Preserva la geometria del grafo:
+    QUASAR  (340,  68) → (736, 110)  — far  upper-right
+    NOVA    (275, 252) → (657, 333)  — near upper-right
+    MAGNETAR(340, 364) → (736, 468)  — near right
+    CEPHEID (525, 400) → (960, 512)  — far  right
+-->
+<svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="#2A1208"/>
+      <stop offset="100%" stop-color="#0F0805"/>
+    </linearGradient>
+    <radialGradient id="halo-grad" cx="50%" cy="50%" r="50%">
+      <stop offset="0%"   stop-color="#C46030" stop-opacity="0.55"/>
+      <stop offset="55%"  stop-color="#C46030" stop-opacity="0.15"/>
+      <stop offset="100%" stop-color="#C46030" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="edge-q" x1="512" y1="512" x2="736" y2="110" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#C46030" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#C46030" stop-opacity="0.15"/>
+    </linearGradient>
+    <linearGradient id="edge-n" x1="512" y1="512" x2="657" y2="333" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#C46030" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#C46030" stop-opacity="0.15"/>
+    </linearGradient>
+    <linearGradient id="edge-m" x1="512" y1="512" x2="736" y2="468" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#C46030" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#C46030" stop-opacity="0.15"/>
+    </linearGradient>
+    <linearGradient id="edge-c" x1="512" y1="512" x2="960" y2="512" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"   stop-color="#C46030" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#C46030" stop-opacity="0.15"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1024" height="1024" fill="url(#bg-grad)"/>
+  <circle cx="512" cy="512" r="400" fill="url(#halo-grad)"/>
+
+  <g stroke-width="7" stroke-linecap="round" fill="none">
+    <line x1="512" y1="512" x2="736" y2="110" stroke="url(#edge-q)"/>
+    <line x1="512" y1="512" x2="657" y2="333" stroke="url(#edge-n)"/>
+    <line x1="512" y1="512" x2="736" y2="468" stroke="url(#edge-m)"/>
+    <line x1="512" y1="512" x2="960" y2="512" stroke="url(#edge-c)"/>
+  </g>
+
+  <circle cx="512" cy="512" r="135" fill="#C46030" opacity="0.22"/>
+  <circle cx="512" cy="512" r="85"  fill="#C46030" opacity="0.45"/>
+  <circle cx="512" cy="512" r="58"  fill="#C46030"/>
+</svg>

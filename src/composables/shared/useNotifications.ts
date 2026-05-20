@@ -30,7 +30,7 @@ const STALE_TOKEN_MS = 7 * 24 * 60 * 60 * 1000
 // ⚠️ VAPID key — Firebase Console > Project Settings > Cloud Messaging > Web Push certificates
 const VAPID_KEY = 'BKHZvBeWzYyHEmWNFUd-CNfmRtEUbb8xYchwnvQNif47LR6xE0hpJHXgoZRHP47wzMIiarFXNYqzuFh-PtXTDhY'
 
-export type NotificationScope = 'pulsar' | 'cepheid' | 'sidera'
+export type NotificationScope = 'pulsar' | 'cepheid' | 'nebula' | 'sidera'
 
 // Schema entry token in team/{email}.fcmTokens:
 //   - Nuovo: { ts: Timestamp, scope: NotificationScope, ua?: string }

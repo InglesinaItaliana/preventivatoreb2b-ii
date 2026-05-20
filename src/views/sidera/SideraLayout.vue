@@ -122,9 +122,9 @@ const modules = [
   {
     name: 'NEBULA',   accent: '#C46030',
     vx: 155, vy: 400, vr: 10,
-    items: [
-      { path: '/sidera/nebula', exact: false, label: 'Team', icon: 'group' },
-    ],
+    // Single source of truth con bottom-nav mobile NEBULA: stessi link (/nebula/*)
+    // sia nella sidebar desktop che nella pillola mobile.
+    items: SCOPE_CONFIGS.nebula.mobileNav as any[],
   },
   {
     name: 'CEPHEID',  accent: '#D4A020',
