@@ -370,12 +370,20 @@ onMounted(() => {
   align-items: center;
   gap: 10px;
   padding: 12px 14px;
-  background: #fff;
-  border-radius: 10px;
-  border: 1px solid #E8E5DF;
+  background: var(--md-sys-color-surface);
+  border-radius: var(--md-sys-shape-corner-small);
+  border: 1px solid var(--md-sys-color-outline-variant);
   border-left: 6px solid transparent;
   margin-bottom: 6px;
   box-shadow: var(--md-sys-elevation-level-1);
+  transition: border-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              box-shadow   var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              transform    var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
+}
+.task-row:hover {
+  border-color: var(--md-sys-color-outline);
+  box-shadow: var(--md-sys-elevation-level-2);
+  transform: translateY(-1px);
 }
 
 .checkbox {

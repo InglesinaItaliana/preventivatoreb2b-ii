@@ -332,15 +332,23 @@ onMounted(() => {
 
 .proj-row {
   display: flex;
-  background: #fff;
-  border: 1px solid #E8E5DF;
+  background: var(--md-sys-color-surface);
+  border: 1px solid var(--md-sys-color-outline-variant);
   border-radius: var(--md-sys-shape-corner-medium);
   overflow: hidden;
   cursor: pointer;
-  transition: border-color 0.15s, background 0.15s;
+  box-shadow: var(--md-sys-elevation-level-1);
+  transition: border-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              background   var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              box-shadow   var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              transform    var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
 }
-
-.proj-row:hover { border-color: var(--md-sys-color-primary); background: color-mix(in srgb, var(--md-sys-color-primary) 4%, transparent); }
+.proj-row:hover {
+  border-color: var(--md-sys-color-primary);
+  background: color-mix(in srgb, var(--md-sys-color-primary) 4%, var(--md-sys-color-surface));
+  box-shadow: var(--md-sys-elevation-level-2);
+  transform: translateY(-1px);
+}
 
 .proj-stripe { width: 6px; flex-shrink: 0; }
 

@@ -379,16 +379,22 @@ function urgenzaLabel(giorni: number) {
   gap: 10px;
   padding: 11px 14px;
   background: var(--s-surface);
-  border-radius: 9px;
+  border-radius: var(--md-sys-shape-corner-small);
   border: 1px solid var(--s-border);
   border-left: 6px solid transparent;
   margin-bottom: 6px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: border-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              box-shadow   var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              transform    var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
   box-shadow: var(--md-sys-elevation-level-1);
 }
 
-.azione-row:hover { border-color: var(--s-border-mid); box-shadow: var(--s-shadow-hover); }
+.azione-row:hover {
+  border-color: var(--md-sys-color-outline);
+  box-shadow: var(--md-sys-elevation-level-2);
+  transform: translateY(-1px);
+}
 
 .checkbox {
   width: 17px; height: 17px;
@@ -433,15 +439,21 @@ function urgenzaLabel(giorni: number) {
 .proj-mini {
   background: var(--s-surface);
   border: 1px solid var(--s-border);
-  border-radius: 10px;
+  border-radius: var(--md-sys-shape-corner-small);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: border-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              box-shadow   var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              transform    var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
   box-shadow: var(--s-shadow);
   position: relative;
   overflow: hidden;
 }
 
-.proj-mini:hover { box-shadow: var(--s-shadow-hover); border-color: var(--s-border-mid); transform: translateY(-1px); }
+.proj-mini:hover {
+  border-color: var(--md-sys-color-outline);
+  box-shadow: var(--s-shadow-hover);
+  transform: translateY(-1px);
+}
 
 .proj-stripe {
   position: absolute; top: 0; left: 0; right: 0;
@@ -477,11 +489,17 @@ function urgenzaLabel(giorni: number) {
   text-decoration: none;
   color: inherit;
   box-shadow: var(--s-shadow);
-  transition: all 0.15s;
+  transition: border-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              box-shadow   var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              transform    var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
   display: block;
 }
 
-.kpi-card:hover { border-color: var(--s-border-mid); box-shadow: var(--s-shadow-hover); transform: translateY(-1px); }
+.kpi-card:hover {
+  border-color: var(--md-sys-color-outline);
+  box-shadow: var(--s-shadow-hover);
+  transform: translateY(-1px);
+}
 
 .kpi-label { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; color: var(--s-text-dim); text-transform: uppercase; margin-bottom: 8px; }
 
@@ -514,15 +532,21 @@ function urgenzaLabel(giorni: number) {
   background: var(--s-surface);
   border: 1px solid var(--s-border);
   border-left: 6px solid transparent;
-  border-radius: 9px;
+  border-radius: var(--md-sys-shape-corner-small);
   margin-bottom: 7px;
   text-decoration: none;
   color: inherit;
-  transition: all 0.15s;
+  transition: border-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              box-shadow   var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              transform    var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
   box-shadow: var(--md-sys-elevation-level-1);
 }
 
-.urgenza-card:hover { border-color: var(--s-border-mid); box-shadow: var(--s-shadow-hover); }
+.urgenza-card:hover {
+  border-color: var(--md-sys-color-outline);
+  box-shadow: var(--md-sys-elevation-level-2);
+  transform: translateY(-1px);
+}
 
 .urgenza-commessa { font-size: 13px; font-weight: 500; color: var(--s-text); margin-bottom: 2px; }
 .urgenza-cliente  { font-size: 11px; color: var(--s-text-dim); }
