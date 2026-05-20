@@ -1524,6 +1524,82 @@ exports.onChatDeleted = functions
     });
 
 // ──────────────────────────────────────────────────────────────────
+// PULSAR — one-shot: cleanup pendenze orfane in PulsarPendingView
+// HTTPS callable, admin-only. Cancella i messaggi in chats/{chatId}/messages
+// dove il documento chat parent non esiste più (chat cancellate prima del
+// deploy di onChatDeleted). Idempotente: rieseguibile senza danni.
+//
+// Invocazione (dopo deploy):
+//   firebase functions:shell  →  cleanupOrphanPendingMessages({})
+// oppure:
+//   gcloud functions call cleanupOrphanPendingMessages --region europe-west1
+// ──────────────────────────────────────────────────────────────────
+exports.cleanupOrphanPendingMessages = functions
+    .region('europe-west1')
+    .runWith({ timeoutSeconds: 540, memory: '512MB' })
+    .https.onCall(async (_data, context) => {
+        // Admin-only: stesso pattern di altre function admin del progetto
+        const callerEmail = context.auth?.token?.email?.toLowerCase()?.trim();
+        if (callerEmail !== 'info@inglesinaitaliana.it') {
+            throw new functions.https.HttpsError('permission-denied', 'Solo admin.');
+        }
+
+        const db = admin.firestore();
+        console.log('[cleanupOrphanPendingMessages] start');
+
+        // Step 1: raccogli tutti i ref messaggi raggruppati per chatId.
+        // collectionGroup('messages') scarica TUTTI i messaggi. Ok per one-shot.
+        const allMessagesSnap = await db.collectionGroup('messages').select().get();
+        const messagesByChat = new Map<string, FirebaseFirestore.DocumentReference[]>();
+        for (const d of allMessagesSnap.docs) {
+            const chatRef = d.ref.parent.parent;
+            if (!chatRef) continue;
+            const list = messagesByChat.get(chatRef.id) ?? [];
+            list.push(d.ref);
+            messagesByChat.set(chatRef.id, list);
+        }
+
+        console.log(`[cleanupOrphanPendingMessages] ${allMessagesSnap.size} messaggi totali in ${messagesByChat.size} chat distinte`);
+
+        // Step 2: per ogni chatId, verifica se la chat esiste.
+        // Se NON esiste, cancella tutti i suoi messaggi in batch.
+        const chatIds = Array.from(messagesByChat.keys());
+        const chatSnaps = await Promise.all(
+            chatIds.map((id) => db.collection('chats').doc(id).get())
+        );
+
+        let orphanChatsCount = 0;
+        let deletedMessagesCount = 0;
+
+        for (let i = 0; i < chatIds.length; i++) {
+            const chatId = chatIds[i];
+            const chatSnap = chatSnaps[i];
+            if (chatSnap.exists) continue;
+
+            // Chat orfana: cancella tutti i suoi messaggi
+            orphanChatsCount++;
+            const refs = messagesByChat.get(chatId) ?? [];
+            const BATCH_SIZE = 500;
+            for (let j = 0; j < refs.length; j += BATCH_SIZE) {
+                const batch = db.batch();
+                refs.slice(j, j + BATCH_SIZE).forEach((r) => batch.delete(r));
+                await batch.commit();
+                deletedMessagesCount += Math.min(BATCH_SIZE, refs.length - j);
+            }
+            console.log(`[cleanupOrphanPendingMessages] chat orfana ${chatId}: cancellati ${refs.length} messaggi`);
+        }
+
+        const result = {
+            orphanChatsCount,
+            deletedMessagesCount,
+            totalMessagesScanned: allMessagesSnap.size,
+            totalChatsScanned: messagesByChat.size,
+        };
+        console.log('[cleanupOrphanPendingMessages] done', result);
+        return result;
+    });
+
+// ──────────────────────────────────────────────────────────────────
 // CRON: SHIPPED → DELIVERED dopo 7 giorni dalla spedizione
 // Risolve i casi in cui il cliente B2B non clicca "Conferma Ricezione"
 // in ClientDashboard, lasciando l'ordine bloccato in SHIPPED.
