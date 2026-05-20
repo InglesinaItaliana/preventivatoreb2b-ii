@@ -2,20 +2,30 @@
 import { ref, computed, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import {
-  collectionGroup, collection, query, where, orderBy,
+  collectionGroup, collection, query, where, orderBy, limit,
   onSnapshot, getDoc, addDoc, doc, updateDoc, serverTimestamp,
 } from 'firebase/firestore'
 import { db, auth } from '../../firebase'
 import { avatarInitial, displayName, useTeamMembers } from '../../composables/sidera/useTeamMembers'
 import { pulsarAvatarColor as avatarColor } from '../../composables/pulsar/usePulsarAvatar'
 import { useProjects } from '../../composables/sidera/useProjects'
+import { useChats } from '../../composables/pulsar/useChats'
 import { createStandaloneTask } from '../../composables/sidera/useAllTasks'
 import MIcon from '../../components/pulsar/MIcon.vue'
 
 const router = useRouter()
 const { members } = useTeamMembers()
 const { projects } = useProjects()
+const { chats } = useChats()
 const myEmail = (auth.currentUser?.email ?? '').toLowerCase().trim()
+
+// Mappa chatId -> {name, isGroup} popolata dallo snapshot di useChats.
+// Permette di leggere chatName/chatIsGroup senza fare getDoc per ogni messaggio (elimina N+1).
+const chatCache = computed(() => {
+  const m = new Map<string, { name: string; isGroup: boolean }>()
+  for (const c of chats.value) m.set(c.id, { name: c.name, isGroup: c.isGroup })
+  return m
+})
 
 interface PendingMsg {
   id: string
@@ -53,38 +63,55 @@ const q = query(
   collectionGroup(db, 'messages'),
   where('flags', 'array-contains-any', ['question', 'task']),
   orderBy('createdAt', 'desc'),
+  limit(100),  // performance: cap iniziale, paginazione "carica altri" rimane TODO
 )
+
+// Cache fallback per chat NON in chatCache (es. utente non è membro,
+// caso raro dato che la query Firestore filtra per flags, non per membership).
+// Popolata lazy via getDoc, deduplica le richieste.
+const chatLookupFallback = new Map<string, Promise<{ name: string; isGroup: boolean } | null>>()
+function resolveChat(chatId: string, chatRef: any): Promise<{ name: string; isGroup: boolean } | null> {
+  const cached = chatCache.value.get(chatId)
+  if (cached) return Promise.resolve(cached)
+  const pending = chatLookupFallback.get(chatId)
+  if (pending) return pending
+  const promise = (async () => {
+    try {
+      const snap = await getDoc(chatRef)
+      const data = snap.data()
+      if (!data) return null
+      return { name: data.name ?? '', isGroup: data.isGroup ?? false }
+    } catch (_) {
+      return null
+    }
+  })()
+  chatLookupFallback.set(chatId, promise)
+  return promise
+}
 
 const unsubscribe = onSnapshot(q, async (snap) => {
   if (snap.metadata.fromCache && snap.empty) return
   const results: PendingMsg[] = []
-  for (const d of snap.docs) {
+  // Eseguo le resolveChat in PARALLELO invece che sequenziale (era N+1 bloccante)
+  const enriched = await Promise.all(snap.docs.map(async (d) => {
     const data    = d.data()
     const chatRef = d.ref.parent.parent
     const chatId  = chatRef?.id ?? ''
-    let chatName  = ''
-    let chatIsGroup = false
-    if (chatRef) {
-      try {
-        const chatSnap = await getDoc(chatRef)
-        const chatData = chatSnap.data()
-        chatName    = chatData?.name ?? ''
-        chatIsGroup = chatData?.isGroup ?? false
-      } catch (_) {}
-    }
-    results.push({
-      id:         d.id,
+    const chatInfo = chatId && chatRef ? await resolveChat(chatId, chatRef) : null
+    return {
+      id:          d.id,
       chatId,
-      chatName:   chatName || chatId.slice(0, 8),
-      chatIsGroup,
-      text:       data.text      ?? '',
-      from:       data.from      ?? '',
-      createdAt:  toDate(data.createdAt) ?? new Date(),
-      flags:      data.flags     ?? [],
-      taskId:     data.taskId    ?? null,
-      answeredAt: toDate(data.answeredAt),
-    })
-  }
+      chatName:    chatInfo?.name || chatId.slice(0, 8),
+      chatIsGroup: chatInfo?.isGroup ?? false,
+      text:        data.text      ?? '',
+      from:        data.from      ?? '',
+      createdAt:   toDate(data.createdAt) ?? new Date(),
+      flags:       data.flags     ?? [],
+      taskId:      data.taskId    ?? null,
+      answeredAt:  toDate(data.answeredAt),
+    } as PendingMsg
+  }))
+  results.push(...enriched)
   allFlagged.value = results
   loading.value    = false
 }, (err) => {
