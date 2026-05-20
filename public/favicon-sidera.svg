@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 680 680" role="img" aria-label="SIDERA">
+  <!-- Sfondo scuro coerente con sidebar SIDERA (#05090F) -->
+  <rect width="680" height="680" rx="100" fill="#05090F"/>
+
+  <!-- Schlegel diagram (ottaedro proiettato, 6 vertici + 12 edges).
+       Coordinate ricalcate per viewBox 680x680 quadrato (originale era 680x480),
+       centrate verticalmente. -->
+
+  <!-- 12 edges in oro #D4C498 a 55% opacita': struttura sempre visibile,
+       i vertici emergono al confronto. Stroke ampio per leggibilita' a 16px. -->
+  <g stroke="#D4C498" stroke-width="14" stroke-linecap="round" stroke-opacity="0.55" fill="none">
+    <!-- Triangolo esterno: QUASAR (top) - NEBULA (bottom-left) - CEPHEID (bottom-right) -->
+    <path d="M340 174 L155 506 L525 506 Z"/>
+    <!-- Triangolo interno: NOVA - PULSAR - MAGNETAR -->
+    <path d="M275 358 L405 358 L340 470 Z"/>
+    <!-- Raggi da QUASAR ai due vertici interni superiori -->
+    <line x1="340" y1="174" x2="405" y2="358"/>
+    <line x1="340" y1="174" x2="275" y2="358"/>
+    <!-- Raggi da NEBULA -->
+    <line x1="155" y1="506" x2="275" y2="358"/>
+    <line x1="155" y1="506" x2="340" y2="470"/>
+    <!-- Raggi da CEPHEID -->
+    <line x1="525" y1="506" x2="405" y2="358"/>
+    <line x1="525" y1="506" x2="340" y2="470"/>
+  </g>
+
+  <!-- 6 vertici oro pieno. Esterni leggermente piu' grandi degli interni
+       (replica della gerarchia r=14 vs r=12 di SideraLogoSchlegel). -->
+  <g fill="#D4C498">
+    <!-- Esterni -->
+    <circle cx="340" cy="174" r="44"/>  <!-- QUASAR -->
+    <circle cx="155" cy="506" r="44"/>  <!-- NEBULA -->
+    <circle cx="525" cy="506" r="44"/>  <!-- CEPHEID -->
+    <!-- Interni -->
+    <circle cx="405" cy="358" r="36"/>  <!-- PULSAR -->
+    <circle cx="275" cy="358" r="36"/>  <!-- NOVA -->
+    <circle cx="340" cy="470" r="36"/>  <!-- MAGNETAR -->
+  </g>
+</svg>

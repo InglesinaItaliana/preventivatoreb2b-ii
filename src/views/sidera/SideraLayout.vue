@@ -11,7 +11,7 @@ import { detectScope, getScopeConfig, SCOPE_CONFIGS, type ScopeId } from './scop
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
 import { useTeamMembers, displayName, avatarColor } from '../../composables/sidera/useTeamMembers'
 import { useChats } from '../../composables/pulsar/useChats'
-import { useNotifications } from '../../composables/shared/useNotifications'
+import { useNotifications, type NotificationScope } from '../../composables/shared/useNotifications'
 
 const route  = useRoute()
 const router = useRouter()
@@ -38,7 +38,7 @@ const currentScopeConfig = computed(() => getScopeConfig(currentScope.value))
 
 // ── FCM scope: 'sidera' (wildcard desktop) o lo scope del modulo se in mobile-layout ─
 // Determinato al mount-time (non reattivo: useNotifications non supporta swap dinamico).
-function pickFcmScope(): 'pulsar' | 'cepheid' | 'sidera' {
+function pickFcmScope(): NotificationScope {
   const onMobile = window.matchMedia('(display-mode: standalone)').matches ||
                    (window.navigator as any).standalone === true ||
                    window.matchMedia('(max-width: 768px)').matches

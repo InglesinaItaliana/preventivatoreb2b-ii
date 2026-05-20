@@ -389,12 +389,12 @@ onUnmounted(() => {
   font-family: 'Outfit', sans-serif;
   display: inline-flex;
   align-items: center;
-  font-size: 0.32em;
+  font-size: 0.24em;
   opacity: 0.55;
   padding: 0 0.45em;
   line-height: 1;
   position: relative;
-  top: -0.18em;
+  top: -0.00em;
   -webkit-text-fill-color: currentColor;
   color: #D4C498;
 }

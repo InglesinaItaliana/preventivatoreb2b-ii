@@ -43,18 +43,44 @@
             });
           }
 
+          function setFavicon(href, type) {
+            var l = head.querySelector("link[rel~='icon']");
+            if (!l) {
+              l = document.createElement('link');
+              l.rel = 'icon';
+              head.appendChild(l);
+            }
+            l.type = type;
+            l.href = href;
+          }
+
+          // Identita' tab browser: tutta la suite-of-webapps mostra favicon
+          // Schlegel + titolo "Sistema SIDERA" (brand unificato in tab desktop).
+          // Manifest e apple-touch-icon restano per-scope: servono per l'icona
+          // PWA quando l'utente fa "Aggiungi a Home Screen".
           if (path.indexOf('/pulsar') === 0) {
             addManifest('/pulsar.webmanifest');
             addAppleIcons('/icons/pulsar', null);
+            document.title = 'Sistema SIDERA';
+            setFavicon('/favicon-sidera.svg', 'image/svg+xml');
             if (titleMeta) titleMeta.setAttribute('content', 'PULSAR');
           } else if (path.indexOf('/cepheid') === 0) {
             addManifest('/cepheid.webmanifest');
             addAppleIcons('/icons/cepheid', '2');
+            document.title = 'Sistema SIDERA';
+            setFavicon('/favicon-sidera.svg', 'image/svg+xml');
             if (titleMeta) titleMeta.setAttribute('content', 'CEPHEID');
           } else if (path.indexOf('/nebula') === 0) {
             addManifest('/nebula.webmanifest');
             addAppleIcons('/icons/nebula', null);
+            document.title = 'Sistema SIDERA';
+            setFavicon('/favicon-sidera.svg', 'image/svg+xml');
             if (titleMeta) titleMeta.setAttribute('content', 'NEBULA');
+          } else if (path.indexOf('/sidera') === 0) {
+            // SIDERA: shell desktop, niente PWA manifest.
+            document.title = 'Sistema SIDERA';
+            setFavicon('/favicon-sidera.svg', 'image/svg+xml');
+            if (titleMeta) titleMeta.setAttribute('content', 'SIDERA');
           } else {
             // POPS default (qualsiasi altro path: /, /preventivatore, /production, /delivery, ...)
             addManifest('/pops.webmanifest');
