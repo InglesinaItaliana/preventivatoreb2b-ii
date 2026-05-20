@@ -159,12 +159,18 @@ const modules = [
 const activeModule = computed(() =>
   modules.find(m => {
     if (m.name === 'QUASAR')
-      return route.path === '/sidera' || route.path === '/sidera/hub'
+      return route.path === '/sidera'   // SOLO /sidera (Cruscotto) — /sidera/hub è all-mode
     return m.items.some((item: any) =>
       item.exact ? route.path === item.path : route.path.startsWith(item.path)
     )
   }) ?? null
 )
+
+// Logo "all-mode": SOLO su /sidera/hub mostriamo tutti i vertici accesi
+// col color SIDERA uniforme (come la pagina HubView). Su /sidera (Cruscotto)
+// e' attivo QUASAR come modulo singolo (vertice illuminato + wordmark color).
+const isAllMode = computed(() => route.path === '/sidera/hub')
+const activeLogoModule = computed(() => isAllMode.value ? null : activeModule.value)
 
 // ── Edges Schlegel per il logo "ricco" della sidebar (replica HubView) ─────
 // 12 edges per nome modulo. Coordinate dei vertici prese da modules[].vx/vy.
@@ -184,9 +190,11 @@ function moduleByName(name: string) {
 }
 
 // Edges adiacenti al modulo attivo, normalizzati col modulo attivo come "from".
-// Replica activateLogo() dell'HubView: gradient 0% color, 75% color, 100% NE.
+// Gradient 0% color, 75% color, 100% color@0.45 — l'edge mantiene il SUO color
+// fino al vertice opposto, solo fadeato in opacity. Risolve il bug 'edges che
+// sfumano in NE si confondono con gli edges base' (es. NEBULA-CEPHEID orizzontale).
 const activeEdges = computed(() => {
-  const am = activeModule.value
+  const am = activeLogoModule.value
   if (!am) return []
   return EDGES_HUB
     .filter(([a, b]) => a === am.name || b === am.name)
@@ -200,16 +208,19 @@ const activeEdges = computed(() => {
 // Dimensioni halo per il vertice attivo: outer più grandi, inner più piccoli
 // (replica HubView: outer halo-lg=42 / md=24, inner halo-lg=34 / md=19).
 const activeHaloLg = computed(() => {
-  const am = activeModule.value
+  const am = activeLogoModule.value
   if (!am) return 0
   // outer = QUASAR/NEBULA/CEPHEID (vr 10), inner = PULSAR/NOVA/MAGNETAR (vr 8)
   return am.vr === 10 ? 42 : 34
 })
 const activeHaloMd = computed(() => {
-  const am = activeModule.value
+  const am = activeLogoModule.value
   if (!am) return 0
   return am.vr === 10 ? 24 : 19
 })
+function haloMdSize(mod: typeof modules[0]) {
+  return mod.vr === 10 ? 24 : 19
+}
 
 const SIDERA_COLOR      = '#D4C498'
 const SIDERA_COLOR_DIM  = '#D4C49880'
@@ -331,16 +342,19 @@ const roleLabel: Record<string, string> = {
               <feGaussianBlur stdDeviation="18" result="b"/>
               <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
             </filter>
-            <!-- Gradient per ogni edge attivo: 0%/75% color modulo, 100% NE -->
+            <!-- Gradient per ogni edge attivo: 0%/75% color modulo, 100% accent@0.45.
+                 NOTA: fadiamo in opacity sullo stesso color (no fade-to-NE) per evitare
+                 che gli edges lunghi (NEBULA-CEPHEID, PULSAR-NOVA orizzontali) sembrino
+                 sparire vicino al vertice opposto — bug riscontrato anche su ScopedLogin. -->
             <linearGradient
               v-for="e in activeEdges" :key="e.id"
               :id="e.id"
               gradientUnits="userSpaceOnUse"
               :x1="e.from.vx" :y1="e.from.vy" :x2="e.to.vx" :y2="e.to.vy"
             >
-              <stop offset="0%"   :stop-color="activeModule!.accent"/>
-              <stop offset="75%"  :stop-color="activeModule!.accent"/>
-              <stop offset="100%" :stop-color="NE_COLOR"/>
+              <stop offset="0%"   :stop-color="activeLogoModule!.accent" stop-opacity="1"/>
+              <stop offset="75%"  :stop-color="activeLogoModule!.accent" stop-opacity="0.85"/>
+              <stop offset="100%" :stop-color="activeLogoModule!.accent" stop-opacity="0.45"/>
             </linearGradient>
           </defs>
 
@@ -353,8 +367,18 @@ const roleLabel: Record<string, string> = {
             style="transition: stroke 0.5s ease"
           />
 
-          <!-- Edge glow (gradient color → NE, solo edges adiacenti al modulo attivo) -->
-          <g v-if="activeModule" style="transition: opacity 0.6s ease">
+          <!-- All-mode (route /sidera o /sidera/hub): tutti gli edges glow color SIDERA -->
+          <g v-if="isAllMode" style="opacity: 0.45">
+            <line
+              v-for="([a, b], i) in EDGES_HUB" :key="`ea-${i}`"
+              :x1="moduleByName(a)!.vx" :y1="moduleByName(a)!.vy"
+              :x2="moduleByName(b)!.vx" :y2="moduleByName(b)!.vy"
+              stroke="#D4C498" stroke-width="3.5" filter="url(#s-hv-gf-sm)"
+            />
+          </g>
+
+          <!-- Edge glow gradient (solo edges adiacenti al modulo attivo) -->
+          <g v-if="activeLogoModule" style="transition: opacity 0.6s ease">
             <line
               v-for="e in activeEdges" :key="`eg-${e.id}`"
               :x1="e.from.vx" :y1="e.from.vy"
@@ -364,30 +388,40 @@ const roleLabel: Record<string, string> = {
             />
           </g>
 
-          <!-- Halo grande (vertice attivo) -->
+          <!-- All-mode: halo md su TUTTI i vertici (color SIDERA tenue) -->
+          <template v-if="isAllMode">
+            <circle
+              v-for="mod in modules" :key="`ha-${mod.name}`"
+              :cx="mod.vx" :cy="mod.vy" :r="haloMdSize(mod)"
+              fill="#D4C498" fill-opacity="0.18"
+              filter="url(#s-hv-gf-md)"
+            />
+          </template>
+
+          <!-- Halo grande (vertice attivo, solo modulo singolo) -->
           <circle
-            v-if="activeModule"
-            :cx="activeModule.vx" :cy="activeModule.vy" :r="activeHaloLg"
-            :fill="activeModule.accent" fill-opacity="0.11"
+            v-if="activeLogoModule"
+            :cx="activeLogoModule.vx" :cy="activeLogoModule.vy" :r="activeHaloLg"
+            :fill="activeLogoModule.accent" fill-opacity="0.11"
             filter="url(#s-hv-gf-lg)"
             style="transition: fill 0.6s ease, fill-opacity 0.6s ease"
           />
-          <!-- Halo medio (vertice attivo) -->
+          <!-- Halo medio (vertice attivo, solo modulo singolo) -->
           <circle
-            v-if="activeModule"
-            :cx="activeModule.vx" :cy="activeModule.vy" :r="activeHaloMd"
-            :fill="activeModule.accent" fill-opacity="0.28"
+            v-if="activeLogoModule"
+            :cx="activeLogoModule.vx" :cy="activeLogoModule.vy" :r="activeHaloMd"
+            :fill="activeLogoModule.accent" fill-opacity="0.28"
             filter="url(#s-hv-gf-md)"
             style="transition: fill 0.5s ease, fill-opacity 0.5s ease"
           />
 
-          <!-- Vertici (attivo color modulo, inattivi NV/NS) -->
+          <!-- Vertici: all-mode → tutti SIDERA / single → solo attivo color modulo -->
           <circle
             v-for="mod in modules" :key="mod.name"
             :cx="mod.vx" :cy="mod.vy"
             :r="mod.vr === 10 ? 14 : 12"
-            :fill="activeModule?.name === mod.name ? mod.accent : NV_COLOR"
-            :stroke="activeModule?.name === mod.name ? mod.accent : NS_COLOR"
+            :fill="isAllMode ? '#D4C498' : (activeLogoModule?.name === mod.name ? mod.accent : NV_COLOR)"
+            :stroke="isAllMode ? '#D4C498' : (activeLogoModule?.name === mod.name ? mod.accent : NS_COLOR)"
             stroke-width="0.8"
             filter="url(#s-hv-gf-sm)"
             style="transition: fill 0.5s ease, stroke 0.5s ease"
