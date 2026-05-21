@@ -1,7 +1,7 @@
 import { ref, onUnmounted } from 'vue'
 import {
   collection, query, orderBy, onSnapshot,
-  addDoc, updateDoc, deleteDoc, doc, serverTimestamp, increment,
+  addDoc, updateDoc, deleteDoc, doc, serverTimestamp, increment, writeBatch,
 } from 'firebase/firestore'
 import { db, auth } from '../../firebase'
 
@@ -13,10 +13,15 @@ export interface ProjectTask {
   status: string
   priority: 'alta' | 'media' | 'bassa'
   assignees: string[]
+  startDate: Date | null
   dueDate: Date | null
   projectId: string
   type: TaskType
   deliverableTaskIds: string[]
+  order: number | null          // sequenza fase (solo deliverable)
+  approved: boolean             // fase approvata (solo deliverable)
+  approvedAt: Date | null
+  deliverableId: string | null  // fase collegata (solo milestone)
   createdBy: string
   createdByEmail: string
   createdAt: Date
@@ -50,10 +55,15 @@ export function useProjectTasks(projectId: string) {
         status:             data.status   ?? 'todo',
         priority:           data.priority ?? 'media',
         assignees:          data.assignees ?? (data.assignee ? [data.assignee] : []),
+        startDate:          toDate(data.startDate),
         dueDate:            toDate(data.dueDate),
         projectId:          data.projectId ?? projectId,
         type:               (data.type as TaskType) ?? 'task',
         deliverableTaskIds: Array.isArray(data.deliverableTaskIds) ? data.deliverableTaskIds : [],
+        order:              typeof data.order === 'number' ? data.order : null,
+        approved:           data.approved ?? false,
+        approvedAt:         toDate(data.approvedAt),
+        deliverableId:      data.deliverableId ?? null,
         createdBy:          data.createdBy ?? '',
         createdByEmail:     data.createdByEmail ?? '',
         createdAt:          toDate(data.createdAt) ?? new Date(),
@@ -79,21 +89,29 @@ export function useProjectTasks(projectId: string) {
     status: string
     priority: 'alta' | 'media' | 'bassa'
     dueDate: Date | null
+    startDate?: Date | null
     assignees?: string[]
     type?: TaskType
     deliverableTaskIds?: string[]
+    order?: number | null
+    deliverableId?: string | null
   }) {
     const type = data.type ?? 'task'
     await addDoc(collection(db, 'projects', projectId, 'tasks'), {
       title:              data.title,
       status:             data.status,
       priority:           data.priority,
+      startDate:          data.startDate ?? null,
       dueDate:            data.dueDate ?? null,
       description:        '',
       assignees:          data.assignees ?? [],
       projectId,
       type,
       deliverableTaskIds: data.deliverableTaskIds ?? [],
+      order:              data.order ?? null,
+      approved:           false,
+      approvedAt:         null,
+      deliverableId:      data.deliverableId ?? null,
       createdBy:          auth.currentUser?.uid ?? '',
       createdByEmail:     auth.currentUser?.email ?? '',
       createdAt:          serverTimestamp(),
@@ -132,9 +150,44 @@ export function useProjectTasks(projectId: string) {
 
   async function updateTask(
     taskId: string,
-    data: Partial<{ title: string; priority: 'alta' | 'media' | 'bassa'; dueDate: Date | null; assignees: string[]; deliverableTaskIds: string[] }>,
+    data: Partial<{ title: string; priority: 'alta' | 'media' | 'bassa'; startDate: Date | null; dueDate: Date | null; assignees: string[]; deliverableTaskIds: string[]; order: number | null; deliverableId: string | null }>,
   ) {
     await updateDoc(doc(db, 'projects', projectId, 'tasks', taskId), data)
+  }
+
+  // Approva una fase (deliverable): segna approved + marca raggiunta la milestone collegata.
+  // approvedAt usa serverTimestamp -> solo qui, mai via updateTask generico.
+  async function approvePhase(deliverableId: string) {
+    const batch = writeBatch(db)
+    batch.update(doc(db, 'projects', projectId, 'tasks', deliverableId), {
+      approved:   true,
+      approvedAt: serverTimestamp(),
+    })
+    const mile = tasks.value.find(t => t.type === 'milestone' && t.deliverableId === deliverableId)
+    if (mile) {
+      batch.update(doc(db, 'projects', projectId, 'tasks', mile.id), {
+        status:      'done',
+        completedAt: serverTimestamp(),
+        completedBy: auth.currentUser?.email ?? null,
+      })
+    }
+    await batch.commit()
+  }
+
+  async function unapprovePhase(deliverableId: string) {
+    const batch = writeBatch(db)
+    batch.update(doc(db, 'projects', projectId, 'tasks', deliverableId), {
+      approved:   false,
+      approvedAt: null,
+    })
+    const mile = tasks.value.find(t => t.type === 'milestone' && t.deliverableId === deliverableId)
+    if (mile) {
+      batch.update(doc(db, 'projects', projectId, 'tasks', mile.id), {
+        status:      'todo',
+        completedAt: null,
+      })
+    }
+    await batch.commit()
   }
 
   async function deleteTask(taskId: string, wasCompleted: boolean) {
@@ -147,5 +200,5 @@ export function useProjectTasks(projectId: string) {
     }
   }
 
-  return { tasks, loading, createTask, updateTaskStatus, completeTask, uncompleteTask, updateTask, deleteTask }
+  return { tasks, loading, createTask, updateTaskStatus, completeTask, uncompleteTask, updateTask, deleteTask, approvePhase, unapprovePhase }
 }

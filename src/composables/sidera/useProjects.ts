@@ -8,6 +8,7 @@ export interface Project {
   description: string
   color: string
   states: { id: string; label: string; color: string; order: number }[]
+  startDate: Date | null
   dueDate: Date | null
   taskCount: number
   doneCount: number
@@ -48,6 +49,7 @@ export function useProjects() {
         description: data.description ?? '',
         color:       data.color       ?? '#2F6B4A',
         states:      data.states      ?? DEFAULT_STATES,
+        startDate:   toDate(data.startDate),
         dueDate:     toDate(data.dueDate),
         taskCount:   data.taskCount   ?? 0,
         doneCount:   data.doneCount   ?? 0,
@@ -105,7 +107,7 @@ export function useProjects() {
 
   async function updateProject(
     projectId: string,
-    data: Partial<{ name: string; description: string; color: string; dueDate: Date | null; obiettivoId: string | null }>,
+    data: Partial<{ name: string; description: string; color: string; startDate: Date | null; dueDate: Date | null; obiettivoId: string | null }>,
   ) {
     await updateDoc(doc(db, 'projects', projectId), data)
   }

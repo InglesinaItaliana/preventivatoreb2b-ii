@@ -9,13 +9,14 @@ import { useObiettivi } from '../../composables/sidera/useObiettivi'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
 import { useTeamMembers, displayName, starAvatarProps } from '../../composables/sidera/useTeamMembers'
 import StarAvatar from '../../components/shared/StarAvatar.vue'
+import CepheidTimeline from '../../components/cepheid/CepheidTimeline.vue'
 
 const route   = useRoute()
 const router  = useRouter()
 const projectId = route.params.id as string
 
-const { projects } = useProjects()
-const { tasks, loading, createTask, completeTask, uncompleteTask, updateTaskStatus, updateTask, deleteTask } = useProjectTasks(projectId)
+const { projects, updateProject } = useProjects()
+const { tasks, loading, createTask, completeTask, uncompleteTask, updateTaskStatus, updateTask, deleteTask, approvePhase, unapprovePhase } = useProjectTasks(projectId)
 const { obiettiviAttivi } = useObiettivi()
 const { currentUser } = useCurrentUser()
 const { members } = useTeamMembers()
@@ -29,7 +30,7 @@ const obiettivoCollegato = computed(() => {
 })
 
 // ── Tabs ──────────────────────────────────────────────────────────────────
-type Tab = 'kanban' | 'list' | 'milestone' | 'deliverable' | 'cal' | 'notes'
+type Tab = 'kanban' | 'list' | 'milestone' | 'deliverable' | 'timeline' | 'notes'
 const activeTab = ref<Tab>('kanban')
 
 // ── List view: tutti i task flat sortable per state/priority ──────────────
@@ -131,36 +132,6 @@ function deliverablePct(d: { deliverableTaskIds: string[] }): number {
   return Math.round((done / sub.length) * 100)
 }
 
-// ── CALENDARIO ────────────────────────────────────────────────────────────
-// Raggruppa task per intervallo di scadenza relativa: ritardo, oggi, settimana, dopo.
-interface CalGroup { id: string; label: string; color: string; tasks: typeof taskItems.value }
-const calendarGroups = computed<CalGroup[]>(() => {
-  const now = new Date(); now.setHours(0, 0, 0, 0)
-  const tomorrow = new Date(now); tomorrow.setDate(tomorrow.getDate() + 1)
-  const weekEnd = new Date(now); weekEnd.setDate(weekEnd.getDate() + 7)
-
-  const withDue = taskItems.value.filter(t => !!t.dueDate && !t.completedAt)
-  const sorted = [...withDue].sort((a, b) => (a.dueDate?.getTime() ?? 0) - (b.dueDate?.getTime() ?? 0))
-
-  const late:    typeof sorted = []
-  const today:   typeof sorted = []
-  const week:    typeof sorted = []
-  const later:   typeof sorted = []
-  for (const t of sorted) {
-    const d = t.dueDate!
-    if (d < now)             late.push(t)
-    else if (d < tomorrow)   today.push(t)
-    else if (d < weekEnd)    week.push(t)
-    else                     later.push(t)
-  }
-  const out: CalGroup[] = []
-  if (late.length)  out.push({ id: 'late',  label: 'In ritardo',         color: '#C8521A', tasks: late })
-  if (today.length) out.push({ id: 'today', label: 'Oggi',               color: 'var(--md-sys-color-primary)', tasks: today })
-  if (week.length)  out.push({ id: 'week',  label: 'Questa settimana',   color: '#7A8FA6', tasks: week })
-  if (later.length) out.push({ id: 'later', label: 'Più avanti',         color: 'var(--md-sys-color-on-surface-variant)', tasks: later })
-  return out
-})
-
 // ── NOTE (text editor con autosave su projects/{id}.notes) ────────────────
 import { onBeforeUnmount } from 'vue'
 import { updateDoc, doc, getDoc } from 'firebase/firestore'
@@ -212,6 +183,7 @@ const form = ref({
   assignees: [] as string[],
   status:    'todo',
   deliverableTaskIds: [] as string[],
+  deliverableId: '' as string,
 })
 
 function openModal(kind: NewKind) {
@@ -223,6 +195,7 @@ function openModal(kind: NewKind) {
     assignees:          kind === 'milestone' ? [] : (currentUser.value?.email ? [currentUser.value.email] : []),
     status:             'todo',
     deliverableTaskIds: [],
+    deliverableId:      '',
   }
   showModal.value = true
 }
@@ -257,6 +230,7 @@ async function submitForm() {
       assignees:          form.value.assignees,
       type:               modalKind.value,
       deliverableTaskIds: modalKind.value === 'deliverable' ? form.value.deliverableTaskIds : [],
+      deliverableId:      modalKind.value === 'milestone' && form.value.deliverableId ? form.value.deliverableId : null,
     })
     showModal.value = false
   } catch (e) {
@@ -364,10 +338,10 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
           <span v-if="deliverableItems.length" class="pd-tab-count">{{ deliverableItems.length }}</span>
         </button>
         <button
-          :class="['pd-tab', { 'is-active': activeTab === 'cal' }]"
-          @click="activeTab = 'cal'"
+          :class="['pd-tab', { 'is-active': activeTab === 'timeline' }]"
+          @click="activeTab = 'timeline'"
         >
-          <MIcon name="calendar_month" :size="14" /> Calendario
+          <MIcon name="timeline" :size="14" /> Timeline
         </button>
         <button
           :class="['pd-tab', { 'is-active': activeTab === 'notes' }]"
@@ -588,34 +562,20 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
         </div>
       </template>
 
-      <!-- CALENDARIO (group-by dueDate) ─────────────────────────────────────── -->
-      <template v-else-if="activeTab === 'cal'">
-        <div v-if="!taskItems.filter(t => t.dueDate).length" class="empty-tab">
-          <MIcon name="calendar_month" :filled="true" :size="32" class="empty-tab-icon" />
-          <div>Nessuna azione con scadenza.</div>
-          <div class="empty-tab-hint">Imposta una data di scadenza alle tue azioni per vederle nel calendario.</div>
-        </div>
-        <div v-else class="cal-view">
-          <div
-            v-for="g in calendarGroups"
-            :key="g.id"
-            class="cal-group"
-          >
-            <div class="cal-group-header">
-              <span class="cal-group-dot" :style="{ background: g.color }" />
-              <span class="cal-group-label">{{ g.label }}</span>
-              <span class="cal-group-count">{{ g.tasks.length }}</span>
-            </div>
-            <div v-for="t in g.tasks" :key="t.id" class="list-row" @click="doComplete(t)">
-              <div class="checkbox" :class="{ 'is-checked': !!t.completedAt || pendingDone.has(t.id) }">
-                <MIcon v-if="t.completedAt || pendingDone.has(t.id)" name="check" :size="12" class="check-icon" />
-              </div>
-              <div class="prio-dot" :style="{ background: prioColor[t.priority] }" />
-              <div class="list-title" :class="{ 'is-done': !!t.completedAt }">{{ t.title }}</div>
-              <span v-if="t.dueDate" class="list-due">{{ formatDue(t.dueDate) }}</span>
-            </div>
-          </div>
-        </div>
+      <!-- TIMELINE (ciclo di vita: fasi → task → deliverable → milestone) ────── -->
+      <template v-else-if="activeTab === 'timeline'">
+        <CepheidTimeline
+          :project="project"
+          :tasks="tasks"
+          :members="members"
+          :update-task="updateTask"
+          :complete-task="completeTask"
+          :uncomplete-task="uncompleteTask"
+          :update-project="updateProject"
+          :approve-phase="approvePhase"
+          :unapprove-phase="unapprovePhase"
+          @new-phase="openModal('deliverable')"
+        />
       </template>
 
       <!-- NOTE (markdown-style per progetto, salvate in projects/{id}.notes) ──── -->
@@ -722,6 +682,15 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
                 </label>
               </div>
             </template>
+
+            <!-- Fase collegata (solo milestone) -->
+            <template v-if="modalKind === 'milestone'">
+              <label class="field-label md-text-field-label" style="margin-top:12px">Fase collegata (deliverable)</label>
+              <select v-model="form.deliverableId" class="field-input md-text-field-input">
+                <option value="">— nessuna —</option>
+                <option v-for="d in deliverableItems" :key="d.id" :value="d.id">{{ d.title }}</option>
+              </select>
+            </template>
           </div>
           <div class="modal-footer md-modal-footer">
             <button class="btn-ghost md-btn md-btn--outlined md-btn--rounded" @click="showModal = false">Annulla</button>
@@ -741,7 +710,12 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
 .pd {
   font-family: 'Outfit', sans-serif;
   color: #1A1917;
-  min-height: calc(100vh - 120px);
+  /* riempie l'altezza disponibile di .s-main (overflow:hidden) e delega
+     lo scroll a .pd-content, così le tab alte (es. Timeline) scorrono */
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .pd-header {
@@ -749,6 +723,7 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
   align-items: stretch;
   background: #fff;
   border-bottom: 1px solid #E8E5DF;
+  flex-shrink: 0;
 }
 
 .pd-stripe { width: 6px; flex-shrink: 0; }
@@ -816,6 +791,7 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
   padding: 8px 16px 0;
   background: #fff;
   border-bottom: 1px solid #E8E5DF;
+  flex-shrink: 0;
 }
 .pd-tabs-list { display: flex; gap: 2px; flex: 1; min-width: 0; overflow-x: auto; }
 
@@ -877,7 +853,7 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
   color: var(--md-sys-color-primary-hover);
 }
 
-.pd-content { padding: 16px; }
+.pd-content { padding: 16px; flex: 1; min-height: 0; overflow-y: auto; }
 
 /* Desktop wide: container centrato + padding generoso. Le tabs interne
    (kanban/milestone/deliverable) sono gia' responsive multi-colonna.
@@ -939,39 +915,6 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
 }
 
 /* ── CAL view (group-by relative due date) ─────────────────────────────── */
-.cal-view { max-width: 720px; display: flex; flex-direction: column; gap: 20px; }
-.cal-group { display: flex; flex-direction: column; gap: 6px; }
-.cal-group-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 0 4px 4px;
-  border-bottom: 1px solid var(--md-sys-color-outline-variant);
-}
-.cal-group-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: var(--md-sys-shape-corner-full);
-  flex-shrink: 0;
-}
-.cal-group-label {
-  font-family: var(--md-sys-typescale-label-medium-font);
-  font-size:   var(--md-sys-typescale-label-medium-size);
-  font-weight: 700;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: var(--md-sys-color-on-surface);
-  flex: 1;
-}
-.cal-group-count {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--md-sys-color-primary);
-  background: color-mix(in srgb, var(--md-sys-color-primary) 14%, transparent);
-  padding: 2px 8px;
-  border-radius: var(--md-sys-shape-corner-full);
-}
-
 /* ── NOTES view ─────────────────────────────────────────────────────────── */
 .notes-view {
   max-width: 720px;
