@@ -9,7 +9,8 @@ import ContextualBottomNav from '../../components/shared/ContextualBottomNav.vue
 import ContextualFab from '../../components/shared/ContextualFab.vue'
 import { detectScope, getScopeConfig, SCOPE_CONFIGS, type ScopeId } from './scopeConfig'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
-import { useTeamMembers, displayName, avatarColor } from '../../composables/sidera/useTeamMembers'
+import { useTeamMembers, displayName } from '../../composables/sidera/useTeamMembers'
+import StarAvatar from '../../components/shared/StarAvatar.vue'
 import { useChats } from '../../composables/pulsar/useChats'
 import { useNotifications, type NotificationScope } from '../../composables/shared/useNotifications'
 
@@ -478,10 +479,14 @@ const roleLabel: Record<string, string> = {
 
       <!-- User -->
       <div class="s-user">
-        <div
-          class="s-user-avatar"
-          :style="currentUser?.email ? { background: avatarColor(currentUser.email) } : {}"
-        >{{ currentUser?.email ? currentUser.email.charAt(0).toUpperCase() : '?' }}</div>
+        <StarAvatar
+          v-if="currentUser?.email"
+          :seed="currentUser.uid || currentUser.email"
+          :category="currentUser.category || 'amministrazione'"
+          :hueIndex="currentUser.hueIndex"
+          :size="36"
+        />
+        <div v-else class="s-user-avatar">?</div>
         <div class="s-user-info">
           <div class="s-user-name">{{ currentUser?.email ? displayName(currentUser.email, members) : '…' }}</div>
           <div class="s-user-role">{{ roleLabel[currentUser?.role ?? ''] ?? 'Membro' }}</div>
@@ -580,7 +585,12 @@ const roleLabel: Record<string, string> = {
 
 .s-logo-icon { flex-shrink: 0; }
 
-.s-nav { flex: 1; }
+.s-nav {
+  flex: 1;
+  min-height: 0;        /* consente lo scroll dentro il flex-column */
+  overflow-y: auto;
+  overflow-x: hidden;
+}
 
 .s-section-label {
   /* M3 label-small: 11px, ma qui 10px per dare aria al letter-spacing maggiorato (0.1em) */
@@ -643,6 +653,8 @@ const roleLabel: Record<string, string> = {
 .s-user {
   border-top: 1px solid var(--s-border);
   padding-top: 12px;
+  margin-top: 8px;
+  flex-shrink: 0;        /* resta sempre visibile in fondo, non viene compresso */
   display: flex;
   align-items: center;
   gap: 10px;

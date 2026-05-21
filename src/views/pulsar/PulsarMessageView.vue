@@ -7,8 +7,8 @@ import { db } from '../../firebase'
 import { useMessages } from '../../composables/pulsar/useMessages'
 import { markChatRead } from '../../composables/pulsar/usePulsarUnread'
 import { useChatHashtags } from '../../composables/pulsar/useChatHashtags'
-import { useTeamMembers, avatarInitial, displayName } from '../../composables/sidera/useTeamMembers'
-import { pulsarAvatarColor as avatarColor } from '../../composables/pulsar/usePulsarAvatar'
+import { useTeamMembers, displayName, starAvatarProps } from '../../composables/sidera/useTeamMembers'
+import StarAvatar from '../../components/shared/StarAvatar.vue'
 import { useProjects } from '../../composables/sidera/useProjects'
 import { createStandaloneTask } from '../../composables/sidera/useAllTasks'
 import { auth } from '../../firebase'
@@ -56,13 +56,10 @@ const chatSubtitle = computed(() => {
   const other = chatDoc.value.members.find(m => m !== myEmail) ?? ''
   return other
 })
-const chatAvatarBg = computed(() => {
-  if (!chatDoc.value) return 'var(--md-sys-color-primary)'
-  if (chatDoc.value.isGroup) return 'var(--md-sys-color-primary)'
-  const other = chatDoc.value.members.find(m => m !== myEmail) ?? ''
-  return avatarColor(other)
-})
+// Usato solo per i gruppi (le chat 1:1 mostrano lo StarAvatar dell'altro membro).
+const chatAvatarBg = computed(() => 'var(--md-sys-color-primary)')
 const chatAvatarInitial = computed(() => (chatTitle.value[0] ?? '?').toUpperCase())
+const otherMember = computed(() => chatDoc.value?.members.find(m => m !== myEmail) ?? '')
 
 onBeforeUnmount(() => chatUnsub())
 
@@ -321,7 +318,8 @@ function renderText(t: string) {
   <div class="mv">
     <!-- Header chat -->
     <header v-if="chatDoc" class="chat-header">
-      <div class="chat-header-avatar" :style="{ background: chatAvatarBg }">
+      <StarAvatar v-if="!chatDoc.isGroup" v-bind="starAvatarProps(otherMember, members)" :size="40" />
+      <div v-else class="chat-header-avatar" :style="{ background: chatAvatarBg }">
         {{ chatAvatarInitial }}
       </div>
       <div class="chat-header-info">
@@ -348,9 +346,7 @@ function renderText(t: string) {
         }"
         :data-msg-id="msg.id"
       >
-        <div v-if="msg.from !== myEmail" class="msg-avatar" :style="{ background: avatarColor(msg.from), color: '#fff' }">
-          {{ avatarInitial(msg.from) }}
-        </div>
+        <StarAvatar v-if="msg.from !== myEmail" v-bind="starAvatarProps(msg.from, members)" :size="32" />
 
         <div class="msg-content">
           <div v-if="msg.from !== myEmail && chatDoc?.isGroup" class="msg-sender">{{ displayName(msg.from, members) }}</div>
@@ -435,7 +431,7 @@ function renderText(t: string) {
         class="mention-item"
         @mousedown.prevent="selectMention(m)"
       >
-        <div class="mention-av" :style="{ background: avatarColor(m.email), color: '#fff' }">{{ avatarInitial(m.email) }}</div>
+        <StarAvatar v-bind="starAvatarProps(m.email, members)" :size="22" />
         {{ displayName(m.email, members) }}
       </div>
     </div>
@@ -551,10 +547,10 @@ function renderText(t: string) {
                 :key="m.email"
                 class="assignee-chip"
                 :class="{ 'is-selected': taskForm.assignees.includes(m.email) }"
-                :style="taskForm.assignees.includes(m.email) ? { background: avatarColor(m.email) + '20', borderColor: avatarColor(m.email) + '80', color: avatarColor(m.email) } : {}"
+                :style="taskForm.assignees.includes(m.email) ? { background: 'var(--md-sys-color-primary-container)', borderColor: 'var(--md-sys-color-primary)', color: 'var(--md-sys-color-on-primary-container)' } : {}"
                 @click="toggleTaskAssignee(m.email)"
               >
-                <span class="chip-avatar" :style="{ background: avatarColor(m.email), color: '#fff' }">{{ avatarInitial(m.email) }}</span>
+                <StarAvatar v-bind="starAvatarProps(m.email, members)" :size="20" />
                 {{ displayName(m.email, members) }}
               </div>
             </div>

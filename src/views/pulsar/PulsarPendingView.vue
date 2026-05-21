@@ -6,8 +6,8 @@ import {
   onSnapshot, getDoc, addDoc, doc, updateDoc, serverTimestamp,
 } from 'firebase/firestore'
 import { db, auth } from '../../firebase'
-import { avatarInitial, displayName, useTeamMembers } from '../../composables/sidera/useTeamMembers'
-import { pulsarAvatarColor as avatarColor } from '../../composables/pulsar/usePulsarAvatar'
+import { displayName, useTeamMembers, starAvatarProps } from '../../composables/sidera/useTeamMembers'
+import StarAvatar from '../../components/shared/StarAvatar.vue'
 import { useProjects } from '../../composables/sidera/useProjects'
 import { useChats } from '../../composables/pulsar/useChats'
 import { createStandaloneTask } from '../../composables/sidera/useAllTasks'
@@ -449,11 +449,11 @@ async function submitTask() {
                   class="assignee-chip"
                   :class="{ 'is-selected': taskForm.assignees.includes(m.email) }"
                   :style="taskForm.assignees.includes(m.email)
-                    ? { background: avatarColor(m.email) + '20', borderColor: avatarColor(m.email) + '80', color: avatarColor(m.email) }
+                    ? { background: 'var(--md-sys-color-primary-container)', borderColor: 'var(--md-sys-color-primary)', color: 'var(--md-sys-color-on-primary-container)' }
                     : {}"
                   @click="toggleTaskAssignee(m.email)"
                 >
-                  <span class="chip-avatar" :style="{ background: avatarColor(m.email), color: '#fff' }">{{ avatarInitial(m.email) }}</span>
+                  <StarAvatar v-bind="starAvatarProps(m.email, members)" :size="20" />
                   {{ displayName(m.email, members) }}
                 </div>
               </div>

@@ -4,8 +4,9 @@ import { useRouter } from 'vue-router'
 import MIcon from '../../components/shared/MIcon.vue'
 import { useChats } from '../../composables/pulsar/useChats'
 import { useUnreadChats } from '../../composables/pulsar/usePulsarUnread'
-import { useTeamMembers, avatarInitial, displayName } from '../../composables/sidera/useTeamMembers'
+import { useTeamMembers, displayName, starAvatarProps } from '../../composables/sidera/useTeamMembers'
 import { pulsarAvatarColor } from '../../composables/pulsar/usePulsarAvatar'
+import StarAvatar from '../../components/shared/StarAvatar.vue'
 import { auth } from '../../firebase'
 
 const router = useRouter()
@@ -79,10 +80,6 @@ function chatName(chat: { name: string; members: string[]; isGroup: boolean }) {
   return displayName(other, members.value)
 }
 
-function chatInitial(chat: { name: string; members: string[]; isGroup: boolean }) {
-  return chatName(chat)[0]?.toUpperCase() ?? '?'
-}
-
 function chatColor(chat: { name: string; members: string[]; isGroup: boolean }) {
   const other = chat.members.find(m => m !== myEmail) ?? chat.name
   return pulsarAvatarColor(other)
@@ -144,12 +141,17 @@ onMounted(() => {
         class="chat-row"
         @click="router.push('/pulsar/chat/' + chat.id)"
       >
+        <StarAvatar
+          v-if="!chat.isGroup"
+          v-bind="starAvatarProps(chat.members.find(m => m !== myEmail) ?? '', members)"
+          :size="40"
+        />
         <div
+          v-else
           class="chat-avatar"
           :style="{ background: chatColor(chat) + '25', border: '2px solid ' + chatColor(chat) + '50', color: chatColor(chat) }"
         >
-          <MIcon v-if="!chatInitial(chat)" :name="chat.isGroup ? 'group' : 'person'" :size="16" />
-          <span v-else>{{ chatInitial(chat) }}</span>
+          <MIcon :name="'group'" :size="16" />
         </div>
         <div class="chat-info">
           <div class="chat-top">
@@ -191,7 +193,7 @@ onMounted(() => {
                   :class="{ 'is-selected': dmTarget === m.email }"
                   @click="dmTarget = m.email"
                 >
-                  <div class="m-avatar" :style="{ background: pulsarAvatarColor(m.email), color: '#fff' }">{{ avatarInitial(m.email) }}</div>
+                  <StarAvatar v-bind="starAvatarProps(m.email, members)" :size="28" />
                   <span>{{ displayName(m.email, members) }}</span>
                 </div>
               </div>
@@ -210,7 +212,7 @@ onMounted(() => {
                   :class="{ 'is-selected': groupMembers.includes(m.email) }"
                   @click="toggleGroupMember(m.email)"
                 >
-                  <div class="m-avatar" :style="{ background: pulsarAvatarColor(m.email), color: '#fff' }">{{ avatarInitial(m.email) }}</div>
+                  <StarAvatar v-bind="starAvatarProps(m.email, members)" :size="28" />
                   <span>{{ displayName(m.email, members) }}</span>
                   <MIcon v-if="groupMembers.includes(m.email)" name="check" :size="16" class="check-mark" />
                 </div>

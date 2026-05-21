@@ -7,8 +7,8 @@ import { useProjects, DEFAULT_STATES } from '../../composables/sidera/useProject
 import { useProjectTasks } from '../../composables/sidera/useProjectTasks'
 import { useObiettivi } from '../../composables/sidera/useObiettivi'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
-import { useTeamMembers, displayName, avatarInitial } from '../../composables/sidera/useTeamMembers'
-import { pulsarAvatarColor as avatarColor } from '../../composables/pulsar/usePulsarAvatar'
+import { useTeamMembers, displayName, starAvatarProps } from '../../composables/sidera/useTeamMembers'
+import StarAvatar from '../../components/shared/StarAvatar.vue'
 
 const route   = useRoute()
 const router  = useRouter()
@@ -658,10 +658,10 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
                   :key="m.email"
                   class="assignee-chip"
                   :class="{ 'is-selected': form.assignees.includes(m.email) }"
-                  :style="form.assignees.includes(m.email) ? { background: avatarColor(m.email) + '20', borderColor: avatarColor(m.email) + '80', color: avatarColor(m.email) } : {}"
+                  :style="form.assignees.includes(m.email) ? { background: 'var(--md-sys-color-primary-container)', borderColor: 'var(--md-sys-color-primary)', color: 'var(--md-sys-color-on-primary-container)' } : {}"
                   @click="toggleAssignee(m.email)"
                 >
-                  <span class="chip-avatar" :style="{ background: avatarColor(m.email), color: '#fff' }">{{ avatarInitial(m.email) }}</span>
+                  <StarAvatar v-bind="starAvatarProps(m.email, members)" :size="20" />
                   {{ displayName(m.email, members) }}
                 </div>
               </div>

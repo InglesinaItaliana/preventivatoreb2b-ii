@@ -11,7 +11,20 @@ export interface NebulaMember {
   active:     boolean
   color:      string
   position?:  string
+  uid?:       string
+  category?:  string
+  hueIndex?:  number
 }
+
+// Categorie avatar (forma della stella). Allineate a CATEGORIES in src/lib/starAvatar.js.
+export const CATEGORY_OPTIONS = [
+  { key: 'direzione',       label: 'Direzione' },
+  { key: 'amministrazione', label: 'Amministrazione' },
+  { key: 'produzione',      label: 'Produzione' },
+  { key: 'tecnico',         label: 'Tecnico' },
+  { key: 'logistica',       label: 'Logistica' },
+  { key: 'commerciale',     label: 'Commerciale' },
+] as const
 
 export const POSITION_OPTIONS = [
   'Titolare',
@@ -46,6 +59,9 @@ export function useNebulaTeam() {
         active:    data.active    ?? true,
         color:     data.color     ?? '#2F6B4A',
         position:  data.position  ?? undefined,
+        uid:       data.uid       ?? undefined,
+        category:  data.category  ?? undefined,
+        hueIndex:  typeof data.hueIndex === 'number' ? data.hueIndex : undefined,
       }
     })
     loading.value = false
@@ -60,5 +76,9 @@ export function useNebulaTeam() {
     await updateDoc(doc(db, 'team', email), { position: position || null })
   }
 
-  return { members, loading, updatePosition }
+  async function updateCategory(email: string, category: string) {
+    await updateDoc(doc(db, 'team', email), { category })
+  }
+
+  return { members, loading, updatePosition, updateCategory }
 }

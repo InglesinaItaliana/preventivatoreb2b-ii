@@ -1,9 +1,9 @@
 import { initializeApp } from 'firebase/app';
 // 1. Aggiornati import per la nuova gestione della cache
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, connectFirestoreEmulator } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
-import { getAuth } from 'firebase/auth';
-import { getFunctions } from "firebase/functions";
+import { getAuth, connectAuthEmulator } from 'firebase/auth';
+import { getFunctions, connectFunctionsEmulator } from "firebase/functions";
 
 const firebaseConfig = {
  apiKey: "AIzaSyA_OLy75pTT5XAzeyjh9e89ff1psPQAPFQ",
@@ -27,6 +27,17 @@ const db = initializeFirestore(app, {
 const auth = getAuth(app);
 const storage = getStorage(app);
 const functions = getFunctions(app, 'europe-west1');
+
+// --- EMULATORI LOCALI (solo dev, gated da env) ---
+// Inerte in produzione: la build prod non imposta VITE_USE_EMULATORS, quindi
+// questo blocco non viene mai eseguito e il comportamento resta invariato.
+// Avvio dev contro emulatori:  VITE_USE_EMULATORS=true npm run dev
+if (import.meta.env.VITE_USE_EMULATORS === 'true') {
+    connectFirestoreEmulator(db, 'localhost', 8080);
+    connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true });
+    connectFunctionsEmulator(functions, 'localhost', 5001);
+    console.info('[firebase] Connesso agli emulatori locali (Firestore:8080, Auth:9099, Functions:5001)');
+}
 
 export { db, auth, storage, functions, app };
 

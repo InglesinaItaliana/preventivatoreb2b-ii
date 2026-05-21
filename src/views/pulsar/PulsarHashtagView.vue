@@ -3,8 +3,8 @@ import { ref, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { collectionGroup, query, where, orderBy, onSnapshot, getDoc, doc, setDoc } from 'firebase/firestore'
 import { db } from '../../firebase'
-import { avatarInitial, displayName, useTeamMembers } from '../../composables/sidera/useTeamMembers'
-import { pulsarAvatarColor as avatarColor } from '../../composables/pulsar/usePulsarAvatar'
+import { displayName, useTeamMembers, starAvatarProps } from '../../composables/sidera/useTeamMembers'
+import StarAvatar from '../../components/shared/StarAvatar.vue'
 import MIcon from '../../components/shared/MIcon.vue'
 
 const route  = useRoute()
@@ -109,9 +109,7 @@ function renderText(t: string) {
     <div v-else class="msg-cards">
       <div v-for="msg in tagMessages" :key="msg.id" class="msg-card">
         <div class="card-header">
-          <div class="card-avatar" :style="{ background: avatarColor(msg.from), color: '#fff' }">
-            {{ avatarInitial(msg.from) }}
-          </div>
+          <StarAvatar v-bind="starAvatarProps(msg.from, members)" :size="32" />
           <div class="card-meta">
             <div class="card-sender">{{ displayName(msg.from, members) }}</div>
             <div class="card-chat">in {{ msg.chatName }}</div>

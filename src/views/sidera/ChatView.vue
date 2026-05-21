@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import MIcon from '../../components/shared/MIcon.vue'
+import StarAvatar from '../../components/shared/StarAvatar.vue'
 
 const channel = ref('generale')
 
@@ -63,10 +64,7 @@ const currentLabel = () => channels.find(c => c.id === channel.value)?.label ?? 
 
       <div class="cv-messages">
         <div v-for="(m, i) in (msgs[channel] || [])" :key="i" class="msg">
-          <div
-            class="msg-avatar"
-            :style="{ background: m.c + '18', border: '1.5px solid ' + m.c + '50', color: m.c }"
-          >{{ m.a }}</div>
+          <StarAvatar :seed="m.from" category="amministrazione" :size="32" />
           <div class="msg-body">
             <div class="msg-meta">
               <span class="msg-from">{{ m.from }}</span>

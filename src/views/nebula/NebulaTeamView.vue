@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import { ListBulletIcon, RectangleGroupIcon, PencilSquareIcon } from '@heroicons/vue/24/outline'
-import { useNebulaTeam, POSITION_OPTIONS, type NebulaMember } from '../../composables/nebula/useNebulaTeam'
+import { useNebulaTeam, POSITION_OPTIONS, CATEGORY_OPTIONS, type NebulaMember } from '../../composables/nebula/useNebulaTeam'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
+import StarAvatar from '../../components/shared/StarAvatar.vue'
 
-const { members, loading, updatePosition } = useNebulaTeam()
+const { members, loading, updatePosition, updateCategory } = useNebulaTeam()
 const { currentUser } = useCurrentUser()
 
 const view          = ref<'org' | 'list'>('org')
@@ -16,16 +17,45 @@ const isAdmin = computed(() => currentUser.value?.role === 'ADMIN')
 const active = computed(() => members.value.filter(m => m.active !== false))
 const all    = computed(() => members.value)
 
-function byRole(role: string) {
-  return active.value.filter(m => m.role === role)
+// Organigramma raggruppato per CATEGORIA (6 reparti), piramide a 3 livelli.
+const LEVELS: string[][] = [
+  ['direzione'],                              // livello 1
+  ['amministrazione', 'commerciale'],         // livello 2 — uffici
+  ['tecnico', 'produzione', 'logistica'],     // livello 3 — operativi
+]
+
+const CATEGORY_ACCENT: Record<string, string> = {
+  direzione:       '#BF592A',
+  amministrazione: '#4A6B8A',
+  commerciale:     '#707D35',
+  tecnico:         '#308478',
+  produzione:      '#C8821A',
+  logistica:       '#7A5CA8',
 }
 
-function initials(m: NebulaMember) {
-  return ((m.firstName?.[0] ?? '') + (m.lastName?.[0] ?? '')).toUpperCase() || '?'
+function byCategory(cat: string) {
+  return active.value.filter(m => (m.category || 'amministrazione') === cat)
+}
+
+function catLabel(cat: string) {
+  return CATEGORY_OPTIONS.find(c => c.key === cat)?.label ?? cat
+}
+
+function levelHasMembers(li: number) {
+  return (LEVELS[li] ?? []).some(c => byCategory(c).length > 0)
 }
 
 function fullName(m: NebulaMember) {
   return [m.firstName, m.lastName].filter(Boolean).join(' ') || m.email
+}
+
+// Props per <StarAvatar> da un membro NEBULA (seed=uid, forma=category, colore=hueIndex).
+function memberStar(m: NebulaMember) {
+  return {
+    seed: m.uid || m.email,
+    category: m.category || 'amministrazione',
+    hueIndex: m.hueIndex,
+  }
 }
 
 function openEdit(m: NebulaMember) {
@@ -39,6 +69,14 @@ async function confirmPosition(pos: string) {
   await updatePosition(editingMember.value.email, pos)
   saving.value = false
   editingMember.value = null
+}
+
+async function confirmCategory(cat: string) {
+  if (!editingMember.value) return
+  saving.value = true
+  await updateCategory(editingMember.value.email, cat)
+  editingMember.value.category = cat   // riflette la selezione nel popover
+  saving.value = false
 }
 
 // Role accents mappati su tonal palettes M3 dei moduli con dominio semantico
@@ -75,89 +113,33 @@ const roleAccent: Record<string, string> = {
 
     <div v-if="loading" class="nb-loading">Caricamento…</div>
 
-    <!-- ── ORG CHART ── -->
+    <!-- ── ORG CHART (piramide per categoria/reparto, 3 livelli) ── -->
     <div v-else-if="view === 'org'" class="nb-org">
 
-      <!-- ADMIN -->
-      <section v-if="byRole('ADMIN').length" class="nb-level">
-        <span class="nb-level-label" :style="{ color: roleAccent.ADMIN }">ADMIN</span>
-        <div class="nb-level-cards">
-          <div v-for="m in byRole('ADMIN')" :key="m.email" class="nb-card">
-            <div class="nb-avatar" :style="{ background: roleAccent.ADMIN }">{{ initials(m) }}</div>
-            <div class="nb-card-name">{{ fullName(m) }}</div>
-            <button v-if="isAdmin" class="nb-pos-trigger" @click="openEdit(m)">
-              {{ m.position || 'Imposta ruolo' }}
-              <PencilSquareIcon class="nb-pen-icon" />
-            </button>
-            <span v-else class="nb-pos-label">{{ m.position || '—' }}</span>
-          </div>
+      <template v-for="(level, li) in LEVELS" :key="li">
+        <!-- connettore verticale tra un livello popolato e il precedente -->
+        <div v-if="li > 0 && levelHasMembers(li) && levelHasMembers(li - 1)" class="nb-conn-vert" />
+
+        <div v-if="levelHasMembers(li)" class="nb-level-split">
+          <template v-for="cat in level" :key="cat">
+            <section v-if="byCategory(cat).length" class="nb-sublevel">
+              <div v-if="li > 0" class="nb-sublevel-stub" />
+              <span class="nb-level-label" :style="{ color: CATEGORY_ACCENT[cat] }">{{ catLabel(cat) }}</span>
+              <div class="nb-level-cards">
+                <div v-for="m in byCategory(cat)" :key="m.email" class="nb-card">
+                  <StarAvatar v-bind="memberStar(m)" :size="42" />
+                  <div class="nb-card-name">{{ fullName(m) }}</div>
+                  <button v-if="isAdmin" class="nb-pos-trigger" @click="openEdit(m)">
+                    {{ m.position || 'Imposta ruolo' }}
+                    <PencilSquareIcon class="nb-pen-icon" />
+                  </button>
+                  <span v-else class="nb-pos-label">{{ m.position || '—' }}</span>
+                </div>
+              </div>
+            </section>
+          </template>
         </div>
-      </section>
-
-      <div v-if="byRole('ADMIN').length" class="nb-conn-vert" />
-
-      <!-- COMMERCIALE -->
-      <section v-if="byRole('COMMERCIALE').length" class="nb-level">
-        <span class="nb-level-label" :style="{ color: roleAccent.COMMERCIALE }">COMMERCIALE</span>
-        <div class="nb-level-cards">
-          <div v-for="m in byRole('COMMERCIALE')" :key="m.email" class="nb-card">
-            <div class="nb-avatar" :style="{ background: roleAccent.COMMERCIALE }">{{ initials(m) }}</div>
-            <div class="nb-card-name">{{ fullName(m) }}</div>
-            <button v-if="isAdmin" class="nb-pos-trigger" @click="openEdit(m)">
-              {{ m.position || 'Imposta ruolo' }}
-              <PencilSquareIcon class="nb-pen-icon" />
-            </button>
-            <span v-else class="nb-pos-label">{{ m.position || '—' }}</span>
-          </div>
-        </div>
-      </section>
-
-      <!-- Connector: branch or single -->
-      <template v-if="byRole('PRODUZIONE').length || byRole('LOGISTICA').length">
-        <div
-          v-if="byRole('PRODUZIONE').length && byRole('LOGISTICA').length"
-          class="nb-conn-branch"
-        />
-        <div v-else class="nb-conn-vert" />
       </template>
-
-      <!-- PRODUZIONE + LOGISTICA -->
-      <div
-        v-if="byRole('PRODUZIONE').length || byRole('LOGISTICA').length"
-        class="nb-level-split"
-      >
-        <section v-if="byRole('PRODUZIONE').length" class="nb-sublevel">
-          <div class="nb-sublevel-stub" />
-          <span class="nb-level-label" :style="{ color: roleAccent.PRODUZIONE }">PRODUZIONE</span>
-          <div class="nb-level-cards">
-            <div v-for="m in byRole('PRODUZIONE')" :key="m.email" class="nb-card">
-              <div class="nb-avatar" :style="{ background: roleAccent.PRODUZIONE }">{{ initials(m) }}</div>
-              <div class="nb-card-name">{{ fullName(m) }}</div>
-              <button v-if="isAdmin" class="nb-pos-trigger" @click="openEdit(m)">
-                {{ m.position || 'Imposta ruolo' }}
-                <PencilSquareIcon class="nb-pen-icon" />
-              </button>
-              <span v-else class="nb-pos-label">{{ m.position || '—' }}</span>
-            </div>
-          </div>
-        </section>
-
-        <section v-if="byRole('LOGISTICA').length" class="nb-sublevel">
-          <div class="nb-sublevel-stub" />
-          <span class="nb-level-label" :style="{ color: roleAccent.LOGISTICA }">LOGISTICA</span>
-          <div class="nb-level-cards">
-            <div v-for="m in byRole('LOGISTICA')" :key="m.email" class="nb-card">
-              <div class="nb-avatar" :style="{ background: roleAccent.LOGISTICA }">{{ initials(m) }}</div>
-              <div class="nb-card-name">{{ fullName(m) }}</div>
-              <button v-if="isAdmin" class="nb-pos-trigger" @click="openEdit(m)">
-                {{ m.position || 'Imposta ruolo' }}
-                <PencilSquareIcon class="nb-pen-icon" />
-              </button>
-              <span v-else class="nb-pos-label">{{ m.position || '—' }}</span>
-            </div>
-          </div>
-        </section>
-      </div>
 
       <!-- Empty state -->
       <div v-if="!active.length" class="nb-empty">Nessun membro attivo nel team.</div>
@@ -166,9 +148,7 @@ const roleAccent: Record<string, string> = {
     <!-- ── LIST VIEW ── -->
     <div v-else class="nb-list">
       <div v-for="m in all" :key="m.email" class="nb-list-card" :class="{ inactive: !m.active }">
-        <div class="nb-avatar nb-avatar--lg" :style="{ background: m.active ? (roleAccent[m.role] ?? '#9B9590') : '#3A3E45' }">
-          {{ initials(m) }}
-        </div>
+        <StarAvatar v-bind="memberStar(m)" :size="40" />
         <div class="nb-list-info">
           <div class="nb-list-name">
             {{ fullName(m) }}
@@ -194,7 +174,23 @@ const roleAccent: Record<string, string> = {
     <Teleport to="body">
       <div v-if="editingMember" class="nb-overlay" @click.self="editingMember = null">
         <div class="nb-popover">
-          <p class="nb-popover-title">Ruolo per <strong>{{ editingMember.firstName }}</strong></p>
+          <p class="nb-popover-title">Avatar di <strong>{{ editingMember.firstName }}</strong></p>
+          <div class="nb-cat-preview">
+            <StarAvatar v-bind="memberStar(editingMember)" :size="56" />
+            <span class="nb-cat-hint">La forma della stella dipende dalla categoria; il colore è stabile per persona.</span>
+          </div>
+          <div class="nb-pos-grid">
+            <button
+              v-for="c in CATEGORY_OPTIONS"
+              :key="c.key"
+              class="nb-pos-opt"
+              :class="{ selected: editingMember.category === c.key }"
+              :disabled="saving"
+              @click="confirmCategory(c.key)"
+            >{{ c.label }}</button>
+          </div>
+
+          <p class="nb-popover-title" style="margin-top: 20px;">Ruolo aziendale</p>
           <div class="nb-pos-grid">
             <button
               v-for="p in POSITION_OPTIONS"
@@ -468,8 +464,9 @@ const roleAccent: Record<string, string> = {
 /* ── Split level ── */
 .nb-level-split {
   display: flex;
+  flex-wrap: wrap;
   justify-content: center;
-  gap: 80px;
+  gap: 32px 56px;
   width: 100%;
 }
 
@@ -631,6 +628,20 @@ const roleAccent: Record<string, string> = {
   line-height: var(--md-sys-typescale-body-medium-line-height);
   color: var(--md-sys-color-on-surface-variant);
   margin-bottom: 16px;
+}
+
+.nb-cat-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.nb-cat-hint {
+  font-family: var(--md-sys-typescale-label-small-font);
+  font-size: var(--md-sys-typescale-label-small-size);
+  line-height: var(--md-sys-typescale-label-small-line-height);
+  color: var(--md-sys-color-on-surface-variant);
 }
 
 .nb-pos-grid {

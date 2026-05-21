@@ -10,6 +10,19 @@ if (admin.apps.length === 0) {
     admin.initializeApp();
 }
 
+// --- AVATAR STELLARI: mappa ruolo Auth -> categoria di default ---
+// La categoria definisce la FORMA della stella. L'admin può sovrascriverla da NEBULA.
+// I role auth restano invariati: questo è solo un default iniziale.
+const ROLE_TO_CATEGORY: Record<string, string> = {
+    ADMIN:       'direzione',
+    PRODUZIONE:  'produzione',
+    LOGISTICA:   'logistica',
+    COMMERCIALE: 'commerciale',
+};
+function defaultCategoryForRole(role: string | undefined): string {
+    return (role && ROLE_TO_CATEGORY[role]) || 'amministrazione';
+}
+
 // ... (codice esistente)
 
 // --- FUNZIONE 4: ANNULLA E CANCELLA ORDINE ---
@@ -106,16 +119,56 @@ exports.syncTeamRoleToAuth = functions
             // 2. Imposta il Custom Claim
             // Salviamo 'role' dentro il token
             await admin.auth().setCustomUserClaims(userRecord.uid, { role: role });
-            
+
             console.log(`[ROLE SYNC] Assegnato ruolo '${role}' a ${email}`);
-            
+
             // Opzionale: Forza il refresh del token lato client (non fattibile da qui, ma utile saperlo)
-            
+
         } catch (e: any) {
             if (e.code === 'auth/user-not-found') {
                 console.warn(`[ROLE SYNC] Utente Auth non trovato per ${email}. Il documento team esiste ma l'utente no.`);
             } else {
                 console.error(`[ROLE SYNC] Errore sincronizzazione ${email}:`, e);
+            }
+        }
+
+        // --- AVATAR STELLARI: assegna hueIndex + category di default se mancanti ---
+        // Idempotente e anti-loop: scrive solo se manca almeno un campo. L'update
+        // ri-scatena onWrite, ma alla 2ª esecuzione i campi esistono -> nessuna
+        // scrittura -> il loop si chiude. L'override category dell'admin non viene mai toccato.
+        if (newData) {
+            const needsHue      = typeof newData.hueIndex !== 'number';
+            const needsCategory = !newData.category;
+            if (needsHue || needsCategory) {
+                const db = admin.firestore();
+                const teamRef    = db.collection('team').doc(email);
+                const counterRef = db.collection('counters').doc('teamHue');
+                try {
+                    await db.runTransaction(async (tx) => {
+                        // Rileggi dentro la transazione: se nel frattempo i campi sono
+                        // stati popolati (doppio onWrite concorrente), non fare nulla.
+                        const fresh = await tx.get(teamRef);
+                        if (!fresh.exists) return;
+                        const fd = fresh.data() as any;
+                        const patch: Record<string, any> = {};
+
+                        if (typeof fd.hueIndex !== 'number') {
+                            const counterSnap = await tx.get(counterRef);
+                            const next = counterSnap.exists ? (counterSnap.data()?.next ?? 0) : 0;
+                            patch.hueIndex = next;
+                            tx.set(counterRef, { next: next + 1 }, { merge: true });
+                        }
+                        if (!fd.category) {
+                            patch.category = defaultCategoryForRole(fd.role);
+                        }
+                        if (Object.keys(patch).length > 0) {
+                            tx.update(teamRef, patch);
+                        }
+                    });
+                    console.log(`[AVATAR SYNC] ${email}: hue/category assegnati (needsHue=${needsHue}, needsCategory=${needsCategory})`);
+                } catch (e: any) {
+                    console.error(`[AVATAR SYNC] Errore assegnazione avatar ${email}:`, e);
+                }
             }
         }
     });
@@ -150,6 +203,32 @@ exports.migrateAllTeamClaims = functions
             }
         }
         return { success: true, updated: count };
+    });
+
+// --- BACKFILL AVATAR STELLARI (DA ESEGUIRE UNA VOLTA SOLA) ---
+// Per ogni doc team privo di hueIndex/category, esegue un "tocco" che fa scattare
+// il trigger syncTeamRoleToAuth, il quale assegna i campi in modo atomico.
+exports.backfillTeamAvatars = functions
+    .region('europe-west1')
+    .https.onCall(async (data, context) => {
+        if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Richiesto login');
+
+        const db = admin.firestore();
+        const teamSnap = await db.collection('team').get();
+        let touched = 0;
+
+        for (const doc of teamSnap.docs) {
+            const d = doc.data();
+            if (typeof d.hueIndex !== 'number' || !d.category) {
+                try {
+                    await doc.ref.update({ _avatarTouch: admin.firestore.FieldValue.serverTimestamp() });
+                    touched++;
+                } catch (e) {
+                    console.error(`[AVATAR BACKFILL] Errore tocco ${doc.id}`, e);
+                }
+            }
+        }
+        return { success: true, touched };
     });
 
 // --- FUNZIONE UNA TANTUM: AGGIORNAMENTO INDIRIZZI DA FIC ---

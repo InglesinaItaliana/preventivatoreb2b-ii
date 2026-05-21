@@ -6,7 +6,8 @@ import { usePopsMetrics }  from '../../composables/sidera/usePopsMetrics'
 import { useAllTasks }     from '../../composables/sidera/useAllTasks'
 import { useProjects }     from '../../composables/sidera/useProjects'
 import { useCurrentUser }  from '../../composables/sidera/useCurrentUser'
-import { useTeamMembers, displayName, avatarColor, avatarInitial } from '../../composables/sidera/useTeamMembers'
+import { useTeamMembers, displayName, starAvatarProps } from '../../composables/sidera/useTeamMembers'
+import StarAvatar from '../../components/shared/StarAvatar.vue'
 import { ref } from 'vue'
 
 const router = useRouter()
@@ -176,9 +177,7 @@ function urgenzaLabel(giorni: number) {
           class="prio-pill"
           :style="{ color: prioColor[t.priority], background: prioColor[t.priority] + '14' }"
         >{{ prioLabel[t.priority] }}</span>
-        <div v-for="email in t.assignees.slice(0,3)" :key="email" class="az-avatar"
-          :style="{ background: avatarColor(email) + '20', border: '1.5px solid ' + avatarColor(email) + '60', color: avatarColor(email) }"
-        >{{ avatarInitial(email, members) }}</div>
+        <StarAvatar v-for="email in t.assignees.slice(0,3)" :key="email" v-bind="starAvatarProps(email, members)" :size="24" />
       </div>
     </section>
 
@@ -293,10 +292,7 @@ function urgenzaLabel(giorni: number) {
         </div>
         <div v-else-if="!feedEvents.length" class="empty-today">Nessuna attività recente.</div>
         <div v-for="e in feedEvents" :key="e.key" class="feed-item">
-          <div
-            class="feed-avatar"
-            :style="{ background: avatarColor(e.actor) + '18', border: '1.5px solid ' + avatarColor(e.actor) + '40', color: avatarColor(e.actor) }"
-          >{{ avatarInitial(e.actor, members) }}</div>
+          <StarAvatar v-bind="starAvatarProps(e.actor, members)" :size="32" />
           <div>
             <div class="feed-text">
               <span class="feed-who">{{ displayName(e.actor, members) }}</span>
