@@ -15,6 +15,8 @@ import type { ScopeConfig } from '../../views/sidera/scopeConfig'
 
 const props = defineProps<{
   config: ScopeConfig
+  /** Numero task da smistare (CEPHEID): mostra la stella pulsante su Smistamento. */
+  triageCount?: number
 }>()
 
 const route = useRoute()
@@ -43,6 +45,11 @@ const items = computed(() => props.config.mobileNav)
           :filled="isActive(item)"
           class="cm-pill-icon"
         />
+        <span
+          v-if="item.path === '/cepheid/smistamento' && (triageCount ?? 0) > 0"
+          class="cm-triage-star"
+          aria-label="Task da smistare"
+        >★</span>
       </button>
     </div>
     <slot name="fab" />
@@ -78,6 +85,7 @@ const items = computed(() => props.config.mobileNav)
 }
 
 .cm-pill-btn {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -100,4 +108,24 @@ const items = computed(() => props.config.mobileNav)
 }
 
 .cm-pill-icon { font-size: 36px; }
+
+/* indicatore "c'è lavoro": stella oro CEPHEID che pulsa quando ci sono task da smistare */
+.cm-triage-star {
+  position: absolute;
+  top: 6px;
+  right: 10px;
+  color: #D4A020;
+  font-size: 14px;
+  line-height: 1;
+  text-shadow: 0 0 6px rgba(212, 160, 32, 0.6);
+  pointer-events: none;
+  animation: cph-star-pulse 1.6s ease-in-out infinite;
+}
+@keyframes cph-star-pulse {
+  0%, 100% { transform: scale(1);    opacity: 0.85; }
+  50%      { transform: scale(1.3);  opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .cm-triage-star { animation: none; }
+}
 </style>

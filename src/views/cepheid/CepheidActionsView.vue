@@ -2,13 +2,14 @@
 import { ref, computed, inject, watch, onMounted, nextTick, type Ref } from 'vue'
 import MIcon from '../../components/shared/MIcon.vue'
 import MdPageHeader from '../../components/shared/MdPageHeader.vue'
+import CepheidViewSwitcher from '../../components/cepheid/CepheidViewSwitcher.vue'
 import { useAllTasks, createStandaloneTask } from '../../composables/sidera/useAllTasks'
 import { useProjects } from '../../composables/sidera/useProjects'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
 import { useTeamMembers, displayName, starAvatarProps } from '../../composables/sidera/useTeamMembers'
 import StarAvatar from '../../components/shared/StarAvatar.vue'
 
-const { tasks, loading: tasksLoading, completeTask, uncompleteTask, updateTask, deleteTask } = useAllTasks()
+const { tasks, loading: tasksLoading, completeTask, uncompleteTask, createTask, updateTask, deleteTask } = useAllTasks()
 const { activeProjects } = useProjects()
 const { currentUser } = useCurrentUser()
 const { members } = useTeamMembers()
@@ -16,12 +17,38 @@ const { members } = useTeamMembers()
 // ── Filtri (port da TasksView SIDERA 2026-05-20) ───────────────────────────
 type Filter = 'mine' | 'all' | 'late' | 'done'
 const filter = ref<Filter>('mine')
-const filterTabs: { id: Filter; label: string }[] = [
-  { id: 'mine', label: 'Le mie' },
-  { id: 'all',  label: 'Tutte' },
-  { id: 'late', label: '⚠ In ritardo' },
-  { id: 'done', label: '✓ Completate' },
+const filterTabs: { id: Filter; label: string; icon: string }[] = [
+  { id: 'mine', label: 'Le mie',     icon: 'person' },
+  { id: 'all',  label: 'Tutte',      icon: 'list' },
+  { id: 'late', label: 'In ritardo', icon: 'warning' },
+  { id: 'done', label: 'Completate', icon: 'check_circle' },
 ]
+
+
+// ── Quick-add: scrivi e premi Invio per creare un'azione (assegnata a me) ───
+const quickTitle = ref('')
+const quickSaving = ref(false)
+async function quickAdd() {
+  const title = quickTitle.value.trim()
+  if (!title || quickSaving.value) return
+  quickSaving.value = true
+  try {
+    // task "da smistare" (triaged:false) senza assegnatario → entra in Smistamento;
+    // resta visibile in "Le mie" perché createdBy sei tu.
+    await createTask({
+      title,
+      projectId: null,
+      priority: 'media',
+      dueDate: null,
+      assignees: [],
+    })
+    quickTitle.value = ''
+  } catch (e) {
+    console.error('[CEPHEID] quick-add error', e)
+  } finally {
+    quickSaving.value = false
+  }
+}
 
 // ── Tasks ─────────────────────────────────────────────────────────────────
 const pendingDone = ref<Set<string>>(new Set())
@@ -119,6 +146,12 @@ const dueTodayCount = computed(() => {
 
 // Completate di recente: collassabile, collassate di default
 const showDone = ref(false)
+
+// Reward "nessuna azione aperta" — stesso pattern di CepheidInboxView ("Inbox pulita")
+const reduceMotion = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+const confetti = computed(() => Array.from({ length: 14 }, (_, k) => ({
+  left: Math.round(6 + k * 88 / 14), color: ['#D4A020', '#C4941C', '#3AAF98', '#C46030', '#98C0D0', '#B06842'][k % 6], delay: ((k % 5) * 90) / 1000,
+})))
 
 // ── Modal create + edit (port da TasksView SIDERA 2026-05-20) ───────────────
 type TaskLike = { id: string; projectId: string | null; title: string; priority: 'alta' | 'media' | 'bassa'; dueDate: Date | null; assignees: string[]; completedAt: Date | null }
@@ -240,22 +273,22 @@ onMounted(() => {
         ? 'Nessuna in scadenza oggi'
         : (dueTodayCount === 1 ? '1 in scadenza oggi' : dueTodayCount + ' in scadenza oggi')"
     >
-      <template #cta>
-        <button class="md-btn md-btn--filled md-btn--sm md-btn--square" @click="openTaskModal">
-          <MIcon name="add" :size="16" /> Nuova azione
-        </button>
+      <template #tools>
+        <CepheidViewSwitcher :model-value="filter" :tabs="filterTabs" @update:model-value="(v) => (filter = v as Filter)" />
       </template>
     </MdPageHeader>
 
     <div class="av-content">
-      <!-- Filter tabs estesi (port da TasksView SIDERA 2026-05-20) -->
-      <div class="filter-pills">
-        <button
-          v-for="t in filterTabs"
-          :key="t.id"
-          :class="['filter-pill', { 'is-active': filter === t.id }]"
-          @click="filter = t.id"
-        >{{ t.label }}</button>
+      <!-- quick-add: scrivi e premi Invio per aggiungere un'azione (iperrapido) -->
+      <div class="quick-add">
+        <MIcon name="add" :size="18" class="quick-add-icon" />
+        <input
+          v-model="quickTitle"
+          class="quick-add-input"
+          type="text"
+          placeholder="Scrivi un'azione e premi Invio…"
+          @keyup.enter="quickAdd"
+        />
       </div>
 
       <div v-if="tasksLoading" class="loading-rows">
@@ -278,13 +311,18 @@ onMounted(() => {
 
       <!-- Tab mine/all/late: rendering group-by relative-date -->
       <template v-else>
-        <div v-if="!visibleOpen.length" class="empty-state">
+        <!-- reward "tutto fatto" (mine/all) — stesso linguaggio di Inbox pulita / progetto completato -->
+        <div v-if="!visibleOpen.length && filter !== 'late'" class="av-fin">
+          <template v-if="!reduceMotion">
+            <span v-for="(c, i) in confetti" :key="i" class="av-pc" :style="{ left: c.left + '%', background: c.color, animationDelay: c.delay + 's' }" />
+          </template>
+          <div class="av-rk"><MIcon name="emoji_events" :size="28" /></div>
+          <div class="av-ft">{{ filter === 'mine' ? 'Tutto fatto' : 'Nessuna azione aperta' }}</div>
+          <div class="av-fs">{{ filter === 'mine' ? 'Nessuna azione assegnata da fare. 🎉' : 'Niente in sospeso qui. 🎉' }}</div>
+        </div>
+        <div v-else-if="!visibleOpen.length" class="empty-state">
           <MIcon name="check_circle" filled :size="20" class="empty-state-icon" />
-          {{
-            filter === 'mine' ? 'Nessuna azione assegnata.'
-            : filter === 'late' ? 'Nessuna azione in ritardo. 🎉'
-            : 'Nessuna azione aperta.'
-          }}
+          Nessuna azione in ritardo. 🎉
         </div>
 
         <template v-for="g in groups" :key="g.key">
@@ -333,10 +371,11 @@ onMounted(() => {
 
         <div v-if="showDone && filter !== 'late'" class="done-list">
           <div v-for="t in doneTasks.slice(0, 10)" :key="t.id" class="task-row task-row--done">
-            <button class="undo-btn" @click="doUncomplete(t)">
+            <span class="row-state-icon" title="Completata"><MIcon name="check_circle" filled :size="16" /></span>
+            <div class="row-title row-title--done" @click="openEditTaskModal(t as TaskLike)">{{ t.title }}</div>
+            <button class="undo-btn" title="Riapri" @click="doUncomplete(t)">
               <MIcon name="undo" :size="14" />
             </button>
-            <div class="row-title row-title--done" @click="openEditTaskModal(t as TaskLike)">{{ t.title }}</div>
           </div>
         </div>
       </template>
@@ -425,7 +464,14 @@ onMounted(() => {
   font-family: 'Outfit', sans-serif;
   color: var(--md-sys-color-on-surface);
   min-height: calc(100vh - 120px);
+  /* sfondo cream coerente con la pagina Progetti */
+  background: #EFE7D9;
 }
+.s-surface-dark .av { background: #0E0C07; }
+@media (prefers-color-scheme: dark) { .av { background: #0E0C07; } }
+.av :deep(.md-page-header) { flex-shrink: 0; }
+/* header allineato al contenuto: padding L/R = gutter del contenuto (mobile 16px) */
+:deep(.md-page-header) { padding: 18px 16px 14px; }
 
 .av-content { padding: 16px 16px; }
 
@@ -433,33 +479,35 @@ onMounted(() => {
    verticale (pattern Asana inbox). Per multi-colonna serve redesign,
    ProjectBoard SIDERA resta accessibile via /sidera/tasks come power-view. */
 @media (min-width: 1024px) {
-  :deep(.md-page-header) { padding: 24px 40px 18px; }
-  .av-content  { padding: 24px 40px; max-width: 960px; margin: 0 auto; }
-  .filter-pills { margin-bottom: 24px; }
-}
-@media (min-width: 1440px) {
-  .av-content  { max-width: 1120px; padding: 32px 56px; }
+  /* contenuto max-width 900 centrato (rif. card Progetti); header allineato a esso:
+     L/R = max(40px, metà-spazio-laterale + 40px) così testo/pillola seguono il box centrato */
+  :deep(.md-page-header) { padding: 24px max(40px, calc(50% - 410px)) 18px; }
+  .av-content  { padding: 24px 40px; max-width: 900px; margin: 0 auto; width: 100%; }
 }
 
-.filter-pills {
+/* quick-add: barra pill in cima al contenuto, Invio per creare l'azione */
+.quick-add {
   display: flex;
-  gap: 6px;
-  margin-bottom: 16px;
+  align-items: center;
+  gap: 8px;
+  height: 46px;
+  padding: 0 14px;
+  margin-bottom: 14px;
+  background: #FFF8F0;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: 16px;
+  box-shadow: var(--md-sys-elevation-level-1);
 }
-
-.filter-pill {
-  padding: 6px 14px;
-  border-radius: var(--md-sys-shape-corner-full);
-  border: 1px solid transparent;
-  background: var(--md-sys-color-surface-container);
-  font-size: 12px;
-  font-weight: 600;
-  font-family: 'Outfit', sans-serif;
-  color: var(--md-sys-color-primary);
-  cursor: pointer;
-  transition: all 0.15s;
+.s-surface-dark .quick-add { background: #16130B; }
+@media (prefers-color-scheme: dark) { .quick-add { background: #16130B; } }
+.quick-add-icon { color: var(--md-sys-color-primary); flex-shrink: 0; }
+.quick-add-input {
+  flex: 1; min-width: 0;
+  border: 0; background: none; outline: none;
+  font-family: 'Outfit', sans-serif; font-size: 14px;
+  color: var(--md-sys-color-on-surface);
 }
-.filter-pill.is-active { background: color-mix(in srgb, var(--md-sys-color-primary) 22%, transparent); color: var(--md-sys-color-primary-hover); }
+.quick-add-input::placeholder { color: var(--md-sys-color-on-surface-variant); }
 
 /* Loading */
 .loading-rows { display: flex; flex-direction: column; gap: 6px; }
@@ -467,6 +515,19 @@ onMounted(() => {
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 
 .empty-state { font-size: 14px; color: var(--md-sys-color-on-surface-variant); padding: 20px 0; }
+
+/* reward "tutto fatto" — riuso del pattern Inbox pulita / progetto completato */
+.av-fin { position: relative; overflow: hidden; margin-top: 8px; padding: 36px 18px; border-radius: 16px; background: #FFF8F0; text-align: center; box-shadow: var(--md-sys-elevation-level-1); border: 1px solid var(--md-sys-color-outline-variant); }
+.s-surface-dark .av-fin { background: #16130B; }
+@media (prefers-color-scheme: dark) { .av-fin { background: #16130B; } }
+.av-rk { display: inline-flex; align-items: center; justify-content: center; width: 58px; height: 58px; border-radius: 50%; background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); margin-bottom: 10px; }
+.av-ft { font-family: var(--md-sys-typescale-headline-small-font, serif); font-size: 24px; color: var(--md-sys-color-on-surface); }
+.av-fs { font-size: 13px; color: var(--md-sys-color-on-surface-variant); margin-top: 4px; }
+.av-pc { position: absolute; top: 8px; width: 8px; height: 8px; border-radius: 2px; opacity: 0; }
+@media (prefers-reduced-motion: no-preference) {
+  @keyframes avconf { 0% { transform: translateY(0) rotate(0); opacity: 0 } 12% { opacity: 1 } 100% { transform: translateY(200px) rotate(420deg); opacity: 0 } }
+  .av-pc { animation: avconf 1.7s cubic-bezier(.3,.1,.5,1) forwards; }
+}
 
 /* Task group-by relative-date (port da TasksView SIDERA 2026-05-20) */
 .task-group { margin-bottom: 20px; }
@@ -504,25 +565,29 @@ onMounted(() => {
 .empty-state-icon { color: var(--md-sys-color-primary); margin-right: 6px; vertical-align: -4px; }
 
 /* Task rows */
+/* stesso "materiale" delle card progetto (.pcard): surface #FFF8F0, raggio 16px,
+   ombra level-1, bordo outline; hover sobrio (niente lift, come le card progetto).
+   Il bordo sinistro colorato resta come affordance di priorità. */
 .task-row {
   display: flex; align-items: center; gap: 10px;
   padding: 12px 14px;
-  background: var(--md-sys-color-surface);
-  border-radius: var(--md-sys-shape-corner-small);
+  background: #FFF8F0;
+  border-radius: 16px;
   border: 1px solid var(--md-sys-color-outline-variant);
   border-left: 6px solid transparent;
   margin-bottom: 6px;
   box-shadow: var(--md-sys-elevation-level-1);
   transition: border-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
-              box-shadow   var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
-              transform    var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
+              background   var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
 }
 .task-row:hover {
   border-color: var(--md-sys-color-primary);
-  background:   var(--md-sys-color-primary-state-hover);
-  box-shadow:   var(--md-sys-elevation-level-2);
-  transform:    translateY(-1px);
+  background:   color-mix(in srgb, var(--md-sys-color-primary) 5%, #FFF8F0);
 }
+.s-surface-dark .task-row:hover { background: color-mix(in srgb, var(--md-sys-color-primary) 10%, #16130B); }
+
+.s-surface-dark .task-row { background: #16130B; }
+@media (prefers-color-scheme: dark) { .task-row { background: #16130B; } }
 
 .task-row--done { opacity: 0.5; border-left: 6px solid var(--md-sys-color-outline-variant); }
 
@@ -541,6 +606,8 @@ onMounted(() => {
 .row-body { flex: 1; min-width: 0; }
 .row-title { font-size: 14px; color: var(--md-sys-color-on-surface); }
 .row-title--done { text-decoration: line-through; color: var(--md-sys-color-on-surface-variant); flex: 1; }
+/* icona di stato "completata" (coerente con pcard-state-mini dei progetti) */
+.row-state-icon { display: inline-flex; align-items: center; color: var(--md-sys-color-primary); flex-shrink: 0; }
 .row-meta { margin-top: 3px; display: flex; gap: 6px; }
 .row-proj { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: var(--md-sys-shape-corner-extra-small); }
 

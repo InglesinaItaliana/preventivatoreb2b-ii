@@ -165,6 +165,31 @@ const router = createRouter({
         { path: 'project/:id',name: 'cepheid-project',  component: () => import('../views/cepheid/CepheidProjectDetail.vue') },
         { path: 'smistamento', name: 'cepheid-smistamento', component: () => import('../views/cepheid/CepheidInboxView.vue') },
       ]
+    },
+
+    // ── QUASAR (PWA indipendente: Analytics · KPI · BI) ─────────────────────
+    {
+      path: '/quasar/login',
+      name: 'quasar-login',
+      component: () => import('../views/shared/ScopedLogin.vue'),
+      props: {
+        scope: 'quasar',
+        primaryColor: '#98C0D0',
+        title: 'QUASAR',
+        tagline: 'Analytics · KPI · Business Intelligence',
+        redirectPath: '/quasar',
+      },
+      meta: { quasarScope: true }
+    },
+    {
+      path: '/quasar',
+      component: () => import('../views/sidera/SideraLayout.vue'),
+      meta: { requiresAuth: true, quasarScope: true },
+      children: [
+        { path: '',          redirect: '/quasar/quadranti' },
+        { path: 'quadranti', name: 'quasar-quadranti', component: () => import('../views/quasar/QuasarQuadrantiView.vue') },
+        { path: 'attivita',  name: 'quasar-attivita',  component: () => import('../views/quasar/QuasarAttivitaView.vue') },
+      ]
     }
   ]
 });
@@ -185,10 +210,12 @@ router.beforeEach(async (to, _from, next) => {
     const isPulsarScope = to.matched.some(r => r.meta.pulsarScope);
     const isCepheidScope = to.matched.some(r => r.meta.cepheidScope);
     const isNebulaScope = to.matched.some(r => r.meta.nebulaScope);
+    const isQuasarScope = to.matched.some(r => r.meta.quasarScope);
     next(
       isCepheidScope ? '/cepheid/login' :
       isPulsarScope  ? '/pulsar/login'  :
       isNebulaScope  ? '/nebula/login'  :
+      isQuasarScope  ? '/quasar/login'  :
       '/'
     );
     return;

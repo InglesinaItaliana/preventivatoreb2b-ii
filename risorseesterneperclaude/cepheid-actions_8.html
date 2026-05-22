@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CEPHEID · Azioni</title>
+<style>
+  @import url('https://cdn.jsdelivr.net/npm/@fontsource/outfit/400.css');
+  @import url('https://cdn.jsdelivr.net/npm/@fontsource/outfit/500.css');
+  @import url('https://cdn.jsdelivr.net/npm/@fontsource/cormorant-garamond/500.css');
+  :root { color-scheme: light dark; }
+  body { margin:0; min-height:100vh; display:flex; justify-content:center; align-items:flex-start;
+    background:#EFE7D9; font-family:'Outfit',system-ui,sans-serif; padding:24px 12px; }
+  @media (prefers-color-scheme: dark){ body { background:#0E0C07; } }
+
+  #ax { --primary:#98C0D0; --on-primary:#00344A; --primary-container:#D6EBF2; --on-primary-container:#001F28;
+    --bg:#FFF8F0; --on-bg:#1E1B13; --surface:#FFF8F0; --surface-2:#F1E8D8; --surface-var:#EBE2CF;
+    --on-surface:#1E1B13; --on-surface-var:#4C4639; --outline:#7D7667; --outline-var:#CEC6B4;
+    --error:#BA1A1A; --rmd:12px; --rlg:16px; --rfull:999px;
+    width:100%; max-width:920px; box-sizing:border-box;
+    background:var(--bg); color:var(--on-surface); border-radius:var(--rlg); padding:18px 18px 22px; }
+  @media (prefers-color-scheme: dark){ #ax { --primary:#98C0D0; --on-primary:#003549; --primary-container:#004D6B; --on-primary-container:#C6E5F2;
+    --bg:#16130B; --on-bg:#E9E2D4; --surface:#16130B; --surface-2:#231E13; --surface-var:#4C4639;
+    --on-surface:#E9E2D4; --on-surface-var:#CEC6B4; --outline:#979080; --outline-var:#4C4639; --error:#FFB4AB; } }
+  #ax * { box-sizing:border-box; }
+
+  #ax .hd { display:flex; align-items:center; gap:8px; }
+  #ax .tag { font-size:11px; font-weight:500; letter-spacing:1.5px; color:var(--primary); }
+  #ax .star { width:8px; height:8px; border-radius:50%; background:var(--primary); }
+  #ax .vsw { display:flex; gap:2px; background:var(--surface-var); border-radius:var(--rmd); padding:3px; margin-left:auto; }
+  #ax .vbtn { width:28px; height:28px; display:flex; align-items:center; justify-content:center; border-radius:8px; color:var(--on-surface-var); font-size:15px; text-decoration:none; transition:background .15s,color .15s; }
+  #ax .vbtn:hover { background:color-mix(in srgb,var(--on-surface) 8%,transparent); color:var(--on-surface); }
+  #ax .vbtn.active { background:var(--bg); color:var(--primary); box-shadow:0 1px 3px rgba(0,0,0,.1); }
+  #ax .pname { font-family:'Cormorant Garamond',serif; font-size:26px; line-height:1.1; color:var(--on-bg); margin:4px 0 14px; }
+
+  #ax .cursor { margin-bottom:16px; }
+  #ax .curlbl { font-size:13px; color:var(--on-surface-var); margin-bottom:9px; }
+  #ax .curlbl b { color:var(--primary); font-weight:500; }
+  #ax .curdelta { color:var(--error); font-size:11px; font-weight:500; margin-left:8px; }
+  #ax input[type=range] { width:100%; -webkit-appearance:none; appearance:none; height:6px; border-radius:3px; background:var(--surface-var); outline:none; }
+  #ax input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:20px; height:20px; border-radius:50%; background:var(--primary); cursor:pointer; border:3px solid var(--bg); box-shadow:0 1px 4px rgba(0,0,0,.22); }
+  #ax input[type=range]::-moz-range-thumb { width:20px; height:20px; border-radius:50%; background:var(--primary); cursor:pointer; border:3px solid var(--bg); }
+  #ax .curscale { display:flex; justify-content:space-between; font-size:10px; color:var(--on-surface-var); margin-top:5px; }
+
+  #ax .matrix { display:grid; grid-template-columns:1.15fr 1fr; grid-template-rows:1.35fr 1fr; gap:10px; height:540px; }
+  #ax .quad { border-radius:var(--rmd); padding:12px 11px; display:flex; flex-direction:column; overflow:hidden; transition:opacity .2s; }
+  #ax .q1 { background:color-mix(in srgb,#C46030 8%,var(--surface-2)); }
+  #ax .q2 { background:color-mix(in srgb,var(--primary) 8%,var(--surface-2)); }
+  #ax .q3 { background:color-mix(in srgb,#B09880 7%,var(--surface-2)); }
+  #ax .q4 { background:color-mix(in srgb,#7B8C9A 6%,var(--surface-2)); opacity:.6; }
+  #ax .qhd { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:9px; }
+  #ax .qname { font-family:'Cormorant Garamond',serif; font-size:19px; line-height:1; }
+  #ax .q1 .qname { color:#C46030; }
+  #ax .q2 .qname { color:var(--primary); }
+  #ax .q3 .qname { color:#9A8070; }
+  #ax .q4 .qname { color:var(--on-surface-var); }
+  #ax .qsub { font-size:8.5px; font-weight:600; letter-spacing:.5px; text-transform:uppercase; color:var(--on-surface-var); margin-top:3px; }
+  #ax .qcount { font-size:11px; font-weight:500; color:var(--on-surface-var); background:color-mix(in srgb,var(--on-surface) 7%,transparent); border-radius:var(--rfull); min-width:20px; height:19px; padding:0 6px; display:inline-flex; align-items:center; justify-content:center; flex:0 0 auto; }
+  #ax .qlist { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:5px; margin:0 -3px; padding:0 3px; }
+
+  #ax .acard { background:var(--bg); border:1px solid var(--outline-var); border-radius:9px; padding:7px 9px; display:flex; align-items:center; gap:8px; }
+  #ax .acard.fresh { animation:axin .25s ease; }
+  @keyframes axin { from { opacity:0; transform:translateY(3px); } to { opacity:1; transform:none; } }
+  #ax .dot { width:8px; height:8px; border-radius:50%; background:var(--outline); flex:0 0 auto; }
+  #ax .dot.on { background:var(--primary); }
+  #ax .acname { flex:1; min-width:0; font-size:12px; color:var(--on-surface); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #ax .days { font-size:10px; font-weight:500; flex:0 0 auto; padding:2px 7px; border-radius:var(--rfull); background:var(--surface-var); color:var(--on-surface-var); display:inline-flex; align-items:center; gap:3px; white-space:nowrap; }
+  #ax .days i { font-size:11px; }
+  #ax .days.urgent { background:color-mix(in srgb,var(--error) 14%,var(--bg)); color:var(--error); }
+  #ax .days.forecast { background:transparent; color:var(--error); border:1px dashed var(--error); }
+  #ax .qempty { font-size:11px; color:var(--on-surface-var); opacity:.55; padding:6px 2px; }
+
+  #ax .avfilter { display:flex; gap:8px; align-items:center; margin-bottom:14px; }
+  #ax .avf { width:32px; height:32px; border-radius:50%; background:var(--surface-var); color:var(--on-surface-var); display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:500; cursor:pointer; border:2px solid transparent; transition:all .15s; user-select:none; flex:0 0 auto; }
+  #ax .avf.on { background:var(--primary); color:var(--on-primary); }
+  #ax .avf.all { width:auto; border-radius:var(--rfull); padding:0 11px; font-size:10px; letter-spacing:.4px; text-transform:uppercase; }
+  #ax .filterlbl { font-size:10px; color:var(--on-surface-var); margin-left:2px; }
+  #ax .days.win-safe { background:color-mix(in srgb,var(--primary) 14%,var(--bg)); color:var(--primary); }
+  #ax .days.win-warm { background:color-mix(in srgb,#C4941C 14%,var(--bg)); color:#C4941C; }
+  #ax .days.win-hot  { background:color-mix(in srgb,#C46030 14%,var(--bg)); color:#C46030; }
+  #ax .days.win-critical { background:color-mix(in srgb,var(--error) 14%,var(--bg)); color:var(--error); }
+  #ax .days.muted { background:var(--surface-var); color:var(--on-surface-var); opacity:.6; }
+  @keyframes firepulse { 0%,100%{opacity:1} 50%{opacity:.38} }
+  #ax .q1.overloaded .qname { animation:firepulse 1.3s ease infinite; }
+  #ax .q1.overloaded .qcount { background:color-mix(in srgb,var(--error) 18%,transparent); color:var(--error); }
+
+  #ax .qaction { border:0; border-radius:var(--rfull); padding:4px 10px; font-family:inherit; font-size:11px; font-weight:500; cursor:pointer; display:inline-flex; align-items:center; gap:4px; white-space:nowrap; flex:0 0 auto; transition:all .15s; }
+  #ax .q1-action { background:color-mix(in srgb,#C46030 13%,var(--bg)); color:#C46030; }
+  #ax .q1-action:hover { background:#C46030; color:#fff; }
+  #ax .q2-action { background:color-mix(in srgb,var(--primary) 13%,var(--bg)); color:var(--primary); }
+  #ax .q2-action:hover { background:var(--primary); color:var(--on-primary); }
+  #ax .q3-action { background:var(--surface-var); color:var(--on-surface); }
+  #ax .q3-action:hover { background:var(--outline-var); }
+  #ax .q4-action { background:transparent; border:1px solid var(--outline-var); color:var(--on-surface-var); width:24px; height:24px; border-radius:50%; padding:0; justify-content:center; font-size:12px; }
+  #ax .q4-action:hover { background:var(--error); color:#fff; border-color:var(--error); }
+  #ax .sched-in { position:absolute; opacity:0; pointer-events:none; width:1px; height:1px; }
+  #ax .acard { position:relative; }
+  #ax .status-chip { font-size:10px; font-weight:500; padding:3px 8px; border-radius:var(--rfull); background:color-mix(in srgb,var(--primary) 13%,var(--bg)); color:var(--primary); white-space:nowrap; flex:0 0 auto; }
+  #ax .del-panel { display:flex; gap:6px; padding:5px 9px 8px; flex-wrap:wrap; }
+  #ax .del-panel .avf { width:28px; height:28px; border-radius:50%; background:var(--surface-var); color:var(--on-surface-var); display:flex; align-items:center; justify-content:center; font-size:10px; font-weight:500; cursor:pointer; border:2px solid transparent; transition:all .15s; flex:0 0 auto; }
+  #ax .del-panel .avf:hover, #ax .del-panel .avf.on { background:var(--primary); color:var(--on-primary); border-color:var(--primary); }
+  @keyframes cardout { to { opacity:0; transform:scaleY(0); max-height:0; padding:0; margin:0; overflow:hidden; } }
+  #ax .acard.removing { animation:cardout .22s ease forwards; transform-origin:top; }
+  @keyframes nextpulse { 0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--primary) 55%,transparent)} 60%{box-shadow:0 0 0 7px transparent} 100%{box-shadow:none} }
+  #ax .acard.next-focus { animation:nextpulse .9s ease; }
+  #ax .q1 .qempty { color:var(--primary); }
+
+  #ax .vtoggle { display:flex; gap:4px; margin-bottom:14px; }
+  #ax .vtab { flex:1; padding:7px 0; font-family:inherit; font-size:12px; font-weight:500; border-radius:var(--rmd); cursor:pointer; border:1px solid var(--outline-var); background:var(--surface-var); color:var(--on-surface-var); transition:all .15s; }
+  #ax .vtab.active { background:var(--primary); color:var(--on-primary); border-color:var(--primary); }
+  #ax .rcard { background:var(--bg); border:1px solid var(--outline-var); border-radius:9px; padding:9px 11px; display:flex; align-items:center; gap:10px; animation:axin .25s ease; }
+  #ax .rcard + .rcard { margin-top:5px; }
+  #ax .ravatar { width:42px; height:42px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:600; flex:0 0 auto; border:2px solid; transition:all .2s; }
+  #ax .q1 .ravatar { background:color-mix(in srgb,#C46030 16%,var(--bg)); color:#C46030; border-color:#C46030; }
+  #ax .q2 .ravatar { background:color-mix(in srgb,var(--primary) 16%,var(--bg)); color:var(--primary); border-color:var(--primary); }
+  #ax .q3 .ravatar { background:color-mix(in srgb,#9A8070 16%,var(--bg)); color:#9A8070; border-color:#9A8070; }
+  #ax .q4 .ravatar { background:var(--surface-var); color:var(--on-surface-var); border-color:var(--outline-var); }
+  #ax .rcard.forecast .ravatar { border-style:dashed; animation:avatarpulse 2s ease infinite; }
+  @keyframes avatarpulse { 0%,100%{opacity:1} 50%{opacity:.5} }
+  #ax .rinfo { flex:1; min-width:0; }
+  #ax .rname { font-size:12.5px; font-weight:500; color:var(--on-surface); }
+  #ax .rstats { font-size:10.5px; color:var(--on-surface-var); margin-top:2px; }
+  #ax .rbar { height:3px; background:var(--surface-var); border-radius:var(--rfull); margin-top:6px; overflow:hidden; }
+  #ax .q1 .rbar-fill { background:#C46030; }
+  #ax .q2 .rbar-fill { background:var(--primary); }
+  #ax .q3 .rbar-fill { background:#9A8070; }
+  #ax .q4 .rbar-fill { background:var(--outline); }
+  #ax .rbar-fill { height:100%; border-radius:var(--rfull); transition:width .35s ease; }
+</style>
+</head>
+<body>
+<div id="ax">
+  <div class="hd"><span class="star"></span><span class="tag">QUASAR · AZIONI</span>
+    <div class="vsw">
+      <a href="cepheid-timeline.html" class="vbtn" title="Timeline"><i class="ti ti-chart-gantt"></i></a>
+      <a href="cepheid-kanban.html" class="vbtn" title="Kanban"><i class="ti ti-layout-kanban"></i></a>
+      <a href="cepheid-triage.html" class="vbtn" title="Smistamento"><i class="ti ti-inbox"></i></a>
+      <a href="#" class="vbtn active" title="Azioni"><i class="ti ti-layout-grid"></i></a>
+      <a href="sidera-log.html" class="vbtn" title="Attività"><i class="ti ti-activity"></i></a>
+    </div>
+  </div>
+  <p class="pname">Azioni</p>
+
+  <div class="cursor">
+    <div class="curlbl">campo <b id="axLbl">oggi</b><span class="curdelta" id="axDelta"></span></div>
+    <input type="range" min="0" max="14" value="0" id="axRange">
+    <div class="curscale"><span>oggi</span><span>fra 7 gg</span><span>fra 14 gg</span></div>
+  </div>
+
+  <div class="vtoggle">
+    <button class="vtab active" data-v="task" onclick="showView('task')">Task</button>
+    <button class="vtab" data-v="resource" onclick="showView('resource')">Risorse</button>
+  </div>
+  <div class="avfilter" id="axFilter">
+    <span class="avf all on" onclick="setFilter(this,'')">Tutti</span>
+    <span class="avf" onclick="setFilter(this,'GM')" title="Gionata">GM</span>
+    <span class="avf" onclick="setFilter(this,'DA')" title="Daniel">DA</span>
+    <span class="avf" onclick="setFilter(this,'EV')" title="Eva">EV</span>
+    <span class="avf" onclick="setFilter(this,'LU')" title="Luca">LU</span>
+    <span class="filterlbl">filtra per persona</span>
+  </div>
+    <div class="matrix" id="tView">
+    <div class="quad q1"><div class="qhd"><div><div class="qname">Agisci</div><div class="qsub">urgente · importante</div></div><span class="qcount">0</span></div><div class="qlist"></div></div>
+    <div class="quad q2"><div class="qhd"><div><div class="qname">Pianifica</div><div class="qsub">importante · non urgente</div></div><span class="qcount">0</span></div><div class="qlist"></div></div>
+    <div class="quad q3"><div class="qhd"><div><div class="qname">Delega</div><div class="qsub">urgente · non importante</div></div><span class="qcount">0</span></div><div class="qlist"></div></div>
+    <div class="quad q4"><div class="qhd"><div><div class="qname">Valuta</div><div class="qsub">non urgente · non importante</div></div><span class="qcount">0</span></div><div class="qlist"></div></div>
+  </div>
+</div>
+  <div class="matrix" id="rView" style="display:none">
+    <div class="quad q1"><div class="qhd"><div><div class="qname">Sovraccarico</div><div class="qsub">carico alto · urgente</div></div><span class="qcount">0</span></div><div class="qlist" id="rq1"></div></div>
+    <div class="quad q2"><div class="qhd"><div><div class="qname">In carico</div><div class="qsub">carico alto · gestibile</div></div><span class="qcount">0</span></div><div class="qlist" id="rq2"></div></div>
+    <div class="quad q3"><div class="qhd"><div><div class="qname">Allerta</div><div class="qsub">carico lieve · urgente</div></div><span class="qcount">0</span></div><div class="qlist" id="rq3"></div></div>
+    <div class="quad q4"><div class="qhd"><div><div class="qname">Disponibile</div><div class="qsub">carico lieve · calmo</div></div><span class="qcount">0</span></div><div class="qlist" id="rq4"></div></div>
+  </div>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3/dist/tabler-icons.min.css">
+<script>
+const URG=3, MAXLOAD=4, LOAD_THRESH=3, PLOAD_URG=1;
+let cursor=0, filterPerson='', currentView='task';
+const TODAY_ISO=new Date().toISOString().slice(0,10);
+const PEOPLE={GM:"Gionata",DA:"Daniel",EV:"Eva",LU:"Luca"};
+const TASKS=[
+  {id:1,  n:"Approvare preventivo Rossi",     due:1,  imp:true,  status:"doing",  a:["DA","GM"]},
+  {id:2,  n:"Consegna campioni cliente",      due:2,  imp:true,  status:"doing",  a:["EV"]},
+  {id:3,  n:"Definire specifiche grata XR",   due:8,  imp:true,  status:"todo",   a:["GM","LU"]},
+  {id:4,  n:"Pianificare verniciatura lotto", due:12, imp:true,  status:"todo",   a:["DA"]},
+  {id:5,  n:"Revisione disegni tecnici",      due:6,  imp:true,  status:"doing",  a:["LU","GM"]},
+  {id:6,  n:"Rispondere email fornitore",     due:1,  imp:false, status:"todo",   a:["EV"]},
+  {id:7,  n:"Aggiornare listino prezzi",      due:2,  imp:false, status:"todo",   a:["EV","DA"]},
+  {id:8,  n:"Ordinare cancelleria ufficio",   due:10, imp:false, status:"todo",   a:["EV"]},
+  {id:9,  n:"Archiviare vecchi progetti",     due:15, imp:false, status:"todo",   a:["LU"]},
+  {id:10, n:"Test resistenza profilo",        due:5,  imp:true,  status:"review", a:["DA","LU"]},
+  {id:11, n:"Foto prodotti catalogo",         due:9,  imp:false, status:"todo",   a:["GM"]},
+  {id:12, n:"Bozza contratto fornitura",      due:4,  imp:true,  status:"doing",  a:["DA","GM"]},
+];
+const EMPTY_R={q1:'<i class="ti ti-circle-check"></i> Team in equilibrio',q2:'Nessuno',q3:'Nessuno',q4:'Tutti impegnati'};
+const EMPTY={q1:'<i class="ti ti-circle-check"></i> Nessun incendio',q2:'Niente da pianificare',q3:'Niente da delegare',q4:'Niente da valutare'};
+
+function quadOf(t,cur){ return (t.due-cur)<=URG ? (t.imp?'q1':'q3') : (t.imp?'q2':'q4'); }
+function daysLabel(eff){ if(eff<0) return 'scaduto'; if(eff===0) return 'oggi'; return 'fra '+(eff===1?'1 gg':eff+' gg'); }
+function cardSig(t,eff,q){ return q+'|'+t.status+'|'+eff; }
+
+function cardHtml(t,eff,q){
+  const dot=(t.status==='doing'||t.status==='review')?' on':'';
+  const urgentToday=t.due<=URG, forecast=(eff<=URG)&&!urgentToday;
+  let chip;
+  if(q==='q1'||q==='q3'){
+    chip='<span class="days '+(forecast?'forecast':'urgent')+'">'+(forecast?'<i class="ti ti-clock"></i> ':'')+daysLabel(eff)+'</span>';
+  } else if(q==='q2'){
+    const win=eff-URG, wl=win<=0?'oggi':(win===1?'1 gg':win+' gg');
+    chip='<span class="days '+(win<=1?'win-critical':win<=3?'win-hot':win<=7?'win-warm':'win-safe')+'"><i class="ti ti-hourglass"></i> '+wl+'</span>';
+  } else {
+    chip='<span class="days muted">'+daysLabel(eff)+'</span>';
+  }
+  let action='';
+  if(q==='q1'){
+    action=t.status==='todo'
+      ?'<button class="qaction q1-action" onclick="doStart('+t.id+')"><i class="ti ti-player-play"></i> Avvia</button>'
+      :'<span class="status-chip">In corso</span>';
+  } else if(q==='q2'){
+    action='<button class="qaction q2-action" onclick="doSchedule('+t.id+')"><i class="ti ti-calendar"></i> Pianifica</button>'
+          +'<input type="date" class="sched-in" id="sched-'+t.id+'" min="'+TODAY_ISO+'" onchange="schedChange('+t.id+',this.value)">';
+  } else if(q==='q3'){
+    action='<button class="qaction q3-action" onclick="doDelegate('+t.id+',this)"><i class="ti ti-arrow-right"></i> Delega</button>';
+  } else {
+    action='<button class="qaction q4-action" onclick="doRemove('+t.id+',this)" aria-label="valuta"><i class="ti ti-x"></i></button>';
+  }
+  return '<span class="dot'+dot+'"></span><span class="acname" title="'+t.n+'">'+t.n+'</span>'+chip+action;
+}
+
+/* ---- RECONCILER: reuses card elements, only updates what changed (no global blink) ---- */
+function axRender(){
+  const active=filterPerson?TASKS.filter(t=>t.a.includes(filterPerson)):TASKS;
+  const activeIds=new Set(active.map(t=>t.id));
+  // remove cards whose task is gone or filtered out
+  document.querySelectorAll('#ax .acard').forEach(card=>{
+    if(!activeIds.has(parseInt(card.dataset.id))) card.remove();
+  });
+  const sorted=[...active].sort((a,b)=>(a.due-cursor)-(b.due-cursor));
+  const counts={q1:0,q2:0,q3:0,q4:0};
+  sorted.forEach(t=>{
+    const eff=t.due-cursor, q=quadOf(t,cursor); counts[q]++;
+    const list=document.querySelector('#ax .'+q+' .qlist');
+    const sig=cardSig(t,eff,q);
+    let card=document.querySelector('#ax .acard[data-id="'+t.id+'"]');
+    if(!card){
+      card=document.createElement('div');
+      card.className='acard fresh'; card.dataset.id=t.id; card.dataset.sig=sig;
+      card.innerHTML=cardHtml(t,eff,q);
+      list.appendChild(card);
+      const c=card; setTimeout(()=>c.classList.remove('fresh'),300);
+    } else {
+      if(card.dataset.sig!==sig){ card.innerHTML=cardHtml(t,eff,q); card.dataset.sig=sig; }
+      list.appendChild(card); // reposition into correct quadrant + sorted order
+    }
+  });
+  ['q1','q2','q3','q4'].forEach(q=>{
+    const list=document.querySelector('#ax .'+q+' .qlist');
+    list.querySelectorAll('.qempty').forEach(e=>e.remove());
+    if(counts[q]===0) list.insertAdjacentHTML('beforeend','<div class="qempty">'+EMPTY[q]+'</div>');
+    document.querySelector('#ax .'+q+' .qcount').textContent=counts[q];
+  });
+  document.querySelector('#ax .q1').classList.toggle('overloaded',counts.q1>MAXLOAD);
+  document.getElementById('axLbl').textContent=cursor===0?'oggi':'fra '+cursor+(cursor===1?' giorno':' giorni');
+  const todayQ1=TASKS.filter(t=>quadOf(t,0)==='q1').length, delta=counts.q1-todayQ1;
+  document.getElementById('axDelta').textContent=(cursor>0&&delta>0&&currentView==='task')?('+'+delta+(delta===1?' incendio':' incendi')+' rispetto a oggi'):currentView==='task'?'':document.getElementById('axDelta').textContent;
+}
+
+function doStart(id){
+  const t=TASKS.find(x=>x.id===id); if(!t||t.status!=='todo') return;
+  t.status='doing'; axRender(); resourceRender();
+  const next=[...document.querySelectorAll('#ax .q1 .acard')].find(c=>c.querySelector('.q1-action'));
+  if(next){ next.classList.add('next-focus'); setTimeout(()=>next.classList.remove('next-focus'),900); }
+}
+
+function doSchedule(id){
+  const el=document.getElementById('sched-'+id); if(!el) return;
+  if(el.showPicker){try{el.showPicker();}catch(e){el.click();}}else el.click();
+}
+
+function schedChange(id,val){
+  if(!val) return;
+  const t=TASKS.find(x=>x.id===id); if(!t) return;
+  const today=new Date(); today.setHours(0,0,0,0);
+  t.due=Math.max(0,Math.round((new Date(val+'T00:00:00')-today)/86400000));
+  axRender(); resourceRender();
+}
+
+function doDelegate(id,btn){
+  const ex=document.getElementById('delpanel-'+id); if(ex){ex.remove();return;}
+  const t=TASKS.find(x=>x.id===id); if(!t) return;
+  const avs=Object.entries(PEOPLE).map(([k,v])=>{
+    const on=t.a.includes(k)?' on':'';
+    return '<span class="avf'+on+'" title="'+v+'" data-p="'+k+'" data-tid="'+id+'">'+k+'</span>';
+  }).join('');
+  btn.closest('.acard').insertAdjacentHTML('afterend','<div class="del-panel" id="delpanel-'+id+'">'+avs+'</div>');
+  document.getElementById('delpanel-'+id).addEventListener('click',e=>{
+    const a=e.target.closest('.avf'); if(!a) return;
+    assignTo(parseInt(a.dataset.tid),a.dataset.p);
+  });
+}
+
+function assignTo(id,person){
+  const t=TASKS.find(x=>x.id===id); if(!t) return;
+  if(t.a.includes(person)) t.a=t.a.filter(x=>x!==person); else t.a.push(person);
+  document.getElementById('delpanel-'+id)?.remove();
+  if(filterPerson) axRender(); resourceRender();
+}
+
+function doRemove(id,btn){
+  const card=btn.closest('.acard'); card.classList.add('removing');
+  setTimeout(()=>{ const i=TASKS.findIndex(x=>x.id===id); if(i>-1) TASKS.splice(i,1); axRender(); resourceRender(); },230);
+}
+
+function setFilter(el,p){
+  document.querySelectorAll('#axFilter .avf').forEach(x=>x.classList.remove('on'));
+  el.classList.add('on'); filterPerson=p; axRender(); resourceRender();
+}
+
+document.getElementById('axRange').addEventListener('input',e=>{cursor=parseInt(e.target.value,10)||0;axRender(); resourceRender();resourceRender();});
+axRender(); resourceRender();
+
+
+function rQuadOf(k,cur){
+  const ts=TASKS.filter(t=>t.a.includes(k));
+  const heavy=ts.length>LOAD_THRESH;
+  const pressing=ts.filter(t=>(t.due-cur)<=URG).length>PLOAD_URG;
+  return pressing?(heavy?'q1':'q3'):(heavy?'q2':'q4');
+}
+
+function resourceRender(){
+  ['q1','q2','q3','q4'].forEach(q=>{ document.getElementById('r'+q).innerHTML=''; });
+  const counts={q1:0,q2:0,q3:0,q4:0};
+  Object.entries(PEOPLE).forEach(([k,v])=>{
+    const ts=TASKS.filter(t=>t.a.includes(k));
+    const total=ts.length;
+    const urg=ts.filter(t=>(t.due-cursor)<=URG).length;
+    const q=rQuadOf(k,cursor);
+    const forecast=q==='q1'&&rQuadOf(k,0)!=='q1';
+    counts[q]++;
+    const barW=total>0?Math.round((urg/total)*100):0;
+    const fc=forecast?' forecast':'';
+    const urgLabel=urg===0?'nessun urgente':urg+(urg===1?' urgente':' urgenti');
+    document.getElementById('r'+q).insertAdjacentHTML('beforeend',
+      '<div class="rcard'+fc+'">'
+      +'<div class="ravatar">'+k+'</div>'
+      +'<div class="rinfo">'
+      +'<div class="rname">'+v+'</div>'
+      +'<div class="rstats">'+total+' task · '+urgLabel+'</div>'
+      +'<div class="rbar"><div class="rbar-fill" style="width:'+barW+'%"></div></div>'
+      +'</div></div>'
+    );
+  });
+  ['q1','q2','q3','q4'].forEach(q=>{
+    const el=document.getElementById('r'+q);
+    if(!counts[q]) el.innerHTML='<div class="qempty">'+EMPTY_R[q]+'</div>';
+    const qheads=document.querySelectorAll('#ax .rView .'+q+' .qcount, #rView .qcount');
+    document.querySelectorAll('#rView .'+q+' .qcount').forEach(c=>c.textContent=counts[q]);
+  });
+  if(currentView==='resource'){
+    const todayQ1=Object.keys(PEOPLE).filter(k=>rQuadOf(k,0)==='q1').length;
+    const delta=Object.keys(PEOPLE).filter(k=>rQuadOf(k,cursor)==='q1').length-todayQ1;
+    document.getElementById('axDelta').textContent=(cursor>0&&delta>0)?('+'+delta+(delta===1?' risorsa':' risorse')+' in sovraccarico rispetto a oggi'):'';
+  }
+}
+
+function showView(v){
+  currentView=v;
+  document.querySelectorAll('.vtab').forEach(t=>t.classList.toggle('active',t.dataset.v===v));
+  document.getElementById('tView').style.display=v==='task'?'':'none';
+  document.getElementById('rView').style.display=v==='resource'?'':'none';
+  document.getElementById('axFilter').style.display=v==='task'?'':'none';
+  if(v==='resource') resourceRender(); else axRender();
+}
+</script>
+</body>
+</html>

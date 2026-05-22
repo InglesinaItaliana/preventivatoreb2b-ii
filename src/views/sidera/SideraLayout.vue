@@ -13,12 +13,14 @@ import { useTeamMembers, displayName } from '../../composables/sidera/useTeamMem
 import StarAvatar from '../../components/shared/StarAvatar.vue'
 import { useChats } from '../../composables/pulsar/useChats'
 import { useNotifications, type NotificationScope } from '../../composables/shared/useNotifications'
+import { useTriageCount } from '../../composables/cepheid/useTriageCount'
 
 const route  = useRoute()
 const router = useRouter()
 const { currentUser } = useCurrentUser()
 const { members } = useTeamMembers()
 const { chats } = useChats()
+const { triageCount } = useTriageCount()
 
 // ── Adaptive mode detection (standalone / mobile viewport) ──────────────────
 const isStandalone = ref(false)
@@ -118,6 +120,8 @@ const modules = [
     vx: 340, vy: 68,  vr: 10,
     items: [
       { path: '/sidera', exact: true, label: 'Cruscotto', icon: 'home' },
+      // Single source of truth con il bottom-nav mobile QUASAR (/quasar/*).
+      ...(SCOPE_CONFIGS.quasar.mobileNav as any[]),
     ],
   },
   {
@@ -469,6 +473,11 @@ const roleLabel: Record<string, string> = {
                 :style="activeIconStyle(item.path, item.exact, mod.accent, item.excludePaths)"
               />
               {{ item.label }}
+              <span
+                v-if="item.path === '/cepheid/smistamento' && triageCount > 0"
+                class="s-triage-star"
+                aria-label="Task da smistare"
+              >★</span>
             </RouterLink>
           </template>
           <div v-if="mod.items.length === 0" class="s-nav-empty">
@@ -514,6 +523,7 @@ const roleLabel: Record<string, string> = {
       <ContextualBottomNav
         v-if="isMobileLayout && currentScopeConfig"
         :config="currentScopeConfig"
+        :triage-count="triageCount"
       >
         <template #fab>
           <ContextualFab :config="currentScopeConfig" @trigger="onFabTrigger" />
@@ -626,6 +636,23 @@ const roleLabel: Record<string, string> = {
 }
 
 .s-nav-item:hover { background: var(--s-border); color: var(--s-text-mid); }
+
+/* indicatore "c'è lavoro": stella oro CEPHEID che pulsa quando ci sono task da smistare */
+.s-triage-star {
+  margin-left: auto;
+  color: #D4A020;
+  font-size: 13px;
+  line-height: 1;
+  text-shadow: 0 0 6px rgba(212, 160, 32, 0.5);
+  animation: cph-star-pulse 1.6s ease-in-out infinite;
+}
+@keyframes cph-star-pulse {
+  0%, 100% { transform: scale(1);    opacity: 0.85; }
+  50%      { transform: scale(1.25); opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .s-triage-star { animation: none; }
+}
 
 .s-nav-icon {
   font-size: 18px;

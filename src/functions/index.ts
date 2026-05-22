@@ -1728,3 +1728,202 @@ export const autoDeliveredAfter7Days = functions
         console.log(`[autoDeliveredAfter7Days] Convertiti ${totale} ordini SHIPPED → DELIVERED.`);
         return null;
     });
+
+// ════════════════════════════════════════════════════════════════════════════
+// QUASAR · Registro attività (activityLog)
+// Trigger di SOLA AGGIUNTA: scrivono eventi denormalizzati su `activityLog`.
+// NON modificano alcuna funzione esistente. logActivity ingoia gli errori così
+// un fallimento di logging non può MAI impattare il flusso (ordini/task/progetti).
+// I trigger scrivono su una collection DIVERSA → nessun loop di ri-trigger.
+// Vedi docs/QUADRANTI.md sibling + plan steady-mixing-pebble.
+// ════════════════════════════════════════════════════════════════════════════
+
+type ActivityTone = 'gold' | 'neutral' | 'red';
+interface ActivityInput {
+    system: 'SIDERA' | 'POPS';
+    sourceType: string;
+    sourceId: string;
+    projectId?: string | null;
+    eventType: string;
+    verb: string;
+    objectLabel: string;
+    tone: ActivityTone;
+    icon: string;
+    actorEmail?: string | null;
+    actorUid?: string | null;
+    actorName?: string | null;
+}
+
+async function logActivity(e: ActivityInput): Promise<void> {
+    try {
+        await admin.firestore().collection('activityLog').add({
+            ts: admin.firestore.FieldValue.serverTimestamp(),
+            system: e.system,
+            sourceType: e.sourceType,
+            sourceId: e.sourceId,
+            projectId: e.projectId ?? null,
+            eventType: e.eventType,
+            verb: e.verb,
+            objectLabel: e.objectLabel,
+            tone: e.tone,
+            icon: e.icon,
+            actorEmail: e.actorEmail ?? null,
+            actorUid: e.actorUid ?? null,
+            actorName: e.actorName ?? null,
+        });
+    } catch (err) {
+        // Mai propagare: il logging è best-effort e non deve impattare nulla.
+        console.error('[activityLog] write fallita (ignoro):', err);
+    }
+}
+
+// Vero se almeno una delle chiavi differisce tra before e after.
+function fieldsChanged(before: any, after: any, keys: string[]): boolean {
+    return keys.some(k => JSON.stringify(before?.[k] ?? null) !== JSON.stringify(after?.[k] ?? null));
+}
+
+const TASK_NOUN: Record<string, string> = {
+    task: 'il task', milestone: 'la milestone', deliverable: 'il deliverable',
+};
+
+// Logica condivisa task/milestone/deliverable (path standalone e di progetto).
+async function handleTaskWrite(
+    change: functions.Change<functions.firestore.DocumentSnapshot>,
+    taskId: string,
+    projectId: string | null,
+): Promise<void> {
+    const before = change.before.exists ? change.before.data() : null;
+    const after = change.after.exists ? change.after.data() : null;
+    const data = after || before;
+    if (!data) return;
+
+    const type = (data.type as string) || 'task';
+    const noun = TASK_NOUN[type] || 'il task';
+    const objectLabel = (after?.title as string) || (before?.title as string) || '(senza titolo)';
+    const base = { system: 'SIDERA' as const, sourceType: type, sourceId: taskId, projectId };
+
+    // CREATO
+    if (!before && after) {
+        return logActivity({ ...base, eventType: 'created', tone: 'gold', icon: 'add',
+            verb: `ha creato ${noun}`, objectLabel, actorEmail: after.createdByEmail ?? null, actorUid: after.createdBy ?? null });
+    }
+    // ELIMINATO (solo standalone: il delete a cascata di progetto è gestito da quel flusso)
+    if (before && !after) {
+        if (projectId) return; // evita rumore dai cascade-delete dei task di progetto
+        return logActivity({ ...base, eventType: 'deleted', tone: 'red', icon: 'delete',
+            verb: `ha eliminato ${noun}`, objectLabel,
+            actorEmail: before.updatedByEmail ?? before.createdByEmail ?? null });
+    }
+    if (!before || !after) return;
+
+    const wasDone = before.status === 'done';
+    const isDone = after.status === 'done';
+
+    if (!wasDone && isDone) {
+        return logActivity({ ...base, eventType: 'completed', tone: 'gold', icon: 'check_circle',
+            verb: `ha completato ${noun}`, objectLabel, actorEmail: after.completedBy ?? null });
+    }
+    if (wasDone && !isDone) {
+        return logActivity({ ...base, eventType: 'uncompleted', tone: 'neutral', icon: 'undo',
+            verb: `ha riaperto ${noun}`, objectLabel, actorEmail: after.updatedByEmail ?? null });
+    }
+    // APPROVATO (solo deliverable: campo `approved`)
+    if (!before.approved && after.approved === true) {
+        return logActivity({ ...base, eventType: 'approved', tone: 'gold', icon: 'verified',
+            verb: `ha approvato ${noun}`, objectLabel, actorEmail: after.approvedByEmail ?? null });
+    }
+    // MODIFICATO (solo campi user-facing; evita rumore da contatori/triaged)
+    if (fieldsChanged(before, after, ['title', 'priority', 'dueDate', 'assignees'])) {
+        return logActivity({ ...base, eventType: 'modified', tone: 'neutral', icon: 'edit',
+            verb: `ha modificato ${noun}`, objectLabel, actorEmail: after.updatedByEmail ?? null });
+    }
+}
+
+exports.logTaskActivityStandalone = functions
+    .region('europe-west1')
+    .firestore.document('tasks/{taskId}')
+    .onWrite((change, context) => handleTaskWrite(change, context.params.taskId, null));
+
+exports.logTaskActivitySub = functions
+    .region('europe-west1')
+    .firestore.document('projects/{projectId}/tasks/{taskId}')
+    .onWrite((change, context) => handleTaskWrite(change, context.params.taskId, context.params.projectId));
+
+exports.logProjectActivity = functions
+    .region('europe-west1')
+    .firestore.document('projects/{projectId}')
+    .onWrite(async (change, context) => {
+        const before = change.before.exists ? change.before.data() : null;
+        const after = change.after.exists ? change.after.data() : null;
+        const projectId = context.params.projectId;
+        const objectLabel = (after?.name as string) || (before?.name as string) || '(senza nome)';
+        const base = { system: 'SIDERA' as const, sourceType: 'project', sourceId: projectId, projectId };
+
+        if (!before && after) {
+            return logActivity({ ...base, eventType: 'created', tone: 'gold', icon: 'create_new_folder',
+                verb: 'ha creato il progetto', objectLabel, actorUid: after.createdBy ?? null });
+        }
+        if (before && !after) return; // niente evento sul delete progetto (cascade) per v1
+        if (!before || !after) return;
+
+        if (!before.completed && after.completed === true) {
+            return logActivity({ ...base, eventType: 'completed', tone: 'gold', icon: 'check_circle',
+                verb: 'ha completato il progetto', objectLabel, actorEmail: after.updatedByEmail ?? null });
+        }
+        if (fieldsChanged(before, after, ['name', 'description', 'color', 'dueDate', 'obiettivoId'])) {
+            return logActivity({ ...base, eventType: 'modified', tone: 'neutral', icon: 'edit',
+                verb: 'ha modificato il progetto', objectLabel, actorEmail: after.updatedByEmail ?? null });
+        }
+    });
+
+// POPS: trigger SEPARATO sullo stesso path di generaOrdineFIC (v1 ammette più trigger
+// indipendenti). NON tocca generaOrdineFIC. Logga solo le transizioni di `stato`.
+exports.logPreventivoActivity = functions
+    .region('europe-west1')
+    .firestore.document('preventivi/{docId}')
+    .onWrite(async (change, context) => {
+        const before = change.before.exists ? change.before.data() : null;
+        const after = change.after.exists ? change.after.data() : null;
+        if (!after) return; // delete preventivo: nessun evento v1
+
+        const codice = after.codice || context.params.docId;
+        const commessa = after.commessa ? ` · ${after.commessa}` : '';
+        const objectLabel = `#${codice}${commessa}`;
+        const cliente = (after.cliente as string) || null;
+        const base = { system: 'POPS' as const, sourceType: 'order', sourceId: context.params.docId, projectId: null };
+
+        // CREATO
+        if (!before) {
+            return logActivity({ ...base, eventType: 'created', tone: 'gold', icon: 'add',
+                verb: "ha creato l'ordine", objectLabel, actorName: cliente });
+        }
+        // Solo su cambio di stato
+        if (before.stato === after.stato) return;
+
+        switch (after.stato) {
+            case 'ORDER_REQ':
+                return logActivity({ ...base, eventType: 'sent', tone: 'gold', icon: 'outbox',
+                    verb: "ha inviato l'ordine", objectLabel, actorName: cliente });
+            case 'SIGNED':
+                // Conferma = azione del cliente (clienteUID) → nome dal campo `cliente`.
+                return logActivity({ ...base, eventType: 'confirmed', tone: 'gold', icon: 'task_alt',
+                    verb: "ha confermato l'ordine", objectLabel, actorName: cliente });
+            case 'IN_PRODUZIONE':
+                return logActivity({ ...base, eventType: 'in_produzione', tone: 'neutral', icon: 'precision_manufacturing',
+                    verb: "ha messo in produzione l'ordine", objectLabel, actorEmail: after.updatedByEmail ?? null });
+            case 'READY':
+                return logActivity({ ...base, eventType: 'ready', tone: 'gold', icon: 'inventory_2',
+                    verb: "ha contrassegnato pronto l'ordine", objectLabel, actorEmail: after.updatedByEmail ?? null });
+            case 'SHIPPED':
+                return logActivity({ ...base, eventType: 'shipped', tone: 'gold', icon: 'local_shipping',
+                    verb: "ha spedito l'ordine", objectLabel, actorEmail: after.updatedByEmail ?? null });
+            case 'DELIVERED':
+                return logActivity({ ...base, eventType: 'delivered', tone: 'gold', icon: 'home',
+                    verb: "ha consegnato l'ordine", objectLabel, actorEmail: after.updatedByEmail ?? null });
+            case 'REJECTED':
+                return logActivity({ ...base, eventType: 'cancelled', tone: 'red', icon: 'close',
+                    verb: "ha annullato l'ordine", objectLabel, actorEmail: after.annullatoDa ?? null });
+            default:
+                return; // DRAFT, PENDING_VAL, QUOTE_READY, WAITING_SIGN, WAITING_FAST, DELIVERY → nessun evento
+        }
+    });

@@ -21,6 +21,32 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
         // Escludi il SW di FCM dal precaching/navigateFallback (è gestito da Firebase Messaging)
         navigateFallbackDenylist: [/^\/firebase-messaging-sw\.js$/],
+        // Cache dei Google Fonts (CSS + file font), incluso "Material Symbols Outlined"
+        // usato da <MIcon>. Senza questo, ad ogni deploy il SW si rigenera e il font
+        // icone viene ri-richiesto alla CDN: finché non arriva le ligature sono invisibili
+        // → le icone "spariscono" a intermittenza. Con CacheFirst il font è servito dalla
+        // cache all'istante, indipendentemente dal deploy. statuses [0,200] gestisce le
+        // risposte opaque cross-origin della CDN Google.
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'google-fonts-stylesheets',
+              expiration: { maxEntries: 10, maxAgeSeconds: 60 * 60 * 24 * 365 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'google-fonts-webfonts',
+              expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
       },
       includeAssets: ['firebase-messaging-sw.js'],
     }),

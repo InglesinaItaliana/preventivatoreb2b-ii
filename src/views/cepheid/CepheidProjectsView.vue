@@ -3,13 +3,14 @@ import { ref, computed, inject, watch, onMounted, nextTick, type Ref } from 'vue
 import MIcon from '../../components/shared/MIcon.vue'
 import MdPageHeader from '../../components/shared/MdPageHeader.vue'
 import CepheidProjectCard from '../../components/cepheid/CepheidProjectCard.vue'
+import CepheidViewSwitcher from '../../components/cepheid/CepheidViewSwitcher.vue'
 import { useProjects, type Project } from '../../composables/sidera/useProjects'
 import { useObiettivi } from '../../composables/sidera/useObiettivi'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
 import { useTeamMembers } from '../../composables/sidera/useTeamMembers'
 import { useAllTasks } from '../../composables/sidera/useAllTasks'
 
-const { projects, activeProjects, loading, createProject, updateProject, deleteProject, toggleActive } = useProjects()
+const { projects, activeProjects, loading, createProject, updateProject, deleteProject, toggleActive, toggleCompleted } = useProjects()
 const { obiettiviAttivi } = useObiettivi()
 const { currentUser } = useCurrentUser()
 const { members } = useTeamMembers()
@@ -20,8 +21,15 @@ const isAdmin = computed(() => currentUser.value?.role === 'ADMIN' || currentUse
 const adminProjects = computed(() => projects.value.filter(p => !p.archived))
 const baseProjects = computed(() => isAdmin.value ? adminProjects.value : activeProjects.value)
 
-// ── Filtro per obiettivo ──────────────────────────────────────────────────
-const filterObiettivoId = ref<string>('') // '' = tutti
+// ── Filtro a pillola: Attivi / Per obiettivo / Tutti / Completati ───────────
+type ProjFilter = 'active' | 'goal' | 'all' | 'completed'
+const statusFilter = ref<ProjFilter>('active')
+const projTabs: { id: ProjFilter; label: string; icon: string }[] = [
+  { id: 'active',    label: 'Attivi',        icon: 'play_circle' },
+  { id: 'goal',      label: 'Per obiettivo', icon: 'flag' },
+  { id: 'all',       label: 'Tutti',         icon: 'list' },
+  { id: 'completed', label: 'Completati',    icon: 'emoji_events' },
+]
 
 // Data di fine DERIVATA per progetto = scadenza del deliverable più tardivo
 // (uguale a quella mostrata in timeline quando il progetto non ha dueDate proprio).
@@ -36,10 +44,16 @@ const derivedEnd = computed(() => {
   return m
 })
 
-// Sort: attivi prima → data di fine effettiva (campo dueDate, altrimenti derivata) crescente → creazione desc.
+// Sort: attivi prima → completati → inattivi; a parità di rank per data di fine
+// effettiva (campo dueDate, altrimenti derivata) crescente → creazione desc.
+function rankOf(p: Project): number {
+  if (p.active === false) return 2
+  if (p.completed) return 1
+  return 0
+}
 function projSort(a: Project, b: Project): number {
-  const aa = a.active !== false ? 0 : 1
-  const ba = b.active !== false ? 0 : 1
+  const aa = rankOf(a)
+  const ba = rankOf(b)
   if (aa !== ba) return aa - ba
   const ae = a.dueDate ? a.dueDate.getTime() : (derivedEnd.value[a.id] ?? Infinity)
   const be = b.dueDate ? b.dueDate.getTime() : (derivedEnd.value[b.id] ?? Infinity)
@@ -47,11 +61,26 @@ function projSort(a: Project, b: Project): number {
   return b.createdAt.getTime() - a.createdAt.getTime()
 }
 
+// liste flat per Attivi / Tutti / Completati ('goal' usa projectGroups)
 const visibleProjects = computed(() => {
   let list = baseProjects.value
-  if (filterObiettivoId.value === '__none__') list = list.filter(p => !p.obiettivoId)
-  else if (filterObiettivoId.value) list = list.filter(p => p.obiettivoId === filterObiettivoId.value)
+  if (statusFilter.value === 'active') list = list.filter(p => p.active !== false && !p.completed)
+  else if (statusFilter.value === 'completed') list = list.filter(p => p.completed)
   return [...list].sort(projSort)
+})
+
+// vista "Per obiettivo": progetti raggruppati sotto intestazioni per obiettivo
+const projectGroups = computed(() => {
+  const list = baseProjects.value
+  const knownIds = new Set(obiettiviAttivi.value.map(o => o.id))
+  const groups: { id: string; titolo: string; colore: string | null; projects: Project[] }[] = []
+  for (const o of obiettiviAttivi.value) {
+    const ps = list.filter(p => p.obiettivoId === o.id)
+    if (ps.length) groups.push({ id: o.id, titolo: o.titolo, colore: o.colore, projects: [...ps].sort(projSort) })
+  }
+  const none = list.filter(p => !p.obiettivoId || !knownIds.has(p.obiettivoId))
+  if (none.length) groups.push({ id: '__none__', titolo: 'Senza obiettivo', colore: null, projects: [...none].sort(projSort) })
+  return groups
 })
 
 // ── Context menu (port ProjectsView SIDERA) ────────────────────────────────
@@ -173,6 +202,9 @@ onMounted(() => {
         ? 'Nessun progetto attivo'
         : (activeProjects.length === 1 ? '1 progetto attivo' : activeProjects.length + ' progetti attivi')"
     >
+      <template #tools>
+        <CepheidViewSwitcher :model-value="statusFilter" :tabs="projTabs" @update:model-value="(v) => (statusFilter = v as ProjFilter)" />
+      </template>
       <template #cta>
         <button class="md-btn md-btn--filled md-btn--sm md-btn--square" @click="openProjModal">
           <MIcon name="add" :size="16" /> Nuovo progetto
@@ -181,36 +213,58 @@ onMounted(() => {
     </MdPageHeader>
 
     <div class="pv-content">
-      <div v-if="obiettiviAttivi.length" class="pv-filter">
-        <label class="pv-filter-label">Obiettivo</label>
-        <select v-model="filterObiettivoId" class="pv-filter-select">
-          <option value="">Tutti</option>
-          <option value="__none__">— Senza obiettivo —</option>
-          <option v-for="o in obiettiviAttivi" :key="o.id" :value="o.id">{{ o.titolo }}</option>
-        </select>
-      </div>
-
       <div v-if="loading" class="loading-rows">
         <div v-for="i in 3" :key="i" class="row-skel" />
       </div>
 
-      <div v-else-if="!visibleProjects.length" class="empty-state">
-        <MIcon name="folder_open" filled :size="40" class="empty-icon" />
-        {{ filterObiettivoId ? 'Nessun progetto per questo filtro.' : 'Nessun progetto.' }}
-      </div>
+      <!-- vista "Per obiettivo": raggruppata per intestazioni -->
+      <template v-else-if="statusFilter === 'goal'">
+        <div v-if="!projectGroups.length" class="empty-state">
+          <MIcon name="folder_open" filled :size="40" class="empty-icon" />
+          Nessun progetto.
+        </div>
+        <template v-for="g in projectGroups" :key="g.id">
+          <div class="pv-group-header">
+            <span class="pv-group-stripe" :style="{ background: g.colore || 'var(--md-sys-color-outline)' }" />
+            <span class="pv-group-label">{{ g.titolo }}</span>
+            <span class="pv-group-count">{{ g.projects.length }}</span>
+          </div>
+          <CepheidProjectCard
+            v-for="p in g.projects"
+            :key="p.id"
+            :project="p"
+            :members="members"
+            :is-admin="isAdmin"
+            :obiettivo="obiettivoFor(p.obiettivoId)"
+            :update-project="updateProject"
+            :set-completed="toggleCompleted"
+            @edit="openEditProjModal"
+            @delete="confirmDelete"
+            @toggle-active="toggleActive"
+          />
+        </template>
+      </template>
 
-      <CepheidProjectCard
-        v-for="p in visibleProjects"
-        :key="p.id"
-        :project="p"
-        :members="members"
-        :is-admin="isAdmin"
-        :obiettivo="obiettivoFor(p.obiettivoId)"
-        :update-project="updateProject"
-        @edit="openEditProjModal"
-        @delete="confirmDelete"
-        @toggle-active="toggleActive"
-      />
+      <!-- Attivi / Tutti / Completati: lista flat -->
+      <template v-else>
+        <div v-if="!visibleProjects.length" class="empty-state">
+          <MIcon name="folder_open" filled :size="40" class="empty-icon" />
+          {{ statusFilter === 'active' ? 'Nessun progetto attivo.' : statusFilter === 'completed' ? 'Nessun progetto completato.' : 'Nessun progetto.' }}
+        </div>
+        <CepheidProjectCard
+          v-for="p in visibleProjects"
+          :key="p.id"
+          :project="p"
+          :members="members"
+          :is-admin="isAdmin"
+          :obiettivo="obiettivoFor(p.obiettivoId)"
+          :update-project="updateProject"
+          :set-completed="toggleCompleted"
+          @edit="openEditProjModal"
+          @delete="confirmDelete"
+          @toggle-active="toggleActive"
+        />
+      </template>
     </div>
 
     <!-- Modal Nuovo progetto -->
@@ -272,6 +326,8 @@ onMounted(() => {
 .s-surface-dark .pv { background: #0E0C07; }
 @media (prefers-color-scheme: dark) { .pv { background: #0E0C07; } }
 .pv :deep(.md-page-header) { flex-shrink: 0; }
+/* header allineato al contenuto: gutter mobile 16px (come .pv-content) */
+:deep(.md-page-header) { padding: 18px 16px 14px; }
 
 .pv-content {
   padding: 16px;
@@ -283,10 +339,31 @@ onMounted(() => {
   overflow-y: auto;
 }
 
+/* intestazioni vista "Per obiettivo" */
+.pv-group-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 2px 2px;
+  margin-top: 4px;
+}
+.pv-group-header:first-child { margin-top: 0; }
+.pv-group-stripe { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.pv-group-label {
+  font-size: 12px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--md-sys-color-on-surface); flex: 1; min-width: 0;
+}
+.pv-group-count {
+  font-size: 11px; font-weight: 700;
+  color: var(--md-sys-color-primary);
+  background: color-mix(in srgb, var(--md-sys-color-primary) 14%, transparent);
+  padding: 2px 8px; border-radius: var(--md-sys-shape-corner-full);
+}
+
 /* Desktop: lista a colonna singola centrata (le card-timeline si espandono
    in larghezza, quindi niente griglia multi-colonna). */
 @media (min-width: 1024px) {
-  :deep(.md-page-header) { padding: 24px 40px 18px; }
+  :deep(.md-page-header) { padding: 24px max(40px, calc(50% - 410px)) 18px; }
   .pv-content { padding: 24px 40px; max-width: 900px; margin: 0 auto; width: 100%; }
 }
 

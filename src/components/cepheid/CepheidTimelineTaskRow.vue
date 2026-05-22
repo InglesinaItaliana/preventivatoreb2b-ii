@@ -11,6 +11,7 @@ const props = defineProps<{
   unlocked: boolean
   windowDays: number
   preview?: { leftPct: number; widthPct: number } | null
+  locked?: boolean   // deliverable approvato: la task non si può più uncheckare finché non si sblocca
 }>()
 
 defineEmits<{
@@ -40,8 +41,8 @@ const avOpen = ref(false)   // tap su mobile per aprire le pillole assegnatari
     </div>
 
     <div class="cell">
-      <div class="task" :class="{ done: task.done }">
-        <div class="trow" @click="$emit('toggle-done', task.id)">
+      <div class="task" :class="{ done: task.done, locked }">
+        <div class="trow" @click="locked || $emit('toggle-done', task.id)">
           <span class="tn" :class="{ done: task.done }">{{ task.title }}</span>
           <span class="dt" :class="{ late: task.late }">{{ task.dueText }}</span>
         </div>
@@ -139,4 +140,7 @@ const avOpen = ref(false)   // tap su mobile per aprire le pillole assegnatari
 /* task completata: non si può trascinare/ridimensionare il timebar né modificare i tempi */
 .task.done .timebar { pointer-events: none; }
 .task.done .bar { cursor: default; }
+/* deliverable approvato: la riga è bloccata, niente uncheck né hover */
+.task.locked .trow { cursor: default; }
+.task.locked:hover { background: transparent; }
 </style>

@@ -1,5 +1,5 @@
 import { ref, computed, onUnmounted } from 'vue'
-import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDocs, writeBatch, serverTimestamp } from 'firebase/firestore'
+import { collection, query, where, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc, getDocs, writeBatch, serverTimestamp } from 'firebase/firestore'
 import { db, auth } from '../../firebase'
 
 export interface Project {
@@ -17,6 +17,8 @@ export interface Project {
   createdAt: Date
   archived: boolean
   active: boolean
+  completed: boolean
+  completedAt: Date | null
 }
 
 export const DEFAULT_STATES = [
@@ -58,6 +60,8 @@ export function useProjects() {
         createdAt:   toDate(data.createdAt) ?? new Date(),
         archived:    data.archived    ?? false,
         active:      data.active      ?? true,
+        completed:   data.completed   ?? false,
+        completedAt: toDate(data.completedAt),
       }
     })
     loading.value = false
@@ -97,10 +101,22 @@ export function useProjects() {
     await updateDoc(doc(db, 'projects', projectId), { active })
   }
 
+  async function toggleCompleted(projectId: string, completed: boolean) {
+    await updateDoc(doc(db, 'projects', projectId), {
+      completed,
+      completedAt: completed ? serverTimestamp() : null,
+      updatedByEmail: auth.currentUser?.email ?? null,
+    })
+  }
+
   async function deleteProject(id: string) {
     const batch = writeBatch(db)
+    // task/milestone/deliverable della subcollection del progetto (cascata)
     const tasksSnap = await getDocs(collection(db, 'projects', id, 'tasks'))
     for (const d of tasksSnap.docs) batch.delete(d.ref)
+    // difensivo: eventuali task sciolti (tasks/ top-level) che puntano a questo progetto
+    const orphanSnap = await getDocs(query(collection(db, 'tasks'), where('projectId', '==', id)))
+    for (const d of orphanSnap.docs) batch.delete(d.ref)
     batch.delete(doc(db, 'projects', id))
     await batch.commit()
   }
@@ -109,7 +125,7 @@ export function useProjects() {
     projectId: string,
     data: Partial<{ name: string; description: string; color: string; startDate: Date | null; dueDate: Date | null; obiettivoId: string | null }>,
   ) {
-    await updateDoc(doc(db, 'projects', projectId), data)
+    await updateDoc(doc(db, 'projects', projectId), { ...data, updatedByEmail: auth.currentUser?.email ?? null })
   }
 
   const activeProjects = computed(() =>
@@ -120,5 +136,5 @@ export function useProjects() {
     return activeProjects.value.filter(p => p.obiettivoId === obiettivoId)
   }
 
-  return { projects, activeProjects, loading, createProject, toggleActive, deleteProject, updateProject, projectsByObiettivo }
+  return { projects, activeProjects, loading, createProject, toggleActive, toggleCompleted, deleteProject, updateProject, projectsByObiettivo }
 }
