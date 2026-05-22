@@ -21,7 +21,8 @@ export interface ProjectTask {
   order: number | null          // sequenza fase (solo deliverable)
   approved: boolean             // fase approvata (solo deliverable)
   approvedAt: Date | null
-  deliverableId: string | null  // fase collegata (solo milestone)
+  deliverableId: string | null  // legacy (vecchio link milestone→deliverable, non più usato)
+  milestoneId: string | null    // NUOVO link: deliverable → la sua milestone
   createdBy: string
   createdByEmail: string
   createdAt: Date
@@ -64,6 +65,7 @@ export function useProjectTasks(projectId: string) {
         approved:           data.approved ?? false,
         approvedAt:         toDate(data.approvedAt),
         deliverableId:      data.deliverableId ?? null,
+        milestoneId:        data.milestoneId ?? null,
         createdBy:          data.createdBy ?? '',
         createdByEmail:     data.createdByEmail ?? '',
         createdAt:          toDate(data.createdAt) ?? new Date(),
@@ -95,9 +97,11 @@ export function useProjectTasks(projectId: string) {
     deliverableTaskIds?: string[]
     order?: number | null
     deliverableId?: string | null
-  }) {
+    milestoneId?: string | null
+    triaged?: boolean
+  }): Promise<string> {
     const type = data.type ?? 'task'
-    await addDoc(collection(db, 'projects', projectId, 'tasks'), {
+    const ref = await addDoc(collection(db, 'projects', projectId, 'tasks'), {
       title:              data.title,
       status:             data.status,
       priority:           data.priority,
@@ -112,6 +116,8 @@ export function useProjectTasks(projectId: string) {
       approved:           false,
       approvedAt:         null,
       deliverableId:      data.deliverableId ?? null,
+      milestoneId:        data.milestoneId ?? null,
+      triaged:            data.triaged ?? (type !== 'task'),   // task nuovi → inbox, salvo override
       createdBy:          auth.currentUser?.uid ?? '',
       createdByEmail:     auth.currentUser?.email ?? '',
       createdAt:          serverTimestamp(),
@@ -121,6 +127,7 @@ export function useProjectTasks(projectId: string) {
     if (type === 'task') {
       await updateDoc(doc(db, 'projects', projectId), { taskCount: increment(1) })
     }
+    return ref.id
   }
 
   async function updateTaskStatus(taskId: string, status: string) {
@@ -150,26 +157,32 @@ export function useProjectTasks(projectId: string) {
 
   async function updateTask(
     taskId: string,
-    data: Partial<{ title: string; priority: 'alta' | 'media' | 'bassa'; startDate: Date | null; dueDate: Date | null; assignees: string[]; deliverableTaskIds: string[]; order: number | null; deliverableId: string | null }>,
+    data: Partial<{ title: string; priority: 'alta' | 'media' | 'bassa'; startDate: Date | null; dueDate: Date | null; assignees: string[]; deliverableTaskIds: string[]; order: number | null; deliverableId: string | null; milestoneId: string | null }>,
   ) {
     await updateDoc(doc(db, 'projects', projectId, 'tasks', taskId), data)
   }
 
-  // Approva una fase (deliverable): segna approved + marca raggiunta la milestone collegata.
-  // approvedAt usa serverTimestamp -> solo qui, mai via updateTask generico.
+  // Approva una fase (deliverable): segna approved; se TUTTI i deliverable della
+  // sua milestone risultano approvati, marca raggiunta (done) la milestone.
+  // approvedAt/completedAt usano serverTimestamp -> solo qui, mai via updateTask.
   async function approvePhase(deliverableId: string) {
     const batch = writeBatch(db)
     batch.update(doc(db, 'projects', projectId, 'tasks', deliverableId), {
       approved:   true,
       approvedAt: serverTimestamp(),
     })
-    const mile = tasks.value.find(t => t.type === 'milestone' && t.deliverableId === deliverableId)
-    if (mile) {
-      batch.update(doc(db, 'projects', projectId, 'tasks', mile.id), {
-        status:      'done',
-        completedAt: serverTimestamp(),
-        completedBy: auth.currentUser?.email ?? null,
-      })
+    const deliv = tasks.value.find(t => t.id === deliverableId)
+    const mid = deliv?.milestoneId ?? null
+    if (mid) {
+      const siblings = tasks.value.filter(t => t.type === 'deliverable' && t.milestoneId === mid)
+      const allApproved = siblings.length > 0 && siblings.every(d => d.id === deliverableId ? true : d.approved)
+      if (allApproved) {
+        batch.update(doc(db, 'projects', projectId, 'tasks', mid), {
+          status:      'done',
+          completedAt: serverTimestamp(),
+          completedBy: auth.currentUser?.email ?? null,
+        })
+      }
     }
     await batch.commit()
   }
@@ -180,12 +193,66 @@ export function useProjectTasks(projectId: string) {
       approved:   false,
       approvedAt: null,
     })
-    const mile = tasks.value.find(t => t.type === 'milestone' && t.deliverableId === deliverableId)
-    if (mile) {
-      batch.update(doc(db, 'projects', projectId, 'tasks', mile.id), {
+    const deliv = tasks.value.find(t => t.id === deliverableId)
+    const mid = deliv?.milestoneId ?? null
+    if (mid) {
+      // riaprire un deliverable riapre necessariamente la milestone
+      batch.update(doc(db, 'projects', projectId, 'tasks', mid), {
         status:      'todo',
         completedAt: null,
       })
+    }
+    await batch.commit()
+  }
+
+  // Crea in un colpo solo (writeBatch) una "fase": milestone (nuova o esistente) +
+  // deliverable (con milestoneId) + N task nuove, collegando le task al deliverable.
+  async function createPhaseBundle(payload: {
+    milestone: { existingId: string } | { title: string; dueDate: Date | null }
+    deliverable: { title: string; dueDate: Date | null; assignees?: string[] }
+    newTaskTitles: string[]
+    attachedTaskIds?: string[]
+  }): Promise<void> {
+    const col = collection(db, 'projects', projectId, 'tasks')
+    const batch = writeBatch(db)
+    const uid = auth.currentUser?.uid ?? ''
+    const email = auth.currentUser?.email ?? ''
+    const base = {
+      startDate: null, description: '', order: null, approved: false, approvedAt: null,
+      deliverableId: null, triaged: true, createdBy: uid, createdByEmail: email,
+      createdAt: serverTimestamp(), completedAt: null, completedBy: null,
+    }
+
+    let milestoneId: string
+    if ('existingId' in payload.milestone) {
+      milestoneId = payload.milestone.existingId
+    } else {
+      milestoneId = doc(col).id
+      batch.set(doc(col, milestoneId), {
+        ...base, title: payload.milestone.title, status: 'todo', priority: 'media',
+        dueDate: payload.milestone.dueDate ?? null, assignees: [], type: 'milestone',
+        deliverableTaskIds: [], milestoneId: null,
+      })
+    }
+
+    const newTaskIds = payload.newTaskTitles.map(() => doc(col).id)
+    payload.newTaskTitles.forEach((title, i) => {
+      batch.set(doc(col, newTaskIds[i]), {
+        ...base, title, status: 'todo', priority: 'media', dueDate: null,
+        assignees: [], type: 'task', deliverableTaskIds: [], milestoneId: null, triaged: false,
+      })
+    })
+
+    const delivId = doc(col).id
+    const allTaskIds = [...(payload.attachedTaskIds ?? []), ...newTaskIds]
+    batch.set(doc(col, delivId), {
+      ...base, title: payload.deliverable.title, status: 'todo', priority: 'media',
+      dueDate: payload.deliverable.dueDate ?? null, assignees: payload.deliverable.assignees ?? [],
+      type: 'deliverable', deliverableTaskIds: allTaskIds, milestoneId,
+    })
+
+    if (newTaskIds.length) {
+      batch.update(doc(db, 'projects', projectId), { taskCount: increment(newTaskIds.length) })
     }
     await batch.commit()
   }
@@ -200,5 +267,5 @@ export function useProjectTasks(projectId: string) {
     }
   }
 
-  return { tasks, loading, createTask, updateTaskStatus, completeTask, uncompleteTask, updateTask, deleteTask, approvePhase, unapprovePhase }
+  return { tasks, loading, createTask, updateTaskStatus, completeTask, uncompleteTask, updateTask, deleteTask, approvePhase, unapprovePhase, createPhaseBundle }
 }

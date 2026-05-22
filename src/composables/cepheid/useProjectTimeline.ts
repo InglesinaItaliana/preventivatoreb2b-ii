@@ -18,6 +18,9 @@ export function isoOf(d: Date) {
 }
 export const parseISO = (iso: string) => new Date(iso + 'T00:00:00')
 function startOfDay(d: Date) { const x = new Date(d); x.setHours(0, 0, 0, 0); return x }
+const byDueThenCreated = (a: ProjectTask, b: ProjectTask) =>
+  (a.dueDate?.getTime() ?? Infinity) - (b.dueDate?.getTime() ?? Infinity)
+  || a.createdAt.getTime() - b.createdAt.getTime()
 
 /* ============================ view-model ============================ */
 export type MarkerState = 'done' | 'late' | 'timed' | 'untimed'
@@ -29,37 +32,45 @@ export interface TaskVM {
   timed: boolean
   done: boolean
   late: boolean
-  s: number              // offset start (giorni) dentro la finestra
-  d: number              // durata (giorni)
+  s: number
+  d: number
   leftPct: number
   widthPct: number
-  startTs: number | null // anchor OGGI (startDate.getTime())
+  startTs: number | null
   dueText: string
   marker: MarkerState
 }
 
 export interface PhaseVM {
   id: string
-  index: number
   delivName: string
-  mileName: string | null
-  milestoneId: string | null
   windowStart: Date
   windowEnd: Date
   windowDays: number
-  windowEndTs: number
   dueIso: string
   minDueIso: string
   maxDueIso: string
   tasks: TaskVM[]
-  unlocked: boolean
-  ready: boolean         // tutti i task fatti
+  unlocked: boolean   // = lock della milestone del gruppo
+  ready: boolean      // tutti i task fatti
   approved: boolean
   canApprove: boolean
   delivLate: boolean
-  mileReached: boolean
-  mileLate: boolean
-  isLast: boolean
+}
+
+export interface MilestoneGroupVM {
+  milestoneId: string
+  mileName: string | null
+  mileDue: Date | null
+  mileDueTs: number | null
+  deliverables: PhaseVM[]
+  directTasks: TaskVM[]          // task agganciati alla milestone senza deliverable
+  directWindowStart: Date
+  directWindowDays: number
+  reached: boolean
+  unlocked: boolean
+  late: boolean
+  isLastGroup: boolean
 }
 
 export interface OrphanGroupVM {
@@ -78,6 +89,8 @@ export interface TimelineWriters {
   unapprovePhase: (deliverableId: string) => Promise<void>
 }
 
+const NONE = '__none__'
+
 export function useProjectTimeline(
   tasks: Ref<ProjectTask[]>,
   project: Ref<Project | undefined>,
@@ -90,7 +103,6 @@ export function useProjectTimeline(
   const milestones   = computed(() => tasks.value.filter(t => t.type === 'milestone'))
   const realTasks    = computed(() => tasks.value.filter(t => !t.type || t.type === 'task'))
 
-  // inizio progetto: campo esplicito, altrimenti primo startDate task, altrimenti oggi
   const projectStart = computed<Date>(() => {
     if (project.value?.startDate) return startOfDay(project.value.startDate)
     const starts = tasks.value.map(t => t.startDate).filter((d): d is Date => !!d).sort((a, b) => a.getTime() - b.getTime())
@@ -116,68 +128,122 @@ export function useProjectTimeline(
     }
   }
 
-  // ordine task: come il prototipo -> non-timed (-1) prima, poi timed per offset start
   function orderTasks(list: ProjectTask[]): ProjectTask[] {
     return [...list].sort((a, b) => {
-      const va = a.startDate && a.dueDate ? (a.startDate.getTime()) : -1
-      const vb = b.startDate && b.dueDate ? (b.startDate.getTime()) : -1
+      const va = a.startDate && a.dueDate ? a.startDate.getTime() : -1
+      const vb = b.startDate && b.dueDate ? b.startDate.getTime() : -1
       return va - vb || a.createdAt.getTime() - b.createdAt.getTime()
     })
   }
 
-  const phases = computed<PhaseVM[]>(() => {
-    const ordered = [...deliverables.value].sort((a, b) => {
-      const oa = a.order ?? Infinity, ob = b.order ?? Infinity
-      if (oa !== ob) return oa - ob
-      const da = a.dueDate?.getTime() ?? Infinity, db = b.dueDate?.getTime() ?? Infinity
-      if (da !== db) return da - db
-      return a.createdAt.getTime() - b.createdAt.getTime()
-    })
+  // Raggruppa i deliverable per milestone; ordine globale = milestone (per data) -> deliverable interni (per data).
+  const groups = computed<MilestoneGroupVM[]>(() => {
     const start0 = projectStart.value
-    const out: PhaseVM[] = []
-    ordered.forEach((deliv, i) => {
-      const windowStart = i === 0 ? start0 : out[i - 1].windowEnd
-      let windowEnd = deliv.dueDate ? startOfDay(deliv.dueDate) : addD(windowStart, 30)
+    const ms = [...milestones.value].sort(byDueThenCreated)
+
+    const delivByM = new Map<string, ProjectTask[]>()
+    ms.forEach(m => delivByM.set(m.id, []))
+    const noneDelivs: ProjectTask[] = []
+    deliverables.value.forEach(d => {
+      if (d.milestoneId && delivByM.has(d.milestoneId)) delivByM.get(d.milestoneId)!.push(d)
+      else noneDelivs.push(d)
+    })
+    delivByM.forEach(arr => arr.sort(byDueThenCreated))
+    noneDelivs.sort(byDueThenCreated)
+
+    // ordine globale dei deliverable + ref milestone
+    const ordered: { milestoneId: string; m: ProjectTask | null; delivs: ProjectTask[] }[] = []
+    ms.forEach(m => ordered.push({ milestoneId: m.id, m, delivs: delivByM.get(m.id)! }))
+    if (noneDelivs.length) ordered.push({ milestoneId: NONE, m: null, delivs: noneDelivs })
+
+    // finestre temporali sequenziali sull'ordine globale dei deliverable
+    const win = new Map<string, { windowStart: Date; windowEnd: Date; windowDays: number; nextDue: Date | null }>()
+    const flatDocs: ProjectTask[] = ordered.flatMap(g => g.delivs)
+    let prevEnd = start0
+    flatDocs.forEach((d, i) => {
+      const windowStart = i === 0 ? start0 : prevEnd
+      let windowEnd = d.dueDate ? startOfDay(d.dueDate) : addD(windowStart, 30)
       if (windowEnd.getTime() <= windowStart.getTime()) windowEnd = addD(windowStart, 1)
       const windowDays = Math.max(1, Math.round((windowEnd.getTime() - windowStart.getTime()) / DAY))
-      const unlocked = i === 0 || out[i - 1].approved
-      const phaseTasks = orderTasks(realTasks.value.filter(t => deliv.deliverableTaskIds.includes(t.id)))
-      const vms = phaseTasks.map(t => buildTaskVM(t, windowStart, windowDays, unlocked))
-      const ready = phaseTasks.every(t => !!t.completedAt)   // true se vuoto (come prototipo)
-      const approved = !!deliv.approved
-      const mile = milestones.value.find(m => m.deliverableId === deliv.id) ?? null
-      const delivLate = !approved && windowEnd.getTime() < TODAY_TS && unlocked
+      const next = flatDocs[i + 1]
+      win.set(d.id, { windowStart, windowEnd, windowDays, nextDue: next?.dueDate ? startOfDay(next.dueDate) : null })
+      prevEnd = windowEnd
+    })
 
-      // clamp per il date input della scadenza
-      const minDueIso = isoOf(addD(windowStart, 1))
-      const nextDeliv = ordered[i + 1]
-      const maxBound = nextDeliv?.dueDate ? addD(startOfDay(nextDeliv.dueDate), -1) : (project.value?.dueDate ? startOfDay(project.value.dueDate) : addD(windowEnd, 365))
+    const projEnd = project.value?.dueDate ? startOfDay(project.value.dueDate) : addD(prevEnd, 365)
 
+    // task "diretti" di milestone: hanno milestoneId ma non stanno in nessun deliverable
+    const assignedSet = new Set<string>()
+    deliverables.value.forEach(d => d.deliverableTaskIds.forEach(id => assignedSet.add(id)))
+    const directByM = new Map<string, ProjectTask[]>()
+    realTasks.value.forEach(t => {
+      if (t.milestoneId && delivByM.has(t.milestoneId) && !assignedSet.has(t.id)) {
+        if (!directByM.has(t.milestoneId)) directByM.set(t.milestoneId, [])
+        directByM.get(t.milestoneId)!.push(t)
+      }
+    })
+
+    // reached per gruppo (dai flag approved), unlocked sequenziale
+    const reachedArr = ordered.map(g => g.milestoneId !== NONE && g.delivs.length > 0 && g.delivs.every(d => d.approved))
+    const out: MilestoneGroupVM[] = []
+    ordered.forEach((g, gi) => {
+      const unlocked = g.milestoneId === NONE ? true : (gi === 0 || reachedArr[gi - 1])
+      const phases: PhaseVM[] = g.delivs.map(d => {
+        const w = win.get(d.id)!
+        const phaseTasks = orderTasks(realTasks.value.filter(t => d.deliverableTaskIds.includes(t.id)))
+        const vms = phaseTasks.map(t => buildTaskVM(t, w.windowStart, w.windowDays, unlocked))
+        const ready = phaseTasks.every(t => !!t.completedAt)
+        const approved = !!d.approved
+        const minDueIso = isoOf(addD(w.windowStart, 1))
+        const maxBound = w.nextDue ? addD(w.nextDue, -1) : projEnd
+        return {
+          id: d.id, delivName: d.title,
+          windowStart: w.windowStart, windowEnd: w.windowEnd, windowDays: w.windowDays,
+          dueIso: isoOf(w.windowEnd), minDueIso, maxDueIso: isoOf(maxBound),
+          tasks: vms, unlocked, ready, approved,
+          canApprove: unlocked && ready && !approved,
+          delivLate: !approved && w.windowEnd.getTime() < TODAY_TS && unlocked,
+        }
+      })
+      // la data della milestone è DERIVATA: fine del deliverable più tardivo del gruppo
+      const mileDue = phases.length ? phases[phases.length - 1].windowEnd : null
+      const reached = reachedArr[gi]
+      // finestra per i task diretti della milestone
+      const dWinStart = phases.length ? phases[0].windowStart : start0
+      const dWinEnd = phases.length ? phases[phases.length - 1].windowEnd : projEnd
+      const directWindowDays = Math.max(1, Math.round((dWinEnd.getTime() - dWinStart.getTime()) / DAY))
+      const directTasks = g.milestoneId !== NONE
+        ? orderTasks(directByM.get(g.milestoneId) ?? []).map(t => buildTaskVM(t, dWinStart, directWindowDays, unlocked))
+        : []
       out.push({
-        id: deliv.id, index: i, delivName: deliv.title,
-        mileName: mile?.title ?? null, milestoneId: mile?.id ?? null,
-        windowStart, windowEnd, windowDays, windowEndTs: windowEnd.getTime(),
-        dueIso: isoOf(windowEnd), minDueIso, maxDueIso: isoOf(maxBound),
-        tasks: vms,
-        unlocked, ready, approved, canApprove: unlocked && ready && !approved,
-        delivLate, mileReached: approved,
-        mileLate: !approved && windowEnd.getTime() < TODAY_TS && unlocked,
-        isLast: i === ordered.length - 1,
+        milestoneId: g.milestoneId,
+        mileName: g.m?.title ?? null,
+        mileDue, mileDueTs: mileDue ? mileDue.getTime() : null,
+        deliverables: phases,
+        directTasks, directWindowStart: dWinStart, directWindowDays,
+        reached, unlocked,
+        late: g.milestoneId !== NONE && !reached && !!mileDue && mileDue.getTime() < TODAY_TS && unlocked,
+        isLastGroup: gi === ordered.length - 1,
       })
     })
     return out
   })
 
-  // task orfani: task timed non appartenenti a nessun deliverable
+  const phasesFlat = computed<PhaseVM[]>(() => groups.value.flatMap(g => g.deliverables))
+
+  // task orfani: timed e non in nessun deliverable
   const orphanGroup = computed<OrphanGroupVM | null>(() => {
     const assigned = new Set<string>()
     deliverables.value.forEach(d => d.deliverableTaskIds.forEach(id => assigned.add(id)))
-    const orphans = realTasks.value.filter(t => !assigned.has(t.id) && t.startDate && t.dueDate)
+    const milestoneIds = new Set(milestones.value.map(m => m.id))
+    // orfani = non completati, non in un deliverable e non agganciati a una milestone esistente
+    // (inclusi gli untimed: es. task appena smistati a livello progetto, così restano visibili)
+    const orphans = realTasks.value.filter(t => !assigned.has(t.id) && !(t.milestoneId && milestoneIds.has(t.milestoneId)) && !t.completedAt)
     if (!orphans.length) return null
     const windowStart = projectStart.value
-    const firstPhaseEnd = phases.value[0]?.windowStart
+    const firstEnd = phasesFlat.value[0]?.windowStart
     const projEnd = project.value?.dueDate ? startOfDay(project.value.dueDate) : null
-    let windowEnd = firstPhaseEnd ?? projEnd ?? addD(windowStart, 30)
+    let windowEnd = firstEnd ?? projEnd ?? addD(windowStart, 30)
     if (windowEnd.getTime() <= windowStart.getTime()) windowEnd = addD(windowStart, 30)
     const windowDays = Math.max(1, Math.round((windowEnd.getTime() - windowStart.getTime()) / DAY))
     return { windowStart, windowEnd, windowDays, tasks: orderTasks(orphans).map(t => buildTaskVM(t, windowStart, windowDays, true)) }
@@ -185,10 +251,10 @@ export function useProjectTimeline(
 
   /* ---------------- barre top ---------------- */
   const workBar = computed(() => {
-    const all = phases.value.reduce((s, p) => s + p.tasks.length, 0)
-    const done = phases.value.reduce((s, p) => s + p.tasks.filter(t => t.done).length, 0)
+    const all = phasesFlat.value.reduce((s, p) => s + p.tasks.length, 0)
+    const done = phasesFlat.value.reduce((s, p) => s + p.tasks.filter(t => t.done).length, 0)
     let cum = 0
-    const marks = phases.value.map(p => {
+    const marks = phasesFlat.value.map(p => {
       cum += p.tasks.length
       return { pct: all ? cum / all * 100 : 0, reached: p.ready, label: p.delivName }
     })
@@ -197,7 +263,7 @@ export function useProjectTimeline(
 
   const projectEnd = computed<Date>(() => {
     if (project.value?.dueDate) return startOfDay(project.value.dueDate)
-    const last = phases.value[phases.value.length - 1]
+    const last = phasesFlat.value[phasesFlat.value.length - 1]
     return last?.windowEnd ?? addD(projectStart.value, 30)
   })
 
@@ -205,19 +271,23 @@ export function useProjectTimeline(
     const st = projectStart.value, en = projectEnd.value
     const totD = Math.max(1, Math.round((en.getTime() - st.getTime()) / DAY))
     const elapsed = clamp(Math.round((TODAY_TS - st.getTime()) / DAY), 0, totD)
-    const marks = phases.value.map(p => ({
-      pct: clamp((p.windowEnd.getTime() - st.getTime()) / DAY / totD * 100, 0, 100),
-      reached: p.approved, label: p.mileName ?? p.delivName,
+    const marks = groups.value.filter(g => g.mileDue).map(g => ({
+      pct: clamp((g.mileDue!.getTime() - st.getTime()) / DAY / totD * 100, 0, 100),
+      reached: g.reached, label: g.mileName ?? '',
     }))
     return { elapsed, total: totD, pct: Math.round(elapsed / totD * 100), marks }
   })
 
-  const allApproved = computed(() => phases.value.length > 0 && phases.value.every(p => p.approved))
+  const allApproved = computed(() => {
+    const real = groups.value.filter(g => g.milestoneId !== NONE)
+    return real.length > 0 && real.every(g => g.reached)
+  })
   const projectRange = computed(() => fmt(projectStart.value) + ' → ' + fmt(projectEnd.value))
 
   /* ---------------- contesto finestra per un task ---------------- */
   function contextOf(taskId: string): { windowStart: Date; windowDays: number } | null {
-    for (const p of phases.value) if (p.tasks.some(t => t.id === taskId)) return { windowStart: p.windowStart, windowDays: p.windowDays }
+    for (const p of phasesFlat.value) if (p.tasks.some(t => t.id === taskId)) return { windowStart: p.windowStart, windowDays: p.windowDays }
+    for (const g of groups.value) if (g.directTasks.some(t => t.id === taskId)) return { windowStart: g.directWindowStart, windowDays: g.directWindowDays }
     const og = orphanGroup.value
     if (og && og.tasks.some(t => t.id === taskId)) return { windowStart: og.windowStart, windowDays: og.windowDays }
     return null
@@ -234,7 +304,7 @@ export function useProjectTimeline(
     const t = tasks.value.find(x => x.id === taskId); if (!t) return
     const ctx = contextOf(taskId)
     if (t.startDate && t.dueDate) {
-      await writers.updateTask(taskId, { startDate: null })  // rimuove la finestra (resta in kanban via dueDate)
+      await writers.updateTask(taskId, { startDate: null })
     } else if (ctx) {
       const startDate = ctx.windowStart
       const dueDate = addD(ctx.windowStart, Math.min(7, ctx.windowDays))
@@ -242,7 +312,6 @@ export function useProjectTimeline(
     }
   }
 
-  // s,d calcolati dal componente durante il drag (in giorni) -> persistenza date assolute
   async function commitDrag(taskId: string, s: number, d: number) {
     const ctx = contextOf(taskId); if (!ctx) return
     const startDate = addD(ctx.windowStart, s)
@@ -262,7 +331,7 @@ export function useProjectTimeline(
     if (!project.value) return
     const startDate = startIso ? startOfDay(parseISO(startIso)) : null
     let dueDate: Date | null = endIso ? startOfDay(parseISO(endIso)) : null
-    const lastEnd = phases.value[phases.value.length - 1]?.windowEnd
+    const lastEnd = phasesFlat.value[phasesFlat.value.length - 1]?.windowEnd
     if (dueDate && lastEnd && dueDate.getTime() < lastEnd.getTime()) dueDate = lastEnd
     await writers.updateProject(project.value.id, { startDate, dueDate })
   }
@@ -270,12 +339,11 @@ export function useProjectTimeline(
   const approve = (id: string) => writers.approvePhase(id)
   const unapprove = (id: string) => writers.unapprovePhase(id)
 
-  // timestamp degli anchor OGGI (il componente li mette come data-t sul DOM)
   const projectStartTs = computed(() => projectStart.value.getTime())
 
   return {
     TODAY, projectStart, projectStartTs, projectEnd, projectRange,
-    phases, orphanGroup, workBar, timeBar, allApproved,
+    groups, phasesFlat, orphanGroup, workBar, timeBar, allApproved,
     toggleDone, toggleTimed, commitDrag, setPhaseDue, setProjectDates, approve, unapprove,
     contextOf, fmt, range, isoOf,
   }

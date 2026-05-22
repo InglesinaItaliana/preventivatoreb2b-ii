@@ -163,7 +163,7 @@ const router = createRouter({
         { path: 'goal/:id',   name: 'cepheid-goal',     component: () => import('../views/cepheid/CepheidGoalDetail.vue') },
         { path: 'projects',   name: 'cepheid-projects', component: () => import('../views/cepheid/CepheidProjectsView.vue') },
         { path: 'project/:id',name: 'cepheid-project',  component: () => import('../views/cepheid/CepheidProjectDetail.vue') },
-        { path: 'due',        name: 'cepheid-due',      component: () => import('../views/cepheid/CepheidDueView.vue') },
+        { path: 'smistamento', name: 'cepheid-smistamento', component: () => import('../views/cepheid/CepheidInboxView.vue') },
       ]
     }
   ]

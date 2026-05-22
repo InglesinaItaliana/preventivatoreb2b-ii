@@ -1,7 +1,14 @@
+<script lang="ts">
+import { ref as _ref } from 'vue'
+// accordion condiviso fra tutte le card: id del progetto attualmente espanso (una sola card aperta)
+const _openCard = _ref<string | null>(null)
+</script>
+
 <script setup lang="ts">
 import { ref, reactive, toRef, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import MIcon from '../shared/MIcon.vue'
 import CepheidTimelinePhase from './CepheidTimelinePhase.vue'
+import CepheidTimelineMilestone from './CepheidTimelineMilestone.vue'
 import CepheidTimelineTaskRow from './CepheidTimelineTaskRow.vue'
 import type { TeamMember } from '../../composables/sidera/useTeamMembers'
 import type { ProjectTask } from '../../composables/sidera/useProjectTasks'
@@ -18,9 +25,32 @@ const props = defineProps<{
   updateProject: (id: string, data: Partial<{ startDate: Date | null; dueDate: Date | null }>) => Promise<void>
   approvePhase: (id: string) => Promise<void>
   unapprovePhase: (id: string) => Promise<void>
+  title?: string
+  collapsible?: boolean
 }>()
 
 const emit = defineEmits<{ (e: 'new-phase'): void }>()
+
+// collassabile: accordion (una sola card aperta). standalone (non collassabile) sempre aperto
+const cardId = computed(() => props.project?.id ?? '')
+const expanded = computed(() => props.collapsible ? _openCard.value === cardId.value : true)
+function toggle() {
+  if (!props.collapsible) return
+  if (expanded.value) { _openCard.value = null }
+  else {
+    _openCard.value = cardId.value
+    nextTick(scrollCardIntoView)
+  }
+}
+function scrollCardIntoView() {
+  const card = (rootRef.value?.closest('.pcard') as HTMLElement | null) ?? rootRef.value
+  if (!card) return
+  const scroller = card.closest('.pv-content') as HTMLElement | null
+  if (!scroller) { card.scrollIntoView({ behavior: 'smooth', block: 'start' }); return }
+  const MARGIN = 12   // poco spazio in alto: si vede il bordo della card sopra
+  const delta = card.getBoundingClientRect().top - scroller.getBoundingClientRect().top - MARGIN
+  scroller.scrollBy({ top: delta, behavior: 'smooth' })
+}
 
 const tl = useProjectTimeline(toRef(props, 'tasks'), toRef(props, 'project'), {
   updateTask: props.updateTask,
@@ -31,7 +61,7 @@ const tl = useProjectTimeline(toRef(props, 'tasks'), toRef(props, 'project'), {
   unapprovePhase: props.unapprovePhase,
 })
 
-const { phases, orphanGroup, workBar, timeBar, allApproved, projectRange, projectStartTs } = tl
+const { groups, phasesFlat, orphanGroup, workBar, timeBar, allApproved, projectRange, projectStartTs } = tl
 const TODAY_TS = tl.TODAY.getTime()
 const reduceMotion = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 
@@ -43,7 +73,8 @@ let drag: { taskId: string; zone: 'move' | 'left' | 'right'; startX: number; day
 const dragLab = reactive({ show: false, text: '', left: 0, top: 0 })
 
 function vmOf(taskId: string) {
-  for (const p of phases.value) { const t = p.tasks.find(x => x.id === taskId); if (t) return t }
+  for (const p of phasesFlat.value) { const t = p.tasks.find(x => x.id === taskId); if (t) return t }
+  for (const g of groups.value) { const t = g.directTasks.find(x => x.id === taskId); if (t) return t }
   return orphanGroup.value?.tasks.find(x => x.id === taskId) ?? null
 }
 
@@ -133,7 +164,8 @@ function scheduleMeasure() {
   rafId = requestAnimationFrame(measureToday)
 }
 
-watch([phases, orphanGroup], () => nextTick(scheduleMeasure))
+watch([groups, orphanGroup], () => nextTick(scheduleMeasure))
+watch(expanded, v => { if (v) nextTick(scheduleMeasure) })
 
 onMounted(() => {
   nextTick(scheduleMeasure)
@@ -152,22 +184,42 @@ function openDates() {
 async function applyDates() { await tl.setProjectDates(dlgStart.value, dlgEnd.value); showDates.value = false }
 
 /* ---------------- handler fasi ---------------- */
-const onToggleDone = (id: string) => tl.toggleDone(id)
+const finRef = ref<HTMLElement | null>(null)
+const onToggleDone = async (id: string) => {
+  try { await tl.toggleDone(id) }
+  catch (e) { console.error('[TL] toggleDone error', e) }
+  // sposta il focus sull'elemento sottostante alla task completata
+  nextTick(() => {
+    const row = rootRef.value?.querySelector(`.row[data-task-id="${id}"]`)
+    row?.nextElementSibling?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  })
+}
+// quando il progetto viene completato, porta in vista il "premio" (celebrazione)
+watch(allApproved, v => { if (v) nextTick(() => finRef.value?.scrollIntoView({ behavior: 'smooth', block: 'center' })) })
 const onToggleTimed = (id: string) => tl.toggleTimed(id)
 const onSetPhaseDue = (p: { phase: PhaseVM; iso: string }) => tl.setPhaseDue(p.phase, p.iso)
 const onApprove = (id: string) => tl.approve(id)
+const onUnapprove = (id: string) => tl.unapprove(id)
 
 const confetti = computed(() => Array.from({ length: 14 }, (_, k) => ({
   left: Math.round(6 + k * 88 / 14), color: ['#D4A020', '#C4941C', '#3AAF98', '#C46030', '#98C0D0', '#B06842'][k % 6], delay: ((k % 5) * 90) / 1000,
 })))
 
-const hasContent = computed(() => phases.value.length > 0 || !!orphanGroup.value)
+const hasContent = computed(() => phasesFlat.value.length > 0 || !!orphanGroup.value)
 </script>
 
 <template>
-  <div ref="rootRef" class="cph-timeline s-scope-cepheid">
-    <!-- top bars -->
-    <div class="topbar">
+  <div ref="rootRef" class="cph-timeline s-scope-cepheid" :class="{ 'is-card': collapsible }">
+    <div class="cph-sticky">
+    <!-- header collassabile (titolo + azioni) -->
+    <button v-if="title || collapsible" class="cph-head" :class="{ clickable: collapsible }" type="button" @click="toggle">
+      <MIcon v-if="collapsible" :name="expanded ? 'expand_more' : 'chevron_right'" :size="20" class="cph-chev" />
+      <span class="cph-title">{{ title }}</span>
+      <span class="cph-head-actions" @click.stop><slot name="head-actions" /></span>
+    </button>
+
+    <!-- top bars (sempre visibili: riepilogo date + lavoro + tempo) -->
+    <div class="topbar" :class="{ 'topbar--static': collapsible }">
       <div class="prange">
         <span class="hicon" style="cursor:pointer" @click="openDates"><MIcon name="calendar_month" :size="18" /></span>
         <span class="ddval">{{ projectRange }}</span>
@@ -193,9 +245,10 @@ const hasContent = computed(() => phases.value.length > 0 || !!orphanGroup.value
         <span class="bval">{{ timeBar.elapsed }}/{{ timeBar.total }}</span>
       </div>
     </div>
+    </div>
 
-    <!-- timeline -->
-    <div ref="tlRef" class="tl"
+    <!-- timeline (corpo: visibile solo quando espanso) -->
+    <div v-if="expanded" ref="tlRef" class="tl"
       @pointerdown="onPointerDown" @pointermove="onPointerMove" @pointerup="onPointerUp" @pointercancel="onPointerUp">
       <div class="tl-top-anchor" :data-t="projectStartTs" data-anchor />
 
@@ -216,21 +269,37 @@ const hasContent = computed(() => phases.value.length > 0 || !!orphanGroup.value
         <div class="gap" />
       </template>
 
-      <!-- fasi -->
-      <CepheidTimelinePhase
-        v-for="p in phases"
-        :key="p.id"
-        :phase="p"
-        :members="members"
-        :preview="preview"
-        @toggle-done="onToggleDone"
-        @toggle-timed="onToggleTimed"
-        @set-phase-due="onSetPhaseDue"
-        @approve="onApprove"
-      />
+      <!-- fasi raggruppate per milestone (rombo condiviso a fine gruppo) -->
+      <template v-for="g in groups" :key="g.milestoneId">
+        <CepheidTimelinePhase
+          v-for="p in g.deliverables"
+          :key="p.id"
+          :phase="p"
+          :members="members"
+          :preview="preview"
+          @toggle-done="onToggleDone"
+          @toggle-timed="onToggleTimed"
+          @set-phase-due="onSetPhaseDue"
+          @approve="onApprove"
+          @unapprove="onUnapprove"
+        />
+        <!-- task agganciati direttamente alla milestone (senza deliverable) -->
+        <CepheidTimelineTaskRow
+          v-for="t in g.directTasks"
+          :key="t.id"
+          :task="t"
+          :members="members"
+          :unlocked="g.unlocked"
+          :window-days="g.directWindowDays"
+          :preview="preview[t.id] ?? null"
+          @toggle-done="onToggleDone"
+          @toggle-timed="onToggleTimed"
+        />
+        <CepheidTimelineMilestone v-if="g.milestoneId !== '__none__'" :group="g" />
+      </template>
 
       <!-- celebrazione -->
-      <div v-if="allApproved" class="fin">
+      <div v-if="allApproved" ref="finRef" class="fin">
         <template v-if="!reduceMotion">
           <span v-for="(c, i) in confetti" :key="i" class="pc" :style="{ left: c.left + '%', background: c.color, animationDelay: c.delay + 's' }" />
         </template>
@@ -249,10 +318,6 @@ const hasContent = computed(() => phases.value.length > 0 || !!orphanGroup.value
       <div v-if="oggiTop != null" class="oggiline" :style="{ top: oggiTop + 'px' }" />
     </div>
 
-    <!-- + Fase -->
-    <button v-if="hasContent" class="add-phase add-phase--foot" @click="emit('new-phase')">
-      <MIcon name="add" :size="16" /> Nuova fase
-    </button>
 
     <!-- drag label -->
     <div v-show="dragLab.show" class="draglab" :style="{ left: dragLab.left + 'px', top: dragLab.top + 'px' }">{{ dragLab.text }}</div>
@@ -276,6 +341,43 @@ const hasContent = computed(() => phases.value.length > 0 || !!orphanGroup.value
 
 <style scoped>
 .cph-timeline { position: relative; font-family: var(--md-sys-typescale-body-medium-font); color: var(--md-sys-color-on-surface); }
+
+/* modalità card (vista progetti): chrome stile riferimento #FFF8F0 */
+.cph-timeline.is-card {
+  background: #FFF8F0;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: 16px;
+  padding: 14px 16px 16px;
+}
+.s-surface-dark .cph-timeline.is-card { background: #16130B; }
+@media (prefers-color-scheme: dark) { .cph-timeline.is-card { background: #16130B; } }
+
+.cph-head {
+  display: flex; align-items: center; gap: 6px; width: 100%;
+  background: none; border: 0; padding: 0 0 8px; margin: 0;
+  font-family: inherit; text-align: left; color: var(--md-sys-color-on-surface);
+}
+/* in non-card il wrapper non deve creare un contesto (così il topbar sticky resta relativo allo scroll della pagina) */
+.cph-sticky { display: contents; }
+/* in modalità card, nome progetto + date + le due barre restano ancorati in alto durante lo scroll */
+.is-card .cph-sticky {
+  display: block;
+  position: sticky; top: 0; z-index: 6;
+  background: #FFF8F0;
+  padding-top: 2px; padding-bottom: 6px;
+}
+.s-surface-dark .is-card .cph-sticky { background: #16130B; }
+@media (prefers-color-scheme: dark) { .is-card .cph-sticky { background: #16130B; } }
+.cph-head.clickable { cursor: pointer; }
+.cph-chev { color: var(--md-sys-color-on-surface-variant); flex: 0 0 auto; }
+.cph-title {
+  font-family: var(--md-sys-typescale-headline-small-font, 'Cormorant Garamond', serif);
+  font-size: 22px; line-height: 1.1; font-weight: 500; color: var(--md-sys-color-on-surface);
+  flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cph-head-actions { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
+
+.topbar.topbar--static { position: static; border-bottom: 0; margin-bottom: 0; }
 
 .topbar { position: sticky; top: 0; z-index: 5; background: var(--md-sys-color-surface); padding: 8px 0 10px; border-bottom: 1px solid var(--md-sys-color-outline-variant); margin-bottom: 8px; }
 .prange { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; }

@@ -69,11 +69,11 @@ export const SCOPE_CONFIGS: Record<Exclude<ScopeId, 'sidera'>, ScopeConfig> = {
       { path: '/cepheid',          exact: true,  label: 'Azioni',    icon: 'check_circle' },
       { path: '/cepheid/projects', exact: false, label: 'Progetti',  icon: 'grid_view' },
       { path: '/cepheid/goals',    exact: false, label: 'Obiettivi', icon: 'flag' },
-      { path: '/cepheid/due',      exact: false, label: 'Scadenze',  icon: 'event' },
+      { path: '/cepheid/smistamento', exact: false, label: 'Smistamento', icon: 'move_to_inbox' },
     ],
     fab: { icon: 'add_circle', action: 'new-task', ariaLabel: 'Nuova azione' },
     isTopLevelPath: (p) =>
-      ['/cepheid', '/cepheid/projects', '/cepheid/goals', '/cepheid/due'].includes(p),
+      ['/cepheid', '/cepheid/projects', '/cepheid/goals', '/cepheid/smistamento'].includes(p),
     loginPath: '/cepheid/login',
     notificationScope: 'cepheid',
   },
