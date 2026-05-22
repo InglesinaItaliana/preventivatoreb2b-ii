@@ -1,6 +1,7 @@
 import { ref, onUnmounted } from 'vue'
 import { collection, doc, onSnapshot, updateDoc } from 'firebase/firestore'
 import { db } from '../../firebase'
+import { isHiddenTeamEmail } from '../sidera/useTeamMembers'
 
 export interface NebulaMember {
   email:      string
@@ -48,7 +49,7 @@ export function useNebulaTeam() {
   const loading = ref(true)
 
   const unsubscribe = onSnapshot(collection(db, 'team'), (snap) => {
-    members.value = snap.docs.map(d => {
+    members.value = snap.docs.filter(d => !isHiddenTeamEmail(d.id)).map(d => {
       const data = d.data()
       return {
         email:     d.id,

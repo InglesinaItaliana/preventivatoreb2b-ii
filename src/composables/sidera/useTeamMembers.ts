@@ -15,6 +15,22 @@ export interface TeamMember {
 
 const DEFAULT_CATEGORY = 'amministrazione'
 
+/**
+ * Account di sistema/tecnici da NON mostrare come persone selezionabili:
+ * nuova conversazione chat (PULSAR), assegnatari azioni (CEPHEID), albero team (NEBULA).
+ * Filtrati alla sorgente. La risoluzione nome/avatar di eventuale attività storica
+ * usa comunque il fallback da email. (Richiesta 2026-05-22)
+ */
+export const HIDDEN_TEAM_EMAILS = new Set([
+  'info@inglesinaitaliana.it',
+  'lavorazioni.inglesinaitaliana@gmail.com',
+])
+
+/** True se l'email è un account di sistema da nascondere dalle liste di persone. */
+export function isHiddenTeamEmail(email: string): boolean {
+  return HIDDEN_TEAM_EMAILS.has((email ?? '').toLowerCase().trim())
+}
+
 /** Mappa un'email -> props per <StarAvatar>. Fallback per email esterne/sconosciute. */
 export function starAvatarProps(
   email: string,
@@ -72,7 +88,7 @@ export function useTeamMembers() {
   const loading = ref(true)
 
   const unsubscribe = onSnapshot(collection(db, 'team'), (snap) => {
-    members.value = snap.docs.map(d => {
+    members.value = snap.docs.filter(d => !isHiddenTeamEmail(d.id)).map(d => {
       const data = d.data()
       return {
         email:     d.id,
