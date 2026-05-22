@@ -26,14 +26,17 @@ export function useChatHashtags() {
   )
 
   const unsubscribe = onSnapshot(q, (snap) => {
-    hashtags.value = snap.docs.map((d) => {
-      const data = d.data()
-      return {
-        name:       data.name ?? d.id,
-        count:      data.count ?? 0,
-        lastUsedAt: toDate(data.lastUsedAt),
-      }
-    })
+    hashtags.value = snap.docs
+      .map((d) => {
+        const data = d.data()
+        return {
+          name:       data.name ?? d.id,
+          count:      data.count ?? 0,
+          lastUsedAt: toDate(data.lastUsedAt),
+        }
+      })
+      // Scarta contatori a zero (residui storici prima del cleanup su delete chat)
+      .filter((h) => h.count > 0)
   }, (err) => {
     console.error('[useChatHashtags]', err)
   })

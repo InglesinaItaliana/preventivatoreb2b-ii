@@ -3,7 +3,7 @@
 > Roadmap strategica per l'evoluzione strutturale della suite-of-webapps.
 > Documento "vivo": va aggiornato dopo ogni step completato o decisione esplicita.
 
-**Ultima revisione:** 2026-05-20
+**Ultima revisione:** 2026-05-22
 **Stato globale:** azioni 1, 2, 3, 4, 5 deployate in produzione (5/7 completate). Resta azione 6 (in lavorazione: pianificata insieme alla promozione NEBULA a 4ª PWA) e azione 7 (differita 6-12 mesi). POPS = 3ª PWA installabile, login con Schlegel + vertice attivo live, Firebase chunk splittato granulare con risparmio reale ~16 KB su POPS. **NEBULA promossa a 4ª PWA installabile** (branch `feature/nebula-pwa`) — sblocca il trigger di azione 6 ("da 4+ PWA in poi").
 
 ---
@@ -60,6 +60,7 @@ POLARIS è la roadmap che governa l'evoluzione architetturale di `preventivatore
 | 6 | 🟢 Bassa | **`meta.scope` unificato nel router guard** | Da 4+ PWA in poi | Medio (test ruoli POPS obbligatori) | ☐ |
 | 7 | ⚪ Differita | **Separazione deploy POPS vs interno** | Tra 6–12 mesi, se POPS cresce o legal richiede dominio separato | Altissimo | ⏸ |
 | 8 | 🟢 Bassa | **Hub Schlegel landing interattiva** (sidebar collassabile + click vertice → sezione) | Quando tutte e 6 le PWA sono attive | Medio (SideraLayout condiviso) | ☐ |
+| 9 | 🟠 Media-alta | **Ruoli e permessi granulari** (chi accede a quali moduli/azioni) + robustezza login su cache-miss | Quando si dovranno aprire moduli SIDERA a ruoli operativi | Medio-alto (tocca guard + LoginView POPS) | ☐ |
 
 **Legenda stato:** ☐ da fare · 🔄 in corso · ☑ fatto · ⏸ rimandato esplicitamente · ❌ scartato
 
@@ -317,6 +318,34 @@ POLARIS è la roadmap che governa l'evoluzione architetturale di `preventivatore
 
 ---
 
+### Azione 9 — Ruoli e permessi granulari 🟠
+
+**Status: da fare (non ora — richiesta utente 2026-05-22 di pianificare, non eseguire).**
+
+**Problema.** Il modello attuale di accesso è grossolano e basato su un solo campo `team/{email}.role` (`ADMIN` | `PRODUZIONE` | `LOGISTICA` | ...) con gating per **allowlist di path** nel router guard (`router/index.ts:244-251`). Conseguenze osservate:
+- Un utente `PRODUZIONE` (es. Daniel) **non può accedere ai moduli SIDERA**: `/sidera` lo rimanda a `/delivery`, `/production/sidera` mostra solo lo sfondo col logo (rotta non valida per quel ruolo → layout senza contenuto). Non c'è un modo dichiarativo per dire "questo ruolo vede QUASAR e CEPHEID ma non NOVA".
+- Aggiungere un modulo o cambiare chi lo vede richiede di toccare a mano `allowedPaths` nel guard.
+- Non esiste granularità sotto il modulo (es. "vede CEPHEID ma sola lettura").
+
+**Soluzione strutturale (bozza, da dettagliare).**
+- Modello permessi dichiarativo: mappa ruolo → moduli/azioni consentiti (es. `permissions.ts` o doc Firestore `roles/{role}` con `allowedScopes[]` + capability). Si appoggia/estende l'allowlist di Azione 6.
+- Guard router consuma la mappa invece di `if (role === 'PRODUZIONE')` hardcoded.
+- Possibile separazione tra "ruolo operativo POPS" (PRODUZIONE/LOGISTICA/CLIENTE) e "accessi suite SIDERA" (per-modulo), oggi mescolati.
+
+**Robustezza login (sotto-problema scoperto 2026-05-22).** `LoginView.vue` (POPS) tratta un **cache-miss come utenza inesistente**: con `persistentLocalCache` + `experimentalForceLongPolling` (`src/firebase.ts`), se la connessione Firestore è impedita/lenta `getDoc(doc(db,'team',email))` ripiega sulla cache locale vuota e ritorna `exists() === false` **senza lanciare**, cadendo nel ramo finale → *"Utenza non configurata. Contattaci su info@inglesinaitaliana.it"* (`LoginView.vue:104-108`). Riproducibile su **localhost** (login Daniel fallisce) mentre in **produzione/incognito** funziona (cache pulita + connessione ok). Fix possibile: distinguere `snap.metadata.fromCache` dal not-found reale (es. `getDocFromServer`, o ritentare/forzare server prima di dichiarare "non configurata"). **Innocuo in produzione**, ma fragile e fuorviante in dev/connessione scarsa.
+
+**File toccati (previsti).**
+- `src/router/index.ts` (guard) — overlap con Azione 6 (`meta.scope` unificato): conviene farle insieme o in sequenza.
+- Nuovo `src/router/permissions.ts` (o doc Firestore `roles/`) per la mappa ruolo→permessi.
+- `src/views/LoginView.vue` (POPS) per la robustezza cache-miss.
+- Eventuali regole Firestore se i permessi diventano dato server.
+
+**Rischio POPS.** Medio-alto — tocca il guard e il `LoginView` POPS (login B2B clienti + team). Test ruoli obbligatori (vedi checklist Azione 6).
+
+**Note.** Sovrapposizione forte con Azione 6: valutare di accorparle. Nessun codice scritto — solo pianificazione (allarme login Daniel del 2026-05-22 rientrato: era artefatto localhost, produzione OK).
+
+---
+
 ## 4. Decisioni esplicite
 
 > Quando si sceglie di NON fare un'azione POLARIS, o di farla in un modo diverso da quello pianificato, annotare qui con data e motivo. Aiuta a non rivisitare le stesse domande tra mesi.
@@ -395,3 +424,4 @@ Quando si decide di lavorare su un'azione POLARIS:
 - **2026-05-19** — Feature extra (fuori-azioni POLARIS): **CEPHEID Asana-flavored** (PR #8, branch `feature/cepheid-asana`). Introdotta gerarchia Obiettivi → Progetti → (task | milestone | deliverable) con schema retrocompatibile. Nuova collection `obiettivi/` (regole Firestore deployate). Discriminator `tasks/{id}.type` aggiunto alla collection condivisa con SIDERA: filtri lato view in SIDERA TasksView/ProjectBoard per non mostrare milestone/deliverable come task. ProjectBoard SIDERA esteso con 2 view tab Milestone+Deliverable. File POPS toccati: zero. **Mergiata (PR #8) e deployata in produzione** (Hosting + Rules).
 - **2026-05-20** — **NEBULA promossa a 4ª PWA installabile** (branch `feature/nebula-pwa`, feature extra ATLAS — ricetta sez. 3). Manifest statico `/public/nebula.webmanifest` (scope `/nebula/`, name "NEBULA — Team Inglesina"). Icone single-vertex generate da `scripts/nebula-icon.svg` (palette `#C46030`, 4 raggi verso QUASAR/NOVA/MAGNETAR/CEPHEID coerenti col Schlegel) → `public/icons/nebula-{180,192,512}.png` via sharp-cli. Ramo `/nebula` aggiunto allo script inline `index.html`. `scopeConfig.ts` aggiornato: `SCOPE_CONFIGS.nebula` ora popolato (mobileNav: Team, `notificationScope: 'nebula'`, `isTopLevelPath`); type `notificationScope` esteso con `'nebula'` (anche in `useNotifications.ts`). Router: nuova rotta `/nebula/login` (ScopedLogin, primary `#B85425`) + `/nebula` (SideraLayout child → NebulaTeamView, name `nebula-team` preservato), `meta: { nebulaScope: true }`. Rotta legacy `/sidera/nebula` **rimossa** (no redirect: bookmark da rigenerare). Guard `beforeEach` esteso con `isNebulaScope` per redirect login fallback. `SideraLayout` desktop sidebar ora legge `SCOPE_CONFIGS.nebula.mobileNav` come single source of truth (parità con pattern CEPHEID). Cloud Function FCM: **non aggiunta** (NEBULA non ha eventi di notifica per ora). File POPS toccati: `index.html` + `src/router/index.ts` (rischio basso — solo aggiunte/rami isolati per `/nebula`). **Sblocca azione 6**: ora siamo a 4 PWA e il refactor `meta.scope` ha trigger reale. Deploy + test PWA reali (iOS/Android Add-to-Home) pendenti.
 - **2026-05-21** — Aggiunta **Azione 8 — Hub Schlegel landing interattiva** alla roadmap (🟢 bassa priorità). Idea utente: entrare su `/sidera` collassa la sidebar lasciando lo Schlegel interattivo a tutto schermo; click su un vertice riapre la sidebar sulla sezione del modulo (prima voce del menu). Gate esplicito: **non implementare prima che tutte e 6 le PWA siano attive** (oggi solo 3 vertici hanno config completa). Nessun codice scritto — solo pianificazione.
+- **2026-05-22** — Aggiunta **Azione 9 — Ruoli e permessi granulari** alla roadmap (🟠 media-alta). Nasce dall'indagine su un presunto blocco login di Daniel (`pastorindaniel@gmail.com`, ruolo `PRODUZIONE`): **allarme rientrato** — in produzione (`b2b.inglesinaitaliana.it` e `preventivatoreb2b-ii.web.app`, stesso progetto/bundle) il login funziona; il fallimento *"Utenza non configurata"* era solo su **localhost**, artefatto di `getDoc(team)` che su cache-miss ritorna `exists()===false`. Emersi due temi da gestire (non ora): (1) permessi granulari per ruolo/modulo — oggi `PRODUZIONE` non accede ai moduli SIDERA, gating coarse via allowlist di path nel guard; (2) robustezza `LoginView.vue` sul cache-miss. Forte overlap con Azione 6 (valutare accorpamento). Nessun codice scritto — solo pianificazione.

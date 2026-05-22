@@ -61,13 +61,16 @@ async function submit() {
   if (saving.value) return
   saving.value = true
   try {
+    let newChatId = ''
     if (!isGroup.value && dmTarget.value) {
       const otherName = displayName(dmTarget.value, members.value)
-      await createChat(otherName, [dmTarget.value], false)
+      newChatId = await createChat(otherName, [dmTarget.value], false)
     } else if (isGroup.value && groupName.value.trim() && groupMembers.value.length > 0) {
-      await createChat(groupName.value.trim(), groupMembers.value, true)
+      newChatId = await createChat(groupName.value.trim(), groupMembers.value, true)
     }
     showModal.value = false
+    // Entra subito nella conversazione appena creata
+    if (newChatId) router.push({ name: 'pulsar-chat', params: { id: newChatId } })
   } finally {
     saving.value = false
   }

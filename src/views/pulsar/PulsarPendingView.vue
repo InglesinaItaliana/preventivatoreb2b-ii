@@ -100,7 +100,13 @@ function resolveChat(chatId: string, chatRef: any): Promise<ChatInfo | null> {
 }
 
 const unsubscribe = onSnapshot(q, async (snap) => {
-  if (snap.metadata.fromCache && snap.empty) return
+  // Cache vuota in attesa del primo round-trip server: niente dati ancora,
+  // ma sblocco comunque lo skeleton così la pagina non resta "in caricamento"
+  // all'infinito se il server tarda o la rete è assente.
+  if (snap.metadata.fromCache && snap.empty) {
+    loading.value = false
+    return
+  }
   const results: PendingMsg[] = []
   // Eseguo le resolveChat in PARALLELO invece che sequenziale (era N+1 bloccante)
   const enriched = await Promise.all(snap.docs.map(async (d) => {
