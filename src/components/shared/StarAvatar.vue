@@ -57,5 +57,8 @@ onUnmounted(() => {
   display: block;
   border-radius: 50%;
   flex-shrink: 0;
+  /* bollino con lo stesso fondo scuro della sidebar SIDERA: le stelle (rese con
+     composite "lighter") risaltano come nel riferimento */
+  background: #05090F;
 }
 </style>

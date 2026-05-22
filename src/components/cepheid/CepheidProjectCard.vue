@@ -1,0 +1,148 @@
+<script setup lang="ts">
+import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
+import MIcon from '../shared/MIcon.vue'
+import GoalChip from './GoalChip.vue'
+import CepheidTimeline from './CepheidTimeline.vue'
+import CepheidCreateMenu from './CepheidCreateMenu.vue'
+import CepheidCreateModal from './CepheidCreateModal.vue'
+import { useProjectTasks } from '../../composables/sidera/useProjectTasks'
+import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
+import type { Project } from '../../composables/sidera/useProjects'
+import type { TeamMember } from '../../composables/sidera/useTeamMembers'
+
+const props = defineProps<{
+  project: Project
+  members: TeamMember[]
+  isAdmin: boolean
+  obiettivo: { titolo: string; colore: string } | null
+  updateProject: (id: string, data: Partial<{ startDate: Date | null; dueDate: Date | null }>) => Promise<void>
+}>()
+
+const emit = defineEmits<{
+  (e: 'edit', p: Project, ev: Event): void
+  (e: 'delete', id: string, ev: Event): void
+  (e: 'toggle-active', id: string, active: boolean): void
+}>()
+
+const router = useRouter()
+const projectId = props.project.id
+const { tasks, updateTask, completeTask, uncompleteTask, approvePhase, unapprovePhase, createTask, createPhaseBundle } = useProjectTasks(projectId)
+const { currentUser } = useCurrentUser()
+
+const menuOpen = ref(false)
+function openDetail() { router.push('/cepheid/project/' + projectId) }
+
+const createOpen = ref(false)
+const createKind = ref<'fase' | 'deliverable' | 'milestone' | 'task'>('fase')
+function openCreate(kind: 'fase' | 'deliverable' | 'milestone' | 'task') { createKind.value = kind; createOpen.value = true }
+
+const projectDueIso = computed(() => {
+  const d = props.project.dueDate
+  return d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` : undefined
+})
+</script>
+
+<template>
+  <div class="pcard" :class="{ 'pcard--inactive': project.active === false }">
+      <CepheidTimeline
+        collapsible
+        :title="project.name"
+        :project="project"
+        :tasks="tasks"
+        :members="members"
+        :update-task="updateTask"
+        :complete-task="completeTask"
+        :uncomplete-task="uncompleteTask"
+        :update-project="updateProject"
+        :approve-phase="approvePhase"
+        :unapprove-phase="unapprovePhase"
+        @new-phase="openCreate('fase')"
+      >
+        <template #head-actions>
+          <GoalChip v-if="obiettivo" :titolo="obiettivo.titolo" :colore="obiettivo.colore" size="sm" />
+          <span v-if="project.active === false" class="badge-inactive">Inattivo</span>
+          <CepheidCreateMenu v-if="isAdmin" @select="openCreate" />
+          <button
+            v-if="isAdmin"
+            class="pcard-icon"
+            :title="project.active !== false ? 'Disattiva' : 'Attiva'"
+            @click="emit('toggle-active', project.id, project.active === false)"
+          >
+            <MIcon :name="project.active !== false ? 'pause' : 'play_arrow'" :size="16" />
+          </button>
+          <button class="pcard-icon" title="Apri dettaglio" @click="openDetail">
+            <MIcon name="open_in_full" :size="16" />
+          </button>
+          <div v-if="isAdmin" class="pcard-menu-wrap">
+            <button class="pcard-icon" aria-label="Menu progetto" @click="menuOpen = !menuOpen">
+              <MIcon name="more_horiz" :size="18" />
+            </button>
+            <div v-if="menuOpen" class="pcard-dropdown" @click="menuOpen = false">
+              <button class="pcard-dropdown-item" @click="emit('edit', project, $event)">
+                <MIcon name="edit" :size="14" /> Modifica progetto
+              </button>
+              <button class="pcard-dropdown-item pcard-dropdown-item--danger" @click="emit('delete', project.id, $event)">
+                <MIcon name="delete" :size="14" /> Elimina progetto
+              </button>
+            </div>
+          </div>
+        </template>
+      </CepheidTimeline>
+
+      <CepheidCreateModal
+        v-model:open="createOpen"
+        v-model:kind="createKind"
+        :tasks="tasks"
+        :members="members"
+        :current-user-email="currentUser?.email ?? null"
+        :create-task="createTask"
+        :create-phase-bundle="createPhaseBundle"
+        :update-task="updateTask"
+        :project-due-iso="projectDueIso"
+      />
+  </div>
+</template>
+
+<style scoped>
+.pcard {
+  background: #FFF8F0;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: 16px;
+  box-shadow: var(--md-sys-elevation-level-1);
+  padding: 12px 14px;
+  flex-shrink: 0;   /* in un flex-column scrollabile evita che la card espansa venga compressa */
+}
+.s-surface-dark .pcard { background: #16130B; }
+@media (prefers-color-scheme: dark) { .pcard { background: #16130B; } }
+.pcard--inactive { opacity: 0.6; }
+
+/* la card timeline interna non ha bisogno del suo chrome: il wrapper lo fornisce */
+.pcard :deep(.cph-timeline.is-card) { background: transparent; border: 0; border-radius: 0; padding: 0; }
+
+.badge-inactive {
+  font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--md-sys-color-on-surface-variant); background: var(--md-sys-color-surface-container);
+  padding: 2px 7px; border-radius: var(--md-sys-shape-corner-full);
+}
+.pcard-icon {
+  background: none; border: none; padding: 4px; border-radius: var(--md-sys-shape-corner-full);
+  cursor: pointer; color: var(--md-sys-color-on-surface-variant); display: inline-flex; align-items: center;
+}
+.pcard-icon:hover { background: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent); color: var(--md-sys-color-primary); }
+.pcard-menu-wrap { position: relative; }
+.pcard-dropdown {
+  position: absolute; top: 100%; right: 0; margin-top: 4px;
+  background: var(--md-sys-color-surface-container-low); border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-medium); box-shadow: var(--md-sys-elevation-level-3);
+  padding: 4px; min-width: 180px; z-index: 50;
+}
+.pcard-dropdown-item {
+  display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 12px;
+  background: none; border: none; font-family: var(--md-sys-typescale-body-medium-font);
+  font-size: var(--md-sys-typescale-body-medium-size); color: var(--md-sys-color-on-surface);
+  text-align: left; cursor: pointer; border-radius: var(--md-sys-shape-corner-small);
+}
+.pcard-dropdown-item:hover { background: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent); }
+.pcard-dropdown-item--danger { color: var(--md-sys-color-error); }
+</style>

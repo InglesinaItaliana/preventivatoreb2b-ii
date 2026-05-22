@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CEPHEID · Ciclo di vita progetto</title>
+<style>
+  @import url('https://cdn.jsdelivr.net/npm/@fontsource/outfit/400.css');
+  @import url('https://cdn.jsdelivr.net/npm/@fontsource/outfit/500.css');
+  @import url('https://cdn.jsdelivr.net/npm/@fontsource/cormorant-garamond/500.css');
+  :root { color-scheme: light dark; }
+  body { margin:0; min-height:100vh; display:flex; justify-content:center; align-items:flex-start;
+    background:#EFE7D9; font-family:'Outfit',system-ui,sans-serif; padding:24px 12px; }
+  @media (prefers-color-scheme: dark){ body { background:#0E0C07; } }
+
+  #cph { --primary:#C4941C; --on-primary:#FFFFFF; --primary-container:#F6E8C4; --on-primary-container:#3F2E00;
+    --bg:#FFF8F0; --on-bg:#1E1B13; --surface:#FFF8F0; --surface-2:#F1E8D8; --surface-var:#EBE2CF;
+    --on-surface:#1E1B13; --on-surface-var:#4C4639; --outline:#7D7667; --outline-var:#CEC6B4;
+    --error:#BA1A1A; --error-container:#FFDAD6; --on-error-container:#93000A;
+    --rmd:12px; --rlg:16px; --rfull:999px;
+    width:100%; max-width:380px; box-sizing:border-box;
+    background:var(--bg); color:var(--on-surface);
+    border-radius:var(--rlg); padding:18px 16px 20px; }
+  @media (prefers-color-scheme: dark){ #cph { --primary:#D4A020; --on-primary:#2A1F00; --primary-container:#5A4300; --on-primary-container:#F6E8C4;
+    --bg:#16130B; --on-bg:#E9E2D4; --surface:#16130B; --surface-2:#231E13; --surface-var:#4C4639;
+    --on-surface:#E9E2D4; --on-surface-var:#CEC6B4; --outline:#979080; --outline-var:#4C4639;
+    --error:#FFB4AB; --error-container:#93000A; --on-error-container:#FFDAD6; } }
+  #cph * { box-sizing:border-box; }
+  .sr-only { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); }
+  #cph .hd { display:flex; align-items:center; gap:8px; }
+  #cph .tag { font-size:11px; font-weight:500; letter-spacing:1.5px; color:var(--primary); }
+  #cph .star { width:8px; height:8px; border-radius:50%; background:var(--primary); }
+  #cph .pname { font-family:'Cormorant Garamond',serif; font-size:26px; line-height:1.1; color:var(--on-bg); margin:4px 0 8px; }
+  #cph .topbar { position:sticky; top:0; z-index:5; background:var(--bg); padding:8px 0 10px; border-bottom:1px solid var(--outline-var); margin-bottom:8px; }
+  #cph .prange { display:flex; align-items:center; gap:8px; margin:0 0 12px; }
+  #cph .modal { position:fixed; inset:0; background:rgba(0,0,0,.45); display:flex; align-items:center; justify-content:center; z-index:50; padding:20px; }
+  #cph .dialog { background:var(--bg); border-radius:var(--rlg); padding:20px; width:100%; max-width:300px; box-shadow:0 8px 30px rgba(0,0,0,.25); }
+  #cph .dialog h3 { font-family:'Cormorant Garamond',serif; font-size:20px; font-weight:500; margin:0 0 14px; color:var(--on-bg); }
+  #cph .dialog label { display:flex; flex-direction:column; gap:4px; font-size:12px; color:var(--on-surface-var); margin-bottom:12px; }
+  #cph .dialog input { height:38px; border:1px solid var(--outline-var); background:var(--surface-var); color:var(--on-surface); border-radius:8px; padding:0 10px; font-family:inherit; font-size:14px; }
+  #cph .dlgbtns { display:flex; justify-content:flex-end; gap:8px; margin-top:4px; }
+  #cph .dlgok { height:38px; padding:0 18px; border:0; border-radius:var(--rfull); background:var(--primary); color:var(--on-primary); font-weight:500; cursor:pointer; font-family:inherit; }
+  #cph .dlgcancel { height:38px; padding:0 16px; border:1px solid var(--outline-var); border-radius:var(--rfull); background:transparent; color:var(--on-surface); cursor:pointer; font-family:inherit; }
+  #cph .brow { display:flex; align-items:center; gap:8px; margin-bottom:7px; }
+  #cph .hicon { width:48px; flex:0 0 auto; display:flex; align-items:center; justify-content:center; font-size:18px; color:var(--on-surface-var); }
+  #cph .track { position:relative; flex:1; height:6px; border-radius:3px; background:var(--surface-var); overflow:hidden; }
+  #cph .bmarks { position:absolute; inset:0; pointer-events:none; }
+  #cph .dmark { position:absolute; top:0; bottom:0; width:2px; transform:translateX(-50%); border-radius:1px; background:color-mix(in srgb,var(--on-surface) 30%,transparent); }
+  #cph .dmark.reached { background:var(--on-surface); }
+  #cph .fillw { height:100%; width:0%; background:var(--primary); border-radius:3px; transition:width .4s cubic-bezier(.2,0,0,1); }
+  #cph .fillt { height:100%; width:0%; background:color-mix(in srgb,var(--primary) 45%,var(--surface-var)); border-radius:3px; transition:width .4s; }
+  #cph .bval { font-size:11px; font-weight:500; min-width:54px; text-align:right; color:var(--on-surface-var); flex:0 0 auto; }
+  #cph .ib { display:inline-flex; align-items:center; justify-content:center; width:36px; height:36px; border-radius:var(--rfull); color:var(--on-surface-var); cursor:pointer; background:transparent; border:0; flex:0 0 auto; font-size:16px; }
+  #cph .ib:hover { background:color-mix(in srgb, var(--on-surface) 8%, transparent); }
+  #cph .start { display:flex; align-items:center; justify-content:flex-end; gap:6px; margin:8px 0 0; font-size:12px; color:var(--on-surface-var); position:relative; }
+  #cph .tl { margin-top:14px; }
+  #cph .tl { position:relative; z-index:0; }
+  #cph .row { display:grid; grid-template-columns:48px 1fr; align-items:stretch; }
+  #cph .rail { position:relative; display:flex; align-items:center; justify-content:center; }
+  #cph .spine { position:absolute; left:50%; top:0; bottom:0; width:2px; transform:translateX(-50%); background:var(--outline-var); }
+  #cph .mkc { display:block; flex:0 0 auto; position:relative; z-index:2; }
+  #cph .mk { position:relative; z-index:2; display:flex; align-items:center; justify-content:center; color:var(--on-primary); font-size:12px; line-height:1; background:var(--bg); flex:0 0 auto; }
+  #cph .mk.deliv { width:24px; height:24px; min-width:24px; max-width:24px; min-height:24px; max-height:24px; border-radius:0; border:2px solid var(--mut); color:var(--mut); }
+  #cph .mk.mile { width:24px; height:24px; min-width:24px; max-width:24px; min-height:24px; max-height:24px; transform:rotate(45deg); border:2px solid var(--mut); background:var(--bg); color:var(--mut); }
+  #cph .mk.mile > * { transform:rotate(-45deg); display:block; }
+  #cph .mk.mile.reached { font-size:13px; border-color:var(--primary); color:var(--on-primary); }
+  #cph .cell { padding:4px 0 4px 12px; min-width:0; }
+  #cph .ph { display:flex; align-items:center; gap:8px; padding:8px 2px 2px; }
+  #cph .phchip { font-size:11px; font-weight:500; padding:2px 9px; border-radius:var(--rfull); background:color-mix(in srgb,var(--primary) 16%,var(--surface)); color:var(--primary); }
+  #cph .phlab { font-size:12px; color:var(--on-surface-var); }
+  #cph .task { border:1px solid transparent; border-radius:var(--rmd); background:transparent; padding:10px 12px; margin:2px 0; min-width:0; overflow:hidden; transition:background .15s; }
+  #cph .task:hover { background:color-mix(in srgb,var(--primary) 8%,var(--surface)); }
+  #cph .task.done { opacity:.5; }
+  #cph .task.done .timebar, #cph .task.done .tbtn { pointer-events:none; }
+  #cph .task.done .tbtn { opacity:.4; }
+  #cph .task.locked { opacity:.4; pointer-events:none; }
+  #cph .trow { display:flex; align-items:center; gap:8px; min-width:0; cursor:pointer; user-select:none; }
+  #cph .tn { font-size:15px; flex:1; color:var(--on-surface); min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #cph .tn.done { color:var(--on-surface); }
+  #cph .dt { font-size:11px; color:var(--on-surface-var); white-space:nowrap; flex:0 0 auto; }
+  #cph .dt.late { color:var(--error); font-weight:500; }
+  #cph .dt.free { font-style:italic; opacity:.8; }
+  #cph .trow2 { display:flex; align-items:center; gap:8px; margin-top:8px; min-width:0; }
+  #cph .spacer { flex:1; }
+  #cph .avg { display:flex; align-items:center; flex:0 0 auto; }
+  #cph .av { width:22px; height:22px; border-radius:50%; background:var(--surface-var); color:var(--on-surface-var); font-size:10px; font-weight:500; display:flex; align-items:center; justify-content:center; flex:0 0 auto; border:1.5px solid var(--bg); }
+  #cph .avg .av:not(:first-child) { margin-left:-7px; }
+  #cph .timebar { position:relative; flex:1; min-width:0; height:14px; border-radius:5px; background:var(--surface-var); touch-action:none; }
+  #cph .bar { position:absolute; top:0; height:14px; border-radius:5px; background:var(--primary); opacity:.9; touch-action:none; cursor:grab; }
+  #cph .bar.done { opacity:1; }
+  #cph .bar:active { cursor:grabbing; }
+  #cph .grip { position:absolute; top:3px; width:2px; height:8px; background:rgba(255,255,255,.75); border-radius:1px; }
+  #cph .gl { left:4px; } #cph .gr { right:4px; }
+  #cph .freebar { flex:1; font-size:12px; color:var(--on-surface-var); font-style:italic; }
+  #cph .tbtn { width:30px; height:30px; flex:0 0 auto; display:flex; align-items:center; justify-content:center; border:0; background:transparent; color:var(--on-surface-var); border-radius:var(--rfull); cursor:pointer; font-size:16px; }
+  #cph .tbtn:hover { background:color-mix(in srgb,var(--on-surface) 8%,transparent); }
+  #cph .dcard { position:relative; min-height:60px; display:flex; flex-direction:column; justify-content:center; gap:4px; background:var(--surface-2); border:1px solid var(--outline-var); border-radius:var(--rlg); padding:12px 15px; margin:5px 0; transition:background .2s, border-color .2s; }
+  #cph .dcard.appr { border-color:transparent; background:var(--primary-container); opacity:.5; }
+  #cph .dhead { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+  #cph .dhead .tbtn { width:22px; height:22px; font-size:15px; }
+  #cph .clab { font-size:11px; letter-spacing:.4px; text-transform:uppercase; color:var(--on-surface-var); }
+  #cph .dcard.appr .clab { color:var(--on-primary-container); opacity:.8; }
+  #cph .cn { font-size:16px; font-weight:500; color:var(--on-surface); }
+  #cph .dcard.appr .cn { color:var(--on-primary-container); }
+  #cph .cs { font-size:13px; color:var(--on-surface-var); }
+  #cph .dcard.appr .cs { color:var(--on-primary-container); }
+  #cph .cs.ready { color:var(--primary); font-weight:500; }
+  #cph .cs.late { color:var(--error); font-weight:500; }
+  #cph .ddwrap { display:flex; align-items:center; gap:6px; flex:0 0 auto; }
+  #cph .ddlab { font-size:11px; color:var(--on-surface-var); }
+  #cph .ddval { font-size:13px; font-weight:500; color:var(--on-surface); }
+  #cph .ddwrap .ddval { font-size:11px; }
+  #cph .dcard.appr .ddlab { color:var(--on-primary-container); opacity:.8; }
+  #cph .dcard.appr .ddval { color:var(--on-primary-container); }
+  #cph .dcard.appr .tbtn { color:var(--on-primary-container); }
+  #cph .approve { display:inline-flex; align-items:center; gap:6px; margin-top:11px; height:40px; padding:0 18px; border-radius:var(--rfull); border:0; background:var(--primary); color:var(--on-primary); font-size:14px; font-weight:500; font-family:inherit; cursor:pointer; }
+  #cph .approve:active { transform:scale(.97); }
+  #cph .mwrap { padding:8px 0 8px 12px; }
+  #cph .mname { font-size:16px; font-weight:500; color:var(--on-surface); }
+  #cph .mstat { font-size:13px; margin-top:2px; color:var(--on-surface-var); }
+  #cph .mstat.late { color:var(--error); font-weight:500; }
+  #cph .mcard { position:relative; min-height:60px; display:flex; align-items:center; gap:12px; border-radius:var(--rlg); padding:14px 16px; margin:5px 0; background:var(--primary); }
+  #cph .mcard .mt { font-size:17px; font-weight:500; color:var(--on-primary); }
+  #cph .mcard .msb { font-size:13px; color:color-mix(in srgb,var(--on-primary) 82%,var(--primary)); margin-top:4px; }
+  #cph .gap { height:6px; position:relative; }
+  #cph .gap::before { content:''; position:absolute; left:24px; top:0; bottom:0; width:2px; transform:translateX(-50%); background:var(--outline-var); }
+  #cph .oggiline { position:absolute; left:0; right:0; height:0; border-top:1.5px dashed color-mix(in srgb,var(--primary) 70%,var(--surface)); z-index:-1; pointer-events:none; }
+  #cph .draglab { position:absolute; z-index:6; transform:translate(-50%,-100%); background:var(--on-surface); color:var(--bg); font-size:11px; font-weight:500; padding:3px 8px; border-radius:6px; white-space:nowrap; pointer-events:none; display:none; }
+  #cph .fin { position:relative; overflow:hidden; margin-top:16px; padding:24px 18px; border-radius:var(--rlg); background:var(--surface-2); text-align:center; }
+  #cph .fin .rk { display:inline-flex; align-items:center; justify-content:center; width:58px; height:58px; border-radius:50%; background:var(--primary); color:var(--on-primary); font-size:28px; margin-bottom:10px; }
+  #cph .fin .ft { font-family:'Cormorant Garamond',serif; font-size:24px; color:var(--on-bg); }
+  #cph .fin .fs { font-size:13px; color:var(--on-surface-var); margin-top:4px; }
+  #cph .pc { position:absolute; top:8px; width:8px; height:8px; border-radius:2px; opacity:0; }
+  @media (prefers-reduced-motion: no-preference){
+    @keyframes cphconf { 0%{transform:translateY(0) rotate(0);opacity:0} 12%{opacity:1} 100%{transform:translateY(160px) rotate(400deg);opacity:0} }
+    #cph .pc { animation:cphconf 1.6s cubic-bezier(.3,.1,.5,1) forwards; }
+  }
+</style>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3/dist/tabler-icons.min.css">
+</head>
+<body>
+<div id="cph">
+  <h2 class="sr-only">CEPHEID — finestre temporali per deliverable con barre dei task trascinabili e riga OGGI.</h2>
+  <div class="topbar">
+    <div class="hd"><span class="star"></span><span class="tag">CEPHEID</span></div>
+    <p class="pname">Lancio modulo QUASAR</p>
+    <div class="prange"><span class="hicon" onclick="openDatesDialog()" style="cursor:pointer"><i class="ti ti-calendar"></i></span><span class="ddval" id="cphRangeVal">—</span></div>
+    <div class="brow"><span class="hicon"><i class="ti ti-checklist"></i></span><div class="track"><div class="fillw" id="cphFillW"></div><div class="bmarks" id="cphMarksW"></div></div><span class="bval" id="cphPctW">0/0</span></div>
+    <div class="brow"><span class="hicon"><i class="ti ti-hourglass"></i></span><div class="track"><div class="fillt" id="cphFillT"></div><div class="bmarks" id="cphMarksT"></div></div><span class="bval" id="cphTimeTxt">—</span></div>
+  </div>
+  <div class="tl" id="cphTL"></div>
+  <div class="draglab" id="cphDragLab"></div>
+  <div class="modal" id="cphModal" style="display:none">
+    <div class="dialog">
+      <h3>Date del progetto</h3>
+      <label>inizio<input type="date" id="dlgStart"></label>
+      <label>fine<input type="date" id="dlgEnd"></label>
+      <div class="dlgbtns"><button class="dlgcancel" onclick="closeDates()">Annulla</button><button class="dlgok" onclick="applyDates()">OK</button></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const PEOPLE={GM:"Gionata",DA:"Daniel",LU:"Luca"};
+const PHASES=[
+  { mile:"Approvato", deliv:"Prototipo", tasks:[
+    {n:"Ricerca",timed:true,s:0,d:14,a:["GM"]},
+    {n:"Design",timed:true,s:7,d:21,a:["DA","GM"]},
+    {n:"Specifiche",timed:true,s:21,d:14,a:["GM"]} ] },
+  { mile:"Beta", deliv:"MVP", tasks:[
+    {n:"Backend",timed:true,s:0,d:28,a:["DA"]},
+    {n:"Frontend",timed:true,s:7,d:21,a:["GM","LU"]},
+    {n:"Test",timed:true,s:21,d:14,a:["LU","DA","GM"]},
+    {n:"Code review",timed:false,s:0,d:7,a:["DA"]} ] },
+  { mile:"Go-live", deliv:"Release", tasks:[
+    {n:"Rifinitura",timed:true,s:0,d:14,a:["GM","DA"]},
+    {n:"Documenti",timed:true,s:0,d:7,a:["LU"]},
+    {n:"Deploy",timed:true,s:14,d:7,a:["DA"]} ] },
+];
+let dueOff=[35,70,91];
+let endOff=110;
+let startISO="2026-05-01";
+let appr=PHASES.map(()=>false);
+
+const MESI=["gen","feb","mar","apr","mag","giu","lug","ago","set","ott","nov","dic"];
+const CONF=["#D4A020","#C4941C","#3AAF98","#C46030","#98C0D0","#B06842"];
+const DAY=86400000, WK=7*DAY;
+const TODAY=new Date(); TODAY.setHours(0,0,0,0);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+
+const winStartOff=i=> i===0?0:dueOff[i-1];
+const winDays=i=> Math.max(1, dueOff[i]-winStartOff(i));
+const tasksDone=i=>PHASES[i].tasks.every(t=>t.done);
+const unlockedI=i=> i===0 || appr[i-1];
+const canApprove=i=> unlockedI(i) && tasksDone(i) && !appr[i];
+
+function startDate(){ return new Date(startISO+"T00:00:00"); }
+const addD=(d,n)=>{const x=new Date(d);x.setDate(x.getDate()+n);return x;};
+const fmt=d=>d.getDate()+" "+MESI[d.getMonth()];
+function range(a,b){ return a.getMonth()===b.getMonth()? a.getDate()+"–"+b.getDate()+" "+MESI[b.getMonth()] : fmt(a)+" → "+fmt(b); }
+function isoOf(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }
+
+function cphToggle(i,j){ if(!unlockedI(i)) return; const t=PHASES[i].tasks[j]; t.done=!t.done; cphRender(); }
+function cphApprove(i){ if(!canApprove(i)) return; appr[i]=true; cphRender(); }
+function toggleTimed(i,j){ const t=PHASES[i].tasks[j]; if(t.timed){ t.timed=false; } else { t.timed=true; t.s=0; t.d=Math.min(7,winDays(i)); } clampAll(); cphRender(); }
+function clampAll(){ PHASES.forEach((p,i)=>{ const W=winDays(i); p.tasks.forEach(t=>{ if(t.timed){ t.d=clamp(t.d,1,W); t.s=clamp(t.s,0,W-t.d); } }); }); }
+function setDue(i, isoVal){ const st=startDate(); const nd=new Date(isoVal+"T00:00:00"); let off=Math.round((nd-st)/DAY);
+  const minOff=winStartOff(i)+1; const maxOff = i<dueOff.length-1 ? dueOff[i+1]-1 : endOff;
+  dueOff[i]=clamp(off, minOff, maxOff); clampAll(); cphRender(); }
+function setEnd(isoVal){ const st=startDate(); const nd=new Date(isoVal+"T00:00:00"); let off=Math.round((nd-st)/DAY); endOff=Math.max(off, dueOff[dueOff.length-1]); cphRender(); }
+function cphReset(){ PHASES.forEach(p=>p.tasks.forEach(t=>t.done=false)); appr=PHASES.map(()=>false); cphRender(); }
+function openDue(i){ const el=document.getElementById('cphDue'+i); if(!el) return; if(el.showPicker){ try{ el.showPicker(); }catch(e){ el.click(); } } else el.click(); }
+function openStart(){ const el=document.getElementById('cphStart'); if(!el) return; if(el.showPicker){ try{ el.showPicker(); }catch(e){ el.click(); } } else el.click(); }
+function openEnd(){ const el=document.getElementById('cphEnd'); if(!el) return; if(el.showPicker){ try{ el.showPicker(); }catch(e){ el.click(); } } else el.click(); }
+function openDatesDialog(){ const st=startDate(); document.getElementById('dlgStart').value=startISO; document.getElementById('dlgEnd').value=isoOf(addD(st,endOff)); document.getElementById('dlgEnd').min=isoOf(addD(st,dueOff[dueOff.length-1])); document.getElementById('cphModal').style.display='flex'; }
+function closeDates(){ document.getElementById('cphModal').style.display='none'; }
+function applyDates(){ const ds=document.getElementById('dlgStart').value, de=document.getElementById('dlgEnd').value; if(ds) startISO=ds; if(de){ const st=startDate(); let off=Math.round((new Date(de+"T00:00:00")-st)/DAY); endOff=Math.max(off, dueOff[dueOff.length-1]); } clampAll(); closeDates(); cphRender(); }
+
+function cphRender(){
+  const st=startDate();
+  const rg=document.getElementById('cphRangeVal'); if(rg) rg.textContent=fmt(st)+' → '+fmt(addD(st,endOff));
+  const out=[]; const allMile=[];
+  out.push('<div id="cphTop" data-anchor data-t="'+st.getTime()+'" style="height:0"></div>');
+
+  PHASES.forEach((p,i)=>{
+    const unlocked=unlockedI(i);
+    const mut=unlocked?"var(--outline)":"var(--outline-var)";
+    const W=winDays(i); const wStart=addD(st, winStartOff(i));
+    const mileDate=addD(st, dueOff[i]); allMile.push(mileDate);
+
+    const ord=p.tasks.map((_,k)=>k).sort((a,b)=>{ const va=p.tasks[a].timed?p.tasks[a].s:-1, vb=p.tasks[b].timed?p.tasks[b].s:-1; return va-vb || a-b; });
+    ord.forEach(j=>{
+      const t=p.tasks[j]; const done=!!t.done;
+      const ts=addD(wStart,t.s), te=addD(wStart,t.s+t.d);
+      const late = t.timed && !done && te.getTime()<TODAY.getTime() && unlocked;
+      const stroke = late ? 'var(--error)' : mut;
+      let mkSvg;
+      if(done) mkSvg='<svg class="mkc"'+(t.timed?' data-anchor data-t="'+ts.getTime()+'"':'')+' width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="10" style="fill:var(--primary)"/><path d="M6.7 12.4 L10.7 16 L17.3 8" style="fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round"/></svg>';
+      else if(t.timed) mkSvg='<svg class="mkc" data-anchor data-t="'+ts.getTime()+'" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="'+(late?'10':'9')+'" style="'+(late?'fill:var(--error)':'fill:var(--bg);stroke:'+stroke+';stroke-width:2')+'"/>'+(late?'<text x="12" y="12" text-anchor="middle" dominant-baseline="central" font-size="13" font-weight="900" fill="#fff" font-family="sans-serif">!</text>':'')+'</svg>';
+      else mkSvg='<svg class="mkc" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" style="fill:var(--bg);stroke:'+mut+';stroke-width:2"/></svg>';
+
+      const avs=t.a.map(x=>'<div class="av" title="'+(PEOPLE[x]||x)+'">'+x+'</div>').join('');
+      let dtTxt='', dtCls='';
+      if(t.timed){ if(late){ dtTxt='in ritardo'; dtCls=' late'; } else dtTxt=range(ts,te); }
+
+      let second;
+      if(t.timed){
+        const left=t.s/W*100, wid=t.d/W*100;
+        second='<div class="timebar"><div class="bar '+(done?'done':'')+'" data-p="'+i+'" data-t="'+j+'" style="left:'+left+'%;width:'+wid+'%"><span class="grip gl"></span><span class="grip gr"></span></div></div>'
+          +'<button class="tbtn" title="rimuovi tempi" onclick="event.stopPropagation();toggleTimed('+i+','+j+')"><i class="ti ti-calendar-minus"></i></button>';
+      } else {
+        second='<div class="spacer"></div>'
+          +'<button class="tbtn" title="assegna tempi" onclick="event.stopPropagation();toggleTimed('+i+','+j+')"><i class="ti ti-calendar-plus"></i></button>';
+      }
+
+      out.push('<div class="row"><div class="rail"><div class="spine" style="'+(done?'background:var(--primary)':'')+'"></div>'+mkSvg+'</div>'
+        +'<div class="cell"><div class="task '+(done?'done ':'')+(unlocked?'':'locked')+'">'
+        +'<div class="trow" onclick="cphToggle('+i+','+j+')"><span class="tn '+(done?'done':'')+'">'+t.n+'</span><span class="dt'+dtCls+'">'+dtTxt+'</span></div>'
+        +'<div class="trow2"><div class="avg">'+avs+'</div>'+second+'</div>'
+        +'</div></div></div>');
+    });
+
+    const ready=tasksDone(i), isAppr=appr[i], canA=canApprove(i);
+    const dLate = !isAppr && mileDate.getTime()<TODAY.getTime() && unlocked;
+    const dMk='--mut:'+mut+';'+(ready?'background:var(--primary);border-color:var(--primary);color:var(--on-primary);':'');
+    let cs = isAppr?'<div class="cs">approvato</div>'
+      : dLate?'<div class="cs late">approvazione in ritardo</div>'
+      : ready?'<div class="cs ready">pronto — approva per attivare la milestone</div>'
+      : '<div class="cs">in attesa dei task</div>';
+    const btn=canA?'<button class="approve" onclick="cphApprove('+i+')"><i class="ti ti-check" style="font-size:16px"></i> Approva '+p.deliv+'</button>':'';
+    const minIso=isoOf(addD(st, winStartOff(i)+1));
+    const maxAttr = i<dueOff.length-1 ? ' max="'+isoOf(addD(st, dueOff[i+1]-1))+'"' : ' max="'+isoOf(addD(st, endOff))+'"';
+    out.push('<div class="row"><div class="rail"><div class="spine" style="'+(ready?'background:var(--primary)':'')+'"></div><div class="mk deliv" style="'+dMk+'">'+(ready?'<i class="ti ti-package"></i>':'')+'</div></div>'
+      +'<div class="cell"><div class="dcard'+(isAppr?' appr':'')+'">'
+      +'<div class="dhead"><div class="cn">'+p.deliv+'</div>'
+      +'<div class="ddwrap"><span class="ddlab">scadenza</span><span class="ddval">'+fmt(mileDate)+'</span>'
+      +'<button class="tbtn" title="modifica scadenza"'+(isAppr?' disabled style="opacity:.4;pointer-events:none"':' onclick="openDue('+i+')"')+'><i class="ti ti-calendar"></i></button>'
+      +'<input id="cphDue'+i+'" type="date" value="'+isoOf(mileDate)+'" min="'+minIso+'"'+maxAttr+' onchange="setDue('+i+', this.value)" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;border:0;padding:0;margin:0"></div></div>'
+      +cs+btn+'</div></div></div>');
+
+    const reached=appr[i], isLast=i===PHASES.length-1;
+    const mLate = !reached && mileDate.getTime()<TODAY.getTime() && unlocked;
+    const mMk='--mut:'+mut+';'+(reached?'background:var(--primary);color:var(--on-primary);':'');
+    if(reached){
+      out.push('<div class="row"><div class="rail"><div class="spine" style="background:var(--primary);'+(isLast?'bottom:50%;':'')+'"></div>'
+        +'<div class="mk mile reached" data-anchor data-t="'+mileDate.getTime()+'" style="'+mMk+'"><i class="ti ti-rocket"></i></div></div>'
+        +'<div class="cell"><div class="mcard"><div><div class="mt">'+p.mile+'</div><div class="msb">raggiunta · '+fmt(mileDate)+'</div></div></div></div></div>');
+    } else {
+      const stt = mLate?('scaduta · '+fmt(mileDate)):(ready?'in attesa di approvazione':(unlocked?('obiettivo · '+fmt(mileDate)):'bloccata'));
+      out.push('<div class="row"><div class="rail"><div class="spine" style="'+(isLast?'bottom:50%;':'')+'"></div>'
+        +'<div class="mk mile" data-anchor data-t="'+mileDate.getTime()+'" style="'+mMk+'"></div></div>'
+        +'<div class="cell"><div class="mwrap"><div class="mname">'+p.mile+'</div><div class="mstat '+(mLate?'late':'')+'">'+stt+'</div></div></div></div>');
+    }
+    out.push('<div class="gap"></div>');
+  });
+
+  if(appr.every(Boolean)){
+    let pc=""; for(let k=0;k<14;k++){ const l=Math.round(6+k*88/14); const c=CONF[k%CONF.length]; const d=((k%5)*90)/1000;
+      pc+='<div class="pc" style="left:'+l+'%;background:'+c+';animation-delay:'+d+'s"></div>'; }
+    out.push('<div class="fin">'+pc+'<div class="rk"><i class="ti ti-trophy"></i></div><div class="ft">Progetto completato</div><div class="fs">tutte le milestone approvate · go-live '+fmt(allMile[allMile.length-1])+'</div></div>');
+  }
+
+  document.getElementById("cphTL").innerHTML=out.join("");
+
+  const allTasks=PHASES.reduce((s,p)=>s+p.tasks.length,0);
+  const dn=PHASES.reduce((s,p)=>s+p.tasks.filter(t=>t.done).length,0);
+  document.getElementById("cphFillW").style.width=Math.round(dn/allTasks*100)+"%";
+  document.getElementById("cphPctW").textContent=dn+'/'+allTasks;
+
+  const totD=endOff;
+  const tT=TODAY.getTime(), sT=st.getTime();
+  const elapsed=clamp(Math.round((tT-sT)/DAY),0,totD);
+  document.getElementById("cphFillT").style.width=Math.round(elapsed/totD*100)+"%";
+  document.getElementById("cphTimeTxt").textContent=elapsed+'/'+totD;
+  let cum=0, mkW='', mkT='';
+  PHASES.forEach((p,i)=>{ cum+=p.tasks.length; const rcW=tasksDone(i)?' reached':''; const rcT=appr[i]?' reached':''; const pw=allTasks?(cum/allTasks*100):0; const pt=endOff?(dueOff[i]/endOff*100):0; mkW+='<span class="dmark'+rcW+'" style="left:'+pw.toFixed(1)+'%" title="'+p.deliv+'"></span>'; mkT+='<span class="dmark'+rcT+'" style="left:'+pt.toFixed(1)+'%" title="'+p.mile+'"></span>'; });
+  const mW=document.getElementById('cphMarksW'); if(mW) mW.innerHTML=mkW;
+  const mT=document.getElementById('cphMarksT'); if(mT) mT.innerHTML=mkT;
+
+  requestAnimationFrame(placeToday);
+}
+
+function placeToday(){
+  const c=document.getElementById("cphTL"); if(!c) return;
+  const cTop=c.getBoundingClientRect().top;
+  const anchors=[...c.querySelectorAll('[data-anchor]')].map(e=>{ const r=e.getBoundingClientRect(); return {y:r.top-cTop+r.height/2, t:Number(e.dataset.t)}; }).sort((a,b)=>a.t-b.t);
+  if(!anchors.length) return;
+  const tT=TODAY.getTime(); let y;
+  if(tT<=anchors[0].t) y=anchors[0].y;
+  else if(tT>=anchors[anchors.length-1].t) y=anchors[anchors.length-1].y;
+  else { for(let k=0;k<anchors.length-1;k++){ const a=anchors[k],b=anchors[k+1]; if(tT>=a.t&&tT<=b.t){ const span=(b.t-a.t)||1; y=a.y+(tT-a.t)/span*(b.y-a.y); break; } } }
+  const line=document.createElement("div"); line.className="oggiline"; line.style.top=y+"px"; c.appendChild(line);
+}
+
+let drag=null;
+function dragStart(e){
+  const bar=e.target.closest('.bar'); if(!bar) return;
+  e.preventDefault();
+  const i=+bar.dataset.p, j=+bar.dataset.t;
+  const track=bar.parentElement; const W=track.clientWidth; const D=winDays(i); const dayPx=W/D;
+  const rect=bar.getBoundingClientRect();
+  const rel=e.clientX-rect.left; let zone='move';
+  if(rel<16) zone='left'; else if(rel>rect.width-16) zone='right';
+  const t=PHASES[i].tasks[j];
+  drag={i,j,zone,startX:e.clientX,dayPx,D,origS:t.s,origD:t.d,bar,track};
+  bar.setPointerCapture(e.pointerId);
+  showDragLab(i,j);
+}
+function dragMove(e){
+  if(!drag) return;
+  const dd=Math.round((e.clientX-drag.startX)/drag.dayPx);
+  const t=PHASES[drag.i].tasks[drag.j];
+  if(drag.zone==='move') t.s=clamp(drag.origS+dd,0,drag.D-drag.origD);
+  else if(drag.zone==='left'){ const ns=clamp(drag.origS+dd,0,drag.origS+drag.origD-1); t.s=ns; t.d=(drag.origS+drag.origD)-ns; }
+  else { const ne=clamp(drag.origS+drag.origD+dd,drag.origS+1,drag.D); t.d=ne-drag.origS; }
+  drag.bar.style.left=(t.s/drag.D*100)+"%";
+  drag.bar.style.width=(t.d/drag.D*100)+"%";
+  showDragLab(drag.i,drag.j);
+}
+function dragEnd(){ if(!drag) return; document.getElementById("cphDragLab").style.display="none"; drag=null; cphRender(); }
+function showDragLab(i,j){
+  const t=PHASES[i].tasks[j]; const st=startDate(); const wStart=addD(st,winStartOff(i));
+  const a=addD(wStart,t.s), b=addD(wStart,t.s+t.d);
+  const lab=document.getElementById("cphDragLab"); lab.textContent=fmt(a)+" → "+fmt(b)+"  ("+t.d+" gg)";
+  const cph=document.getElementById("cph"); const cr=cph.getBoundingClientRect();
+  const br=drag.bar.getBoundingClientRect();
+  lab.style.left=(br.left+br.width/2-cr.left)+"px";
+  lab.style.top=(br.top-cr.top-6)+"px";
+  lab.style.display="block";
+}
+const TLc=document.getElementById("cphTL");
+TLc.addEventListener('pointerdown',dragStart);
+TLc.addEventListener('pointermove',dragMove);
+TLc.addEventListener('pointerup',dragEnd);
+TLc.addEventListener('pointercancel',dragEnd);
+
+cphRender();
+</script>
+</body>
+</html>

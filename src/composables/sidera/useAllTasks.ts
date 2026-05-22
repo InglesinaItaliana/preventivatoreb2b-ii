@@ -1,7 +1,7 @@
 import { ref, onUnmounted } from 'vue'
 import {
   collectionGroup, query, orderBy, onSnapshot,
-  addDoc, updateDoc, deleteDoc, doc, collection, serverTimestamp, increment,
+  addDoc, updateDoc, deleteDoc, doc, collection, serverTimestamp, increment, arrayUnion,
 } from 'firebase/firestore'
 import { db, auth } from '../../firebase'
 
@@ -17,6 +17,8 @@ export interface Task {
   projectId: string
   type: TaskType
   deliverableTaskIds: string[]
+  triaged: boolean
+  milestoneId: string | null
   createdBy: string
   createdByEmail: string
   createdAt: Date
@@ -48,9 +50,14 @@ export function useAllTasks() {
         priority:           data.priority ?? 'media',
         assignees:          data.assignees ?? (data.assignee ? [data.assignee] : []),
         dueDate:            toDate(data.dueDate),
-        projectId:          data.projectId ?? '',
+        // projectId dal PATH reale (parent del doc), non dal campo (che può mancare/essere errato):
+        // projects/{pid}/tasks/{tid} -> pid ; tasks/{tid} (sciolto) -> ''
+        projectId:          d.ref.parent.parent?.id ?? '',
         type:               (data.type as TaskType) ?? 'task',
         deliverableTaskIds: Array.isArray(data.deliverableTaskIds) ? data.deliverableTaskIds : [],
+        // campo mancante (task storici): da smistare se NON ha assegnatari, altrimenti già gestito
+        triaged:            typeof data.triaged === 'boolean' ? data.triaged : ((data.assignees ?? (data.assignee ? [data.assignee] : [])).length > 0),
+        milestoneId:        data.milestoneId ?? null,
         createdBy:          data.createdBy ?? '',
         createdByEmail:     data.createdByEmail ?? '',
         createdAt:          toDate(data.createdAt) ?? new Date(),
@@ -115,6 +122,8 @@ export function useAllTasks() {
       projectId:          data.projectId ?? null,
       type,
       deliverableTaskIds: data.deliverableTaskIds ?? [],
+      triaged:            type !== 'task',   // i task nascono da smistare; milestone/deliverable no
+      milestoneId:        null,
       createdBy:          auth.currentUser?.uid ?? '',
       createdByEmail:     auth.currentUser?.email ?? '',
       createdAt:          serverTimestamp(),
@@ -137,13 +146,43 @@ export function useAllTasks() {
   async function updateTask(
     projectId: string | null,
     taskId: string,
-    data: Partial<{ title: string; priority: 'alta' | 'media' | 'bassa'; dueDate: Date | null; assignees: string[]; deliverableTaskIds: string[] }>,
+    data: Partial<{ title: string; priority: 'alta' | 'media' | 'bassa'; dueDate: Date | null; assignees: string[]; deliverableTaskIds: string[]; triaged: boolean; milestoneId: string | null }>,
   ) {
     if (projectId) {
       await updateDoc(doc(db, 'projects', projectId, 'tasks', taskId), data)
     } else {
       await updateDoc(doc(db, 'tasks', taskId), data)
     }
+  }
+
+  // Smista un task SCIOLTO (tasks/) dentro un progetto (+ deliverable opzionale).
+  // Crea il doc nella subcollection del progetto e cancella lo standalone.
+  async function fileStandaloneTask(
+    task: Task,
+    projectId: string,
+    deliverableId: string | null,
+    milestoneId: string | null,
+    patch: { assignees: string[]; priority: 'alta' | 'media' | 'bassa' },
+  ) {
+    const ref = await addDoc(collection(db, 'projects', projectId, 'tasks'), {
+      title: task.title, status: task.status === 'done' ? 'done' : 'todo',
+      priority: patch.priority, startDate: null, dueDate: task.dueDate ?? null,
+      description: '', assignees: patch.assignees, projectId, type: 'task',
+      deliverableTaskIds: [], order: null, approved: false, approvedAt: null,
+      deliverableId: null, milestoneId: deliverableId ? null : (milestoneId ?? null), triaged: true,
+      createdBy: task.createdBy || (auth.currentUser?.uid ?? ''),
+      createdByEmail: task.createdByEmail || (auth.currentUser?.email ?? ''),
+      createdAt: serverTimestamp(), completedAt: task.completedAt ?? null, completedBy: task.completedBy ?? null,
+    })
+    await updateDoc(doc(db, 'projects', projectId), { taskCount: increment(1) })
+    if (deliverableId) await updateDoc(doc(db, 'projects', projectId, 'tasks', deliverableId), { deliverableTaskIds: arrayUnion(ref.id) })
+    await deleteDoc(doc(db, 'tasks', task.id))
+    return ref.id
+  }
+
+  // Aggancia un task GIÀ in un progetto a un deliverable (se non già presente altrove).
+  async function attachToDeliverable(projectId: string, deliverableId: string, taskId: string) {
+    await updateDoc(doc(db, 'projects', projectId, 'tasks', deliverableId), { deliverableTaskIds: arrayUnion(taskId) })
   }
 
   async function deleteTask(projectId: string | null, taskId: string, wasCompleted: boolean) {
@@ -160,7 +199,7 @@ export function useAllTasks() {
     }
   }
 
-  return { tasks, loading, completeTask, uncompleteTask, createTask, updateTask, deleteTask }
+  return { tasks, loading, completeTask, uncompleteTask, createTask, updateTask, deleteTask, fileStandaloneTask, attachToDeliverable }
 }
 
 export async function createStandaloneTask(data: {

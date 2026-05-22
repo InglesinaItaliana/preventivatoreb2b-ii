@@ -1,20 +1,20 @@
 <script setup lang="ts">
 import { ref, computed, inject, watch, onMounted, nextTick, type Ref } from 'vue'
-import { useRouter } from 'vue-router'
 import MIcon from '../../components/shared/MIcon.vue'
 import MdPageHeader from '../../components/shared/MdPageHeader.vue'
-import GoalChip from '../../components/cepheid/GoalChip.vue'
+import CepheidProjectCard from '../../components/cepheid/CepheidProjectCard.vue'
 import { useProjects, type Project } from '../../composables/sidera/useProjects'
 import { useObiettivi } from '../../composables/sidera/useObiettivi'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
+import { useTeamMembers } from '../../composables/sidera/useTeamMembers'
+import { useAllTasks } from '../../composables/sidera/useAllTasks'
 
-const router = useRouter()
 const { projects, activeProjects, loading, createProject, updateProject, deleteProject, toggleActive } = useProjects()
 const { obiettiviAttivi } = useObiettivi()
 const { currentUser } = useCurrentUser()
+const { members } = useTeamMembers()
+const { tasks: allTasks } = useAllTasks()
 const isAdmin = computed(() => currentUser.value?.role === 'ADMIN' || currentUser.value?.email === 'info@inglesinaitaliana.it')
-
-const COLOR_PRESETS = ['#D4A020', '#2F6B4A', '#3A8C80', '#C8521A', '#7A8FA6', '#9B5BB5']
 
 // ── Visibility: admin vede anche inactive (port da ProjectsView SIDERA) ────
 const adminProjects = computed(() => projects.value.filter(p => !p.archived))
@@ -23,20 +23,39 @@ const baseProjects = computed(() => isAdmin.value ? adminProjects.value : active
 // ── Filtro per obiettivo ──────────────────────────────────────────────────
 const filterObiettivoId = ref<string>('') // '' = tutti
 
-const visibleProjects = computed(() => {
-  if (!filterObiettivoId.value) return baseProjects.value
-  if (filterObiettivoId.value === '__none__') {
-    return baseProjects.value.filter(p => !p.obiettivoId)
+// Data di fine DERIVATA per progetto = scadenza del deliverable più tardivo
+// (uguale a quella mostrata in timeline quando il progetto non ha dueDate proprio).
+const derivedEnd = computed(() => {
+  const m: Record<string, number> = {}
+  for (const t of allTasks.value) {
+    if (t.type === 'deliverable' && t.dueDate) {
+      const ts = t.dueDate.getTime()
+      if (!(t.projectId in m) || ts > m[t.projectId]) m[t.projectId] = ts
+    }
   }
-  return baseProjects.value.filter(p => p.obiettivoId === filterObiettivoId.value)
+  return m
+})
+
+// Sort: attivi prima → data di fine effettiva (campo dueDate, altrimenti derivata) crescente → creazione desc.
+function projSort(a: Project, b: Project): number {
+  const aa = a.active !== false ? 0 : 1
+  const ba = b.active !== false ? 0 : 1
+  if (aa !== ba) return aa - ba
+  const ae = a.dueDate ? a.dueDate.getTime() : (derivedEnd.value[a.id] ?? Infinity)
+  const be = b.dueDate ? b.dueDate.getTime() : (derivedEnd.value[b.id] ?? Infinity)
+  if (ae !== be) return ae - be
+  return b.createdAt.getTime() - a.createdAt.getTime()
+}
+
+const visibleProjects = computed(() => {
+  let list = baseProjects.value
+  if (filterObiettivoId.value === '__none__') list = list.filter(p => !p.obiettivoId)
+  else if (filterObiettivoId.value) list = list.filter(p => p.obiettivoId === filterObiettivoId.value)
+  return [...list].sort(projSort)
 })
 
 // ── Context menu (port ProjectsView SIDERA) ────────────────────────────────
 const menuOpen = ref<string | null>(null)
-function openMenu(id: string, e: Event) {
-  e.stopPropagation()
-  menuOpen.value = menuOpen.value === id ? null : id
-}
 function closeMenu() { menuOpen.value = null }
 async function confirmDelete(id: string, e: Event) {
   e.stopPropagation()
@@ -58,7 +77,6 @@ const editingProject = ref<Project | null>(null)
 const projForm = ref({
   name:         '',
   description:  '',
-  color:        COLOR_PRESETS[0],
   dueDate:      '',
   obiettivoId:  '',
 })
@@ -68,7 +86,6 @@ function openProjModal() {
   projForm.value = {
     name:        '',
     description: '',
-    color:       COLOR_PRESETS[0],
     dueDate:     '',
     obiettivoId: filterObiettivoId.value && filterObiettivoId.value !== '__none__' ? filterObiettivoId.value : '',
   }
@@ -82,7 +99,6 @@ function openEditProjModal(p: Project, e: Event) {
   projForm.value = {
     name:        p.name,
     description: p.description,
-    color:       p.color,
     dueDate:     p.dueDate ? p.dueDate.toISOString().split('T')[0] : '',
     obiettivoId: p.obiettivoId ?? '',
   }
@@ -103,7 +119,6 @@ async function submitProject() {
       await updateProject(editingProject.value.id, {
         name:        projForm.value.name.trim(),
         description: projForm.value.description.trim(),
-        color:       projForm.value.color,
         dueDate,
         obiettivoId: projForm.value.obiettivoId || null,
       })
@@ -111,7 +126,7 @@ async function submitProject() {
       await createProject({
         name:        projForm.value.name.trim(),
         description: projForm.value.description.trim(),
-        color:       projForm.value.color,
+        color:       '#C4941C',
         dueDate,
         obiettivoId: projForm.value.obiettivoId || null,
       })
@@ -134,11 +149,6 @@ async function doDeleteFromModal() {
   } finally {
     projDeleting.value = false
   }
-}
-
-function pct(p: { taskCount: number; doneCount: number }) {
-  if (!p.taskCount) return 0
-  return Math.round((p.doneCount / p.taskCount) * 100)
 }
 
 // ── Trigger dal FAB del layout ─────────────────────────────────────────────
@@ -189,55 +199,18 @@ onMounted(() => {
         {{ filterObiettivoId ? 'Nessun progetto per questo filtro.' : 'Nessun progetto.' }}
       </div>
 
-      <div
+      <CepheidProjectCard
         v-for="p in visibleProjects"
         :key="p.id"
-        class="proj-row"
-        :class="{ 'proj-row--inactive': p.active === false }"
-        @click="router.push('/cepheid/project/' + p.id)"
-      >
-        <div class="proj-stripe" :style="{ background: p.color }" />
-        <div class="proj-body">
-          <div class="proj-top">
-            <div class="proj-name">{{ p.name }}</div>
-            <div class="proj-top-actions">
-              <GoalChip
-                v-if="obiettivoFor(p.obiettivoId)"
-                :titolo="obiettivoFor(p.obiettivoId)!.titolo"
-                :colore="obiettivoFor(p.obiettivoId)!.colore"
-                size="sm"
-              />
-              <span v-if="p.active === false" class="badge-inactive">Inattivo</span>
-              <button
-                v-if="isAdmin"
-                class="proj-toggle-btn"
-                :title="p.active !== false ? 'Disattiva progetto' : 'Attiva progetto'"
-                @click.stop="toggleActive(p.id, p.active === false)"
-              >
-                <MIcon :name="p.active !== false ? 'pause' : 'play_arrow'" :size="16" />
-              </button>
-              <div v-if="isAdmin" class="proj-menu-wrap" @click.stop>
-                <button class="proj-more" @click="openMenu(p.id, $event)" aria-label="Menu progetto">
-                  <MIcon name="more_horiz" :size="18" />
-                </button>
-                <div v-if="menuOpen === p.id" class="proj-dropdown">
-                  <button class="proj-dropdown-item" @click="openEditProjModal(p, $event)">
-                    <MIcon name="edit" :size="14" /> Modifica progetto
-                  </button>
-                  <button class="proj-dropdown-item proj-dropdown-item--danger" @click="confirmDelete(p.id, $event)">
-                    <MIcon name="delete" :size="14" /> Elimina progetto
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div v-if="p.description" class="proj-desc">{{ p.description }}</div>
-          <div class="proj-stats">{{ p.doneCount }}/{{ p.taskCount }} azioni · {{ pct(p) }}%</div>
-          <div class="prog-track">
-            <div class="prog-fill" :style="{ width: pct(p) + '%', background: p.color }" />
-          </div>
-        </div>
-      </div>
+        :project="p"
+        :members="members"
+        :is-admin="isAdmin"
+        :obiettivo="obiettivoFor(p.obiettivoId)"
+        :update-project="updateProject"
+        @edit="openEditProjModal"
+        @delete="confirmDelete"
+        @toggle-active="toggleActive"
+      />
     </div>
 
     <!-- Modal Nuovo progetto -->
@@ -260,19 +233,6 @@ onMounted(() => {
               <option value="">— Nessun obiettivo —</option>
               <option v-for="o in obiettiviAttivi" :key="o.id" :value="o.id">{{ o.titolo }}</option>
             </select>
-
-            <label class="field-label md-text-field-label" style="margin-top:12px">Colore</label>
-            <div class="color-picker">
-              <button
-                v-for="c in COLOR_PRESETS"
-                :key="c"
-                type="button"
-                class="color-swatch"
-                :class="{ 'is-sel': projForm.color === c }"
-                :style="{ background: c }"
-                @click="projForm.color = c"
-              />
-            </div>
 
             <label class="field-label md-text-field-label" style="margin-top:12px">Scadenza</label>
             <input v-model="projForm.dueDate" type="date" class="field-input field-date" />
@@ -302,31 +262,32 @@ onMounted(() => {
 .pv {
   font-family: 'Outfit', sans-serif;
   color: var(--md-sys-color-on-surface);
-  min-height: calc(100vh - 120px);
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  /* sfondo pagina come il riferimento cepheid-timeline.html */
+  background: #EFE7D9;
+}
+.s-surface-dark .pv { background: #0E0C07; }
+@media (prefers-color-scheme: dark) { .pv { background: #0E0C07; } }
+.pv :deep(.md-page-header) { flex-shrink: 0; }
+
+.pv-content {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
-.pv-content { padding: 16px; display: flex; flex-direction: column; gap: 8px; }
-
-/* Desktop wide: grid 2 colonne di project card, container centrato.
-   Su mobile/tablet resta lista verticale singola. */
+/* Desktop: lista a colonna singola centrata (le card-timeline si espandono
+   in larghezza, quindi niente griglia multi-colonna). */
 @media (min-width: 1024px) {
   :deep(.md-page-header) { padding: 24px 40px 18px; }
-  .pv-content  {
-    padding: 24px 40px;
-    max-width: 1280px;
-    margin: 0 auto;
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 12px;
-  }
-  .pv-filter,
-  .loading-rows,
-  .empty-state {
-    grid-column: 1 / -1; /* questi span full-width nella grid */
-  }
-}
-@media (min-width: 1440px) {
-  .pv-content { grid-template-columns: repeat(3, 1fr); padding: 32px 56px; }
+  .pv-content { padding: 24px 40px; max-width: 900px; margin: 0 auto; width: 100%; }
 }
 
 .pv-filter {
@@ -568,17 +529,6 @@ onMounted(() => {
 .field-input:focus { border-color: var(--md-sys-color-primary); }
 .field-date { color-scheme: light; }
 
-.color-picker { display: flex; gap: 8px; }
-
-.color-swatch {
-  width: 32px; height: 32px;
-  border-radius: var(--md-sys-shape-corner-full);
-  border: 2px solid transparent;
-  cursor: pointer;
-  transition: transform 0.15s, border-color 0.15s;
-}
-
-.color-swatch.is-sel { border-color: var(--md-sys-color-on-surface); transform: scale(1.1); }
 
 .modal-footer {
   display: flex;

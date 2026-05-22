@@ -16,6 +16,7 @@ const emit = defineEmits<{
   (e: 'toggle-timed', id: string): void
   (e: 'set-phase-due', payload: { phase: PhaseVM; iso: string }): void
   (e: 'approve', id: string): void
+  (e: 'unapprove', id: string): void
 }>()
 
 const dueInput = ref<HTMLInputElement | null>(null)
@@ -72,39 +73,18 @@ function openDuePicker() {
             >
           </div>
         </div>
-        <div v-if="phase.approved" class="cs">approvato</div>
+        <div v-if="phase.approved" class="cs cs-approved">
+          approvato
+          <button class="undo-appr" title="Annulla approvazione (test)" @click="emit('unapprove', phase.id)">
+            <MIcon name="undo" :size="14" />
+          </button>
+        </div>
         <div v-else-if="phase.delivLate" class="cs late">approvazione in ritardo</div>
         <div v-else-if="phase.ready" class="cs ready">pronto — approva per attivare la milestone</div>
         <div v-else class="cs">in attesa dei task</div>
         <button v-if="phase.canApprove" class="approve" @click="emit('approve', phase.id)">
           <MIcon name="check" :size="16" /> Approva {{ phase.delivName }}
         </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- milestone (se collegata) -->
-  <div v-if="phase.mileName" class="row" :class="{ locked: !phase.unlocked }">
-    <div class="rail">
-      <div class="spine" :class="{ 'is-on': phase.mileReached }" :style="phase.isLast ? 'bottom:50%' : ''" />
-      <div class="mk-mile" :class="{ reached: phase.mileReached }" :data-t="phase.windowEndTs" data-anchor>
-        <MIcon v-if="phase.mileReached" name="rocket_launch" :size="13" class="mile-icon" />
-      </div>
-    </div>
-    <div class="cell">
-      <div v-if="phase.mileReached" class="mcard">
-        <div>
-          <div class="mt">{{ phase.mileName }}</div>
-          <div class="msb">raggiunta · {{ fmt(phase.windowEnd) }}</div>
-        </div>
-      </div>
-      <div v-else class="mwrap">
-        <div class="mname">{{ phase.mileName }}</div>
-        <div class="mstat" :class="{ late: phase.mileLate }">
-          {{ phase.mileLate ? 'scaduta · ' + fmt(phase.windowEnd)
-             : phase.ready ? 'in attesa di approvazione'
-             : phase.unlocked ? 'obiettivo · ' + fmt(phase.windowEnd) : 'bloccata' }}
-        </div>
       </div>
     </div>
   </div>
@@ -129,16 +109,6 @@ function openDuePicker() {
 }
 .mk-deliv.ready { background: var(--md-sys-color-primary); border-color: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); }
 
-/* marker rombo (milestone) */
-.mk-mile {
-  position: relative; z-index: 2; width: 24px; height: 24px; box-sizing: border-box;
-  display: flex; align-items: center; justify-content: center; transform: rotate(45deg);
-  border: 2px solid var(--md-sys-color-outline); color: var(--md-sys-color-outline);
-  background: var(--md-sys-color-surface);
-}
-.mk-mile.reached { border-color: var(--md-sys-color-primary); background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); }
-.mile-icon { transform: rotate(-45deg); }
-
 .due-hidden { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; border: 0; padding: 0; margin: 0; }
 
 .dcard { position: relative; min-height: 60px; display: flex; flex-direction: column; justify-content: center; gap: 4px; background: var(--md-sys-color-surface-container); border: 1px solid var(--md-sys-color-outline-variant); border-radius: var(--md-sys-shape-corner-large); padding: 12px 15px; margin: 5px 0; transition: background .2s, border-color .2s; }
@@ -149,6 +119,14 @@ function openDuePicker() {
 .cs { font-size: 13px; color: var(--md-sys-color-on-surface-variant); }
 .cs.ready { color: var(--md-sys-color-primary); font-weight: 500; }
 .cs.late { color: var(--md-sys-color-error); font-weight: 500; }
+.cs-approved { display: flex; align-items: center; gap: 6px; }
+.undo-appr {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; border: 0; border-radius: var(--md-sys-shape-corner-full);
+  background: color-mix(in srgb, var(--md-sys-color-on-primary-container) 12%, transparent);
+  color: var(--md-sys-color-on-primary-container); cursor: pointer;
+}
+.undo-appr:hover { background: color-mix(in srgb, var(--md-sys-color-on-primary-container) 22%, transparent); }
 .ddwrap { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; }
 .ddlab { font-size: 11px; color: var(--md-sys-color-on-surface-variant); }
 .ddval { font-size: 11px; font-weight: 500; color: var(--md-sys-color-on-surface); }
@@ -159,14 +137,6 @@ function openDuePicker() {
 
 .approve { display: inline-flex; align-items: center; gap: 6px; margin-top: 11px; height: 40px; padding: 0 18px; border-radius: var(--md-sys-shape-corner-full); border: 0; background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); font-size: 14px; font-weight: 500; font-family: inherit; cursor: pointer; align-self: flex-start; }
 .approve:active { transform: scale(.97); }
-
-.mwrap { padding: 8px 0 8px 12px; }
-.mname { font-size: 16px; font-weight: 500; color: var(--md-sys-color-on-surface); }
-.mstat { font-size: 13px; margin-top: 2px; color: var(--md-sys-color-on-surface-variant); }
-.mstat.late { color: var(--md-sys-color-error); font-weight: 500; }
-.mcard { position: relative; min-height: 60px; display: flex; align-items: center; gap: 12px; border-radius: var(--md-sys-shape-corner-large); padding: 14px 16px; margin: 5px 0; background: var(--md-sys-color-primary); }
-.mcard .mt { font-size: 17px; font-weight: 500; color: var(--md-sys-color-on-primary); }
-.mcard .msb { font-size: 13px; color: color-mix(in srgb, var(--md-sys-color-on-primary) 82%, var(--md-sys-color-primary)); margin-top: 4px; }
 
 .gap { height: 6px; position: relative; }
 .gap::before { content: ''; position: absolute; left: 24px; top: 0; bottom: 0; width: 2px; transform: translateX(-50%); background: var(--md-sys-color-outline-variant); }

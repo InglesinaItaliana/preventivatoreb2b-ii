@@ -100,7 +100,7 @@ function onFabTrigger(action: 'new-chat' | 'new-task' | 'new-project' | 'new-goa
         sessionStorage.setItem('cepheid-pending-new-project', '1')
         router.push('/cepheid/projects')
       }
-    } else if (p === '/cepheid' || p === '/cepheid/due') {
+    } else if (p === '/cepheid' || p === '/cepheid/smistamento') {
       newTaskTick.value++
     } else {
       sessionStorage.setItem('cepheid-pending-new-task', '1')

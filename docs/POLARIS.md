@@ -48,7 +48,7 @@ POLARIS è la roadmap che governa l'evoluzione architetturale di `preventivatore
 
 ---
 
-## 2. Roadmap — 7 azioni con priorità
+## 2. Roadmap — 8 azioni con priorità
 
 | # | Priorità | Azione | Trigger ideale | Rischio POPS | Stato |
 |---|---|---|---|---|---|
@@ -59,6 +59,7 @@ POLARIS è la roadmap che governa l'evoluzione architetturale di `preventivatore
 | 5 | 🟢 Bassa | **`name` manifest più parlanti** | Quando si lavora su uno scope per altri motivi | Nessuno | ☑ (piggyback su azione 2) |
 | 6 | 🟢 Bassa | **`meta.scope` unificato nel router guard** | Da 4+ PWA in poi | Medio (test ruoli POPS obbligatori) | ☐ |
 | 7 | ⚪ Differita | **Separazione deploy POPS vs interno** | Tra 6–12 mesi, se POPS cresce o legal richiede dominio separato | Altissimo | ⏸ |
+| 8 | 🟢 Bassa | **Hub Schlegel landing interattiva** (sidebar collassabile + click vertice → sezione) | Quando tutte e 6 le PWA sono attive | Medio (SideraLayout condiviso) | ☐ |
 
 **Legenda stato:** ☐ da fare · 🔄 in corso · ☑ fatto · ⏸ rimandato esplicitamente · ❌ scartato
 
@@ -282,6 +283,40 @@ POLARIS è la roadmap che governa l'evoluzione architetturale di `preventivatore
 
 ---
 
+### Azione 8 — Hub Schlegel landing interattiva 🟢
+
+**Gate: NON prima che tutte e 6 le PWA (QUASAR, NEBULA, CEPHEID, PULSAR, NOVA, MAGNETAR) siano attive con config completa.** Oggi solo 3 vertici (PULSAR/CEPHEID/NEBULA) hanno `scopeConfig.mobileNav` popolato; gli altri 3 sono placeholder. L'effetto-wow ha senso solo quando ogni vertice porta a una sezione reale.
+
+**Idea (utente, 2026-05-21).** Trasformare l'ingresso in SIDERA in una landing page "effetto wow":
+1. Quando si entra su `/sidera` (o si clicca il logo SIDERA), la sidebar **si chiude** e resta solo lo Schlegel interattivo centrato a tutto schermo.
+2. Cliccando un **vertice** dello Schlegel, la sidebar **rientra aprendosi sulla sezione corrispondente**, navigando alla **prima voce** del menu di quel modulo (`scopeConfig.mobileNav[0]`).
+
+**Pezzi già esistenti (~70%).**
+- `SideraHubView.vue` (`/sidera/hub`) ha già lo Schlegel interattivo a tutto schermo con hit-area per vertice (oggi solo hover → mostra nome+desc, **nessun click→navigazione**).
+- `scopeConfig.mobileNav[0]` fornisce la "prima voce" di ogni modulo.
+- Le sezioni sidebar per modulo esistono già in `SideraLayout`.
+
+**Soluzione (bozza, da dettagliare a gate raggiunto).**
+- Aggiungere stato `collapsed` a `SideraLayout`, **vincolato al solo path `/sidera*`** (non deve toccare il chrome di pulsar/cepheid/nebula/...).
+- Transizione CSS: sidebar 220px → 0 (o icon-rail) + Schlegel che scala al centro. È qui il "wow".
+- Wire dei click sui vertici: vertice → `router.push(scopeConfig[modulo].mobileNav[0].path)` + espansione sidebar sulla sezione.
+- **Decisione aperta**: consolidare `/sidera` e `/sidera/hub` in un solo entry point, oppure tenerli distinti (landing collassata vs cruscotto). Da decidere a gate raggiunto.
+
+**File toccati (previsti).**
+- `src/views/sidera/SideraLayout.vue` (stato collapsed + transizioni, vincolato a `/sidera*`)
+- `src/views/sidera/SideraHubView.vue` (click handler sui vertici → navigazione)
+- Eventuale consolidamento rotte in `src/router/index.ts` (se si fonde hub+cruscotto)
+
+**Rischio POPS.** Nessuno diretto. **Rischio suite: Medio** — `SideraLayout` è il layout condiviso da tutti gli scope; lo stato collassato va isolato a `/sidera*` per non rompere il chrome mobile degli altri moduli.
+
+**Test obbligatori prima del merge.**
+- ☐ `/sidera` → sidebar collassata, Schlegel centrato, animazione fluida
+- ☐ Click su ciascuno dei 6 vertici → naviga alla prima voce del modulo + sidebar aperta sulla sezione giusta
+- ☐ Scope non-sidera (pulsar/cepheid/nebula) → nessuna regressione del chrome (sidebar/bottom-nav/FAB invariati)
+- ☐ Mobile-layout (`≤768px` / standalone) → comportamento coerente, niente sidebar collassata fantasma
+
+---
+
 ## 4. Decisioni esplicite
 
 > Quando si sceglie di NON fare un'azione POLARIS, o di farla in un modo diverso da quello pianificato, annotare qui con data e motivo. Aiuta a non rivisitare le stesse domande tra mesi.
@@ -359,3 +394,4 @@ Quando si decide di lavorare su un'azione POLARIS:
 - **2026-05-19** — Azione 4 mergiata (PR #6) e deployata in produzione. 5 azioni POLARIS su 7 completate.
 - **2026-05-19** — Feature extra (fuori-azioni POLARIS): **CEPHEID Asana-flavored** (PR #8, branch `feature/cepheid-asana`). Introdotta gerarchia Obiettivi → Progetti → (task | milestone | deliverable) con schema retrocompatibile. Nuova collection `obiettivi/` (regole Firestore deployate). Discriminator `tasks/{id}.type` aggiunto alla collection condivisa con SIDERA: filtri lato view in SIDERA TasksView/ProjectBoard per non mostrare milestone/deliverable come task. ProjectBoard SIDERA esteso con 2 view tab Milestone+Deliverable. File POPS toccati: zero. **Mergiata (PR #8) e deployata in produzione** (Hosting + Rules).
 - **2026-05-20** — **NEBULA promossa a 4ª PWA installabile** (branch `feature/nebula-pwa`, feature extra ATLAS — ricetta sez. 3). Manifest statico `/public/nebula.webmanifest` (scope `/nebula/`, name "NEBULA — Team Inglesina"). Icone single-vertex generate da `scripts/nebula-icon.svg` (palette `#C46030`, 4 raggi verso QUASAR/NOVA/MAGNETAR/CEPHEID coerenti col Schlegel) → `public/icons/nebula-{180,192,512}.png` via sharp-cli. Ramo `/nebula` aggiunto allo script inline `index.html`. `scopeConfig.ts` aggiornato: `SCOPE_CONFIGS.nebula` ora popolato (mobileNav: Team, `notificationScope: 'nebula'`, `isTopLevelPath`); type `notificationScope` esteso con `'nebula'` (anche in `useNotifications.ts`). Router: nuova rotta `/nebula/login` (ScopedLogin, primary `#B85425`) + `/nebula` (SideraLayout child → NebulaTeamView, name `nebula-team` preservato), `meta: { nebulaScope: true }`. Rotta legacy `/sidera/nebula` **rimossa** (no redirect: bookmark da rigenerare). Guard `beforeEach` esteso con `isNebulaScope` per redirect login fallback. `SideraLayout` desktop sidebar ora legge `SCOPE_CONFIGS.nebula.mobileNav` come single source of truth (parità con pattern CEPHEID). Cloud Function FCM: **non aggiunta** (NEBULA non ha eventi di notifica per ora). File POPS toccati: `index.html` + `src/router/index.ts` (rischio basso — solo aggiunte/rami isolati per `/nebula`). **Sblocca azione 6**: ora siamo a 4 PWA e il refactor `meta.scope` ha trigger reale. Deploy + test PWA reali (iOS/Android Add-to-Home) pendenti.
+- **2026-05-21** — Aggiunta **Azione 8 — Hub Schlegel landing interattiva** alla roadmap (🟢 bassa priorità). Idea utente: entrare su `/sidera` collassa la sidebar lasciando lo Schlegel interattivo a tutto schermo; click su un vertice riapre la sidebar sulla sezione del modulo (prima voce del menu). Gate esplicito: **non implementare prima che tutte e 6 le PWA siano attive** (oggi solo 3 vertici hanno config completa). Nessun codice scritto — solo pianificazione.

@@ -10,18 +10,24 @@ import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
 import { useTeamMembers, displayName, starAvatarProps } from '../../composables/sidera/useTeamMembers'
 import StarAvatar from '../../components/shared/StarAvatar.vue'
 import CepheidTimeline from '../../components/cepheid/CepheidTimeline.vue'
+import CepheidCreateMenu from '../../components/cepheid/CepheidCreateMenu.vue'
+import CepheidCreateModal from '../../components/cepheid/CepheidCreateModal.vue'
 
 const route   = useRoute()
 const router  = useRouter()
 const projectId = route.params.id as string
 
 const { projects, updateProject } = useProjects()
-const { tasks, loading, createTask, completeTask, uncompleteTask, updateTaskStatus, updateTask, deleteTask, approvePhase, unapprovePhase } = useProjectTasks(projectId)
+const { tasks, loading, createTask, completeTask, uncompleteTask, updateTaskStatus, updateTask, deleteTask, approvePhase, unapprovePhase, createPhaseBundle } = useProjectTasks(projectId)
 const { obiettiviAttivi } = useObiettivi()
 const { currentUser } = useCurrentUser()
 const { members } = useTeamMembers()
 
 const project = computed(() => projects.value.find(p => p.id === projectId))
+const projectDueIso = computed(() => {
+  const d = project.value?.dueDate
+  return d ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}` : undefined
+})
 const states = computed(() => project.value?.states ?? DEFAULT_STATES)
 
 const obiettivoCollegato = computed(() => {
@@ -94,10 +100,21 @@ async function changeStatus(taskId: string, newStatus: string) {
 }
 
 // ── MILESTONE ─────────────────────────────────────────────────────────────
+// data milestone DERIVATA = scadenza del deliverable più tardivo collegato
+function mileDerivedDate(mId: string): Date | null {
+  const ds = tasks.value.filter(t => t.type === 'deliverable' && t.milestoneId === mId && t.dueDate)
+  if (!ds.length) return null
+  return new Date(Math.max(...ds.map(d => d.dueDate!.getTime())))
+}
+function mileDateLabel(mId: string): string {
+  const d = mileDerivedDate(mId)
+  return d ? formatDue(d) : 'definita dai deliverable'
+}
+
 const milestoneSorted = computed(() => {
   return [...milestoneItems.value].sort((a, b) => {
-    const da = a.dueDate?.getTime() ?? Number.MAX_SAFE_INTEGER
-    const db = b.dueDate?.getTime() ?? Number.MAX_SAFE_INTEGER
+    const da = mileDerivedDate(a.id)?.getTime() ?? Number.MAX_SAFE_INTEGER
+    const db = mileDerivedDate(b.id)?.getTime() ?? Number.MAX_SAFE_INTEGER
     return da - db
   })
 })
@@ -105,6 +122,16 @@ const milestoneSorted = computed(() => {
 async function toggleMilestone(m: { id: string; completedAt: Date | null }) {
   if (m.completedAt) await uncompleteTask(m.id)
   else await completeTask(m.id)
+}
+
+// edit titolo milestone (inline)
+const editingMileId = ref<string | null>(null)
+const editMileTitle = ref('')
+function startEditMile(m: { id: string; title: string }) { editingMileId.value = m.id; editMileTitle.value = m.title }
+async function saveMile() {
+  const id = editingMileId.value
+  if (id && editMileTitle.value.trim()) await updateTask(id, { title: editMileTitle.value.trim() })
+  editingMileId.value = null
 }
 
 // ── DELIVERABLE ───────────────────────────────────────────────────────────
@@ -171,104 +198,15 @@ function onNotesInput() {
 
 onBeforeUnmount(() => { if (notesTimer) clearTimeout(notesTimer) })
 
-// ── Modale unificata per nuova creazione (task / milestone / deliverable) ─
-type NewKind = 'task' | 'milestone' | 'deliverable'
-const showModal = ref(false)
-const modalKind = ref<NewKind>('task')
-const saving    = ref(false)
-const form = ref({
-  title:     '',
-  priority:  'media' as 'alta' | 'media' | 'bassa',
-  dueDate:   '',
-  assignees: [] as string[],
-  status:    'todo',
-  deliverableTaskIds: [] as string[],
-  deliverableId: '' as string,
-})
+// ── Creazione (menu + modal condiviso) ─────────────────────────────────────
+const createOpen = ref(false)
+const createKind = ref<'fase' | 'deliverable' | 'milestone' | 'task'>('task')
+function openCreate(kind: 'fase' | 'deliverable' | 'milestone' | 'task') { createKind.value = kind; createOpen.value = true }
 
-function openModal(kind: NewKind) {
-  modalKind.value = kind
-  form.value = {
-    title:              '',
-    priority:           'media',
-    dueDate:            '',
-    assignees:          kind === 'milestone' ? [] : (currentUser.value?.email ? [currentUser.value.email] : []),
-    status:             'todo',
-    deliverableTaskIds: [],
-    deliverableId:      '',
-  }
-  showModal.value = true
-}
-
-function toggleAssignee(email: string) {
-  const idx = form.value.assignees.indexOf(email)
-  if (idx === -1) form.value.assignees.push(email)
-  else form.value.assignees.splice(idx, 1)
-}
-
-function toggleDeliverableSubTask(taskId: string) {
-  const idx = form.value.deliverableTaskIds.indexOf(taskId)
-  if (idx === -1) form.value.deliverableTaskIds.push(taskId)
-  else form.value.deliverableTaskIds.splice(idx, 1)
-}
-
-function parseDateInput(s: string): Date {
-  const [y, m, d] = s.split('-').map(Number)
-  return new Date(y, m - 1, d)
-}
-
-async function submitForm() {
-  if (!form.value.title.trim() || saving.value) return
-  saving.value = true
-  try {
-    const dueDate = form.value.dueDate ? parseDateInput(form.value.dueDate) : null
-    await createTask({
-      title:              form.value.title.trim(),
-      status:             form.value.status,
-      priority:           form.value.priority,
-      dueDate,
-      assignees:          form.value.assignees,
-      type:               modalKind.value,
-      deliverableTaskIds: modalKind.value === 'deliverable' ? form.value.deliverableTaskIds : [],
-      deliverableId:      modalKind.value === 'milestone' && form.value.deliverableId ? form.value.deliverableId : null,
-    })
-    showModal.value = false
-  } catch (e) {
-    console.error('[CEPHEID] item creation error', e)
-  } finally {
-    saving.value = false
-  }
-}
-
-const prioOptions = [
-  { id: 'alta',  label: 'Alta',  color: '#C8521A' },
-  { id: 'media', label: 'Media', color: '#D4A020' },
-  { id: 'bassa', label: 'Bassa', color: '#7A8FA6' },
-] as const
-
-const modalTitle = computed(() => {
-  if (modalKind.value === 'milestone') return 'Nuova milestone'
-  if (modalKind.value === 'deliverable') return 'Nuovo deliverable'
-  return 'Nuova azione'
-})
-const ctaLabel = computed(() => {
-  if (activeTab.value === 'milestone')   return 'Nuova milestone'
-  if (activeTab.value === 'deliverable') return 'Nuovo deliverable'
-  return 'Nuova azione'
-})
-function openCurrentTabModal() {
-  openModal(activeTab.value === 'kanban' ? 'task' : activeTab.value)
-}
-const modalCta = computed(() => {
-  if (modalKind.value === 'milestone') return saving.value ? 'Creazione…' : 'Crea milestone'
-  if (modalKind.value === 'deliverable') return saving.value ? 'Creazione…' : 'Crea deliverable'
-  return saving.value ? 'Creazione…' : 'Crea azione'
-})
-
-// ── FAB del layout → apre il modal del tab attivo ─────────────────────────
+// ── FAB del layout → crea task rapida ─────────────────────────────────────
 const newTaskTick = inject<Ref<number>>('cepheid-new-task-tick', null as any)
 if (newTaskTick) {
-  watch(newTaskTick, () => openModal(activeTab.value === 'kanban' ? 'task' : activeTab.value))
+  watch(newTaskTick, () => openCreate('task'))
 }
 
 // ── Delete con conferma ───────────────────────────────────────────────────
@@ -350,12 +288,10 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
           <MIcon name="description" :size="14" /> Note
         </button>
       </div>
-      <button class="header-cta" @click="openCurrentTabModal">
-        <MIcon name="add" :size="16" /> {{ ctaLabel }}
-      </button>
+      <CepheidCreateMenu class="header-create" @select="openCreate" />
     </div>
 
-    <div class="pd-content">
+    <div class="pd-content" :class="{ 'pd-content--timeline': activeTab === 'timeline' }">
       <div v-if="loading" class="loading-rows">
         <div v-for="i in 3" :key="i" class="row-skel" />
       </div>
@@ -452,10 +388,19 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
               <MIcon v-if="m.completedAt" name="check" :size="14" />
             </button>
             <div class="milestone-body">
-              <div class="milestone-title" :class="{ 'is-done': m.completedAt }">{{ m.title }}</div>
-              <div v-if="m.dueDate" class="milestone-date">{{ formatDue(m.dueDate) }}</div>
-              <div v-else class="milestone-date milestone-date--missing">data non impostata</div>
+              <input
+                v-if="editingMileId === m.id"
+                v-model="editMileTitle"
+                class="milestone-edit-input"
+                @keyup.enter="saveMile"
+                @blur="saveMile"
+              />
+              <div v-else class="milestone-title" :class="{ 'is-done': m.completedAt }" @click="startEditMile(m)">{{ m.title }}</div>
+              <div class="milestone-date">{{ mileDateLabel(m.id) }}</div>
             </div>
+            <button class="row-del-btn" @click="startEditMile(m)" title="Rinomina">
+              <MIcon name="edit" :size="14" />
+            </button>
             <button class="row-del-btn" @click="deleteItem(m)" title="Elimina">
               <MIcon name="close" :size="14" />
             </button>
@@ -574,7 +519,7 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
           :update-project="updateProject"
           :approve-phase="approvePhase"
           :unapprove-phase="unapprovePhase"
-          @new-phase="openModal('deliverable')"
+          @new-phase="openCreate('fase')"
         />
       </template>
 
@@ -597,112 +542,18 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
       </template>
     </div>
 
-    <!-- Modal unificata (task / milestone / deliverable) -->
-    <Teleport to="body">
-      <div v-if="showModal" class="modal-backdrop md-modal-backdrop" @click.self="showModal = false">
-        <div class="modal md-modal-dialog" @click.stop>
-          <div class="modal-header md-modal-header">
-            <span class="modal-title md-modal-title">{{ modalTitle }}</span>
-            <button class="modal-close md-modal-close" @click="showModal = false"><MIcon name="close" :size="18" /></button>
-          </div>
-          <div class="modal-body md-modal-body">
-            <label class="field-label md-text-field-label">Titolo *</label>
-            <input v-model="form.title" class="field-input md-text-field-input" autofocus />
-
-            <!-- Assegnatari (no per milestone) -->
-            <template v-if="modalKind !== 'milestone'">
-              <label class="field-label md-text-field-label" style="margin-top:12px">{{ modalKind === 'deliverable' ? 'Owner' : 'Assegna a' }}</label>
-              <div class="assignees-chips">
-                <div
-                  v-for="m in members"
-                  :key="m.email"
-                  class="assignee-chip"
-                  :class="{ 'is-selected': form.assignees.includes(m.email) }"
-                  :style="form.assignees.includes(m.email) ? { background: 'var(--md-sys-color-primary-container)', borderColor: 'var(--md-sys-color-primary)', color: 'var(--md-sys-color-on-primary-container)' } : {}"
-                  @click="toggleAssignee(m.email)"
-                >
-                  <StarAvatar v-bind="starAvatarProps(m.email, members)" :size="20" />
-                  {{ displayName(m.email, members) }}
-                </div>
-              </div>
-            </template>
-
-            <!-- Priorità (no per milestone) + Scadenza -->
-            <div :style="modalKind === 'milestone' ? 'margin-top:12px' : 'display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px'">
-              <div v-if="modalKind !== 'milestone'">
-                <label class="field-label md-text-field-label">Priorità</label>
-                <div class="prio-picker">
-                  <button
-                    v-for="p in prioOptions"
-                    :key="p.id"
-                    class="prio-opt"
-                    :class="{ 'is-sel': form.priority === p.id }"
-                    :style="form.priority === p.id ? { borderColor: p.color, color: p.color } : {}"
-                    type="button"
-                    @click="form.priority = p.id"
-                  >
-                    <span class="prio-dot" :style="{ background: p.color }" />
-                    {{ p.label }}
-                  </button>
-                </div>
-              </div>
-              <div>
-                <label class="field-label md-text-field-label">{{ modalKind === 'milestone' ? 'Data checkpoint' : 'Scadenza' }}</label>
-                <input v-model="form.dueDate" type="date" class="field-input field-date" />
-              </div>
-            </div>
-
-            <!-- Stato iniziale (solo task) -->
-            <template v-if="modalKind === 'task'">
-              <label class="field-label md-text-field-label" style="margin-top:12px">Stato iniziale</label>
-              <select v-model="form.status" class="field-input md-text-field-input">
-                <option v-for="s in states" :key="s.id" :value="s.id">{{ s.label }}</option>
-              </select>
-            </template>
-
-            <!-- Task collegati (solo deliverable) -->
-            <template v-if="modalKind === 'deliverable'">
-              <label class="field-label md-text-field-label" style="margin-top:12px">Task collegati</label>
-              <div v-if="!taskItems.length" class="modal-empty">
-                Nessun task disponibile in questo progetto.
-              </div>
-              <div v-else class="subtask-picker">
-                <label
-                  v-for="t in taskItems"
-                  :key="t.id"
-                  class="subtask-picker-item"
-                  :class="{ 'is-sel': form.deliverableTaskIds.includes(t.id) }"
-                >
-                  <input
-                    type="checkbox"
-                    :checked="form.deliverableTaskIds.includes(t.id)"
-                    @change="toggleDeliverableSubTask(t.id)"
-                  />
-                  <span>{{ t.title }}</span>
-                </label>
-              </div>
-            </template>
-
-            <!-- Fase collegata (solo milestone) -->
-            <template v-if="modalKind === 'milestone'">
-              <label class="field-label md-text-field-label" style="margin-top:12px">Fase collegata (deliverable)</label>
-              <select v-model="form.deliverableId" class="field-input md-text-field-input">
-                <option value="">— nessuna —</option>
-                <option v-for="d in deliverableItems" :key="d.id" :value="d.id">{{ d.title }}</option>
-              </select>
-            </template>
-          </div>
-          <div class="modal-footer md-modal-footer">
-            <button class="btn-ghost md-btn md-btn--outlined md-btn--rounded" @click="showModal = false">Annulla</button>
-            <button
-              class="btn-primary md-btn md-btn--filled md-btn--rounded"
-              :disabled="!form.title.trim() || saving"
-              @click="submitForm"
-            >{{ modalCta }}</button>
-          </div>
-        </div>
-      </div>
-    </Teleport>
+    <!-- Modal di creazione condiviso (fase / deliverable / milestone / task) -->
+    <CepheidCreateModal
+      v-model:open="createOpen"
+      v-model:kind="createKind"
+      :tasks="tasks"
+      :members="members"
+      :current-user-email="currentUser?.email ?? null"
+      :create-task="createTask"
+      :create-phase-bundle="createPhaseBundle"
+      :update-task="updateTask"
+      :project-due-iso="projectDueIso"
+    />
   </div>
 </template>
 
@@ -854,6 +705,12 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
 }
 
 .pd-content { padding: 16px; flex: 1; min-height: 0; overflow-y: auto; }
+/* Sfondo pagina della Timeline come nel prototipo cepheid-timeline.html */
+.pd-content--timeline { background: #EFE7D9; }
+.s-surface-dark .pd-content--timeline { background: #0E0C07; }
+@media (prefers-color-scheme: dark) {
+  .pd-content--timeline { background: #0E0C07; }
+}
 
 /* Desktop wide: container centrato + padding generoso. Le tabs interne
    (kanban/milestone/deliverable) sono gia' responsive multi-colonna.
@@ -1167,8 +1024,14 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
   font-weight: 600;
   color: #1A1917;
   margin-bottom: 2px;
+  cursor: text;
 }
 .milestone-title.is-done { text-decoration: line-through; color: #9B9590; }
+.milestone-edit-input {
+  font-size: 14px; font-weight: 600; color: #1A1917; margin-bottom: 2px;
+  border: 1px solid var(--md-sys-color-primary); border-radius: var(--md-sys-shape-corner-extra-small);
+  padding: 2px 6px; font-family: 'Outfit', sans-serif; outline: none; width: 100%;
+}
 
 .milestone-date {
   font-size: 11px;
