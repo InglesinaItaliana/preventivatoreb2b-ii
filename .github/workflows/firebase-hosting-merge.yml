@@ -7,7 +7,7 @@ jobs:
   build_and_deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # 1. Configurazione Variabili d'ambiente per le Functions
       - name: Create .env file for Functions
@@ -31,18 +31,14 @@ jobs:
       - name: Install Firebase CLI
         run: npm install -g firebase-tools
 
-      - name: Deploy Cloud Functions
+      # Deploy Functions + Hosting via Firebase CLI (un unico metodo, niente action di terze parti).
+      # Sostituisce FirebaseExtended/action-hosting-deploy@v0 (deprecata, runtime Node 20).
+      # Usa lo stesso service account già impiegato per le functions.
+      # Le preview channel restano possibili in un workflow PR separato con
+      # `firebase hosting:channel:deploy <id>`.
+      - name: Deploy Functions + Hosting
         run: |
           echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT_PREVENTIVATOREB2B_II }}' > sa-key.json
           export GOOGLE_APPLICATION_CREDENTIALS=sa-key.json
-          firebase deploy --only functions --project preventivatoreb2b-ii
+          firebase deploy --only functions,hosting --project preventivatoreb2b-ii
           rm sa-key.json
-
-      # 5. Deploy Hosting (già presente)
-        # Questo corrisponde al tuo "firebase deploy --only hosting"
-      - uses: FirebaseExtended/action-hosting-deploy@v0
-        with:
-          repoToken: '${{ secrets.GITHUB_TOKEN }}'
-          firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_PREVENTIVATOREB2B_II }}'
-          channelId: live
-          projectId: preventivatoreb2b-ii
