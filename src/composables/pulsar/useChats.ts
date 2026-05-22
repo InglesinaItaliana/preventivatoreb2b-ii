@@ -34,7 +34,7 @@ export function useChats() {
     return {
       chats,
       loading,
-      createChat: async (_n: string, _m: string[], _g: boolean) => {},
+      createChat: async (_n: string, _m: string[], _g: boolean) => '',
       deleteChat: async (_id: string) => {},
     }
   }
@@ -66,9 +66,9 @@ export function useChats() {
 
   onUnmounted(unsubscribe)
 
-  async function createChat(name: string, members: string[], isGroup: boolean) {
+  async function createChat(name: string, members: string[], isGroup: boolean): Promise<string> {
     const allMembers = members.includes(email) ? members : [...members, email]
-    await addDoc(collection(db, 'chats'), {
+    const ref = await addDoc(collection(db, 'chats'), {
       name,
       isGroup,
       members:       allMembers,
@@ -77,6 +77,7 @@ export function useChats() {
       lastMessageAt: serverTimestamp(),
       createdAt:     serverTimestamp(),
     })
+    return ref.id
   }
 
   async function deleteChat(chatId: string) {

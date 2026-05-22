@@ -5,6 +5,7 @@ import MIcon from '../../components/shared/MIcon.vue'
 import { doc, onSnapshot } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { useMessages } from '../../composables/pulsar/useMessages'
+import { usePulsarPresence } from '../../composables/pulsar/usePulsarPresence'
 import { markChatRead } from '../../composables/pulsar/usePulsarUnread'
 import { useChatHashtags } from '../../composables/pulsar/useChatHashtags'
 import { useTeamMembers, displayName, starAvatarProps } from '../../composables/sidera/useTeamMembers'
@@ -19,6 +20,9 @@ const router = useRouter()
 const chatId = route.params.id as string
 
 const { messages, loading, sendMessage, linkTask, markAnswered } = useMessages(chatId)
+
+// Segnala al server che questa chat è aperta → niente push duplicata mentre la guardo
+usePulsarPresence(chatId)
 
 // Aggiorna "ultimo visto" per la chat ogni volta che arriva un messaggio mentre sono qui.
 watch(messages, (msgs) => {

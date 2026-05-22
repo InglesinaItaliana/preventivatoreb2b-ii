@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { collectionGroup, query, where, orderBy, onSnapshot, getDoc, doc, setDoc } from 'firebase/firestore'
+import { collectionGroup, query, where, orderBy, onSnapshot, getDoc, doc, setDoc, deleteDoc } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { displayName, useTeamMembers, starAvatarProps } from '../../composables/sidera/useTeamMembers'
 import StarAvatar from '../../components/shared/StarAvatar.vue'
@@ -41,7 +41,10 @@ const q = query(
 )
 
 const unsubscribe = onSnapshot(q, async (snap) => {
-  if (snap.metadata.fromCache && snap.empty) return
+  if (snap.metadata.fromCache && snap.empty) {
+    loading.value = false
+    return
+  }
   const results: TagMessage[] = []
   for (const d of snap.docs) {
     const data     = d.data()
@@ -68,7 +71,13 @@ const unsubscribe = onSnapshot(q, async (snap) => {
   }
   tagMessages.value = results
   loading.value = false
-  setDoc(doc(db, 'chatHashtags', tagName), { name: tagName, count: results.length }, { merge: true }).catch(() => {})
+  // Riallinea il contatore denormalizzato al numero reale di messaggi.
+  // Se non ne resta nessuno, elimino il doc così l'hashtag sparisce dai chip.
+  if (results.length === 0) {
+    deleteDoc(doc(db, 'chatHashtags', tagName)).catch(() => {})
+  } else {
+    setDoc(doc(db, 'chatHashtags', tagName), { name: tagName, count: results.length }, { merge: true }).catch(() => {})
+  }
 }, (err) => {
   console.error('[PulsarHashtagView]', err)
   loading.value = false

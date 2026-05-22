@@ -1331,9 +1331,21 @@ exports.onNewPulsarMessage = functions
         const members = chatData.members || [];
         const chatName = chatData.name || '';
         // 2. Target = tutti i membri tranne il sender
+        // …e tranne chi ha la chat APERTA in primo piano: la presence
+        // (chats/{chatId}.activeViewers[email]) viene rinfrescata ~ogni 45s
+        // dalla view; consideriamo "presente" solo un timestamp recente,
+        // così un cleanup mancato (crash) non silenzia le push per sempre.
+        const PRESENCE_FRESH_MS = 90 * 1000;
+        const now = Date.now();
+        const activeViewers = (chatData.activeViewers || {});
+        const isViewing = (email) => {
+            const ts = activeViewers[email];
+            const ms = ts && typeof ts.toMillis === "function" ? ts.toMillis() : 0;
+            return ms > 0 && (now - ms) < PRESENCE_FRESH_MS;
+        };
         const targets = members
             .map((m) => (m || '').toLowerCase().trim())
-            .filter((m) => m && m !== sender);
+            .filter((m) => m && m !== sender && !isViewing(m));
         if (!targets.length)
             return null;
         // 3. Carica fcmTokens dai documenti team
@@ -1429,6 +1441,9 @@ exports.onChatDeleted = functions
     const messagesRef = db.collection('chats').doc(chatId).collection('messages');
     const BATCH_SIZE = 500;
     let totalDeleted = 0;
+    // Conteggio occorrenze hashtag nei messaggi cancellati, per scalare poi
+    // i contatori denormalizzati in chatHashtags (altrimenti restano "fantasma").
+    const hashtagDelta = new Map();
     try {
         // Loop: scarica fino a BATCH_SIZE docs, cancellali in batch atomico, ripeti.
         // Il while si ferma quando la subcollection è vuota (snapshot.empty).
@@ -1439,7 +1454,16 @@ exports.onChatDeleted = functions
             if (snapshot.empty)
                 break;
             const batch = db.batch();
-            snapshot.docs.forEach((d) => batch.delete(d.ref));
+            snapshot.docs.forEach((d) => {
+                var _a;
+                const tags = (((_a = d.data()) === null || _a === void 0 ? void 0 : _a.hashtags) || []);
+                for (const tag of tags) {
+                    if (typeof tag === 'string' && tag) {
+                        hashtagDelta.set(tag, (hashtagDelta.get(tag) || 0) + 1);
+                    }
+                }
+                batch.delete(d.ref);
+            });
             await batch.commit();
             totalDeleted += snapshot.size;
             if (snapshot.size < BATCH_SIZE)
@@ -1449,6 +1473,28 @@ exports.onChatDeleted = functions
     }
     catch (e) {
         console.error(`[onChatDeleted] chat ${chatId}: errore durante cleanup:`, e);
+    }
+    // Scala i contatori hashtag in transazione: se scendono a <= 0 cancello
+    // il doc così l'hashtag sparisce da chip e suggerimenti (PulsarTagsView).
+    for (const [tag, count] of hashtagDelta) {
+        try {
+            const tagRef = db.collection('chatHashtags').doc(tag);
+            await db.runTransaction(async (tx) => {
+                var _a;
+                const snap = await tx.get(tagRef);
+                if (!snap.exists)
+                    return;
+                const current = (((_a = snap.data()) === null || _a === void 0 ? void 0 : _a.count) || 0);
+                const next = current - count;
+                if (next <= 0)
+                    tx.delete(tagRef);
+                else
+                    tx.update(tagRef, { count: next });
+            });
+        }
+        catch (e) {
+            console.error(`[onChatDeleted] chat ${chatId}: errore decremento hashtag ${tag}:`, e);
+        }
     }
     return null;
 });
