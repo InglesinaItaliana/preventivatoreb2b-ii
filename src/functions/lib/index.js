@@ -1467,10 +1467,15 @@ exports.cleanupOrphanPendingMessages = functions
     .region('europe-west1')
     .runWith({ timeoutSeconds: 540, memory: '512MB' })
     .https.onCall(async (_data, context) => {
-    var _a, _b, _c, _d, _e, _f;
-    // Admin-only: stesso pattern di altre function admin del progetto
+    var _a, _b, _c, _d, _e, _f, _g, _h;
+    // Admin-only: allowlist dinamica in core/admins (+ super-admin info@ come fallback)
     const callerEmail = (_d = (_c = (_b = (_a = context.auth) === null || _a === void 0 ? void 0 : _a.token) === null || _b === void 0 ? void 0 : _b.email) === null || _c === void 0 ? void 0 : _c.toLowerCase()) === null || _d === void 0 ? void 0 : _d.trim();
-    if (callerEmail !== 'info@inglesinaitaliana.it') {
+    const adminsSnap = await admin.firestore().doc('core/admins').get();
+    const adminEmails = ((_f = (_e = adminsSnap.data()) === null || _e === void 0 ? void 0 : _e.emails) !== null && _f !== void 0 ? _f : [])
+        .map((e) => (e !== null && e !== void 0 ? e : '').toLowerCase().trim());
+    const allowed = callerEmail === 'info@inglesinaitaliana.it'
+        || (!!callerEmail && adminEmails.includes(callerEmail));
+    if (!allowed) {
         throw new functions.https.HttpsError('permission-denied', 'Solo admin.');
     }
     const db = admin.firestore();
@@ -1483,7 +1488,7 @@ exports.cleanupOrphanPendingMessages = functions
         const chatRef = d.ref.parent.parent;
         if (!chatRef)
             continue;
-        const list = (_e = messagesByChat.get(chatRef.id)) !== null && _e !== void 0 ? _e : [];
+        const list = (_g = messagesByChat.get(chatRef.id)) !== null && _g !== void 0 ? _g : [];
         list.push(d.ref);
         messagesByChat.set(chatRef.id, list);
     }
@@ -1501,7 +1506,7 @@ exports.cleanupOrphanPendingMessages = functions
             continue;
         // Chat orfana: cancella tutti i suoi messaggi
         orphanChatsCount++;
-        const refs = (_f = messagesByChat.get(chatId)) !== null && _f !== void 0 ? _f : [];
+        const refs = (_h = messagesByChat.get(chatId)) !== null && _h !== void 0 ? _h : [];
         const BATCH_SIZE = 500;
         for (let j = 0; j < refs.length; j += BATCH_SIZE) {
             const batch = db.batch();

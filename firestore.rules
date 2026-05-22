@@ -69,6 +69,18 @@ service cloud.firestore {
     match /config/{docId} {
       allow read, write: if false; // Solo backend (Cloud Functions) accede qui
     }
+
+    // CORE: allowlist email admin (gating sezione CORE / manutenzione)
+    // read: tutti gli autenticati; create: bootstrap ruolo ADMIN/super-admin;
+    // update/delete: solo super-admin o email già presente nella lista.
+    match /core/{docId} {
+      allow read:   if request.auth != null;
+      allow create: if isAdmin();
+      allow update, delete: if request.auth != null && (
+        request.auth.token.email == 'info@inglesinaitaliana.it' ||
+        (resource.data.emails is list && request.auth.token.email in resource.data.emails)
+      );
+    }
 // REGOLE PER I VIAGGI (TRIPS)
     match /trips/{tripId} {
       // Permetti a chiunque sia loggato di leggere e scrivere i viaggi
