@@ -2,6 +2,7 @@
 import { ref, computed, inject, watch, onMounted, nextTick, type Ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import MIcon from '../../components/shared/MIcon.vue'
+import MdPageHeader from '../../components/shared/MdPageHeader.vue'
 import GoalProgressBar from '../../components/cepheid/GoalProgressBar.vue'
 import { useObiettivi, GOAL_COLOR_PRESETS } from '../../composables/sidera/useObiettivi'
 import { useProjects } from '../../composables/sidera/useProjects'
@@ -109,18 +110,17 @@ const totalActive = computed(() => obiettiviAttivi.value.length)
 
 <template>
   <div class="gv s-scope-cepheid">
-    <header class="gv-header">
-      <div class="gv-header-text">
-        <h2 class="p-page-title">Obiettivi</h2>
-        <p class="p-page-sub">
-          {{ totalActive === 0 ? 'Nessun obiettivo'
-             : (totalActive === 1 ? '1 obiettivo attivo' : totalActive + ' obiettivi attivi') }}
-        </p>
-      </div>
-      <button class="header-cta" @click="openGoalModal">
-        <MIcon name="add" :size="16" /> Nuovo obiettivo
-      </button>
-    </header>
+    <MdPageHeader
+      title="Obiettivi"
+      :subtitle="totalActive === 0 ? 'Nessun obiettivo'
+        : (totalActive === 1 ? '1 obiettivo attivo' : totalActive + ' obiettivi attivi')"
+    >
+      <template #cta>
+        <button class="md-btn md-btn--filled md-btn--sm md-btn--square" @click="openGoalModal">
+          <MIcon name="add" :size="16" /> Nuovo obiettivo
+        </button>
+      </template>
+    </MdPageHeader>
 
     <div class="gv-content">
       <div v-if="loading" class="loading-rows">
@@ -236,52 +236,24 @@ const totalActive = computed(() => obiettiviAttivi.value.length)
 <style scoped>
 .gv {
   font-family: 'Outfit', sans-serif;
-  color: #1A1917;
+  color: var(--md-sys-color-on-surface);
   min-height: calc(100vh - 120px);
+  /* sfondo cream coerente con la pagina Progetti */
+  background: #EFE7D9;
 }
-
-.gv-header {
-  padding: 18px 20px 14px;
-  background: #fff;
-  border-bottom: 1px solid #E8E5DF;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.gv-header-text { flex: 1; min-width: 0; }
-.header-cta {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 9px 14px;
-  background: var(--md-sys-color-primary);
-  border: none;
-  border-radius: 10px;
-  font-family: 'Outfit', sans-serif;
-  font-size: 13px;
-  font-weight: 600;
-  color: #fff;
-  cursor: pointer;
-  transition: background 0.15s;
-  flex-shrink: 0;
-}
-.header-cta:hover { background: #B8870E; }
-@media (max-width: 768px) { .header-cta { display: none; } }
-
-.p-page-title {
-  font-family: 'Outfit', sans-serif;
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: #1A1917;
-  margin: 0 0 4px 0;
-}
-
-.p-page-sub { font-size: 12px; color: #9B9590; margin: 0; }
+.s-surface-dark .gv { background: #0E0C07; }
+@media (prefers-color-scheme: dark) { .gv { background: #0E0C07; } }
+.gv :deep(.md-page-header) { flex-shrink: 0; }
+/* header allineato al contenuto: gutter mobile 16px (come .gv-content) */
+:deep(.md-page-header) { padding: 18px 16px 14px; }
 
 .gv-content { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+
+/* desktop: contenuto max-width 900 centrato (rif. card Progetti) + header allineato */
+@media (min-width: 1024px) {
+  :deep(.md-page-header) { padding: 24px max(40px, calc(50% - 410px)) 18px; }
+  .gv-content { padding: 24px 40px; max-width: 900px; margin: 0 auto; width: 100%; }
+}
 
 .loading-rows { display: flex; flex-direction: column; gap: 6px; }
 .row-skel { height: 130px; border-radius: 14px; background: #E8E5DF; animation: pulse 1.4s ease-in-out infinite; }
@@ -302,13 +274,16 @@ const totalActive = computed(() => obiettiviAttivi.value.length)
 
 .goal-card {
   display: flex;
-  background: #fff;
-  border: 1px solid #E8E5DF;
-  border-radius: 14px;
+  background: #FFF8F0;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: 16px;
+  box-shadow: var(--md-sys-elevation-level-1);
   overflow: hidden;
   cursor: pointer;
   transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
 }
+.s-surface-dark .goal-card { background: #16130B; }
+@media (prefers-color-scheme: dark) { .goal-card { background: #16130B; } }
 
 .goal-card:hover {
   border-color: var(--md-sys-color-primary);
@@ -332,7 +307,7 @@ const totalActive = computed(() => obiettiviAttivi.value.length)
   font-size: 15px;
   font-weight: 700;
   letter-spacing: 0.01em;
-  color: #1A1917;
+  color: var(--md-sys-color-on-surface);
   flex: 1;
   min-width: 0;
 }
@@ -340,8 +315,8 @@ const totalActive = computed(() => obiettiviAttivi.value.length)
 .goal-anno {
   font-size: 11px;
   font-weight: 600;
-  color: #9B9590;
-  background: #F4F2EE;
+  color: var(--md-sys-color-on-surface-variant);
+  background: var(--md-sys-color-surface-container);
   padding: 2px 8px;
   border-radius: var(--md-sys-shape-corner-full);
   flex-shrink: 0;
@@ -352,13 +327,13 @@ const totalActive = computed(() => obiettiviAttivi.value.length)
   align-items: center;
   gap: 4px;
   font-size: 12px;
-  color: #6A6560;
+  color: var(--md-sys-color-on-surface-variant);
   margin-bottom: 4px;
 }
 
 .goal-desc {
   font-size: 12px;
-  color: #6A6560;
+  color: var(--md-sys-color-on-surface-variant);
   margin-bottom: 10px;
   display: -webkit-box;
   -webkit-line-clamp: 2;
@@ -375,10 +350,10 @@ const totalActive = computed(() => obiettiviAttivi.value.length)
 }
 
 .goal-stat-pct { font-size: 13px; font-weight: 700; }
-.goal-stat-meta { font-size: 11px; color: #9B9590; }
+.goal-stat-meta { font-size: 11px; color: var(--md-sys-color-on-surface-variant); }
 .goal-stats--empty {
   font-size: 11px;
-  color: #B4B0AA;
+  color: var(--md-sys-color-on-surface-variant);
   font-style: italic;
   margin-top: 4px;
 }

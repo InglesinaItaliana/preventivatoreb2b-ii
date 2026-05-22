@@ -27,6 +27,9 @@ defineProps<{
       <h2 class="md-page-header__title">{{ title }}</h2>
       <p v-if="subtitle" class="md-page-header__subtitle">{{ subtitle }}</p>
     </div>
+    <div v-if="$slots.tools" class="md-page-header__tools">
+      <slot name="tools" />
+    </div>
     <div v-if="$slots.cta" class="md-page-header__cta">
       <slot name="cta" />
     </div>
@@ -64,6 +67,8 @@ defineProps<{
 }
 
 .md-page-header__cta { flex-shrink: 0; display: inline-flex; }
+/* tools: sempre visibile (anche mobile), a differenza di __cta */
+.md-page-header__tools { flex-shrink: 0; display: inline-flex; align-items: center; }
 
 @media (max-width: 768px) {
   .md-page-header__cta { display: none; }

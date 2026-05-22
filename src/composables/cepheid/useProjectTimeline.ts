@@ -282,6 +282,17 @@ export function useProjectTimeline(
     const real = groups.value.filter(g => g.milestoneId !== NONE)
     return real.length > 0 && real.every(g => g.reached)
   })
+
+  // Progetto completato: copre sia i progetti con milestone (tutti i deliverable
+  // approvati ⇒ milestone raggiunte) sia quelli di sole task (tutte completate).
+  // false se il progetto è ancora vuoto.
+  const projectComplete = computed(() => {
+    const hasContent = phasesFlat.value.length > 0 || realTasks.value.length > 0
+    if (!hasContent) return false
+    const allPhasesApproved = phasesFlat.value.every(p => p.approved)
+    const allTasksDone = realTasks.value.every(t => !!t.completedAt)
+    return allPhasesApproved && allTasksDone
+  })
   const projectRange = computed(() => fmt(projectStart.value) + ' → ' + fmt(projectEnd.value))
 
   /* ---------------- contesto finestra per un task ---------------- */
@@ -343,7 +354,7 @@ export function useProjectTimeline(
 
   return {
     TODAY, projectStart, projectStartTs, projectEnd, projectRange,
-    groups, phasesFlat, orphanGroup, workBar, timeBar, allApproved,
+    groups, phasesFlat, orphanGroup, workBar, timeBar, allApproved, projectComplete,
     toggleDone, toggleTimed, commitDrag, setPhaseDue, setProjectDates, approve, unapprove,
     contextOf, fmt, range, isoOf,
   }

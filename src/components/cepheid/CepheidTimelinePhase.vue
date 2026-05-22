@@ -34,6 +34,7 @@ function openDuePicker() {
     :task="t"
     :members="members"
     :unlocked="phase.unlocked"
+    :locked="phase.approved"
     :window-days="phase.windowDays"
     :preview="preview[t.id] ?? null"
     @toggle-done="emit('toggle-done', $event)"
@@ -41,7 +42,7 @@ function openDuePicker() {
   />
 
   <!-- deliverable -->
-  <div class="row" :class="{ locked: !phase.unlocked }">
+  <div class="row" :class="{ locked: !phase.unlocked, appr: phase.approved }">
     <div class="rail">
       <div class="spine" :class="{ 'is-on': phase.ready }" />
       <div class="mk-deliv" :class="{ ready: phase.ready }">
@@ -98,6 +99,9 @@ function openDuePicker() {
 .rail { position: relative; display: flex; align-items: center; justify-content: center; }
 .spine { position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; transform: translateX(-50%); background: var(--md-sys-color-outline-variant); }
 .spine.is-on { background: var(--md-sys-color-primary); }
+/* deliverable approvato: la linea colorata si ferma al marker e non prosegue
+   verso la milestone, lasciando uno stacco visivo netto */
+.row.appr .spine.is-on { bottom: calc(50% + 12px); border-radius: 1px; }
 .cell { padding: 4px 0 4px 12px; min-width: 0; }
 
 /* marker quadrato (deliverable) */

@@ -54,7 +54,12 @@ const confetti = computed(() => Array.from({ length: 14 }, (_, k) => ({
 
 <template>
   <div class="ib-page s-scope-cepheid">
-    <MdPageHeader title="Smistamento" />
+    <MdPageHeader
+      title="Smistamento"
+      :subtitle="inbox.length === 0
+        ? 'Nessuna task da smistare'
+        : (inbox.length === 1 ? '1 task da smistare' : inbox.length + ' task da smistare')"
+    />
 
     <div class="ib-content">
      <div class="ib-inner">

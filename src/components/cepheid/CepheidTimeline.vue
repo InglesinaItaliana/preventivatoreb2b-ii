@@ -29,7 +29,7 @@ const props = defineProps<{
   collapsible?: boolean
 }>()
 
-const emit = defineEmits<{ (e: 'new-phase'): void }>()
+const emit = defineEmits<{ (e: 'new-phase'): void; (e: 'completed', done: boolean): void }>()
 
 // collassabile: accordion (una sola card aperta). standalone (non collassabile) sempre aperto
 const cardId = computed(() => props.project?.id ?? '')
@@ -61,7 +61,7 @@ const tl = useProjectTimeline(toRef(props, 'tasks'), toRef(props, 'project'), {
   unapprovePhase: props.unapprovePhase,
 })
 
-const { groups, phasesFlat, orphanGroup, workBar, timeBar, allApproved, projectRange, projectStartTs } = tl
+const { groups, phasesFlat, orphanGroup, workBar, timeBar, projectComplete, projectRange, projectStartTs } = tl
 const TODAY_TS = tl.TODAY.getTime()
 const reduceMotion = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 
@@ -194,8 +194,27 @@ const onToggleDone = async (id: string) => {
     row?.nextElementSibling?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
   })
 }
-// quando il progetto viene completato, porta in vista il "premio" (celebrazione)
-watch(allApproved, v => { if (v) nextTick(() => finRef.value?.scrollIntoView({ behavior: 'smooth', block: 'center' })) })
+// quando il progetto viene completato: mostra il premio, attende 3s, poi marca
+// completato (persistenza via emit), collassa l'accordion. Se viene riaperto
+// qualcosa, lo stato torna indietro (emit completed=false).
+let completeTimer: ReturnType<typeof setTimeout> | null = null
+watch(projectComplete, (done) => {
+  if (completeTimer) { clearTimeout(completeTimer); completeTimer = null }
+  if (done) {
+    nextTick(() => finRef.value?.scrollIntoView({ behavior: 'smooth', block: 'center' }))
+    // se già persistito come completato (es. al rimontaggio), non rifare la cerimonia
+    if (props.project?.completed) return
+    completeTimer = setTimeout(() => {
+      completeTimer = null
+      if (!projectComplete.value) return
+      emit('completed', true)
+      if (props.collapsible && _openCard.value === cardId.value) _openCard.value = null
+    }, 3000)
+  } else if (props.project?.completed) {
+    emit('completed', false)
+  }
+})
+onUnmounted(() => { if (completeTimer) clearTimeout(completeTimer) })
 const onToggleTimed = (id: string) => tl.toggleTimed(id)
 const onSetPhaseDue = (p: { phase: PhaseVM; iso: string }) => tl.setPhaseDue(p.phase, p.iso)
 const onApprove = (id: string) => tl.approve(id)
@@ -206,6 +225,9 @@ const confetti = computed(() => Array.from({ length: 14 }, (_, k) => ({
 })))
 
 const hasContent = computed(() => phasesFlat.value.length > 0 || !!orphanGroup.value)
+
+// esposto al parent (card): per nascondere l'overlay di stato quando la card è aperta
+defineExpose({ expanded })
 </script>
 
 <template>
@@ -299,13 +321,13 @@ const hasContent = computed(() => phasesFlat.value.length > 0 || !!orphanGroup.v
       </template>
 
       <!-- celebrazione -->
-      <div v-if="allApproved" ref="finRef" class="fin">
+      <div v-if="projectComplete" ref="finRef" class="fin">
         <template v-if="!reduceMotion">
           <span v-for="(c, i) in confetti" :key="i" class="pc" :style="{ left: c.left + '%', background: c.color, animationDelay: c.delay + 's' }" />
         </template>
         <div class="rk"><MIcon name="emoji_events" :size="28" /></div>
         <div class="ft">Progetto completato</div>
-        <div class="fs">tutte le milestone approvate</div>
+        <div class="fs">obiettivo raggiunto 🎉</div>
       </div>
 
       <!-- empty -->
@@ -353,7 +375,7 @@ const hasContent = computed(() => phasesFlat.value.length > 0 || !!orphanGroup.v
 @media (prefers-color-scheme: dark) { .cph-timeline.is-card { background: #16130B; } }
 
 .cph-head {
-  display: flex; align-items: center; gap: 6px; width: 100%;
+  display: flex; align-items: center; gap: 8px; width: 100%;
   background: none; border: 0; padding: 0 0 8px; margin: 0;
   font-family: inherit; text-align: left; color: var(--md-sys-color-on-surface);
 }
@@ -369,7 +391,9 @@ const hasContent = computed(() => phasesFlat.value.length > 0 || !!orphanGroup.v
 .s-surface-dark .is-card .cph-sticky { background: #16130B; }
 @media (prefers-color-scheme: dark) { .is-card .cph-sticky { background: #16130B; } }
 .cph-head.clickable { cursor: pointer; }
-.cph-chev { color: var(--md-sys-color-on-surface-variant); flex: 0 0 auto; }
+/* chevron in colonna da 48px centrata: allineato alle icone (.hicon) della topbar sotto;
+   col gap 8px del .cph-head il titolo parte allineato al testo (.ddval) sottostante */
+.cph-chev { color: var(--md-sys-color-on-surface-variant); flex: 0 0 auto; width: 48px; display: inline-flex; align-items: center; justify-content: center; }
 .cph-title {
   font-family: var(--md-sys-typescale-headline-small-font, 'Cormorant Garamond', serif);
   font-size: 22px; line-height: 1.1; font-weight: 500; color: var(--md-sys-color-on-surface);

@@ -17,6 +17,7 @@ const props = defineProps<{
   isAdmin: boolean
   obiettivo: { titolo: string; colore: string } | null
   updateProject: (id: string, data: Partial<{ startDate: Date | null; dueDate: Date | null }>) => Promise<void>
+  setCompleted: (id: string, done: boolean) => Promise<void>
 }>()
 
 const emit = defineEmits<{
@@ -27,6 +28,8 @@ const emit = defineEmits<{
 
 const router = useRouter()
 const projectId = props.project.id
+const timelineRef = ref<{ expanded: boolean } | null>(null)
+const isExpanded = computed(() => timelineRef.value?.expanded ?? false)
 const { tasks, updateTask, completeTask, uncompleteTask, approvePhase, unapprovePhase, createTask, createPhaseBundle } = useProjectTasks(projectId)
 const { currentUser } = useCurrentUser()
 
@@ -44,8 +47,20 @@ const projectDueIso = computed(() => {
 </script>
 
 <template>
-  <div class="pcard" :class="{ 'pcard--inactive': project.active === false }">
+  <div
+    class="pcard"
+    :class="{
+      'pcard--inactive': project.active === false || project.completed,
+      'pcard--quiet': (project.completed || project.active === false) && !isExpanded,
+    }"
+  >
+      <!-- overlay stato: trofeo (completato) o pausa (inattivo), grande al centro
+           della card collassata; nascosto quando la card è aperta -->
+      <div v-if="(project.completed || project.active === false) && !isExpanded" class="pcard-state-overlay">
+        <MIcon :name="project.completed ? 'emoji_events' : 'pause'" :size="72" :filled="project.completed" />
+      </div>
       <CepheidTimeline
+        ref="timelineRef"
         collapsible
         :title="project.name"
         :project="project"
@@ -58,8 +73,17 @@ const projectDueIso = computed(() => {
         :approve-phase="approvePhase"
         :unapprove-phase="unapprovePhase"
         @new-phase="openCreate('fase')"
+        @completed="(done) => setCompleted(project.id, done).catch(e => console.error('[CEPHEID] setCompleted', e))"
       >
         <template #head-actions>
+          <!-- indicatore di stato compatto (card quiet): visibile finché non si fa hover -->
+          <span
+            v-if="(project.completed || project.active === false) && !isExpanded"
+            class="pcard-state-mini"
+            :title="project.completed ? 'Completato' : 'In pausa'"
+          >
+            <MIcon :name="project.completed ? 'emoji_events' : 'pause'" :size="16" :filled="project.completed" />
+          </span>
           <GoalChip v-if="obiettivo" :titolo="obiettivo.titolo" :colore="obiettivo.colore" size="sm" />
           <span v-if="project.active === false" class="badge-inactive">Inattivo</span>
           <CepheidCreateMenu v-if="isAdmin" @select="openCreate" />
@@ -106,6 +130,7 @@ const projectDueIso = computed(() => {
 
 <style scoped>
 .pcard {
+  position: relative;
   background: #FFF8F0;
   border: 1px solid var(--md-sys-color-outline-variant);
   border-radius: 16px;
@@ -113,9 +138,29 @@ const projectDueIso = computed(() => {
   padding: 12px 14px;
   flex-shrink: 0;   /* in un flex-column scrollabile evita che la card espansa venga compressa */
 }
+
+/* overlay grande centrato: distingue a colpo d'occhio completato (trofeo) da in pausa (pause).
+   z-index alto perché su card collassata deve stare SOPRA l'header sticky (opaco, z-index 6);
+   pointer-events:none così i pulsanti dell'header restano cliccabili sotto. */
+.pcard-state-overlay {
+  position: absolute; inset: 0; z-index: 7;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none;
+  color: var(--md-sys-color-on-surface-variant);
+  opacity: 0.5;
+}
 .s-surface-dark .pcard { background: #16130B; }
 @media (prefers-color-scheme: dark) { .pcard { background: #16130B; } }
 .pcard--inactive { opacity: 0.6; }
+
+/* card "quiet" (conclusi/in pausa): di default solo la riga del titolo + icone azione.
+   topbar e overlay grande riappaiono all'hover → torna come una card collassata normale. */
+.pcard--quiet :deep(.topbar) { display: none; }
+.pcard--quiet .pcard-state-overlay { display: none; }
+.pcard--quiet:hover :deep(.topbar) { display: block; }
+.pcard--quiet:hover .pcard-state-overlay { display: flex; }
+.pcard--quiet:hover .pcard-state-mini { display: none; }
+.pcard-state-mini { display: inline-flex; align-items: center; color: var(--md-sys-color-on-surface-variant); }
 
 /* la card timeline interna non ha bisogno del suo chrome: il wrapper lo fornisce */
 .pcard :deep(.cph-timeline.is-card) { background: transparent; border: 0; border-radius: 0; padding: 0; }
