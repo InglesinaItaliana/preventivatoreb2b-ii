@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SIDERA · Attività</title>
+<style>
+  @import url('https://cdn.jsdelivr.net/npm/@fontsource/outfit/400.css');
+  @import url('https://cdn.jsdelivr.net/npm/@fontsource/outfit/500.css');
+  @import url('https://cdn.jsdelivr.net/npm/@fontsource/cormorant-garamond/500.css');
+  :root { color-scheme: light dark; }
+  body { margin:0; min-height:100vh; display:flex; justify-content:center; align-items:flex-start;
+    background:#EFE7D9; font-family:'Outfit',system-ui,sans-serif; padding:24px 12px; }
+  @media (prefers-color-scheme: dark){ body { background:#0E0C07; } }
+
+  #lg { --primary:#98C0D0; --on-primary:#00344A; --primary-container:#D6EBF2; --on-primary-container:#001F28;
+    --bg:#FFF8F0; --on-bg:#1E1B13; --surface:#FFF8F0; --surface-2:#F1E8D8; --surface-var:#EBE2CF;
+    --on-surface:#1E1B13; --on-surface-var:#4C4639; --outline:#7D7667; --outline-var:#CEC6B4;
+    --error:#BA1A1A; --rmd:12px; --rlg:16px; --rfull:999px;
+    width:100%; max-width:440px; box-sizing:border-box;
+    background:var(--bg); color:var(--on-surface); border-radius:var(--rlg); padding:18px 18px 24px; }
+  @media (prefers-color-scheme: dark){ #lg { --primary:#98C0D0; --on-primary:#003549; --primary-container:#004D6B; --on-primary-container:#C6E5F2;
+    --bg:#16130B; --on-bg:#E9E2D4; --surface:#16130B; --surface-2:#231E13; --surface-var:#4C4639;
+    --on-surface:#E9E2D4; --on-surface-var:#CEC6B4; --outline:#979080; --outline-var:#4C4639; --error:#FFB4AB; } }
+  #lg * { box-sizing:border-box; }
+
+  #lg .hd { display:flex; align-items:center; gap:8px; }
+  #lg .tag { font-size:11px; font-weight:500; letter-spacing:1.5px; color:var(--primary); }
+  #lg .star { width:8px; height:8px; border-radius:50%; background:var(--primary); }
+  #lg .vsw { display:flex; gap:2px; background:var(--surface-var); border-radius:var(--rmd); padding:3px; margin-left:auto; }
+  #lg .vbtn { width:28px; height:28px; display:flex; align-items:center; justify-content:center; border-radius:8px; color:var(--on-surface-var); font-size:15px; text-decoration:none; transition:background .15s,color .15s; }
+  #lg .vbtn:hover { background:color-mix(in srgb,var(--on-surface) 8%,transparent); color:var(--on-surface); }
+  #lg .vbtn.active { background:var(--bg); color:var(--primary); box-shadow:0 1px 3px rgba(0,0,0,.1); }
+  #lg .pname { font-family:'Cormorant Garamond',serif; font-size:26px; line-height:1.1; color:var(--on-bg); margin:4px 0 4px; }
+  #lg .psub { font-size:12px; color:var(--on-surface-var); margin:0 0 18px; }
+
+  #lg .feed { position:relative; }
+  #lg .feed .spine { position:absolute; left:18px; top:6px; bottom:14px; width:2px; transform:translateX(-50%);
+    background:var(--outline-var); z-index:0; }
+
+  #lg .live { display:flex; align-items:center; height:30px; position:relative; z-index:1; margin-bottom:4px; }
+  #lg .live .rail { width:36px; display:flex; align-items:center; justify-content:center; flex:0 0 auto; }
+  #lg .livedot { width:10px; height:10px; border-radius:50%; background:var(--primary); }
+  #lg .livedot::after { content:''; position:absolute; width:10px; height:10px; border-radius:50%; background:var(--primary); animation:lgpulse 2.2s ease-out infinite; }
+  @keyframes lgpulse { 0% { transform:scale(1); opacity:.5; } 100% { transform:scale(3.2); opacity:0; } }
+  #lg .livelbl { font-size:11px; font-weight:500; letter-spacing:.6px; text-transform:uppercase; color:var(--primary); }
+
+  #lg .dayhd { display:flex; align-items:center; gap:10px; margin:14px 0 8px; padding-left:36px; position:relative; z-index:1; }
+  #lg .dayhd span { font-size:10px; font-weight:600; letter-spacing:1px; text-transform:uppercase; color:var(--on-surface-var); }
+  #lg .dayhd::after { content:''; flex:1; height:1px; background:var(--outline-var); opacity:.5; }
+
+  #lg .ev { display:flex; gap:0; position:relative; z-index:1; padding:5px 0; animation:lgin .45s ease backwards; }
+  @keyframes lgin { from { opacity:0; transform:translateY(7px); } to { opacity:1; transform:translateY(0); } }
+  #lg .ev .rail { width:36px; flex:0 0 auto; display:flex; justify-content:center; padding-top:1px; }
+  #lg .node { width:24px; height:24px; border-radius:50%; display:flex; align-items:center; justify-content:center; font-size:12px; flex:0 0 auto; }
+  #lg .node.gold { background:var(--primary); color:var(--on-primary); }
+  #lg .node.neutral { background:var(--surface-var); color:var(--on-surface-var); border:1px solid var(--outline-var); }
+  #lg .node.red { background:var(--error); color:#fff; }
+  @media (prefers-color-scheme: dark){ #lg .node.red { color:#3a0a06; } #lg .node.gold { color:#2A1F00; } }
+
+  #lg .body { flex:1; min-width:0; padding-bottom:2px; }
+  #lg .line { display:flex; align-items:center; gap:8px; }
+  #lg .av { width:20px; height:20px; border-radius:50%; background:var(--surface-var); color:var(--on-surface-var); font-size:9px; font-weight:500; display:flex; align-items:center; justify-content:center; flex:0 0 auto; }
+  #lg .txt { font-size:13.5px; line-height:1.35; color:var(--on-surface-var); }
+  #lg .txt b { color:var(--on-surface); font-weight:500; }
+  #lg .obj { color:var(--on-surface); }
+  #lg .meta { display:flex; align-items:center; gap:7px; margin:3px 0 0 28px; font-size:11px; color:var(--on-surface-var); }
+  #lg .sys { font-size:9px; font-weight:600; letter-spacing:.7px; text-transform:uppercase; padding:2px 6px; border-radius:var(--rfull); }
+  #lg .sys.sidera { background:color-mix(in srgb,var(--primary) 16%,transparent); color:var(--primary); }
+  #lg .sys.pops { background:var(--surface-var); color:var(--on-surface-var); }
+</style>
+</head>
+<body>
+<div id="lg">
+  <div class="hd"><span class="star"></span><span class="tag">QUASAR · ATTIVITÀ</span>
+    <div class="vsw">
+      <a href="cepheid-timeline.html" class="vbtn" title="Timeline"><i class="ti ti-chart-gantt"></i></a>
+      <a href="cepheid-kanban.html" class="vbtn" title="Kanban"><i class="ti ti-layout-kanban"></i></a>
+      <a href="cepheid-triage.html" class="vbtn" title="Smistamento"><i class="ti ti-inbox"></i></a>
+      <a href="#" class="vbtn active" title="Attività"><i class="ti ti-activity"></i></a>
+    </div>
+  </div>
+  <p class="pname">Registro attività</p>
+  <p class="psub">tutto ciò che accade su SIDERA e POPS, in tempo reale</p>
+  <div class="feed" id="lgFeed"></div>
+</div>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3/dist/tabler-icons.min.css">
+<script>
+const PEOPLE={GM:"Gionata",DA:"Daniel",EV:"Eva",LU:"Luca"};
+const NOW=new Date();
+const MO=["gen","feb","mar","apr","mag","giu","lug","ago","set","ott","nov","dic"];
+const WD=["domenica","lunedì","martedì","mercoledì","giovedì","venerdì","sabato"];
+
+// each event: actor, system, icon (tabler suffix), tone, verb, obj, min (minutes ago)
+const EVENTS=[
+  {a:"GM", s:"SIDERA", ic:"plus",              t:"gold",    v:"ha creato il task",                 o:"Ricerca materiali",          min:0},
+  {a:"DA", s:"POPS",   ic:"truck-delivery",    t:"gold",    v:"ha spedito l'ordine",               o:"#1042 · Serramenti Bianchi", min:8},
+  {a:"EV", s:"POPS",   ic:"file-invoice",      t:"gold",    v:"ha fatturato l'ordine",             o:"#1038",                      min:22},
+  {a:"GM", s:"SIDERA", ic:"arrow-right",       t:"neutral", v:"ha spostato in «In corso»",         o:"Design grata",               min:45},
+  {a:"DA", s:"SIDERA", ic:"circle-check",      t:"gold",    v:"ha approvato la milestone",         o:"Beta",                       min:70},
+  {a:"LU", s:"SIDERA", ic:"check",             t:"gold",    v:"ha completato il task",             o:"Test resistenza profilo",    min:120},
+  {a:"EV", s:"POPS",   ic:"box",               t:"neutral", v:"ha messo in spedizione l'ordine",   o:"#1042",                      min:180},
+  {a:"GM", s:"SIDERA", ic:"folder-plus",       t:"gold",    v:"ha creato il progetto",             o:"Linea XR-200",               min:300},
+  {a:"DA", s:"POPS",   ic:"circle-check",      t:"gold",    v:"ha confermato l'ordine",            o:"#1041",                      min:1545},
+  {a:"GM", s:"SIDERA", ic:"package",           t:"gold",    v:"ha approvato il deliverable",       o:"Prototipo",                  min:1620},
+  {a:"EV", s:"POPS",   ic:"clipboard-list",    t:"neutral", v:"ha messo in preparazione l'ordine", o:"#1040",                      min:1740},
+  {a:"LU", s:"SIDERA", ic:"trash",             t:"red",     v:"ha eliminato il task",              o:"Bozza vecchia",              min:1880},
+  {a:"DA", s:"POPS",   ic:"shopping-cart-plus",t:"gold",    v:"ha creato l'ordine",                o:"#1041 · Grate Verdi",        min:3000},
+  {a:"GM", s:"SIDERA", ic:"pencil",            t:"neutral", v:"ha modificato il progetto",         o:"Lancio modulo QUASAR",       min:3120},
+  {a:"EV", s:"POPS",   ic:"home-check",        t:"gold",    v:"ha consegnato l'ordine",            o:"#1039",                      min:4400},
+  {a:"GM", s:"SIDERA", ic:"plus",              t:"gold",    v:"ha creato il task",                 o:"Documenti tecnici",          min:4500},
+  {a:"DA", s:"POPS",   ic:"x",                 t:"red",     v:"ha annullato l'ordine",             o:"#1037",                      min:4620},
+];
+
+const sameDay=(x,y)=>x.getFullYear()===y.getFullYear()&&x.getMonth()===y.getMonth()&&x.getDate()===y.getDate();
+const startDay=d=>{const x=new Date(d);x.setHours(0,0,0,0);return x;};
+function dayLabel(d){
+  if(sameDay(d,NOW)) return "Oggi";
+  const y=new Date(NOW); y.setDate(y.getDate()-1);
+  if(sameDay(d,y)) return "Ieri";
+  const diff=Math.floor((startDay(NOW)-startDay(d))/86400000);
+  if(diff<7) return WD[d.getDay()];
+  return d.getDate()+" "+MO[d.getMonth()];
+}
+function relTime(d){
+  const min=Math.round((NOW-d)/60000);
+  if(min<1) return "ora";
+  if(min<60) return min+" min fa";
+  const h=Math.floor(min/60);
+  if(h<24 && sameDay(d,NOW)) return h+" h fa";
+  const hh=String(d.getHours()).padStart(2,'0'), mm=String(d.getMinutes()).padStart(2,'0');
+  return hh+":"+mm;
+}
+
+function build(){
+  const feed=document.getElementById("lgFeed");
+  let html='<div class="spine"></div><div class="live"><div class="rail"><span class="livedot"></span></div><span class="livelbl">in tempo reale</span></div>';
+  let curDay=null, i=0;
+  EVENTS.forEach(e=>{
+    const d=new Date(NOW.getTime()-e.min*60000);
+    const dl=dayLabel(d);
+    if(dl!==curDay){ curDay=dl; html+='<div class="dayhd"><span>'+dl+'</span></div>'; }
+    const delay=Math.min(i*0.045,0.6).toFixed(3);
+    const ic=e.t==='gold'?'bolt':e.t==='red'?'trash':'pencil';
+    html+='<div class="ev" style="animation-delay:'+delay+'s">'
+      +'<div class="rail"><div class="node '+e.t+'"><i class="ti ti-'+ic+'"></i></div></div>'
+      +'<div class="body">'
+        +'<div class="line"><span class="txt"><b>'+PEOPLE[e.a]+'</b> '+e.v+' «<span class="obj">'+e.o+'</span>»</span></div>'
+        +'<div class="meta"><span class="sys '+(e.s==="SIDERA"?"sidera":"pops")+'">'+e.s+'</span> · '+relTime(d)+'</div>'
+      +'</div></div>';
+    i++;
+  });
+  feed.innerHTML=html;
+}
+build();
+</script>
+</body>
+</html>

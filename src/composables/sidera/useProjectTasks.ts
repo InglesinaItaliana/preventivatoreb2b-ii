@@ -168,8 +168,9 @@ export function useProjectTasks(projectId: string) {
   async function approvePhase(deliverableId: string) {
     const batch = writeBatch(db)
     batch.update(doc(db, 'projects', projectId, 'tasks', deliverableId), {
-      approved:   true,
-      approvedAt: serverTimestamp(),
+      approved:        true,
+      approvedAt:      serverTimestamp(),
+      approvedByEmail: auth.currentUser?.email ?? null,
     })
     const deliv = tasks.value.find(t => t.id === deliverableId)
     const mid = deliv?.milestoneId ?? null

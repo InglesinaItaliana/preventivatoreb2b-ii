@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>CEPHEID · Azioni</title>
+<style>
+  @import url('https://cdn.jsdelivr.net/npm/@fontsource/outfit/400.css');
+  @import url('https://cdn.jsdelivr.net/npm/@fontsource/outfit/500.css');
+  @import url('https://cdn.jsdelivr.net/npm/@fontsource/cormorant-garamond/500.css');
+  :root { color-scheme: light dark; }
+  body { margin:0; min-height:100vh; display:flex; justify-content:center; align-items:flex-start;
+    background:#EFE7D9; font-family:'Outfit',system-ui,sans-serif; padding:24px 12px; }
+  @media (prefers-color-scheme: dark){ body { background:#0E0C07; } }
+
+  #ax { --primary:#C4941C; --on-primary:#FFFFFF; --primary-container:#F6E8C4; --on-primary-container:#3F2E00;
+    --bg:#FFF8F0; --on-bg:#1E1B13; --surface:#FFF8F0; --surface-2:#F1E8D8; --surface-var:#EBE2CF;
+    --on-surface:#1E1B13; --on-surface-var:#4C4639; --outline:#7D7667; --outline-var:#CEC6B4;
+    --error:#BA1A1A; --rmd:12px; --rlg:16px; --rfull:999px;
+    width:100%; max-width:460px; box-sizing:border-box;
+    background:var(--bg); color:var(--on-surface); border-radius:var(--rlg); padding:18px 18px 22px; }
+  @media (prefers-color-scheme: dark){ #ax { --primary:#D4A020; --on-primary:#2A1F00; --primary-container:#5A4300; --on-primary-container:#F6E8C4;
+    --bg:#16130B; --on-bg:#E9E2D4; --surface:#16130B; --surface-2:#231E13; --surface-var:#4C4639;
+    --on-surface:#E9E2D4; --on-surface-var:#CEC6B4; --outline:#979080; --outline-var:#4C4639; --error:#FFB4AB; } }
+  #ax * { box-sizing:border-box; }
+
+  #ax .hd { display:flex; align-items:center; gap:8px; }
+  #ax .tag { font-size:11px; font-weight:500; letter-spacing:1.5px; color:var(--primary); }
+  #ax .star { width:8px; height:8px; border-radius:50%; background:var(--primary); }
+  #ax .vsw { display:flex; gap:2px; background:var(--surface-var); border-radius:var(--rmd); padding:3px; margin-left:auto; }
+  #ax .vbtn { width:28px; height:28px; display:flex; align-items:center; justify-content:center; border-radius:8px; color:var(--on-surface-var); font-size:15px; text-decoration:none; transition:background .15s,color .15s; }
+  #ax .vbtn:hover { background:color-mix(in srgb,var(--on-surface) 8%,transparent); color:var(--on-surface); }
+  #ax .vbtn.active { background:var(--bg); color:var(--primary); box-shadow:0 1px 3px rgba(0,0,0,.1); }
+  #ax .pname { font-family:'Cormorant Garamond',serif; font-size:26px; line-height:1.1; color:var(--on-bg); margin:4px 0 14px; }
+
+  #ax .cursor { margin-bottom:16px; }
+  #ax .curlbl { font-size:13px; color:var(--on-surface-var); margin-bottom:9px; }
+  #ax .curlbl b { color:var(--primary); font-weight:500; }
+  #ax .curdelta { color:var(--error); font-size:11px; font-weight:500; margin-left:8px; }
+  #ax input[type=range] { width:100%; -webkit-appearance:none; appearance:none; height:6px; border-radius:3px; background:var(--surface-var); outline:none; }
+  #ax input[type=range]::-webkit-slider-thumb { -webkit-appearance:none; width:20px; height:20px; border-radius:50%; background:var(--primary); cursor:pointer; border:3px solid var(--bg); box-shadow:0 1px 4px rgba(0,0,0,.22); }
+  #ax input[type=range]::-moz-range-thumb { width:20px; height:20px; border-radius:50%; background:var(--primary); cursor:pointer; border:3px solid var(--bg); }
+  #ax .curscale { display:flex; justify-content:space-between; font-size:10px; color:var(--on-surface-var); margin-top:5px; }
+
+  #ax .matrix { display:grid; grid-template-columns:1.15fr 1fr; grid-template-rows:1.35fr 1fr; gap:8px; height:450px; }
+  #ax .quad { border-radius:var(--rmd); padding:12px 11px; display:flex; flex-direction:column; overflow:hidden; transition:opacity .2s; }
+  #ax .q1 { background:color-mix(in srgb,var(--error) 6%,var(--surface-2)); }
+  #ax .q2 { background:color-mix(in srgb,var(--primary) 8%,var(--surface-2)); }
+  #ax .q3 { background:var(--surface-2); }
+  #ax .q4 { background:var(--surface-2); opacity:.62; }
+  #ax .qhd { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:9px; }
+  #ax .qname { font-family:'Cormorant Garamond',serif; font-size:19px; line-height:1; }
+  #ax .q1 .qname { color:var(--error); }
+  #ax .q2 .qname { color:var(--primary); }
+  #ax .q3 .qname, #ax .q4 .qname { color:var(--on-surface); }
+  #ax .qsub { font-size:8.5px; font-weight:600; letter-spacing:.5px; text-transform:uppercase; color:var(--on-surface-var); margin-top:3px; }
+  #ax .qcount { font-size:11px; font-weight:500; color:var(--on-surface-var); background:color-mix(in srgb,var(--on-surface) 7%,transparent); border-radius:var(--rfull); min-width:20px; height:19px; padding:0 6px; display:inline-flex; align-items:center; justify-content:center; flex:0 0 auto; }
+  #ax .qlist { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:5px; margin:0 -3px; padding:0 3px; }
+
+  #ax .acard { background:var(--bg); border:1px solid var(--outline-var); border-radius:9px; padding:7px 9px; display:flex; align-items:center; gap:8px; animation:axin .25s ease; }
+  @keyframes axin { from { opacity:0; transform:translateY(3px); } to { opacity:1; transform:none; } }
+  #ax .dot { width:8px; height:8px; border-radius:50%; background:var(--outline); flex:0 0 auto; }
+  #ax .dot.on { background:var(--primary); }
+  #ax .acname { flex:1; min-width:0; font-size:12px; color:var(--on-surface); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  #ax .days { font-size:10px; font-weight:500; flex:0 0 auto; padding:2px 7px; border-radius:var(--rfull); background:var(--surface-var); color:var(--on-surface-var); display:inline-flex; align-items:center; gap:3px; white-space:nowrap; }
+  #ax .days i { font-size:11px; }
+  #ax .days.urgent { background:color-mix(in srgb,var(--error) 14%,var(--bg)); color:var(--error); }
+  #ax .days.forecast { background:transparent; color:var(--error); border:1px dashed var(--error); }
+  #ax .qempty { font-size:11px; color:var(--on-surface-var); opacity:.55; padding:6px 2px; }
+</style>
+</head>
+<body>
+<div id="ax">
+  <div class="hd"><span class="star"></span><span class="tag">CEPHEID · AZIONI</span>
+    <div class="vsw">
+      <a href="cepheid-timeline.html" class="vbtn" title="Timeline"><i class="ti ti-chart-gantt"></i></a>
+      <a href="cepheid-kanban.html" class="vbtn" title="Kanban"><i class="ti ti-layout-kanban"></i></a>
+      <a href="cepheid-triage.html" class="vbtn" title="Smistamento"><i class="ti ti-inbox"></i></a>
+      <a href="#" class="vbtn active" title="Azioni"><i class="ti ti-layout-grid"></i></a>
+      <a href="sidera-log.html" class="vbtn" title="Attività"><i class="ti ti-activity"></i></a>
+    </div>
+  </div>
+  <p class="pname">Azioni</p>
+
+  <div class="cursor">
+    <div class="curlbl">campo <b id="axLbl">oggi</b><span class="curdelta" id="axDelta"></span></div>
+    <input type="range" min="0" max="14" value="0" id="axRange">
+    <div class="curscale"><span>oggi</span><span>fra 7 gg</span><span>fra 14 gg</span></div>
+  </div>
+
+  <div class="matrix">
+    <div class="quad q1"><div class="qhd"><div><div class="qname">Incendio</div><div class="qsub">urgente · importante</div></div><span class="qcount">0</span></div><div class="qlist"></div></div>
+    <div class="quad q2"><div class="qhd"><div><div class="qname">Costruire</div><div class="qsub">importante · non urgente</div></div><span class="qcount">0</span></div><div class="qlist"></div></div>
+    <div class="quad q3"><div class="qhd"><div><div class="qname">Rumore</div><div class="qsub">urgente · non importante</div></div><span class="qcount">0</span></div><div class="qlist"></div></div>
+    <div class="quad q4"><div class="qhd"><div><div class="qname">Scarto</div><div class="qsub">non urgente · non importante</div></div><span class="qcount">0</span></div><div class="qlist"></div></div>
+  </div>
+</div>
+
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3/dist/tabler-icons.min.css">
+<script>
+const URG=3; // soglia urgenza in giorni
+let cursor=0;
+// due = giorni alla scadenza da oggi · imp = importante · status per il puntino
+const TASKS=[
+  {id:1,  n:"Approvare preventivo Rossi",     due:1,  imp:true,  status:"doing"},
+  {id:2,  n:"Consegna campioni cliente",      due:2,  imp:true,  status:"doing"},
+  {id:3,  n:"Definire specifiche grata XR",   due:8,  imp:true,  status:"todo"},
+  {id:4,  n:"Pianificare verniciatura lotto", due:12, imp:true,  status:"todo"},
+  {id:5,  n:"Revisione disegni tecnici",      due:6,  imp:true,  status:"doing"},
+  {id:6,  n:"Rispondere email fornitore",     due:1,  imp:false, status:"todo"},
+  {id:7,  n:"Aggiornare listino prezzi",      due:2,  imp:false, status:"todo"},
+  {id:8,  n:"Ordinare cancelleria ufficio",   due:10, imp:false, status:"todo"},
+  {id:9,  n:"Archiviare vecchi progetti",     due:15, imp:false, status:"todo"},
+  {id:10, n:"Test resistenza profilo",        due:5,  imp:true,  status:"review"},
+  {id:11, n:"Foto prodotti catalogo",         due:9,  imp:false, status:"todo"},
+  {id:12, n:"Bozza contratto fornitura",      due:4,  imp:true,  status:"doing"},
+];
+
+function quadOf(t, cur){ const urgent=(t.due-cur)<=URG; return urgent ? (t.imp?'q1':'q3') : (t.imp?'q2':'q4'); }
+function daysLabel(eff){ if(eff<0) return 'scaduto'; if(eff===0) return 'oggi'; if(eff===1) return 'fra 1 gg'; return 'fra '+eff+' gg'; }
+
+function axRender(){
+  const counts={q1:0,q2:0,q3:0,q4:0};
+  ['q1','q2','q3','q4'].forEach(q=>{ document.querySelector('#ax .'+q+' .qlist').innerHTML=''; });
+  TASKS.forEach(t=>{
+    const q=quadOf(t,cursor);
+    counts[q]++;
+    const eff=t.due-cursor;
+    const urgentCur=(t.due-cursor)<=URG, urgentToday=t.due<=URG;
+    const forecast=urgentCur && !urgentToday;
+    const dot=(t.status==='doing'||t.status==='review')?' on':'';
+    const cls = forecast ? 'forecast' : (urgentCur?'urgent':'');
+    const fc = forecast ? '<i class="ti ti-clock"></i>' : '';
+    const card='<div class="acard"><span class="dot'+dot+'"></span><span class="acname" title="'+t.n+'">'+t.n+'</span><span class="days '+cls+'">'+fc+daysLabel(eff)+'</span></div>';
+    document.querySelector('#ax .'+q+' .qlist').insertAdjacentHTML('beforeend', card);
+  });
+  ['q1','q2','q3','q4'].forEach(q=>{
+    const list=document.querySelector('#ax .'+q+' .qlist');
+    if(counts[q]===0) list.innerHTML='<div class="qempty">nessuna azione</div>';
+    document.querySelector('#ax .'+q+' .qcount').textContent=counts[q];
+  });
+  document.getElementById('axLbl').textContent = cursor===0?'oggi':'fra '+cursor+(cursor===1?' giorno':' giorni');
+  const todayQ1=TASKS.filter(t=>quadOf(t,0)==='q1').length;
+  const delta=counts.q1-todayQ1;
+  document.getElementById('axDelta').textContent = (cursor>0 && delta>0) ? ('+'+delta+(delta===1?' incendio':' incendi')+' rispetto a oggi') : '';
+}
+
+document.getElementById('axRange').addEventListener('input', e=>{ cursor=parseInt(e.target.value,10)||0; axRender(); });
+axRender();
+</script>
+</body>
+</html>

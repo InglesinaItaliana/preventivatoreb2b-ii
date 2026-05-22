@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { collection, query, orderBy, getDocs, limit, updateDoc, doc, onSnapshot } from 'firebase/firestore';
-import { db } from '../firebase';
+import { db, auth } from '../firebase';
 import { useRouter } from 'vue-router';
 import { STATUS_DETAILS } from '../types';
 import OrderModals from '../components/OrderModals.vue';
@@ -155,7 +155,7 @@ const confermaProduzione = (preventivo: any) => {
 const onConfirmProduction = async () => {
   if (!selectedOrder.value) return;
   try {
-    await updateDoc(doc(db, 'preventivi', selectedOrder.value.id), { stato: 'IN_PRODUZIONE' });
+    await updateDoc(doc(db, 'preventivi', selectedOrder.value.id), { stato: 'IN_PRODUZIONE', updatedByEmail: auth.currentUser?.email ?? null });
     showModals.value = false;
   } catch (e) { console.error(e); showCustomToast("Errore aggiornamento stato."); }
 };
@@ -165,7 +165,7 @@ const idOrdineInConferma = ref<string | null>(null);
 
 const ordinePronto = async (preventivo: any) => {
   try {
-      await updateDoc(doc(db, 'preventivi', preventivo.id), { stato: 'READY' });
+      await updateDoc(doc(db, 'preventivi', preventivo.id), { stato: 'READY', updatedByEmail: auth.currentUser?.email ?? null });
       // L'ordine sparirà dalla lista perché lo stato diventa READY (non incluso nel filtro produzione)
   } catch (e) { console.error(e); showCustomToast("Errore aggiornamento."); }
 };

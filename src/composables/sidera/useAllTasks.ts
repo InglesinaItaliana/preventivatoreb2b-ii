@@ -91,7 +91,7 @@ export function useAllTasks() {
   }
 
   async function uncompleteTask(projectId: string | null, taskId: string) {
-    const payload = { status: 'todo', completedAt: null }
+    const payload = { status: 'todo', completedAt: null, updatedByEmail: auth.currentUser?.email ?? null }
     if (projectId) {
       await updateDoc(doc(db, 'projects', projectId, 'tasks', taskId), payload)
       if (isRealTask(taskId)) {
@@ -148,10 +148,12 @@ export function useAllTasks() {
     taskId: string,
     data: Partial<{ title: string; priority: 'alta' | 'media' | 'bassa'; dueDate: Date | null; assignees: string[]; deliverableTaskIds: string[]; triaged: boolean; milestoneId: string | null }>,
   ) {
+    // updatedByEmail: attribuisce l'autore della modifica al registro attività QUASAR
+    const payload = { ...data, updatedByEmail: auth.currentUser?.email ?? null }
     if (projectId) {
-      await updateDoc(doc(db, 'projects', projectId, 'tasks', taskId), data)
+      await updateDoc(doc(db, 'projects', projectId, 'tasks', taskId), payload)
     } else {
-      await updateDoc(doc(db, 'tasks', taskId), data)
+      await updateDoc(doc(db, 'tasks', taskId), payload)
     }
   }
 

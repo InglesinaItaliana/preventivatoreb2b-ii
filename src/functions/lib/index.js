@@ -1563,4 +1563,151 @@ exports.autoDeliveredAfter7Days = functions
     console.log(`[autoDeliveredAfter7Days] Convertiti ${totale} ordini SHIPPED → DELIVERED.`);
     return null;
 });
+async function logActivity(e) {
+    var _a, _b, _c, _d;
+    try {
+        await admin.firestore().collection('activityLog').add({
+            ts: admin.firestore.FieldValue.serverTimestamp(),
+            system: e.system,
+            sourceType: e.sourceType,
+            sourceId: e.sourceId,
+            projectId: (_a = e.projectId) !== null && _a !== void 0 ? _a : null,
+            eventType: e.eventType,
+            verb: e.verb,
+            objectLabel: e.objectLabel,
+            tone: e.tone,
+            icon: e.icon,
+            actorEmail: (_b = e.actorEmail) !== null && _b !== void 0 ? _b : null,
+            actorUid: (_c = e.actorUid) !== null && _c !== void 0 ? _c : null,
+            actorName: (_d = e.actorName) !== null && _d !== void 0 ? _d : null,
+        });
+    }
+    catch (err) {
+        // Mai propagare: il logging è best-effort e non deve impattare nulla.
+        console.error('[activityLog] write fallita (ignoro):', err);
+    }
+}
+// Vero se almeno una delle chiavi differisce tra before e after.
+function fieldsChanged(before, after, keys) {
+    return keys.some(k => { var _a, _b; return JSON.stringify((_a = before === null || before === void 0 ? void 0 : before[k]) !== null && _a !== void 0 ? _a : null) !== JSON.stringify((_b = after === null || after === void 0 ? void 0 : after[k]) !== null && _b !== void 0 ? _b : null); });
+}
+const TASK_NOUN = {
+    task: 'il task', milestone: 'la milestone', deliverable: 'il deliverable',
+};
+// Logica condivisa task/milestone/deliverable (path standalone e di progetto).
+async function handleTaskWrite(change, taskId, projectId) {
+    var _a, _b, _c, _d, _e, _f, _g, _h;
+    const before = change.before.exists ? change.before.data() : null;
+    const after = change.after.exists ? change.after.data() : null;
+    const data = after || before;
+    if (!data)
+        return;
+    const type = data.type || 'task';
+    const noun = TASK_NOUN[type] || 'il task';
+    const objectLabel = (after === null || after === void 0 ? void 0 : after.title) || (before === null || before === void 0 ? void 0 : before.title) || '(senza titolo)';
+    const base = { system: 'SIDERA', sourceType: type, sourceId: taskId, projectId };
+    // CREATO
+    if (!before && after) {
+        return logActivity(Object.assign(Object.assign({}, base), { eventType: 'created', tone: 'gold', icon: 'add', verb: `ha creato ${noun}`, objectLabel, actorEmail: (_a = after.createdByEmail) !== null && _a !== void 0 ? _a : null, actorUid: (_b = after.createdBy) !== null && _b !== void 0 ? _b : null }));
+    }
+    // ELIMINATO (solo standalone: il delete a cascata di progetto è gestito da quel flusso)
+    if (before && !after) {
+        if (projectId)
+            return; // evita rumore dai cascade-delete dei task di progetto
+        return logActivity(Object.assign(Object.assign({}, base), { eventType: 'deleted', tone: 'red', icon: 'delete', verb: `ha eliminato ${noun}`, objectLabel, actorEmail: (_d = (_c = before.updatedByEmail) !== null && _c !== void 0 ? _c : before.createdByEmail) !== null && _d !== void 0 ? _d : null }));
+    }
+    if (!before || !after)
+        return;
+    const wasDone = before.status === 'done';
+    const isDone = after.status === 'done';
+    if (!wasDone && isDone) {
+        return logActivity(Object.assign(Object.assign({}, base), { eventType: 'completed', tone: 'gold', icon: 'check_circle', verb: `ha completato ${noun}`, objectLabel, actorEmail: (_e = after.completedBy) !== null && _e !== void 0 ? _e : null }));
+    }
+    if (wasDone && !isDone) {
+        return logActivity(Object.assign(Object.assign({}, base), { eventType: 'uncompleted', tone: 'neutral', icon: 'undo', verb: `ha riaperto ${noun}`, objectLabel, actorEmail: (_f = after.updatedByEmail) !== null && _f !== void 0 ? _f : null }));
+    }
+    // APPROVATO (solo deliverable: campo `approved`)
+    if (!before.approved && after.approved === true) {
+        return logActivity(Object.assign(Object.assign({}, base), { eventType: 'approved', tone: 'gold', icon: 'verified', verb: `ha approvato ${noun}`, objectLabel, actorEmail: (_g = after.approvedByEmail) !== null && _g !== void 0 ? _g : null }));
+    }
+    // MODIFICATO (solo campi user-facing; evita rumore da contatori/triaged)
+    if (fieldsChanged(before, after, ['title', 'priority', 'dueDate', 'assignees'])) {
+        return logActivity(Object.assign(Object.assign({}, base), { eventType: 'modified', tone: 'neutral', icon: 'edit', verb: `ha modificato ${noun}`, objectLabel, actorEmail: (_h = after.updatedByEmail) !== null && _h !== void 0 ? _h : null }));
+    }
+}
+exports.logTaskActivityStandalone = functions
+    .region('europe-west1')
+    .firestore.document('tasks/{taskId}')
+    .onWrite((change, context) => handleTaskWrite(change, context.params.taskId, null));
+exports.logTaskActivitySub = functions
+    .region('europe-west1')
+    .firestore.document('projects/{projectId}/tasks/{taskId}')
+    .onWrite((change, context) => handleTaskWrite(change, context.params.taskId, context.params.projectId));
+exports.logProjectActivity = functions
+    .region('europe-west1')
+    .firestore.document('projects/{projectId}')
+    .onWrite(async (change, context) => {
+    var _a, _b, _c;
+    const before = change.before.exists ? change.before.data() : null;
+    const after = change.after.exists ? change.after.data() : null;
+    const projectId = context.params.projectId;
+    const objectLabel = (after === null || after === void 0 ? void 0 : after.name) || (before === null || before === void 0 ? void 0 : before.name) || '(senza nome)';
+    const base = { system: 'SIDERA', sourceType: 'project', sourceId: projectId, projectId };
+    if (!before && after) {
+        return logActivity(Object.assign(Object.assign({}, base), { eventType: 'created', tone: 'gold', icon: 'create_new_folder', verb: 'ha creato il progetto', objectLabel, actorUid: (_a = after.createdBy) !== null && _a !== void 0 ? _a : null }));
+    }
+    if (before && !after)
+        return; // niente evento sul delete progetto (cascade) per v1
+    if (!before || !after)
+        return;
+    if (!before.completed && after.completed === true) {
+        return logActivity(Object.assign(Object.assign({}, base), { eventType: 'completed', tone: 'gold', icon: 'check_circle', verb: 'ha completato il progetto', objectLabel, actorEmail: (_b = after.updatedByEmail) !== null && _b !== void 0 ? _b : null }));
+    }
+    if (fieldsChanged(before, after, ['name', 'description', 'color', 'dueDate', 'obiettivoId'])) {
+        return logActivity(Object.assign(Object.assign({}, base), { eventType: 'modified', tone: 'neutral', icon: 'edit', verb: 'ha modificato il progetto', objectLabel, actorEmail: (_c = after.updatedByEmail) !== null && _c !== void 0 ? _c : null }));
+    }
+});
+// POPS: trigger SEPARATO sullo stesso path di generaOrdineFIC (v1 ammette più trigger
+// indipendenti). NON tocca generaOrdineFIC. Logga solo le transizioni di `stato`.
+exports.logPreventivoActivity = functions
+    .region('europe-west1')
+    .firestore.document('preventivi/{docId}')
+    .onWrite(async (change, context) => {
+    var _a, _b, _c, _d, _e;
+    const before = change.before.exists ? change.before.data() : null;
+    const after = change.after.exists ? change.after.data() : null;
+    if (!after)
+        return; // delete preventivo: nessun evento v1
+    const codice = after.codice || context.params.docId;
+    const commessa = after.commessa ? ` · ${after.commessa}` : '';
+    const objectLabel = `#${codice}${commessa}`;
+    const cliente = after.cliente || null;
+    const base = { system: 'POPS', sourceType: 'order', sourceId: context.params.docId, projectId: null };
+    // CREATO
+    if (!before) {
+        return logActivity(Object.assign(Object.assign({}, base), { eventType: 'created', tone: 'gold', icon: 'add', verb: "ha creato l'ordine", objectLabel, actorName: cliente }));
+    }
+    // Solo su cambio di stato
+    if (before.stato === after.stato)
+        return;
+    switch (after.stato) {
+        case 'ORDER_REQ':
+            return logActivity(Object.assign(Object.assign({}, base), { eventType: 'sent', tone: 'gold', icon: 'outbox', verb: "ha inviato l'ordine", objectLabel, actorName: cliente }));
+        case 'SIGNED':
+            // Conferma = azione del cliente (clienteUID) → nome dal campo `cliente`.
+            return logActivity(Object.assign(Object.assign({}, base), { eventType: 'confirmed', tone: 'gold', icon: 'task_alt', verb: "ha confermato l'ordine", objectLabel, actorName: cliente }));
+        case 'IN_PRODUZIONE':
+            return logActivity(Object.assign(Object.assign({}, base), { eventType: 'in_produzione', tone: 'neutral', icon: 'precision_manufacturing', verb: "ha messo in produzione l'ordine", objectLabel, actorEmail: (_a = after.updatedByEmail) !== null && _a !== void 0 ? _a : null }));
+        case 'READY':
+            return logActivity(Object.assign(Object.assign({}, base), { eventType: 'ready', tone: 'gold', icon: 'inventory_2', verb: "ha contrassegnato pronto l'ordine", objectLabel, actorEmail: (_b = after.updatedByEmail) !== null && _b !== void 0 ? _b : null }));
+        case 'SHIPPED':
+            return logActivity(Object.assign(Object.assign({}, base), { eventType: 'shipped', tone: 'gold', icon: 'local_shipping', verb: "ha spedito l'ordine", objectLabel, actorEmail: (_c = after.updatedByEmail) !== null && _c !== void 0 ? _c : null }));
+        case 'DELIVERED':
+            return logActivity(Object.assign(Object.assign({}, base), { eventType: 'delivered', tone: 'gold', icon: 'home', verb: "ha consegnato l'ordine", objectLabel, actorEmail: (_d = after.updatedByEmail) !== null && _d !== void 0 ? _d : null }));
+        case 'REJECTED':
+            return logActivity(Object.assign(Object.assign({}, base), { eventType: 'cancelled', tone: 'red', icon: 'close', verb: "ha annullato l'ordine", objectLabel, actorEmail: (_e = after.annullatoDa) !== null && _e !== void 0 ? _e : null }));
+        default:
+            return; // DRAFT, PENDING_VAL, QUOTE_READY, WAITING_SIGN, WAITING_FAST, DELIVERY → nessun evento
+    }
+});
 //# sourceMappingURL=index.js.map

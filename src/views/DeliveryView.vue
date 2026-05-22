@@ -453,7 +453,8 @@ const handleConfirmDelivery = async (signatureBase64: string) => {
         batch.update(ref, {
            stato: 'DELIVERED',
            firmaConsegna: signatureUrl,
-           dataConsegnaEffettiva: timestamp
+           dataConsegnaEffettiva: timestamp,
+           updatedByEmail: auth.currentUser?.email ?? null
         });
      });
      
