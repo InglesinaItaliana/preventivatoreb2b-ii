@@ -14,6 +14,7 @@ import StarAvatar from '../../components/shared/StarAvatar.vue'
 import { useChats } from '../../composables/pulsar/useChats'
 import { useNotifications, type NotificationScope } from '../../composables/shared/useNotifications'
 import { useTriageCount } from '../../composables/cepheid/useTriageCount'
+import { useCoreAdmins } from '../../composables/sidera/useCoreAdmins'
 
 const route  = useRoute()
 const router = useRouter()
@@ -21,6 +22,15 @@ const { currentUser } = useCurrentUser()
 const { members } = useTeamMembers()
 const { chats } = useChats()
 const { triageCount } = useTriageCount()
+
+// Sezione CORE (admin-only): visibile a chi è nella allowlist; in bootstrap
+// (lista non ancora inizializzata) anche a un ruolo ADMIN che può crearla.
+const { isCoreAdmin, initialized: coreInitialized } = useCoreAdmins()
+const CORE_ACCENT = '#7D8794'
+const canAccessCore = computed(() =>
+  isCoreAdmin(currentUser.value?.email) ||
+  (!coreInitialized.value && currentUser.value?.role === 'ADMIN'),
+)
 
 // ── Adaptive mode detection (standalone / mobile viewport) ──────────────────
 const isStandalone = ref(false)
@@ -483,6 +493,19 @@ const roleLabel: Record<string, string> = {
           <div v-if="mod.items.length === 0" class="s-nav-empty">
             <span class="s-soon" :style="{ borderColor: mod.accent + '44', color: mod.accent + 'AA' }">In arrivo</span>
           </div>
+        </template>
+
+        <!-- CORE: sezione admin-only in fondo (manutenzione + impostazioni) -->
+        <template v-if="canAccessCore">
+          <p class="s-section-label" :style="{ color: route.path.startsWith('/sidera/admin/maintenance') || route.path.startsWith('/sidera/core') ? CORE_ACCENT : undefined }">CORE</p>
+          <RouterLink to="/sidera/admin/maintenance" class="s-nav-item" :style="activeStyle('/sidera/admin/maintenance', false, CORE_ACCENT)">
+            <MIcon name="build" :size="18" :filled="isActive('/sidera/admin/maintenance', false)" class="s-nav-icon" :style="activeIconStyle('/sidera/admin/maintenance', false, CORE_ACCENT)" />
+            Manutenzione
+          </RouterLink>
+          <RouterLink to="/sidera/core/settings" class="s-nav-item" :style="activeStyle('/sidera/core/settings', false, CORE_ACCENT)">
+            <MIcon name="settings" :size="18" :filled="isActive('/sidera/core/settings', false)" class="s-nav-icon" :style="activeIconStyle('/sidera/core/settings', false, CORE_ACCENT)" />
+            Impostazioni
+          </RouterLink>
         </template>
       </nav>
 

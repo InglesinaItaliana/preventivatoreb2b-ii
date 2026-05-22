@@ -1617,9 +1617,14 @@ exports.cleanupOrphanPendingMessages = functions
     .region('europe-west1')
     .runWith({ timeoutSeconds: 540, memory: '512MB' })
     .https.onCall(async (_data, context) => {
-        // Admin-only: stesso pattern di altre function admin del progetto
+        // Admin-only: allowlist dinamica in core/admins (+ super-admin info@ come fallback)
         const callerEmail = context.auth?.token?.email?.toLowerCase()?.trim();
-        if (callerEmail !== 'info@inglesinaitaliana.it') {
+        const adminsSnap = await admin.firestore().doc('core/admins').get();
+        const adminEmails = ((adminsSnap.data()?.emails ?? []) as string[])
+            .map((e) => (e ?? '').toLowerCase().trim());
+        const allowed = callerEmail === 'info@inglesinaitaliana.it'
+            || (!!callerEmail && adminEmails.includes(callerEmail));
+        if (!allowed) {
             throw new functions.https.HttpsError('permission-denied', 'Solo admin.');
         }
 

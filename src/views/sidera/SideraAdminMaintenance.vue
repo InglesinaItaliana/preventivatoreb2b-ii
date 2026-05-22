@@ -10,10 +10,12 @@ import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { httpsCallable } from 'firebase/functions'
 import { auth, functions } from '../../firebase'
+import { useCoreAdmins } from '../../composables/sidera/useCoreAdmins'
 
 const router = useRouter()
+const { isCoreAdmin } = useCoreAdmins()
 const userEmail = computed(() => (auth.currentUser?.email ?? '').toLowerCase().trim())
-const isAdmin = computed(() => userEmail.value === 'info@inglesinaitaliana.it')
+const isAdmin = computed(() => isCoreAdmin(userEmail.value))
 
 interface CleanupResult {
   orphanChatsCount: number
