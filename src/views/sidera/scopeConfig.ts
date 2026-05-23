@@ -114,10 +114,11 @@ export const SCOPE_CONFIGS: Record<Exclude<ScopeId, 'sidera'>, ScopeConfig> = {
     wordmark: 'QUASAR',
     brandSvg: 'quasar',
     mobileNav: [
+      { path: '/quasar/cruscotto', exact: false, label: 'Cruscotto', icon: 'home' },
       { path: '/quasar/quadranti', exact: false, label: 'Quadranti', icon: 'grid_view' },
       { path: '/quasar/attivita',  exact: false, label: 'Attività',  icon: 'history' },
     ],
-    isTopLevelPath: (p) => ['/quasar', '/quasar/quadranti', '/quasar/attivita'].includes(p),
+    isTopLevelPath: (p) => ['/quasar', '/quasar/cruscotto', '/quasar/quadranti', '/quasar/attivita'].includes(p),
     loginPath: '/quasar/login',
     notificationScope: 'sidera',
   },

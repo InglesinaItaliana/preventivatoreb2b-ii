@@ -73,7 +73,7 @@ const router = createRouter({
       meta: { requiresAuth: true },
       children: [
         { path: '',           name: 'sidera-home',    component: () => import('../views/sidera/HomeView.vue') },
-        { path: 'hub',        name: 'sidera-hub',     component: () => import('../views/sidera/SideraHubView.vue') },
+        { path: 'hub',        redirect: '/sidera' },
         // Route legacy /sidera/{tasks,projects,projects/:id} eliminate 2026-05-20:
         // tutte redirect a /cepheid/* dopo che le feature SIDERA-specific sono state
         // portate dentro le viste CEPHEID (filter tabs estesi, edit modal, context menu,
@@ -187,7 +187,8 @@ const router = createRouter({
       component: () => import('../views/sidera/SideraLayout.vue'),
       meta: { requiresAuth: true, quasarScope: true },
       children: [
-        { path: '',          redirect: '/quasar/quadranti' },
+        { path: '',          redirect: '/quasar/cruscotto' },
+        { path: 'cruscotto', name: 'quasar-cruscotto', component: () => import('../views/quasar/QuasarCruscottoView.vue') },
         { path: 'quadranti', name: 'quasar-quadranti', component: () => import('../views/quasar/QuasarQuadrantiView.vue') },
         { path: 'attivita',  name: 'quasar-attivita',  component: () => import('../views/quasar/QuasarAttivitaView.vue') },
       ]

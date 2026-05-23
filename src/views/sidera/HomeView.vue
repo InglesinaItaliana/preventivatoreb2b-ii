@@ -1,575 +1,571 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import MIcon from '../../components/shared/MIcon.vue'
-import { usePopsMetrics }  from '../../composables/sidera/usePopsMetrics'
-import { useAllTasks }     from '../../composables/sidera/useAllTasks'
-import { useProjects }     from '../../composables/sidera/useProjects'
-import { useCurrentUser }  from '../../composables/sidera/useCurrentUser'
-import { useTeamMembers, displayName, starAvatarProps } from '../../composables/sidera/useTeamMembers'
-import StarAvatar from '../../components/shared/StarAvatar.vue'
-import { ref } from 'vue'
 
 const router = useRouter()
-const { daGestire, inProduzione, pronti, valorePipeline, urgenze, loading: metricsLoading } = usePopsMetrics()
-const { tasks, loading: tasksLoading, completeTask } = useAllTasks()
-const { projects, loading: projsLoading } = useProjects()
-const { currentUser } = useCurrentUser()
-const { members } = useTeamMembers()
 
-// ── Greeting ──────────────────────────────────────────────────────────────
-const greeting = computed(() => {
-  const h = new Date().getHours()
-  if (h >= 5  && h < 12) return 'Buongiorno'
-  if (h >= 12 && h < 18) return 'Buon pomeriggio'
-  return 'Buonasera'
-})
+const SCOPE_ROUTES: Record<string, { type: 'internal' | 'external'; href: string }> = {
+  quasar:   { type: 'internal', href: '/quasar/cruscotto' },
+  nebula:   { type: 'internal', href: '/nebula' },
+  cepheid:  { type: 'internal', href: '/cepheid' },
+  pulsar:   { type: 'internal', href: '/pulsar' },
+  nova:     { type: 'internal', href: '/sidera/nova/spedizioni' },
+  magnetar: { type: 'external', href: 'https://b2b.inglesinaitaliana.it' },
+}
 
-const todayLabel = computed(() =>
-  new Intl.DateTimeFormat('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date())
-    .replace(/^\w/, c => c.toUpperCase())
+const moduleColor = ref('#D4C498')
+let cycleTimer: ReturnType<typeof setInterval> | null = null
+
+// Theme toggle (dark / light). Persistito in localStorage.
+const THEME_KEY = 'sidera-home-theme'
+const isLight = ref<boolean>(
+  typeof window !== 'undefined' && window.localStorage?.getItem(THEME_KEY) === 'light'
 )
 
-const userName = computed(() => currentUser.value?.email ? displayName(currentUser.value.email, members.value) : '…')
+// In light mode le sfere restano sempre color SIDERA (glow uniforme), non cambiano col modulo.
+// setSpheresFn viene esposto da onMounted per consentire al toggle di rinfrescare le sfere subito.
+let setSpheresFn: ((c: string) => void) | null = null
 
-// ── Azioni di oggi ────────────────────────────────────────────────────────
-const pendingDone = ref<Set<string>>(new Set())
-
-async function doComplete(t: { id: string; projectId: string }) {
-  if (pendingDone.value.has(t.id)) return
-  pendingDone.value = new Set([...pendingDone.value, t.id])
-  await completeTask(t.projectId, t.id)
+function toggleTheme() {
+  isLight.value = !isLight.value
+  try { window.localStorage.setItem(THEME_KEY, isLight.value ? 'light' : 'dark') } catch (_e) { /* ignore */ }
+  if (setSpheresFn) setSpheresFn(moduleColor.value)
 }
 
-const azioniOggi = computed(() => {
-  const start = new Date(); start.setHours(0, 0, 0, 0)
-  const end   = new Date(); end.setHours(23, 59, 59, 999)
-  return tasks.value.filter(t =>
-    !t.completedAt &&
-    !pendingDone.value.has(t.id) &&
-    t.dueDate && t.dueDate >= start && t.dueDate <= end &&
-    (t.assignees.includes(currentUser.value?.email ?? '') || t.createdBy === currentUser.value?.uid)
-  )
-})
+onMounted(() => {
+  const NE = '#2A3F52', NV = '#243648', NS = '#364F66', SIDERA = '#D4C498'
 
-// ── Progetti attivi ───────────────────────────────────────────────────────
-const activeProjects = computed(() =>
-  projects.value.filter(p => !p.archived && p.active !== false).slice(0, 4)
-)
-
-function pct(p: { taskCount: number; doneCount: number }) {
-  if (!p.taskCount) return 0
-  return Math.round((p.doneCount / p.taskCount) * 100)
-}
-
-function formatDue(d: Date | null) {
-  if (!d) return ''
-  return new Intl.DateTimeFormat('it-IT', { day: 'numeric', month: 'short' }).format(d)
-}
-
-// ── Priorità ──────────────────────────────────────────────────────────────
-const prioColor: Record<string, string> = { alta: '#C8521A', media: '#D4A020', bassa: '#7A8FA6' }
-const prioLabel: Record<string, string> = { alta: 'Alta', media: 'Media', bassa: 'Bassa' }
-
-// ── Feed team reale ───────────────────────────────────────────────────────
-interface FeedEvent {
-  key: string
-  actor: string
-  action: string
-  what: string
-  when: Date
-}
-
-function timeAgo(d: Date): string {
-  const diff = Date.now() - d.getTime()
-  if (diff < 60_000)     return 'adesso'
-  if (diff < 3_600_000)  return Math.floor(diff / 60_000) + 'm fa'
-  if (diff < 86_400_000) return Math.floor(diff / 3_600_000) + 'h fa'
-  return Math.floor(diff / 86_400_000) + 'g fa'
-}
-
-const feedEvents = computed((): FeedEvent[] => {
-  const events: FeedEvent[] = []
-
-  for (const t of tasks.value) {
-    if (t.createdByEmail && t.createdAt) {
-      events.push({
-        key:    'c-' + t.id,
-        actor:  t.createdByEmail,
-        action: 'ha creato',
-        what:   t.title,
-        when:   t.createdAt,
-      })
+  const mods: any[] = [
+    null,
+    { id:'quasar',   name:'Quasar',   desc:'Analytics · KPI · Business Intelligence',
+      color:'#98C0D0', vx:340, vy:68,
+      vEl:'hv-quasar',   hlEl:'hv-hl-quasar',   hsEl:'hv-hs-quasar',
+      edges:[{id:'hv-e-v1v2',ox:155,oy:400},{id:'hv-e-v3v1',ox:525,oy:400},{id:'hv-e-v1v4',ox:405,oy:252},{id:'hv-e-v1v5',ox:275,oy:252}]
+    },
+    { id:'nebula',   name:'Nebula',   desc:'HR · Anagrafiche · Documentale',
+      color:'#C46030', vx:155, vy:400,
+      vEl:'hv-nebula',   hlEl:'hv-hl-nebula',   hsEl:'hv-hs-nebula',
+      edges:[{id:'hv-e-v1v2',ox:340,oy:68},{id:'hv-e-v2v3',ox:525,oy:400},{id:'hv-e-v2v5',ox:275,oy:252},{id:'hv-e-v2v6',ox:340,oy:364}]
+    },
+    { id:'cepheid',  name:'Cepheid',  desc:'Project Management · Workflow · Task',
+      color:'#D4A020', vx:525, vy:400,
+      vEl:'hv-cepheid',  hlEl:'hv-hl-cepheid',  hsEl:'hv-hs-cepheid',
+      edges:[{id:'hv-e-v2v3',ox:155,oy:400},{id:'hv-e-v3v1',ox:340,oy:68},{id:'hv-e-v3v4',ox:405,oy:252},{id:'hv-e-v3v6',ox:340,oy:364}]
+    },
+    { id:'pulsar',   name:'Pulsar',   desc:'Chat · Comunicazione · Collaborazione',
+      color:'#3AAF98', vx:405, vy:252,
+      vEl:'hv-pulsar',   hlEl:'hv-hl-pulsar',   hsEl:'hv-hs-pulsar',
+      edges:[{id:'hv-e-v5v4',ox:275,oy:252},{id:'hv-e-v4v6',ox:340,oy:364},{id:'hv-e-v1v4',ox:340,oy:68},{id:'hv-e-v3v4',ox:525,oy:400}]
+    },
+    { id:'nova',     name:'Nova',     desc:'Logistica · Supply Chain · Spedizioni',
+      color:'#8FAB35', vx:275, vy:252,
+      vEl:'hv-nova',     hlEl:'hv-hl-nova',     hsEl:'hv-hs-nova',
+      edges:[{id:'hv-e-v5v4',ox:405,oy:252},{id:'hv-e-v6v5',ox:340,oy:364},{id:'hv-e-v1v5',ox:340,oy:68},{id:'hv-e-v2v5',ox:155,oy:400}]
+    },
+    { id:'magnetar', name:'Magnetar', desc:'CRM · Lead Generation · Pipeline Commerciale',
+      color:'#B06842', vx:340, vy:364,
+      vEl:'hv-magnetar', hlEl:'hv-hl-magnetar', hsEl:'hv-hs-magnetar',
+      edges:[{id:'hv-e-v4v6',ox:405,oy:252},{id:'hv-e-v6v5',ox:275,oy:252},{id:'hv-e-v2v6',ox:155,oy:400},{id:'hv-e-v3v6',ox:525,oy:400}]
     }
-    if (t.completedBy && t.completedAt) {
-      events.push({
-        key:    'd-' + t.id,
-        actor:  t.completedBy,
-        action: 'ha completato',
-        what:   t.title,
-        when:   t.completedAt,
-      })
-    }
+  ]
+
+  const allEdges = ['hv-e-v1v2','hv-e-v2v3','hv-e-v3v1','hv-e-v5v4','hv-e-v4v6','hv-e-v6v5','hv-e-v1v4','hv-e-v1v5','hv-e-v2v5','hv-e-v2v6','hv-e-v3v4','hv-e-v3v6']
+  const svgDefs = document.getElementById('hv-svg-defs')!
+  let idx = 0
+
+  function stopCycle() { if (cycleTimer) { clearInterval(cycleTimer); cycleTimer = null } }
+  function startCycle() { stopCycle(); cycleTimer = setInterval(cycle, 4800) }
+
+  function h2r(h: string) { return { r: parseInt(h.slice(1,3),16), g: parseInt(h.slice(3,5),16), b: parseInt(h.slice(5,7),16) } }
+
+  function setSpheres(c: string) {
+    // In light mode le sfere sono sempre color SIDERA, indipendentemente dal modulo attivo.
+    const effective = isLight.value ? SIDERA : c
+    const { r, g, b } = h2r(effective)
+    const vals = [
+      `rgba(${r},${g},${b},.52)`,
+      `rgba(${Math.round(r*.5)},${Math.round(g*.5)},${Math.round(b*.65)},.58)`,
+      `rgba(${Math.round(r*.32)},${Math.round(g*.4)},${Math.round(b*.72)},.48)`,
+      `rgba(${Math.round(r*.82)},${Math.round(g*.72)},${Math.round(b*.48)},.44)`,
+    ]
+    ;['hv-s1','hv-s2','hv-s3','hv-s4'].forEach((id, i) => {
+      const el = document.getElementById(id)
+      if (!el) return
+      el.style.background = vals[i] ?? ''
+    })
+  }
+  setSpheresFn = setSpheres
+
+  function resetLogo() {
+    allEdges.forEach(id => document.getElementById(id)?.setAttribute('stroke', NE))
+    const eg = document.getElementById('hv-edge-glow'); if (eg) eg.style.opacity = '0'
+    const es = document.getElementById('hv-edge-sweep'); if (es) es.style.opacity = '0'
+    mods.filter(Boolean).forEach(m => {
+      const v = document.getElementById(m.vEl); if (v) { v.style.fill = NV; v.style.stroke = NS }
+      const hl = document.getElementById(m.hlEl); if (hl) { hl.style.opacity = '0'; hl.style.fillOpacity = '0' }
+      const hs = document.getElementById(m.hsEl); if (hs) { hs.style.opacity = '0'; hs.style.fillOpacity = '0' }
+    })
   }
 
-  return events
-    .sort((a, b) => b.when.getTime() - a.when.getTime())
-    .slice(0, 6)
+  function activateLogo(m: any) {
+    const v = document.getElementById(m.vEl); if (v) { v.style.fill = m.color; v.style.stroke = m.color }
+    const hl = document.getElementById(m.hlEl); if (hl) { hl.style.fill = m.color; hl.style.fillOpacity = '.11'; hl.style.opacity = '1' }
+    const hs = document.getElementById(m.hsEl); if (hs) { hs.style.fill = m.color; hs.style.fillOpacity = '.28'; hs.style.opacity = '1' }
+    m.edges.forEach((e: any, i: number) => {
+      const gid = `hv-g${i}`
+      let g: Element | null = document.getElementById(gid)
+      if (!g) {
+        g = document.createElementNS('http://www.w3.org/2000/svg', 'linearGradient')
+        g.setAttribute('id', gid); g.setAttribute('gradientUnits', 'userSpaceOnUse')
+        svgDefs.appendChild(g)
+      }
+      g.setAttribute('x1', String(m.vx)); g.setAttribute('y1', String(m.vy))
+      g.setAttribute('x2', String(e.ox)); g.setAttribute('y2', String(e.oy))
+      g.innerHTML = `<stop offset="0%" stop-color="${m.color}"/><stop offset="75%" stop-color="${m.color}"/><stop offset="100%" stop-color="${NE}"/>`
+      document.getElementById(e.id)?.setAttribute('stroke', `url(#${gid})`)
+    })
+  }
+
+  function revealName(el: HTMLElement, text: string) {
+    el.innerHTML = ''
+    ;[...text].forEach((ch, i) => {
+      const s = document.createElement('span')
+      s.textContent = ch === ' ' ? ' ' : ch
+      s.style.cssText = `opacity:0;display:inline;transition:opacity .38s ease ${i*.065}s`
+      el.appendChild(s)
+    })
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      el.querySelectorAll('span').forEach(s => ((s as HTMLElement).style.opacity = '1'))
+    }))
+  }
+
+  function cycle() {
+    const m = mods[idx]
+    idx = (idx + 1) % mods.length
+    const disp = document.getElementById('hv-mod-display')!
+    disp.classList.add('fading')
+    setTimeout(() => {
+      resetLogo()
+      const sep = disp.querySelector('.hv-sep') as HTMLElement
+      if (m === null) {
+        setSpheres(SIDERA)
+        moduleColor.value = SIDERA
+        document.getElementById('hv-module-name')!.innerHTML = '&nbsp;'
+        document.getElementById('hv-module-desc')!.innerHTML = '&nbsp;'
+        allEdges.forEach(id => document.getElementById(id)?.setAttribute('stroke', SIDERA))
+        const eg = document.getElementById('hv-edge-glow'); if (eg) eg.style.opacity = '0.45'
+        const es = document.getElementById('hv-edge-sweep'); if (es) es.style.opacity = '1'
+        if (sep) sep.style.opacity = '0'
+        mods.filter(Boolean).forEach(mod => {
+          const v = document.getElementById(mod.vEl); if (v) { v.style.fill = SIDERA; v.style.stroke = SIDERA }
+          const hs = document.getElementById(mod.hsEl); if (hs) { hs.style.fill = SIDERA; hs.style.fillOpacity = '.18'; hs.style.opacity = '1' }
+        })
+      } else {
+        activateLogo(m)
+        setSpheres(m.color)
+        moduleColor.value = m.color
+        revealName(document.getElementById('hv-module-name')!, m.name.toUpperCase())
+        document.getElementById('hv-module-desc')!.textContent = m.desc
+        if (sep) sep.style.opacity = '1'
+      }
+      disp.classList.remove('fading')
+    }, 430)
+  }
+
+  setTimeout(() => {
+    document.querySelectorAll('.hv-sphere').forEach(s => s.classList.add('on'))
+    cycle()
+    startCycle()
+
+    mods.filter(Boolean).forEach(m => {
+      const hit = document.getElementById('hv-hit-' + m.id)
+      if (!hit) return
+      hit.addEventListener('mouseenter', () => {
+        stopCycle()
+        const disp = document.getElementById('hv-mod-display')!
+        disp.classList.add('fading')
+        setTimeout(() => {
+          resetLogo()
+          activateLogo(m)
+          setSpheres(m.color)
+          moduleColor.value = m.color
+          revealName(document.getElementById('hv-module-name')!, m.name.toUpperCase())
+          document.getElementById('hv-module-desc')!.textContent = m.desc
+          const sep = disp.querySelector('.hv-sep') as HTMLElement
+          if (sep) sep.style.opacity = '1'
+          disp.classList.remove('fading')
+        }, 180)
+      })
+      hit.addEventListener('mouseleave', () => {
+        idx = (mods.indexOf(m) + 1) % mods.length
+        startCycle()
+      })
+      hit.addEventListener('click', () => {
+        const target = SCOPE_ROUTES[m.id]
+        if (!target) return
+        if (target.type === 'external') {
+          window.open(target.href, '_blank', 'noopener,noreferrer')
+          return
+        }
+        router.push(target.href)
+      })
+    })
+  }, 300)
 })
 
-// ── KPI ───────────────────────────────────────────────────────────────────
-function formatEuro(v: number) {
-  return new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v)
-}
-
-// ── Urgenze ───────────────────────────────────────────────────────────────
-function urgenzaColor(giorni: number) {
-  if (giorni <= 3) return '#C8521A'
-  if (giorni <= 7) return '#C8821A'
-  return 'var(--s-text-dim)'
-}
-
-function urgenzaLabel(giorni: number) {
-  if (giorni <= 0) return 'Scaduto'
-  if (giorni === 1) return 'Domani'
-  return giorni + 'g'
-}
+onUnmounted(() => {
+  if (cycleTimer) clearInterval(cycleTimer)
+})
 </script>
 
 <template>
-  <div class="hv s-fade-in">
+  <div class="hub" :class="{ light: isLight }" :style="{ '--module-color': moduleColor }">
+    <!-- Theme toggle pill -->
+    <button
+      class="theme-pill"
+      :aria-label="isLight ? 'Passa a tema scuro' : 'Passa a tema chiaro'"
+      @click="toggleTheme"
+    >
+      <span class="theme-icon material-symbols-outlined" :class="{ active: isLight }">light_mode</span>
+      <span class="theme-icon material-symbols-outlined" :class="{ active: !isLight }">dark_mode</span>
+    </button>
 
-    <!-- ── Header ──────────────────────────────────────────────────── -->
-    <div class="hv-header">
-      <h1 class="hv-greeting">{{ greeting }}, {{ userName }}.</h1>
-      <p class="hv-subtitle">
-        {{ todayLabel }}
-        <template v-if="!tasksLoading">
-          · {{ azioniOggi.length }} azioni per oggi
-        </template>
-      </p>
+    <!-- Sfere -->
+    <div class="hv-bg">
+      <div class="hv-sphere s1" id="hv-s1"></div>
+      <div class="hv-sphere s2" id="hv-s2"></div>
+      <div class="hv-sphere s3" id="hv-s3"></div>
+      <div class="hv-sphere s4" id="hv-s4"></div>
     </div>
 
-    <!-- ── Le mie azioni — oggi ────────────────────────────────────── -->
-    <section class="hv-section">
-      <p class="s-label">Le mie azioni — oggi</p>
+    <!-- Contenuto centrato -->
+    <div class="hv-content">
+      <svg class="hv-svg" viewBox="0 0 680 480" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <defs id="hv-svg-defs">
+          <filter id="hv-gf-sm" x="-80%" y="-80%" width="260%" height="260%">
+            <feGaussianBlur stdDeviation="4.5" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <filter id="hv-gf-md" x="-120%" y="-120%" width="340%" height="340%">
+            <feGaussianBlur stdDeviation="9" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <filter id="hv-gf-lg" x="-180%" y="-180%" width="460%" height="460%">
+            <feGaussianBlur stdDeviation="18" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <linearGradient id="hv-sweep-grad" gradientUnits="userSpaceOnUse" x1="-90" y1="240" x2="90" y2="240">
+            <stop offset="0%"   stop-color="#D4C498" stop-opacity="0"/>
+            <stop offset="50%"  stop-color="#D4C498" stop-opacity="1"/>
+            <stop offset="100%" stop-color="#D4C498" stop-opacity="0"/>
+            <animateTransform attributeName="gradientTransform" type="translate" values="-450 0; 1130 0" dur="3.2s" repeatCount="indefinite"/>
+          </linearGradient>
+        </defs>
 
-      <div v-if="tasksLoading" class="skeleton-rows">
-        <div v-for="i in 3" :key="i" class="row-skel" />
-      </div>
+        <!-- outer edges -->
+        <line id="hv-e-v1v2" x1="340" y1="68"  x2="155" y2="400" stroke-width="1.2" fill="none"/>
+        <line id="hv-e-v2v3" x1="155" y1="400" x2="525" y2="400" stroke-width="1.2" fill="none"/>
+        <line id="hv-e-v3v1" x1="525" y1="400" x2="340" y2="68"  stroke-width="1.2" fill="none"/>
+        <!-- inner edges -->
+        <line id="hv-e-v5v4" x1="275" y1="252" x2="405" y2="252" stroke-width="1.2" fill="none"/>
+        <line id="hv-e-v4v6" x1="405" y1="252" x2="340" y2="364" stroke-width="1.2" fill="none"/>
+        <line id="hv-e-v6v5" x1="340" y1="364" x2="275" y2="252" stroke-width="1.2" fill="none"/>
+        <!-- cross edges -->
+        <line id="hv-e-v1v4" x1="340" y1="68"  x2="405" y2="252" stroke-width="1.2" fill="none"/>
+        <line id="hv-e-v1v5" x1="340" y1="68"  x2="275" y2="252" stroke-width="1.2" fill="none"/>
+        <line id="hv-e-v2v5" x1="155" y1="400" x2="275" y2="252" stroke-width="1.2" fill="none"/>
+        <line id="hv-e-v2v6" x1="155" y1="400" x2="340" y2="364" stroke-width="1.2" fill="none"/>
+        <line id="hv-e-v3v4" x1="525" y1="400" x2="405" y2="252" stroke-width="1.2" fill="none"/>
+        <line id="hv-e-v3v6" x1="525" y1="400" x2="340" y2="364" stroke-width="1.2" fill="none"/>
 
-      <div v-else-if="!azioniOggi.length" class="empty-today">
-        Nessuna azione in scadenza oggi
-      </div>
+        <!-- edge glow -->
+        <g id="hv-edge-glow" opacity="0" style="transition:opacity .9s ease">
+          <line x1="340" y1="68"  x2="155" y2="400" stroke="#D4C498" stroke-width="3.5" fill="none" :filter="'url(#hv-gf-sm)'"/>
+          <line x1="155" y1="400" x2="525" y2="400" stroke="#D4C498" stroke-width="3.5" fill="none" :filter="'url(#hv-gf-sm)'"/>
+          <line x1="525" y1="400" x2="340" y2="68"  stroke="#D4C498" stroke-width="3.5" fill="none" :filter="'url(#hv-gf-sm)'"/>
+          <line x1="275" y1="252" x2="405" y2="252" stroke="#D4C498" stroke-width="3.5" fill="none" :filter="'url(#hv-gf-sm)'"/>
+          <line x1="405" y1="252" x2="340" y2="364" stroke="#D4C498" stroke-width="3.5" fill="none" :filter="'url(#hv-gf-sm)'"/>
+          <line x1="340" y1="364" x2="275" y2="252" stroke="#D4C498" stroke-width="3.5" fill="none" :filter="'url(#hv-gf-sm)'"/>
+          <line x1="340" y1="68"  x2="405" y2="252" stroke="#D4C498" stroke-width="3.5" fill="none" :filter="'url(#hv-gf-sm)'"/>
+          <line x1="340" y1="68"  x2="275" y2="252" stroke="#D4C498" stroke-width="3.5" fill="none" :filter="'url(#hv-gf-sm)'"/>
+          <line x1="155" y1="400" x2="275" y2="252" stroke="#D4C498" stroke-width="3.5" fill="none" :filter="'url(#hv-gf-sm)'"/>
+          <line x1="155" y1="400" x2="340" y2="364" stroke="#D4C498" stroke-width="3.5" fill="none" :filter="'url(#hv-gf-sm)'"/>
+          <line x1="525" y1="400" x2="405" y2="252" stroke="#D4C498" stroke-width="3.5" fill="none" :filter="'url(#hv-gf-sm)'"/>
+          <line x1="525" y1="400" x2="340" y2="364" stroke="#D4C498" stroke-width="3.5" fill="none" :filter="'url(#hv-gf-sm)'"/>
+        </g>
+        <!-- sweep -->
+        <g id="hv-edge-sweep" opacity="0" style="transition:opacity .9s ease">
+          <line x1="340" y1="68"  x2="155" y2="400" stroke="url(#hv-sweep-grad)" stroke-width="2" fill="none"/>
+          <line x1="155" y1="400" x2="525" y2="400" stroke="url(#hv-sweep-grad)" stroke-width="2" fill="none"/>
+          <line x1="525" y1="400" x2="340" y2="68"  stroke="url(#hv-sweep-grad)" stroke-width="2" fill="none"/>
+          <line x1="275" y1="252" x2="405" y2="252" stroke="url(#hv-sweep-grad)" stroke-width="2" fill="none"/>
+          <line x1="405" y1="252" x2="340" y2="364" stroke="url(#hv-sweep-grad)" stroke-width="2" fill="none"/>
+          <line x1="340" y1="364" x2="275" y2="252" stroke="url(#hv-sweep-grad)" stroke-width="2" fill="none"/>
+          <line x1="340" y1="68"  x2="405" y2="252" stroke="url(#hv-sweep-grad)" stroke-width="2" fill="none"/>
+          <line x1="340" y1="68"  x2="275" y2="252" stroke="url(#hv-sweep-grad)" stroke-width="2" fill="none"/>
+          <line x1="155" y1="400" x2="275" y2="252" stroke="url(#hv-sweep-grad)" stroke-width="2" fill="none"/>
+          <line x1="155" y1="400" x2="340" y2="364" stroke="url(#hv-sweep-grad)" stroke-width="2" fill="none"/>
+          <line x1="525" y1="400" x2="405" y2="252" stroke="url(#hv-sweep-grad)" stroke-width="2" fill="none"/>
+          <line x1="525" y1="400" x2="340" y2="364" stroke="url(#hv-sweep-grad)" stroke-width="2" fill="none"/>
+        </g>
 
-      <div
-        v-for="t in azioniOggi"
-        :key="t.id"
-        class="azione-row"
-        :style="{ borderLeftColor: prioColor[t.priority] }"
-        @click="doComplete(t)"
-      >
-        <div class="checkbox" :class="{ 'is-checked': pendingDone.has(t.id) }">
-          <MIcon v-if="pendingDone.has(t.id)" name="check" :size="12" :weight="700" class="check-icon" />
-        </div>
-        <div class="azione-title">{{ t.title }}</div>
-        <span
-          class="prio-pill"
-          :style="{ color: prioColor[t.priority], background: prioColor[t.priority] + '14' }"
-        >{{ prioLabel[t.priority] }}</span>
-        <StarAvatar v-for="email in t.assignees.slice(0,3)" :key="email" v-bind="starAvatarProps(email, members)" :size="24" />
-      </div>
-    </section>
+        <!-- halos large -->
+        <circle id="hv-hl-quasar"   cx="340" cy="68"  r="42" :filter="'url(#hv-gf-lg)'" style="fill:#2A3F52;fill-opacity:0;opacity:0;transition:fill .6s,fill-opacity .6s,opacity .6s"/>
+        <circle id="hv-hl-nebula"   cx="155" cy="400" r="42" :filter="'url(#hv-gf-lg)'" style="fill:#2A3F52;fill-opacity:0;opacity:0;transition:fill .6s,fill-opacity .6s,opacity .6s"/>
+        <circle id="hv-hl-cepheid"  cx="525" cy="400" r="42" :filter="'url(#hv-gf-lg)'" style="fill:#2A3F52;fill-opacity:0;opacity:0;transition:fill .6s,fill-opacity .6s,opacity .6s"/>
+        <circle id="hv-hl-pulsar"   cx="405" cy="252" r="34" :filter="'url(#hv-gf-lg)'" style="fill:#2A3F52;fill-opacity:0;opacity:0;transition:fill .6s,fill-opacity .6s,opacity .6s"/>
+        <circle id="hv-hl-nova"     cx="275" cy="252" r="34" :filter="'url(#hv-gf-lg)'" style="fill:#2A3F52;fill-opacity:0;opacity:0;transition:fill .6s,fill-opacity .6s,opacity .6s"/>
+        <circle id="hv-hl-magnetar" cx="340" cy="364" r="34" :filter="'url(#hv-gf-lg)'" style="fill:#2A3F52;fill-opacity:0;opacity:0;transition:fill .6s,fill-opacity .6s,opacity .6s"/>
+        <!-- halos small -->
+        <circle id="hv-hs-quasar"   cx="340" cy="68"  r="24" :filter="'url(#hv-gf-md)'" style="fill:#2A3F52;fill-opacity:0;opacity:0;transition:fill .5s,fill-opacity .5s,opacity .5s"/>
+        <circle id="hv-hs-nebula"   cx="155" cy="400" r="24" :filter="'url(#hv-gf-md)'" style="fill:#2A3F52;fill-opacity:0;opacity:0;transition:fill .5s,fill-opacity .5s,opacity .5s"/>
+        <circle id="hv-hs-cepheid"  cx="525" cy="400" r="24" :filter="'url(#hv-gf-md)'" style="fill:#2A3F52;fill-opacity:0;opacity:0;transition:fill .5s,fill-opacity .5s,opacity .5s"/>
+        <circle id="hv-hs-pulsar"   cx="405" cy="252" r="19" :filter="'url(#hv-gf-md)'" style="fill:#2A3F52;fill-opacity:0;opacity:0;transition:fill .5s,fill-opacity .5s,opacity .5s"/>
+        <circle id="hv-hs-nova"     cx="275" cy="252" r="19" :filter="'url(#hv-gf-md)'" style="fill:#2A3F52;fill-opacity:0;opacity:0;transition:fill .5s,fill-opacity .5s,opacity .5s"/>
+        <circle id="hv-hs-magnetar" cx="340" cy="364" r="19" :filter="'url(#hv-gf-md)'" style="fill:#2A3F52;fill-opacity:0;opacity:0;transition:fill .5s,fill-opacity .5s,opacity .5s"/>
+        <!-- vertices -->
+        <circle id="hv-quasar"   cx="340" cy="68"  r="14" :filter="'url(#hv-gf-sm)'" style="fill:#243648;stroke:#364F66;stroke-width:.8;transition:fill .5s,stroke .5s"/>
+        <circle id="hv-nebula"   cx="155" cy="400" r="14" :filter="'url(#hv-gf-sm)'" style="fill:#243648;stroke:#364F66;stroke-width:.8;transition:fill .5s,stroke .5s"/>
+        <circle id="hv-cepheid"  cx="525" cy="400" r="14" :filter="'url(#hv-gf-sm)'" style="fill:#243648;stroke:#364F66;stroke-width:.8;transition:fill .5s,stroke .5s"/>
+        <circle id="hv-pulsar"   cx="405" cy="252" r="12" :filter="'url(#hv-gf-sm)'" style="fill:#243648;stroke:#364F66;stroke-width:.8;transition:fill .5s,stroke .5s"/>
+        <circle id="hv-nova"     cx="275" cy="252" r="12" :filter="'url(#hv-gf-sm)'" style="fill:#243648;stroke:#364F66;stroke-width:.8;transition:fill .5s,stroke .5s"/>
+        <circle id="hv-magnetar" cx="340" cy="364" r="12" :filter="'url(#hv-gf-sm)'" style="fill:#243648;stroke:#364F66;stroke-width:.8;transition:fill .5s,stroke .5s"/>
+        <!-- hit areas -->
+        <circle id="hv-hit-quasar"   cx="340" cy="68"  r="28" fill="transparent" style="cursor:pointer"/>
+        <circle id="hv-hit-nebula"   cx="155" cy="400" r="28" fill="transparent" style="cursor:pointer"/>
+        <circle id="hv-hit-cepheid"  cx="525" cy="400" r="28" fill="transparent" style="cursor:pointer"/>
+        <circle id="hv-hit-pulsar"   cx="405" cy="252" r="24" fill="transparent" style="cursor:pointer"/>
+        <circle id="hv-hit-nova"     cx="275" cy="252" r="24" fill="transparent" style="cursor:pointer"/>
+        <circle id="hv-hit-magnetar" cx="340" cy="364" r="24" fill="transparent" style="cursor:pointer"/>
+      </svg>
 
-    <!-- ── Progetti attivi ─────────────────────────────────────────── -->
-    <section class="hv-section">
-      <p class="s-label">Progetti attivi</p>
-
-      <div v-if="projsLoading" class="proj-grid">
-        <div v-for="i in 4" :key="i" class="proj-skel" />
-      </div>
-
-      <div v-else-if="!activeProjects.length" class="empty-today">
-        Nessun progetto attivo ancora.
-      </div>
-
-      <div v-else class="proj-grid">
-        <div
-          v-for="p in activeProjects"
-          :key="p.id"
-          class="proj-mini"
-          @click="router.push('/sidera/projects/' + p.id)"
-        >
-          <div class="proj-stripe" :style="{ background: p.color }" />
-          <div class="proj-inner">
-            <div class="proj-mini-top">
-              <span class="proj-mini-name">{{ p.name }}</span>
-              <span class="proj-mini-pct" :style="{ color: p.color }">{{ pct(p) }}%</span>
-            </div>
-            <div class="prog-track">
-              <div class="prog-fill" :style="{ width: pct(p) + '%', background: p.color }" />
-            </div>
-            <div class="proj-mini-info">
-              <MIcon name="schedule" :size="13" class="clock-icon" />
-              {{ p.doneCount }}/{{ p.taskCount }} azioni
-              <template v-if="p.dueDate"> · {{ formatDue(p.dueDate) }}</template>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ── POPS KPI strip ─────────────────────────────────────────── -->
-    <div class="pops-strip">
-      <a href="https://b2b.inglesinaitaliana.it" target="_blank" rel="noopener noreferrer" class="kpi-card">
-        <div class="kpi-label">Da gestire</div>
-        <div class="kpi-value" style="color:#C8521A">
-          <span v-if="metricsLoading" class="kpi-skeleton" />
-          <span v-else>{{ daGestire }}</span>
-        </div>
-        <div class="kpi-sub">Preventivi · Ordini</div>
-      </a>
-      <a href="https://b2b.inglesinaitaliana.it" target="_blank" rel="noopener noreferrer" class="kpi-card">
-        <div class="kpi-label">In produzione</div>
-        <div class="kpi-value" style="color:var(--s-green)">
-          <span v-if="metricsLoading" class="kpi-skeleton" />
-          <span v-else>{{ inProduzione }}</span>
-        </div>
-        <div class="kpi-sub">Firmati · Lavorazione</div>
-      </a>
-      <a href="https://b2b.inglesinaitaliana.it" target="_blank" rel="noopener noreferrer" class="kpi-card">
-        <div class="kpi-label">Pronti</div>
-        <div class="kpi-value" style="color:#4A6B8A">
-          <span v-if="metricsLoading" class="kpi-skeleton" />
-          <span v-else>{{ pronti }}</span>
-        </div>
-        <div class="kpi-sub">Da spedire</div>
-      </a>
-      <a href="https://b2b.inglesinaitaliana.it" target="_blank" rel="noopener noreferrer" class="kpi-card">
-        <div class="kpi-label">Valore pipeline</div>
-        <div class="kpi-value kpi-value--sm" style="color:var(--s-green)">
-          <span v-if="metricsLoading" class="kpi-skeleton kpi-skeleton--wide" />
-          <span v-else>{{ formatEuro(valorePipeline) }}</span>
-        </div>
-        <div class="kpi-sub">Ordini attivi</div>
-      </a>
-    </div>
-
-    <!-- ── Bottom grid ────────────────────────────────────────────── -->
-    <div class="hv-grid">
-
-      <!-- Urgenze produzione -->
-      <div>
-        <p class="s-label">Urgenze produzione</p>
-        <div v-if="metricsLoading" class="skeleton-rows">
-          <div v-for="i in 3" :key="i" class="row-skel" />
-        </div>
-        <div v-else-if="!urgenze.length" class="empty-today">Nessuna urgenza al momento.</div>
-        <a
-          v-for="u in urgenze"
-          :key="u.commessa || u.codice"
-          href="https://b2b.inglesinaitaliana.it"
-          target="_blank"
-          rel="noopener noreferrer"
-          class="urgenza-card"
-          :style="{ borderLeftColor: urgenzaColor(u.giorniRimasti) }"
-        >
-          <div class="urgenza-info">
-            <div class="urgenza-commessa">{{ u.commessa || u.codice }}</div>
-            <div class="urgenza-cliente">{{ u.cliente }}</div>
-          </div>
-          <div class="urgenza-badge" :style="{ color: urgenzaColor(u.giorniRimasti), background: urgenzaColor(u.giorniRimasti) + '14' }">
-            {{ urgenzaLabel(u.giorniRimasti) }}
-          </div>
-        </a>
-      </div>
-
-      <!-- Aggiornamenti team -->
-      <div>
-        <p class="s-label">Aggiornamenti team</p>
-        <div v-if="tasksLoading" class="skeleton-rows">
-          <div v-for="i in 4" :key="i" class="row-skel row-skel--feed" />
-        </div>
-        <div v-else-if="!feedEvents.length" class="empty-today">Nessuna attività recente.</div>
-        <div v-for="e in feedEvents" :key="e.key" class="feed-item">
-          <StarAvatar v-bind="starAvatarProps(e.actor, members)" :size="32" />
-          <div>
-            <div class="feed-text">
-              <span class="feed-who">{{ displayName(e.actor, members) }}</span>
-              {{ e.action }}
-              <span class="feed-what">{{ e.what }}</span>
-            </div>
-            <div class="feed-when">{{ timeAgo(e.when) }}</div>
-          </div>
+      <div class="hv-brand">
+        <h1 class="hv-title">
+          <span class="hv-ltr">S</span><span class="hv-dot">•</span>
+          <span class="hv-ltr">I</span><span class="hv-dot">•</span>
+          <span class="hv-ltr">D</span><span class="hv-dot">•</span>
+          <span class="hv-ltr">E</span><span class="hv-dot">•</span>
+          <span class="hv-ltr">R</span><span class="hv-dot">•</span>
+          <span class="hv-ltr">A</span>
+        </h1>
+        <div class="hv-module-display" id="hv-mod-display">
+          <p id="hv-module-name">&nbsp;</p>
+          <div class="hv-sep"></div>
+          <p id="hv-module-desc">&nbsp;</p>
         </div>
       </div>
     </div>
-
   </div>
 </template>
 
 <style scoped>
-.hv {
-  height: 100%;
-  overflow: auto;
-  padding: 40px 52px;
-  background: var(--s-bg);
-  font-family: 'Outfit', sans-serif;
-  color: var(--s-text);
-}
-
-/* ── Header ── */
-.hv-header { margin-bottom: 36px; }
-
-.hv-greeting {
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 30px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  margin-bottom: 5px;
-  line-height: 1.2;
-}
-
-.hv-subtitle { font-size: 13px; color: var(--s-text-dim); letter-spacing: 0.02em; }
-
-/* ── Section ── */
-.hv-section { margin-bottom: 36px; }
-
-.s-label {
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--s-text-dim);
-  margin-bottom: 14px;
-}
-
-/* ── Skeleton ── */
-.skeleton-rows { display: flex; flex-direction: column; gap: 6px; }
-
-.row-skel {
-  height: 44px;
-  background: var(--s-surface);
-  border-radius: var(--md-sys-shape-corner-small);
-  animation: s-pulse 1.4s ease-in-out infinite;
-}
-
-.row-skel--feed { height: 36px; }
-
-@keyframes s-pulse {
-  0%, 100% { opacity: 1; }
-  50%       { opacity: 0.4; }
-}
-
-/* ── Empty ── */
-.empty-today {
-  font-size: 13px;
-  color: var(--s-text-dim);
-  padding: 12px 0;
-}
-
-/* ── Azione row ── */
-.azione-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 11px 14px;
-  background: var(--s-surface);
-  border-radius: var(--md-sys-shape-corner-small);
-  border: 1px solid var(--s-border);
-  border-left: 6px solid transparent;
-  margin-bottom: 6px;
-  cursor: pointer;
-  transition: border-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
-              box-shadow   var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
-              transform    var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
-  box-shadow: var(--md-sys-elevation-level-1);
-}
-
-.azione-row:hover {
-  border-color: var(--md-sys-color-primary);
-  background:   var(--md-sys-color-primary-state-hover);
-  box-shadow:   var(--md-sys-elevation-level-2);
-  transform:    translateY(-1px);
-}
-
-.checkbox {
-  width: 17px; height: 17px;
-  border-radius: var(--md-sys-shape-corner-extra-small);
-  border: 1.5px solid var(--s-border-mid);
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0; transition: all 0.15s;
-}
-
-.checkbox:hover { border-color: var(--module-accent); }
-.checkbox.is-checked { background: var(--module-accent); border-color: var(--module-accent); }
-.check-icon { width: 10px; height: 10px; color: white; stroke-width: 3; }
-
-.azione-title { flex: 1; font-size: 13.5px; color: var(--s-text); }
-
-.prio-pill {
-  font-size: 10px; font-weight: 700;
-  padding: 2px 7px; border-radius: var(--md-sys-shape-corner-full);
-  letter-spacing: 0.03em; flex-shrink: 0;
-}
-
-.az-avatar {
-  width: 26px; height: 26px; border-radius: var(--md-sys-shape-corner-full);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 9.5px; font-weight: 700; letter-spacing: 0.02em; flex-shrink: 0;
-}
-
-/* ── Progetti mini ── */
-.proj-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
-}
-
-.proj-skel {
-  height: 100px;
-  background: var(--s-surface);
-  border-radius: var(--md-sys-shape-corner-medium);
-  animation: s-pulse 1.4s ease-in-out infinite;
-}
-
-.proj-mini {
-  background: var(--s-surface);
-  border: 1px solid var(--s-border);
-  border-radius: var(--md-sys-shape-corner-small);
-  cursor: pointer;
-  transition: border-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
-              box-shadow   var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
-              transform    var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
-  box-shadow: var(--s-shadow);
+.hub {
   position: relative;
-  overflow: hidden;
-}
-
-.proj-mini:hover {
-  border-color: var(--md-sys-color-primary);
-  background:   var(--md-sys-color-primary-state-hover);
-  box-shadow:   var(--s-shadow-hover);
-  transform:    translateY(-1px);
-}
-
-.proj-stripe {
-  position: absolute; top: 0; left: 0; right: 0;
-  height: 3px;
-  border-top-left-radius:  var(--md-sys-shape-corner-small);
-  border-top-right-radius: var(--md-sys-shape-corner-small);
-}
-
-.proj-inner { padding: 14px 14px 12px; padding-top: 16px; }
-
-.proj-mini-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; }
-.proj-mini-name { font-size: 12.5px; font-weight: 500; }
-.proj-mini-pct  { font-size: 11px; font-weight: 700; }
-
-.prog-track { height: 3px; border-radius: 2px; background: var(--s-border); overflow: hidden; margin-bottom: 8px; }
-.prog-fill  { height: 100%; border-radius: 2px; transition: width 0.4s ease; }
-
-.proj-mini-info { font-size: 11px; color: var(--s-text-dim); display: flex; align-items: center; gap: 4px; }
-
-.clock-icon { width: 10px; height: 10px; }
-
-/* ── POPS strip ── */
-.pops-strip {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
-  margin-bottom: 36px;
-}
-
-.kpi-card {
-  background: var(--s-surface);
-  border: 1px solid var(--s-border);
-  border-radius: var(--md-sys-shape-corner-medium);
-  padding: 18px 20px;
-  text-decoration: none;
-  color: inherit;
-  box-shadow: var(--s-shadow);
-  transition: border-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
-              box-shadow   var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
-              transform    var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
-  display: block;
-}
-
-.kpi-card:hover {
-  border-color: var(--md-sys-color-primary);
-  background:   var(--md-sys-color-primary-state-hover);
-  box-shadow:   var(--s-shadow-hover);
-  transform:    translateY(-1px);
-}
-
-.kpi-label { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; color: var(--s-text-dim); text-transform: uppercase; margin-bottom: 8px; }
-
-.kpi-value { font-size: 32px; font-weight: 300; line-height: 1; margin-bottom: 6px; font-family: 'Outfit', sans-serif; }
-.kpi-value--sm { font-size: 22px; }
-
-.kpi-sub { font-size: 11px; color: var(--s-text-dim); }
-
-.kpi-skeleton {
-  display: inline-block; width: 40px; height: 32px;
-  background: var(--s-border); border-radius: var(--md-sys-shape-corner-extra-small);
-  animation: s-pulse 1.4s ease-in-out infinite;
-}
-
-.kpi-skeleton--wide { width: 90px; height: 22px; }
-
-/* ── Bottom grid ── */
-.hv-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 36px;
-}
-
-/* ── Urgenze ── */
-.urgenza-card {
+  width: 100%;
+  height: 100%;
+  background: #05090F;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 12px 14px;
-  background: var(--s-surface);
-  border: 1px solid var(--s-border);
-  border-left: 6px solid transparent;
-  border-radius: var(--md-sys-shape-corner-small);
-  margin-bottom: 7px;
-  text-decoration: none;
-  color: inherit;
-  transition: border-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
-              box-shadow   var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
-              transform    var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
-  box-shadow: var(--md-sys-elevation-level-1);
+  justify-content: center;
+  overflow: hidden;
+  font-family: 'Outfit', sans-serif;
+  transition: background 0.5s ease;
 }
 
-.urgenza-card:hover {
-  border-color: var(--md-sys-color-primary);
-  background:   var(--md-sys-color-primary-state-hover);
-  box-shadow:   var(--md-sys-elevation-level-2);
-  transform:    translateY(-1px);
+/* ─── Light mode (sfondo color SIDERA) ─── */
+.hub.light {
+  background: #D4C498;
 }
 
-.urgenza-commessa { font-size: 13px; font-weight: 500; color: var(--s-text); margin-bottom: 2px; }
-.urgenza-cliente  { font-size: 11px; color: var(--s-text-dim); }
+/* In light mode le sfere sono sempre color SIDERA: glow uniforme che si fonde col fondo. */
+.hub.light .hv-sphere { opacity: 0.5; }
+.hub.light .hv-sphere.on { opacity: 0.5; }
 
-.urgenza-badge {
-  font-size: 11px; font-weight: 700;
-  padding: 3px 9px; border-radius: var(--md-sys-shape-corner-full);
-  flex-shrink: 0; letter-spacing: 0.02em;
+.hub.light .hv-title {
+  color: #2A1E10;
+  background: linear-gradient(
+    90deg,
+    #2A1E10 0%,
+    #2A1E10 44%,
+    #6A4A20 50%,
+    #2A1E10 56%,
+    #2A1E10 100%
+  );
+  background-size: 400% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.hub.light .hv-dot { color: #2A1E10; }
+
+.hub.light #hv-module-name { color: #2A1E10; }
+.hub.light .hv-sep { background: rgba(42, 30, 16, 0.2); }
+.hub.light #hv-module-desc { color: rgba(42, 30, 16, 0.55); }
+
+/* ─── Theme toggle pill ─── */
+.theme-pill {
+  position: absolute;
+  top: max(16px, env(safe-area-inset-top));
+  right: max(16px, env(safe-area-inset-right));
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  cursor: pointer;
+  transition: background 0.25s ease, border-color 0.25s ease;
+}
+.theme-pill:hover { background: rgba(255, 255, 255, 0.1); border-color: rgba(255, 255, 255, 0.2); }
+
+.hub.light .theme-pill {
+  background: rgba(42, 30, 16, 0.08);
+  border-color: rgba(42, 30, 16, 0.15);
+}
+.hub.light .theme-pill:hover {
+  background: rgba(42, 30, 16, 0.14);
+  border-color: rgba(42, 30, 16, 0.25);
 }
 
-/* ── Feed ── */
-.feed-item { display: flex; gap: 10px; margin-bottom: 14px; }
-
-.feed-avatar {
-  width: 28px; height: 28px; border-radius: var(--md-sys-shape-corner-full);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 10px; font-weight: 700; letter-spacing: 0.02em; flex-shrink: 0;
+.theme-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  font-size: 16px;
+  color: rgba(255, 255, 255, 0.5);
+  transition: background 0.25s ease, color 0.25s ease;
+}
+.theme-icon.active {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
 }
 
-.feed-text { font-size: 12px; line-height: 1.6; color: var(--s-text-mid); }
-.feed-who  { color: var(--s-text); font-weight: 600; }
-.feed-what { color: var(--s-green-text); font-weight: 500; }
-.feed-when { font-size: 10px; color: var(--s-text-dim); margin-top: 1px; }
+.hub.light .theme-icon { color: rgba(42, 30, 16, 0.45); }
+.hub.light .theme-icon.active {
+  background: rgba(42, 30, 16, 0.18);
+  color: #2A1E10;
+}
+
+.hv-bg { position: absolute; inset: 0; pointer-events: none; }
+
+.hv-sphere {
+  position: absolute;
+  border-radius: var(--md-sys-shape-corner-full);
+  opacity: 0;
+  will-change: transform, background;
+  transition: background 3.8s ease, opacity 2.2s ease;
+}
+.hv-sphere.on { opacity: 1; }
+
+.s1 { width:720px;height:720px;top:-290px;left:-200px;filter:blur(115px);animation:d1 30s ease-in-out infinite; }
+.s2 { width:620px;height:620px;bottom:-220px;right:-140px;filter:blur(125px);animation:d2 37s ease-in-out infinite; }
+.s3 { width:460px;height:460px;top:20%;left:22%;filter:blur(95px);animation:d3 24s ease-in-out infinite; }
+.s4 { width:390px;height:390px;bottom:8%;right:28%;filter:blur(105px);animation:d4 42s ease-in-out infinite; }
+
+@keyframes d1 { 0%,100%{transform:translate(0,0) scale(1)} 30%{transform:translate(75px,85px) scale(1.04)} 65%{transform:translate(-55px,115px) scale(0.96)} }
+@keyframes d2 { 0%,100%{transform:translate(0,0) scale(1)} 35%{transform:translate(-105px,-65px) scale(1.06)} 72%{transform:translate(65px,-95px) scale(0.97)} }
+@keyframes d3 { 0%,100%{transform:translate(0,0)} 42%{transform:translate(85px,-65px) scale(1.03)} 78%{transform:translate(-45px,75px) scale(0.97)} }
+@keyframes d4 { 0%,100%{transform:translate(0,0)} 48%{transform:translate(65px,55px) scale(1.05)} }
+
+.hv-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2.8rem;
+  padding: 2rem;
+}
+
+.hv-svg { width: min(340px, 65%); display: block; overflow: visible; }
+
+.hv-brand { text-align: center; color: #fff; }
+
+.hv-title {
+  font-family: 'Cormorant Garamond', serif;
+  font-weight: 500;
+  font-size: clamp(3rem, 5vw, 4.6rem);
+  color: #D4C498;
+  line-height: 1;
+  letter-spacing: 0.04em;
+  display: inline-flex;
+  align-items: center;
+  background: linear-gradient(
+    90deg,
+    #D4C498 0%,
+    #D4C498 44%,
+    #FFF8E0 50%,
+    #D4C498 56%,
+    #D4C498 100%
+  );
+  background-size: 400% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  animation: hv-title-sweep 3.2s linear infinite;
+}
+
+@keyframes hv-title-sweep {
+  from { background-position: 125% center; }
+  to   { background-position: 0% center; }
+}
+.hv-ltr { display: inline-block; }
+.hv-dot {
+  font-family: 'Outfit', sans-serif;
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.24em;
+  opacity: 0.55;
+  padding: 0 0.45em;
+  line-height: 1;
+  position: relative;
+  top: -0.00em;
+  -webkit-text-fill-color: currentColor;
+  color: #D4C498;
+}
+
+.hv-module-display {
+  margin-top: 1.6rem;
+  min-height: 64px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.7rem;
+  transition: opacity 0.4s ease;
+}
+.hv-module-display.fading { opacity: 0; }
+
+#hv-module-name {
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-weight: 300;
+  font-size: clamp(1rem, 2vw, 1.45rem);
+  letter-spacing: 0.38em;
+  color: #fff;
+  min-height: 1.6em;
+}
+
+.hv-sep {
+  width: 28px;
+  height: 1px;
+  background: rgba(255,255,255,0.13);
+  flex-shrink: 0;
+  transition: opacity 0.4s ease;
+}
+
+#hv-module-desc {
+  font-family: 'Outfit', sans-serif;
+  font-weight: 300;
+  font-size: 0.65rem;
+  letter-spacing: 0.2em;
+  color: rgba(255,255,255,0.3);
+  text-transform: uppercase;
+}
 </style>
