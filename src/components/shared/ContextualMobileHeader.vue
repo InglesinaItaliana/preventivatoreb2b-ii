@@ -20,7 +20,15 @@ const props = defineProps<{
 const route = useRoute()
 const router = useRouter()
 
-const showBackButton = computed(() => !props.config.isTopLevelPath(route.path))
+// Normalizza il trailing slash: start_url PWA è `/scope/`, all'apertura
+// route.path può arrivare con slash finale e isTopLevelPath fallisce → back
+// button appariva sulla landing della PWA.
+const normalizedPath = computed(() => {
+  const stripped = route.path.replace(/\/+$/, '')
+  return stripped || '/'
+})
+
+const showBackButton = computed(() => !props.config.isTopLevelPath(normalizedPath.value))
 
 // Spezza il wordmark in singole lettere intervallate da puntini (P·U·L·S·A·R).
 const wordmarkLetters = computed(() => props.config.wordmark.split(''))

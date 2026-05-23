@@ -386,7 +386,7 @@ onMounted(() => {
       <div v-if="showTaskModal" class="modal-backdrop md-modal-backdrop" @click.self="showTaskModal = false">
         <div class="modal md-modal-dialog" @click.stop>
           <div class="modal-header md-modal-header">
-            <span class="modal-title md-modal-title">{{ editingTask ? 'Modifica azione' : 'Nuova azione' }}</span>
+            <span class="modal-title">{{ editingTask ? 'Modifica azione' : 'Nuova azione' }}</span>
             <button class="modal-close md-modal-close" @click="showTaskModal = false"><MIcon name="close" :size="18" /></button>
           </div>
           <div class="modal-body md-modal-body">
@@ -666,22 +666,27 @@ onMounted(() => {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.35);
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
   z-index: 100;
 }
 
 .modal {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  margin-left: auto;
+  margin-right: auto;
   background: var(--md-sys-color-surface);
   border-radius: var(--md-sys-shape-corner-large) var(--md-sys-shape-corner-large) 0 0;
   width: 100%;
   max-width: 540px;
-  max-height: 86vh;
+  max-height: 92dvh;
+  padding-bottom: env(safe-area-inset-bottom);
   display: flex;
   flex-direction: column;
   font-family: 'Outfit', sans-serif;
   overflow: hidden;
+  animation: modal-slide-from-bottom var(--md-sys-motion-duration-medium3, 350ms) var(--md-sys-motion-easing-emphasized-decelerate, cubic-bezier(0.05, 0.7, 0.1, 1));
 }
 
 .modal-header {

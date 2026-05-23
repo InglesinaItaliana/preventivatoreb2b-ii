@@ -531,7 +531,7 @@ function renderText(t: string) {
       <div v-if="showTaskModal" class="modal-backdrop md-modal-backdrop" @click.self="showTaskModal = false">
         <div class="task-modal" @click.stop>
           <div class="modal-header md-modal-header">
-            <span class="modal-title md-modal-title">Crea azione</span>
+            <span class="modal-title">Crea azione</span>
             <button class="modal-close md-modal-close" @click="showTaskModal = false"><MIcon name="close" :size="18" /></button>
           </div>
           <div class="modal-body md-modal-body">
@@ -1077,7 +1077,7 @@ function renderText(t: string) {
   padding: 18px 20px 0;
 }
 
-.modal-title { font-size: 15px; font-weight: 600; color: #1A1917; }
+.modal-title { font-size: 16px; font-weight: 600; color: #1A1917; }
 
 .modal-close {
   background: none; border: none; cursor: pointer;

@@ -859,6 +859,13 @@ input[type=number] {
   from { transform: translateY(40px); opacity: 0; }
   to   { transform: translateY(0); opacity: 1; }
 }
+/* Bottom-sheet slide-up dal fondo viewport (translate 100% → 0). Usato dalle
+   dialog ancorate al bottom (.modal di Cepheid/Quasar/Pulsar) per un'entrata
+   chiaramente "dal basso". Vedi feedback_modal_pattern.md in memory. */
+@keyframes modal-slide-from-bottom {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
 
 
 /* ── CARD (M3 sez. 14) ────────────────────────────────────────────────── */
