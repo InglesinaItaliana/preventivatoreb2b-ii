@@ -73,7 +73,7 @@ async function onRemove(email: string) {
 <template>
   <div class="m-page s-scope-sidera">
     <header class="m-header">
-      <button class="m-back" @click="router.push('/sidera/hub')" aria-label="Indietro">←</button>
+      <button class="m-back" @click="router.push('/sidera')" aria-label="Indietro">←</button>
       <div>
         <h2 class="m-title">Impostazioni</h2>
         <p class="m-sub">CORE · Amministratori</p>

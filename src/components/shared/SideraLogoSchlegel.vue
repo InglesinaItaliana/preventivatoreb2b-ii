@@ -11,8 +11,16 @@ interface Props {
   activeScope: ScopeKey
   /** Dimensione del logo in px. Default 280. Il viewBox interno è 680x480 quindi proporzioni 1.42:1. */
   size?: number
+  /** Se true, i vertici diventano hit-area cliccabili (hover halo + cursor pointer) ed emettono vertex-click. */
+  clickable?: boolean
 }
-const props = withDefaults(defineProps<Props>(), { size: 280 })
+const props = withDefaults(defineProps<Props>(), { size: 280, clickable: false })
+
+const emit = defineEmits<{
+  (e: 'vertex-click', scope: ScopeKey): void
+}>()
+
+const hoveredScope = ref<ScopeKey | null>(null)
 
 interface Vertex { x: number; y: number; r: number; color: string }
 const MODULES: Record<ScopeKey, Vertex> = {
@@ -166,6 +174,28 @@ const heightPx = computed(() => Math.round(props.size * 480 / 680))
       :filter="'url(#sls-gf-sm)'"
       class="sl-vertex"
     />
+
+    <!-- Hit-area cliccabili (solo se clickable). Cerchi trasparenti più grandi
+         per facilitare il tap su mobile. Halo visibile su hover. -->
+    <template v-if="clickable">
+      <circle
+        v-for="[key, v] in moduleEntries" :key="`hover-${key}`"
+        class="sl-hit-halo"
+        :class="{ on: hoveredScope === key }"
+        :cx="v.x" :cy="v.y" r="28"
+        :fill="v.color"
+        :filter="'url(#sls-gf-md)'"
+      />
+      <circle
+        v-for="[key, v] in moduleEntries" :key="`hit-${key}`"
+        class="sl-hit"
+        :cx="v.x" :cy="v.y" r="34"
+        fill="transparent"
+        @click="emit('vertex-click', key)"
+        @mouseenter="hoveredScope = key"
+        @mouseleave="hoveredScope = null"
+      />
+    </template>
   </svg>
 </template>
 
@@ -185,4 +215,14 @@ const heightPx = computed(() => Math.round(props.size * 480 / 680))
 .sl-halo-md.on { opacity: 0.85; }
 
 .sl-vertex { transition: fill 0.5s ease, stroke 0.5s ease; }
+
+.sl-hit { cursor: pointer; }
+
+.sl-hit-halo {
+  opacity: 0;
+  fill-opacity: 0.7;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+.sl-hit-halo.on { opacity: 0.6; }
 </style>

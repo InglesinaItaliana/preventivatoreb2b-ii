@@ -50,7 +50,7 @@ async function runCleanup() {
 <template>
   <div class="m-page">
     <header class="m-header">
-      <button class="m-back" @click="router.push('/sidera/hub')" aria-label="Indietro">←</button>
+      <button class="m-back" @click="router.push('/sidera')" aria-label="Indietro">←</button>
       <div>
         <h2 class="m-title">Manutenzione</h2>
         <p class="m-sub">Task admin una-tantum</p>

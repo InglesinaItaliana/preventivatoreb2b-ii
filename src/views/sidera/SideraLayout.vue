@@ -128,11 +128,9 @@ const modules = [
   {
     name: 'QUASAR',   accent: '#98C0D0',
     vx: 340, vy: 68,  vr: 10,
-    items: [
-      { path: '/sidera', exact: true, label: 'Cruscotto', icon: 'home' },
-      // Single source of truth con il bottom-nav mobile QUASAR (/quasar/*).
-      ...(SCOPE_CONFIGS.quasar.mobileNav as any[]),
-    ],
+    // Single source of truth con il bottom-nav mobile QUASAR (/quasar/*):
+    // Cruscotto + Quadranti + Attività.
+    items: SCOPE_CONFIGS.quasar.mobileNav as any[],
   },
   {
     name: 'NEBULA',   accent: '#C46030',
@@ -172,19 +170,19 @@ const modules = [
 ]
 
 const activeModule = computed(() =>
-  modules.find(m => {
-    if (m.name === 'QUASAR')
-      return route.path === '/sidera'   // SOLO /sidera (Cruscotto) — /sidera/hub è all-mode
-    return m.items.some((item: any) =>
+  modules.find(m =>
+    m.items.some((item: any) =>
       item.exact ? route.path === item.path : route.path.startsWith(item.path)
     )
-  }) ?? null
+  ) ?? null
 )
 
-// Logo "all-mode": SOLO su /sidera/hub mostriamo tutti i vertici accesi
-// col color SIDERA uniforme (come la pagina HubView). Su /sidera (Cruscotto)
-// e' attivo QUASAR come modulo singolo (vertice illuminato + wordmark color).
-const isAllMode = computed(() => route.path === '/sidera/hub')
+// Logo "all-mode": su /sidera (vetrina con ciclo scope) mostriamo tutti i vertici
+// accesi col color SIDERA uniforme.
+const isAllMode = computed(() => route.path === '/sidera')
+
+// Vetrina home: solo logo Schlegel grande al centro, niente sidebar/header.
+const hideSidebarOnHome = computed(() => route.path === '/sidera')
 const activeLogoModule = computed(() => isAllMode.value ? null : activeModule.value)
 
 // ── Edges Schlegel per il logo "ricco" della sidebar (replica HubView) ─────
@@ -334,12 +332,12 @@ const roleLabel: Record<string, string> = {
 
 <template>
   <div
-    :class="['s-shell', `s-scope-${currentScope}`, { 's-mobile-layout': isMobileLayout }]"
+    :class="['s-shell', `s-scope-${currentScope}`, { 's-mobile-layout': isMobileLayout, 's-hide-sidebar': hideSidebarOnHome }]"
     :style="{ '--module-accent': activeModule?.accent ?? 'var(--s-green)', '--module-accent-light': (activeModule?.accent ?? 'var(--s-green)') + 'DD' }"
   >
     <!-- ── SIDEBAR ── -->
     <aside class="s-sidebar">
-      <div class="s-logo" style="cursor: pointer" @click="router.push('/sidera/hub')">
+      <div class="s-logo" style="cursor: pointer" @click="router.push('/sidera')">
         <!-- Schlegel diagram ricco — replica HubView (no cycle, attivo in base alla route) -->
         <svg class="s-logo-icon" width="116" height="82" viewBox="0 0 680 480" fill="none" xmlns="http://www.w3.org/2000/svg" style="overflow: visible">
           <defs>
@@ -771,6 +769,11 @@ const roleLabel: Record<string, string> = {
 /* Quando .s-mobile-layout è attivo (standalone OR viewport ≤ 768px) e c'è uno scope modulare,
    la sidebar SIDERA scompare e il main lascia spazio per il bottom-nav. */
 .s-shell.s-mobile-layout .s-sidebar {
+  display: none;
+}
+
+/* Vetrina home /sidera: solo logo Schlegel grande al centro, sidebar nascosta. */
+.s-shell.s-hide-sidebar .s-sidebar {
   display: none;
 }
 .s-shell.s-mobile-layout .s-main {

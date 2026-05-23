@@ -76,6 +76,12 @@
             document.title = 'Sistema SIDERA';
             setFavicon('/favicon-sidera.svg', 'image/svg+xml');
             if (titleMeta) titleMeta.setAttribute('content', 'NEBULA');
+          } else if (path.indexOf('/quasar') === 0) {
+            addManifest('/quasar.webmanifest');
+            addAppleIcons('/icons/quasar', null);
+            document.title = 'Sistema SIDERA';
+            setFavicon('/favicon-sidera.svg', 'image/svg+xml');
+            if (titleMeta) titleMeta.setAttribute('content', 'QUASAR');
           } else if (path.indexOf('/sidera') === 0) {
             // SIDERA: shell desktop, niente PWA manifest.
             document.title = 'Sistema SIDERA';
