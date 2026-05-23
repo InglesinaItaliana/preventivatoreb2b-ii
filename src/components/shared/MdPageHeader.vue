@@ -18,11 +18,21 @@ defineProps<{
   /** Nasconde il bordo inferiore — utile se la sezione successiva ha già
    *  separazione visiva propria. */
   borderless?: boolean
+  /** Modalità sticky con auto-hide su scroll-down (richiede il container
+   *  scrollabile gestito da useAutoHideHeader). Il valore controlla solo la
+   *  classe applicata; la logica sticky/transition è in CSS. */
+  hidden?: boolean
+  /** Attiva sticky-top per consentire l'auto-hide. Senza questo il prop
+   *  `hidden` non avrebbe effetto visivo (l'header scrollerebbe via). */
+  sticky?: boolean
 }>()
 </script>
 
 <template>
-  <header class="md-page-header" :class="{ 'is-borderless': borderless }">
+  <header
+    class="md-page-header"
+    :class="{ 'is-borderless': borderless, 'is-sticky': sticky, 'is-hidden': sticky && hidden }"
+  >
     <div class="md-page-header__text">
       <h2 class="md-page-header__title">{{ title }}</h2>
       <p v-if="subtitle" class="md-page-header__subtitle">{{ subtitle }}</p>
@@ -47,6 +57,26 @@ defineProps<{
   gap: 12px;
 }
 .md-page-header.is-borderless { border-bottom: none; }
+
+/* Sticky + auto-hide (vedi composable useAutoHideHeader).
+   Background:
+   - non-sticky: surface (POPS standard, già dichiarato sopra)
+   - sticky: var(--page-bg) impostato dalla view (es. #EFE7D9 CEPHEID/QUASAR)
+     così l'header "match-a" il bg colorato della pagina e occlude il content
+     che gli scorre sotto. Fallback a surface se la view non dichiara --page-bg.
+   z-index 10 per stare sopra eventuali card con stacking context locale (es.
+   CepheidProjectCard.pcard-state-overlay z-index:7 nello scope della card). */
+.md-page-header.is-sticky {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--page-bg, var(--md-sys-color-surface));
+  transition: transform var(--md-sys-motion-duration-short4, 200ms) var(--md-sys-motion-easing-emphasized-decelerate, cubic-bezier(.05,.7,.1,1));
+  will-change: transform;
+}
+.md-page-header.is-sticky.is-hidden {
+  transform: translateY(-100%);
+}
 
 .md-page-header__text { flex: 1; min-width: 0; }
 

@@ -7,6 +7,10 @@ import { useAllTasks, createStandaloneTask } from '../../composables/sidera/useA
 import { useProjects } from '../../composables/sidera/useProjects'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
 import { useTeamMembers, displayName, starAvatarProps } from '../../composables/sidera/useTeamMembers'
+import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
+
+const scrollEl = ref<HTMLElement | null>(null)
+const { hidden: headerHidden } = useAutoHideHeader(scrollEl)
 import StarAvatar from '../../components/shared/StarAvatar.vue'
 
 const { tasks, loading: tasksLoading, completeTask, uncompleteTask, createTask, updateTask, deleteTask } = useAllTasks()
@@ -266,12 +270,14 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="av s-scope-cepheid">
+  <div class="av s-scope-cepheid" ref="scrollEl">
     <MdPageHeader
       title="Azioni"
       :subtitle="dueTodayCount === 0
         ? 'Nessuna in scadenza oggi'
         : (dueTodayCount === 1 ? '1 in scadenza oggi' : dueTodayCount + ' in scadenza oggi')"
+      sticky
+      :hidden="headerHidden"
     >
       <template #tools>
         <CepheidViewSwitcher :model-value="filter" :tabs="filterTabs" @update:model-value="(v) => (filter = v as Filter)" />
@@ -463,13 +469,17 @@ onMounted(() => {
 .av {
   font-family: 'Outfit', sans-serif;
   color: var(--md-sys-color-on-surface);
-  min-height: calc(100vh - 120px);
-  /* sfondo cream coerente con la pagina Progetti */
-  background: #EFE7D9;
+  /* Pattern Cruscotto: scroll sul root. Necessario perché .s-main ha overflow:hidden
+     (in SideraLayout) → senza overflow:auto qui la pagina non scrollerebbe affatto
+     in PWA mobile. Il padding-bottom 110px+safe (da SideraLayout) lascia spazio per
+     la pillola fluttuante; --page-bg è letto da MdPageHeader.is-sticky. */
+  height: 100%;
+  overflow: auto;
+  --page-bg: #EFE7D9;
+  background: var(--page-bg);
 }
-.s-surface-dark .av { background: #0E0C07; }
-@media (prefers-color-scheme: dark) { .av { background: #0E0C07; } }
-.av :deep(.md-page-header) { flex-shrink: 0; }
+.s-surface-dark .av { --page-bg: #0E0C07; }
+@media (prefers-color-scheme: dark) { .av { --page-bg: #0E0C07; } }
 /* header allineato al contenuto: padding L/R = gutter del contenuto (mobile 16px) */
 :deep(.md-page-header) { padding: 18px 16px 14px; }
 

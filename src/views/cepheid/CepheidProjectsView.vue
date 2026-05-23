@@ -9,6 +9,10 @@ import { useObiettivi } from '../../composables/sidera/useObiettivi'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
 import { useTeamMembers } from '../../composables/sidera/useTeamMembers'
 import { useAllTasks } from '../../composables/sidera/useAllTasks'
+import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
+
+const scrollEl = ref<HTMLElement | null>(null)
+const { hidden: headerHidden } = useAutoHideHeader(scrollEl)
 
 const { projects, activeProjects, loading, createProject, updateProject, deleteProject, toggleActive, toggleCompleted } = useProjects()
 const { obiettiviAttivi } = useObiettivi()
@@ -195,12 +199,14 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="pv s-scope-cepheid" @click="closeMenu">
+  <div class="pv s-scope-cepheid" ref="scrollEl" @click="closeMenu">
     <MdPageHeader
       title="Progetti"
       :subtitle="activeProjects.length === 0
         ? 'Nessun progetto attivo'
         : (activeProjects.length === 1 ? '1 progetto attivo' : activeProjects.length + ' progetti attivi')"
+      sticky
+      :hidden="headerHidden"
     >
       <template #tools>
         <CepheidViewSwitcher :model-value="statusFilter" :tabs="projTabs" @update:model-value="(v) => (statusFilter = v as ProjFilter)" />
@@ -316,16 +322,18 @@ onMounted(() => {
 .pv {
   font-family: 'Outfit', sans-serif;
   color: var(--md-sys-color-on-surface);
-  flex: 1;
-  min-height: 0;
-  display: flex;
-  flex-direction: column;
-  /* sfondo pagina come il riferimento cepheid-timeline.html */
-  background: #EFE7D9;
+  /* Pattern Cruscotto: scroll sul root → padding-bottom 110px+safe (da SideraLayout)
+     lascia spazio alla pillola fluttuante e il bg copre la zona della pillola. */
+  height: 100%;
+  overflow: auto;
+  /* sfondo pagina come il riferimento cepheid-timeline.html.
+     --page-bg letto da MdPageHeader.is-sticky per match-are il bg pagina e
+     occludere il content (card progetti) che gli scorre sotto. */
+  --page-bg: #EFE7D9;
+  background: var(--page-bg);
 }
-.s-surface-dark .pv { background: #0E0C07; }
-@media (prefers-color-scheme: dark) { .pv { background: #0E0C07; } }
-.pv :deep(.md-page-header) { flex-shrink: 0; }
+.s-surface-dark .pv { --page-bg: #0E0C07; }
+@media (prefers-color-scheme: dark) { .pv { --page-bg: #0E0C07; } }
 /* header allineato al contenuto: gutter mobile 16px (come .pv-content) */
 :deep(.md-page-header) { padding: 18px 16px 14px; }
 
@@ -334,9 +342,6 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  flex: 1;
-  min-height: 0;
-  overflow-y: auto;
 }
 
 /* intestazioni vista "Per obiettivo" */
