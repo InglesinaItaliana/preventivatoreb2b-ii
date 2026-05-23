@@ -22,8 +22,20 @@ const props = defineProps<{
 const route = useRoute()
 const router = useRouter()
 
+// Normalizza il trailing slash: la start_url PWA è `/scope/` e all'apertura
+// dell'app installata route.path può arrivare con lo slash finale, facendo
+// fallire l'isActive (e analogamente isTopLevelPath nell'header) per la 1a tab.
+function normalize(p: string): string {
+  const stripped = p.replace(/\/+$/, '')
+  return stripped || '/'
+}
+
 function isActive(item: { path: string; exact: boolean }) {
-  return item.exact ? route.path === item.path : route.path.startsWith(item.path)
+  const current = normalize(route.path)
+  const itemPath = normalize(item.path)
+  if (item.exact) return current === itemPath
+  // Match esatto OR startsWith con separatore: evita che /quasar matchi /quasarsomething.
+  return current === itemPath || current.startsWith(itemPath + '/')
 }
 
 const items = computed(() => props.config.mobileNav)

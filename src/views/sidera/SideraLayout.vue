@@ -49,6 +49,10 @@ const isMobileLayout = computed(() => isStandalone.value || isMobileViewport.val
 const currentScope = computed<ScopeId>(() => detectScope(route.path))
 const currentScopeConfig = computed(() => getScopeConfig(currentScope.value))
 
+// Toggle per ripristinare la barra in alto delle PWA mobile (logo + wordmark + back).
+// Mantenuto a false per scelta di design 2026-05-23 — basta riportare a true per riabilitarla.
+const SHOW_MOBILE_HEADER = false
+
 // ── FCM scope: 'sidera' (wildcard desktop) o lo scope del modulo se in mobile-layout ─
 // Determinato al mount-time (non reattivo: useNotifications non supporta swap dinamico).
 function pickFcmScope(): NotificationScope {
@@ -529,9 +533,10 @@ const roleLabel: Record<string, string> = {
 
     <!-- ── MAIN ── -->
     <div class="s-main-wrap">
-      <!-- Mobile-only: header contestuale del modulo corrente (visibile solo in mobile-layout su scope modulare) -->
+      <!-- Mobile-only: header contestuale del modulo corrente (visibile solo in mobile-layout su scope modulare).
+           Disabilitato di default (SHOW_MOBILE_HEADER=false): tutta la navigazione è nella pillola in basso. -->
       <ContextualMobileHeader
-        v-if="isMobileLayout && currentScopeConfig"
+        v-if="SHOW_MOBILE_HEADER && isMobileLayout && currentScopeConfig"
         :scope="currentScope as Exclude<ScopeId, 'sidera'>"
         :config="currentScopeConfig"
       />
@@ -776,8 +781,14 @@ const roleLabel: Record<string, string> = {
 .s-shell.s-hide-sidebar .s-sidebar {
   display: none;
 }
-.s-shell.s-mobile-layout .s-main {
+/* Lo spazio per la pillola+FAB fluttuanti viene riservato dentro il view child,
+   non sul .s-main: così il bg della pagina (es. crema #EFE7D9 di CEPHEID/QUASAR)
+   copre anche la zona della pillola, evitando la "barra" leggermente diversa di
+   colore var(--s-bg) #ECEAE5 visibile sotto la pillola (PULSAR non la mostrava
+   perché il suo bg #E8E5DF era già quasi identico a --s-bg). */
+.s-shell.s-mobile-layout .s-main > * {
   padding-bottom: calc(110px + env(safe-area-inset-bottom));
+  box-sizing: border-box;
 }
 
 /* Fallback graceful per viewport ≤ 768px su scope='sidera' (no module chrome): nasconde

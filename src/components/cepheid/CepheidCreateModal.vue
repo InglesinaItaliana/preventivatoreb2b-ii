@@ -245,14 +245,20 @@ const PRIO = [
 </template>
 
 <style scoped>
-.cm-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.35); display: flex; align-items: flex-end; justify-content: center; z-index: 200; }
-@media (min-width: 700px) { .cm-backdrop { align-items: center; } }
+.cm-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 200; }
 .cm-dialog {
-  background: var(--md-sys-color-surface); width: 100%; max-width: 540px; max-height: 88vh;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  margin-left: auto;
+  margin-right: auto;
+  background: var(--md-sys-color-surface); width: 100%; max-width: 540px; max-height: 92dvh;
+  padding-bottom: env(safe-area-inset-bottom);
   border-radius: var(--md-sys-shape-corner-large) var(--md-sys-shape-corner-large) 0 0;
   display: flex; flex-direction: column; font-family: 'Outfit', sans-serif;
+  animation: modal-slide-from-bottom var(--md-sys-motion-duration-medium3, 350ms) var(--md-sys-motion-easing-emphasized-decelerate, cubic-bezier(0.05, 0.7, 0.1, 1));
 }
-@media (min-width: 700px) { .cm-dialog { border-radius: var(--md-sys-shape-corner-large); } }
 .cm-head { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 0; }
 .cm-title { font-size: 16px; font-weight: 600; color: var(--md-sys-color-on-surface); }
 .cm-close { background: none; border: none; cursor: pointer; color: var(--md-sys-color-on-surface-variant); padding: 2px; }

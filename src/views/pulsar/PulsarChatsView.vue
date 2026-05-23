@@ -174,7 +174,7 @@ onMounted(() => {
       <div v-if="showModal" class="modal-backdrop md-modal-backdrop" @click.self="showModal = false">
         <div class="modal md-modal-dialog">
           <div class="modal-header md-modal-header">
-            <span class="modal-title md-modal-title">Nuova conversazione</span>
+            <span class="modal-title">Nuova conversazione</span>
             <button class="modal-close md-modal-close" @click="showModal = false"><MIcon name="close" :size="18" /></button>
           </div>
 
@@ -240,7 +240,7 @@ onMounted(() => {
       <div v-if="chatToDelete" class="modal-backdrop md-modal-backdrop" @click.self="chatToDelete = null">
         <div class="modal modal--confirm">
           <div class="modal-header md-modal-header">
-            <span class="modal-title md-modal-title">Eliminare la chat?</span>
+            <span class="modal-title">Eliminare la chat?</span>
             <button class="modal-close md-modal-close" @click="chatToDelete = null"><MIcon name="close" :size="18" /></button>
           </div>
           <div class="modal-body md-modal-body">
@@ -381,22 +381,27 @@ onMounted(() => {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.35);
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
   z-index: 100;
 }
 
 .modal {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  margin-left: auto;
+  margin-right: auto;
   background: #fff;
   border-radius: 20px 20px 0 0;
   width: 100%;
   max-width: 540px;
-  max-height: 80vh;
+  max-height: 92dvh;
+  padding-bottom: env(safe-area-inset-bottom);
   display: flex;
   flex-direction: column;
   font-family: 'Outfit', sans-serif;
   overflow: hidden;
+  animation: modal-slide-from-bottom var(--md-sys-motion-duration-medium3, 350ms) var(--md-sys-motion-easing-emphasized-decelerate, cubic-bezier(0.05, 0.7, 0.1, 1));
 }
 
 .modal-header {

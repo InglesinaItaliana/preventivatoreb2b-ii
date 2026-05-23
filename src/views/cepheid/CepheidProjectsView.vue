@@ -116,7 +116,7 @@ function openProjModal() {
     name:        '',
     description: '',
     dueDate:     '',
-    obiettivoId: filterObiettivoId.value && filterObiettivoId.value !== '__none__' ? filterObiettivoId.value : '',
+    obiettivoId: '',
   }
   showProjModal.value = true
 }
@@ -272,7 +272,7 @@ onMounted(() => {
       <div v-if="showProjModal" class="modal-backdrop md-modal-backdrop" @click.self="showProjModal = false">
         <div class="modal md-modal-dialog" @click.stop>
           <div class="modal-header md-modal-header">
-            <span class="modal-title md-modal-title">{{ editingProject ? 'Modifica progetto' : 'Nuovo progetto' }}</span>
+            <span class="modal-title">{{ editingProject ? 'Modifica progetto' : 'Nuovo progetto' }}</span>
             <button class="modal-close md-modal-close" @click="showProjModal = false"><MIcon name="close" :size="18" /></button>
           </div>
           <div class="modal-body md-modal-body">
@@ -549,24 +549,37 @@ onMounted(() => {
 /* Modal */
 .modal-backdrop {
   position: fixed;
-  inset: 0;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
   background: rgba(0, 0, 0, 0.35);
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
   z-index: 100;
 }
 
 .modal {
+  /* Ancoro esplicitamente al fondo del backdrop (che è viewport-bound).
+     Centratura via left:0/right:0 + margin auto (non transform!) per non
+     interferire con l'animazione transform sottostante. */
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  margin-left: auto;
+  margin-right: auto;
   background: var(--md-sys-color-surface);
   border-radius: var(--md-sys-shape-corner-large) var(--md-sys-shape-corner-large) 0 0;
   width: 100%;
   max-width: 540px;
-  max-height: 86vh;
+  max-height: 92dvh;
+  padding-bottom: env(safe-area-inset-bottom);
   display: flex;
   flex-direction: column;
   font-family: 'Outfit', sans-serif;
   overflow: hidden;
+  /* Slide-up dal fondo del viewport (override di .md-modal-dialog
+     che usa pop-in scale). Keyframe definito in src/style.css. */
+  animation: modal-slide-from-bottom var(--md-sys-motion-duration-medium3, 350ms) var(--md-sys-motion-easing-emphasized-decelerate, cubic-bezier(0.05, 0.7, 0.1, 1));
 }
 
 .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 0; }

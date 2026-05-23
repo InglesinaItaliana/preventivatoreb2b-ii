@@ -429,7 +429,7 @@ async function submitTask() {
         <div v-if="showTaskModal" class="modal-backdrop md-modal-backdrop" @click.self="closeTaskModal">
           <div class="task-modal" @click.stop>
             <div class="modal-header md-modal-header">
-              <span class="modal-title md-modal-title">Crea azione</span>
+              <span class="modal-title">Crea azione</span>
               <button class="modal-close md-modal-close" @click="closeTaskModal">
                 <MIcon name="close" :size="18" />
               </button>
@@ -803,7 +803,7 @@ async function submitTask() {
   padding: 18px 20px 0;
 }
 
-.modal-title { font-size: 15px; font-weight: 600; color: #1A1917; }
+.modal-title { font-size: 16px; font-weight: 600; color: #1A1917; }
 .modal-close { background: none; border: none; cursor: pointer; color: #9B9590; padding: 2px; }
 .modal-body { padding: 16px 20px; }
 .modal-context { font-size: 11px; color: #9B9590; margin-bottom: 14px; }

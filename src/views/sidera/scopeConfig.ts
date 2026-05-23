@@ -67,7 +67,7 @@ export const SCOPE_CONFIGS: Record<Exclude<ScopeId, 'sidera'>, ScopeConfig> = {
     brandSvg: 'cepheid',
     mobileNav: [
       { path: '/cepheid',          exact: true,  label: 'Azioni',    icon: 'check_circle' },
-      { path: '/cepheid/projects', exact: false, label: 'Progetti',  icon: 'grid_view' },
+      { path: '/cepheid/projects', exact: false, label: 'Progetti',  icon: 'folder' },
       { path: '/cepheid/goals',    exact: false, label: 'Obiettivi', icon: 'flag' },
       { path: '/cepheid/smistamento', exact: false, label: 'Smistamento', icon: 'move_to_inbox' },
     ],

@@ -250,7 +250,7 @@ function metricaCorrenteVsTarget(): string {
       <div v-if="showLinkModal" class="modal-backdrop md-modal-backdrop" @click.self="showLinkModal = false">
         <div class="modal md-modal-dialog" @click.stop>
           <div class="modal-header md-modal-header">
-            <span class="modal-title md-modal-title">Collega progetto</span>
+            <span class="modal-title">Collega progetto</span>
             <button class="modal-close md-modal-close" @click="showLinkModal = false"><MIcon name="close" :size="18" /></button>
           </div>
           <div class="modal-body md-modal-body">
@@ -283,7 +283,7 @@ function metricaCorrenteVsTarget(): string {
       <div v-if="showEditModal" class="modal-backdrop md-modal-backdrop" @click.self="showEditModal = false">
         <div class="modal md-modal-dialog" @click.stop>
           <div class="modal-header md-modal-header">
-            <span class="modal-title md-modal-title">Modifica obiettivo</span>
+            <span class="modal-title">Modifica obiettivo</span>
             <button class="modal-close md-modal-close" @click="showEditModal = false"><MIcon name="close" :size="18" /></button>
           </div>
           <div class="modal-body md-modal-body">
@@ -581,18 +581,25 @@ function metricaCorrenteVsTarget(): string {
 .modal-backdrop {
   position: fixed; inset: 0;
   background: rgba(0, 0, 0, 0.35);
-  display: flex; align-items: flex-end; justify-content: center;
   z-index: 100;
 }
 
 .modal {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  margin-left: auto;
+  margin-right: auto;
   background: #fff;
   border-radius: 20px 20px 0 0;
   width: 100%; max-width: 540px;
-  max-height: 86vh;
+  max-height: 92dvh;
+  padding-bottom: env(safe-area-inset-bottom);
   display: flex; flex-direction: column;
   font-family: 'Outfit', sans-serif;
   overflow: hidden;
+  animation: modal-slide-from-bottom var(--md-sys-motion-duration-medium3, 350ms) var(--md-sys-motion-easing-emphasized-decelerate, cubic-bezier(0.05, 0.7, 0.1, 1));
 }
 
 .modal-header { display: flex; align-items: center; justify-content: space-between; padding: 18px 20px 0; }
