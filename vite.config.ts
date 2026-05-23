@@ -21,6 +21,14 @@ export default defineConfig({
         maximumFileSizeToCacheInBytes: 8 * 1024 * 1024,
         // Escludi il SW di FCM dal precaching/navigateFallback (è gestito da Firebase Messaging)
         navigateFallbackDenylist: [/^\/firebase-messaging-sw\.js$/],
+        // Quando l'utente accetta il banner update (registerType:'prompt') il messaggio
+        // SKIP_WAITING fa attivare il nuovo SW; clientsClaim permette di prendere il controllo
+        // dei client esistenti senza richiedere un secondo reload. Senza questo,
+        // l'evento 'controlling' non scattava e il fallback setTimeout reload lasciava
+        // i client controllati dal vecchio SW → 'waiting' ri-emesso → banner in loop.
+        // Vedi docs/ATLAS.md sez. 10.
+        skipWaiting: false,
+        clientsClaim: true,
         // Cache dei Google Fonts (CSS + file font), incluso "Material Symbols Outlined"
         // usato da <MIcon>. Senza questo, ad ogni deploy il SW si rigenera e il font
         // icone viene ri-richiesto alla CDN: finché non arriva le ligature sono invisibili
