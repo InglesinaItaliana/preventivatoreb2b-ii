@@ -6,6 +6,10 @@ import { useAllTasks, createStandaloneTask } from '../../composables/sidera/useA
 import { useProjects } from '../../composables/sidera/useProjects'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
 import { useTeamMembers, displayName, starAvatarProps } from '../../composables/sidera/useTeamMembers'
+import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
+
+const scrollEl = ref<HTMLElement | null>(null)
+const { hidden: headerHidden } = useAutoHideHeader(scrollEl)
 import StarAvatar from '../../components/shared/StarAvatar.vue'
 
 const { tasks, loading, completeTask } = useAllTasks()
@@ -151,12 +155,14 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="dv s-scope-cepheid">
+  <div class="dv s-scope-cepheid" ref="scrollEl">
     <MdPageHeader
       title="Scadenze"
       :subtitle="totalCount === 0
         ? 'Nessuna scadenza nei prossimi 7 giorni'
         : (totalCount === 1 ? '1 scadenza in vista' : totalCount + ' scadenze in vista')"
+      sticky
+      :hidden="headerHidden"
     >
       <template #cta>
         <button class="md-btn md-btn--filled md-btn--sm md-btn--square" @click="openTaskModal">
@@ -274,8 +280,15 @@ onMounted(() => {
 .dv {
   font-family: 'Outfit', sans-serif;
   color: var(--md-sys-color-on-surface);
-  min-height: calc(100vh - 120px);
+  /* Pattern Cruscotto: scroll sul root (.s-main ha overflow:hidden in PWA mobile);
+     --page-bg letto da MdPageHeader.is-sticky per match-are il bg pagina. */
+  height: 100%;
+  overflow: auto;
+  --page-bg: #EFE7D9;
+  background: var(--page-bg);
 }
+.s-surface-dark .dv { --page-bg: #0E0C07; }
+@media (prefers-color-scheme: dark) { .dv { --page-bg: #0E0C07; } }
 
 .dv-content { padding: 16px; }
 

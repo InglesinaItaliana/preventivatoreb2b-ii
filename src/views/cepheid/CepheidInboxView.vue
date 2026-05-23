@@ -6,6 +6,10 @@ import CepheidInboxCard from '../../components/cepheid/CepheidInboxCard.vue'
 import { useAllTasks, type Task } from '../../composables/sidera/useAllTasks'
 import { useProjects } from '../../composables/sidera/useProjects'
 import { useTeamMembers } from '../../composables/sidera/useTeamMembers'
+import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
+
+const scrollEl = ref<HTMLElement | null>(null)
+const { hidden: headerHidden } = useAutoHideHeader(scrollEl)
 
 const { tasks, loading, updateTask, deleteTask, fileStandaloneTask, attachToDeliverable } = useAllTasks()
 const { activeProjects } = useProjects()
@@ -53,12 +57,14 @@ const confetti = computed(() => Array.from({ length: 14 }, (_, k) => ({
 </script>
 
 <template>
-  <div class="ib-page s-scope-cepheid">
+  <div class="ib-page s-scope-cepheid" ref="scrollEl">
     <MdPageHeader
       title="Smistamento"
       :subtitle="inbox.length === 0
         ? 'Nessuna task da smistare'
         : (inbox.length === 1 ? '1 task da smistare' : inbox.length + ' task da smistare')"
+      sticky
+      :hidden="headerHidden"
     />
 
     <div class="ib-content">
@@ -105,13 +111,16 @@ const confetti = computed(() => Array.from({ length: 14 }, (_, k) => ({
 </template>
 
 <style scoped>
-.ib-page { font-family: 'Outfit', sans-serif; color: var(--md-sys-color-on-surface); flex: 1; min-height: 0; display: flex; flex-direction: column; background: #EFE7D9; }
-.s-surface-dark .ib-page { background: #0E0C07; }
-@media (prefers-color-scheme: dark) { .ib-page { background: #0E0C07; } }
-.ib-page :deep(.md-page-header) { flex-shrink: 0; }
+/* Pattern Cruscotto: scroll sul root → padding-bottom 110px+safe (da SideraLayout)
+   lascia spazio alla pillola fluttuante e il bg copre la zona della pillola.
+   overflow-x:hidden preserva il requisito originale (card in swipe non tagliata
+   dai lati di un contenitore stretto).
+   --page-bg letto da MdPageHeader.is-sticky per match-are il bg pagina. */
+.ib-page { font-family: 'Outfit', sans-serif; color: var(--md-sys-color-on-surface); height: 100%; overflow-y: auto; overflow-x: hidden; --page-bg: #EFE7D9; background: var(--page-bg); }
+.s-surface-dark .ib-page { --page-bg: #0E0C07; }
+@media (prefers-color-scheme: dark) { .ib-page { --page-bg: #0E0C07; } }
 
-/* scroll a tutta larghezza: la card in swipe può uscire oltre i lati senza essere tagliata da un contenitore stretto */
-.ib-content { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 16px 0; }
+.ib-content { padding: 16px 0; }
 .ib-inner { max-width: 560px; margin: 0 auto; padding: 0 16px; display: flex; flex-direction: column; gap: 16px; }
 @media (min-width: 700px) { .ib-inner { padding: 0 20px; } }
 

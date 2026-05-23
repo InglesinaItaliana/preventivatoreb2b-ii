@@ -4,11 +4,15 @@
  * Porting del prototipo risorseesterneperclaude/sidera-log_1.html.
  * Feed alimentato da `activityLog` (scritto dalle Cloud Functions). Piano: docs + steady-mixing-pebble.
  */
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import MIcon from '../../components/shared/MIcon.vue'
 import MdPageHeader from '../../components/shared/MdPageHeader.vue'
 import { useActivityLog, type ActivityEvent } from '../../composables/quasar/useActivityLog'
 import { useTeamMembers, displayName } from '../../composables/sidera/useTeamMembers'
+import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
+
+const scrollEl = ref<HTMLElement | null>(null)
+const { hidden: headerHidden } = useAutoHideHeader(scrollEl)
 
 const { events, loading } = useActivityLog(100)
 const { members } = useTeamMembers()
@@ -78,13 +82,15 @@ const grouped = computed(() => {
 </script>
 
 <template>
-  <div class="qd s-scope-quasar">
+  <div class="qd s-scope-quasar" ref="scrollEl">
     <div class="qd-content">
       <div class="panel">
         <MdPageHeader
           title="Registro attività"
           subtitle="tutto ciò che accade su SIDERA e POPS, in tempo reale"
           borderless
+          sticky
+          :hidden="headerHidden"
         />
 
         <div v-if="loading" class="lg-loading">
@@ -127,15 +133,17 @@ const grouped = computed(() => {
 .qd {
   font-family: 'Outfit', sans-serif;
   color: var(--md-sys-color-on-surface);
-  background: #EFE7D9;
+  --page-bg: #EFE7D9;
+  background: var(--page-bg);
+  /* Pattern Cruscotto: scroll sul root → padding-bottom 110px+safe (da SideraLayout)
+     lascia spazio alla pillola fluttuante e il bg copre la zona della pillola. */
   height: 100%;
-  display: flex;
-  flex-direction: column;
+  overflow: auto;
 }
-.s-surface-dark .qd { background: #0E0C07; }
-@media (prefers-color-scheme: dark) { .qd { background: #0E0C07; } }
+.s-surface-dark .qd { --page-bg: #0E0C07; }
+@media (prefers-color-scheme: dark) { .qd { --page-bg: #0E0C07; } }
 
-.qd-content { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; }
+.qd-content { padding: 16px; }
 @media (min-width: 1024px) { .qd-content { padding: 24px 40px; } }
 
 .panel {

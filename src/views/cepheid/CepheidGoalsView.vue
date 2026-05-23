@@ -6,6 +6,10 @@ import MdPageHeader from '../../components/shared/MdPageHeader.vue'
 import GoalProgressBar from '../../components/cepheid/GoalProgressBar.vue'
 import { useObiettivi, GOAL_COLOR_PRESETS } from '../../composables/sidera/useObiettivi'
 import { useProjects } from '../../composables/sidera/useProjects'
+import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
+
+const scrollEl = ref<HTMLElement | null>(null)
+const { hidden: headerHidden } = useAutoHideHeader(scrollEl)
 
 const route  = useRoute()
 const router = useRouter()
@@ -109,11 +113,13 @@ const totalActive = computed(() => obiettiviAttivi.value.length)
 </script>
 
 <template>
-  <div class="gv s-scope-cepheid">
+  <div class="gv s-scope-cepheid" ref="scrollEl">
     <MdPageHeader
       title="Obiettivi"
       :subtitle="totalActive === 0 ? 'Nessun obiettivo'
         : (totalActive === 1 ? '1 obiettivo attivo' : totalActive + ' obiettivi attivi')"
+      sticky
+      :hidden="headerHidden"
     >
       <template #cta>
         <button class="md-btn md-btn--filled md-btn--sm md-btn--square" @click="openGoalModal">
@@ -237,13 +243,18 @@ const totalActive = computed(() => obiettiviAttivi.value.length)
 .gv {
   font-family: 'Outfit', sans-serif;
   color: var(--md-sys-color-on-surface);
-  min-height: calc(100vh - 120px);
-  /* sfondo cream coerente con la pagina Progetti */
-  background: #EFE7D9;
+  /* Pattern Cruscotto: scroll sul root → padding-bottom 110px+safe (da SideraLayout)
+     lascia spazio alla pillola fluttuante e il bg copre la zona della pillola. */
+  height: 100%;
+  overflow: auto;
+  /* sfondo cream coerente con la pagina Progetti.
+     --page-bg letto da MdPageHeader.is-sticky per match-are il bg pagina e
+     occludere il content che gli scorre sotto. */
+  --page-bg: #EFE7D9;
+  background: var(--page-bg);
 }
-.s-surface-dark .gv { background: #0E0C07; }
-@media (prefers-color-scheme: dark) { .gv { background: #0E0C07; } }
-.gv :deep(.md-page-header) { flex-shrink: 0; }
+.s-surface-dark .gv { --page-bg: #0E0C07; }
+@media (prefers-color-scheme: dark) { .gv { --page-bg: #0E0C07; } }
 /* header allineato al contenuto: gutter mobile 16px (come .gv-content) */
 :deep(.md-page-header) { padding: 18px 16px 14px; }
 

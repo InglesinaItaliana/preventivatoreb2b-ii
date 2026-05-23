@@ -131,6 +131,12 @@ const projectDueIso = computed(() => {
 <style scoped>
 .pcard {
   position: relative;
+  /* isolation: isolate crea uno stacking context locale così gli z-index interni
+     (`.pcard-state-overlay` z-index:7, header sticky interno z-index:6,
+     `.pcard-menu` z-index:50) sono CONFINATI alla card e non risalgono nello
+     stacking context globale, dove altrimenti finirebbero sopra la pillola
+     bottom-nav (z-index:5) e il MdPageHeader sticky (z-index:10). */
+  isolation: isolate;
   background: #FFF8F0;
   border: 1px solid var(--md-sys-color-outline-variant);
   border-radius: 16px;

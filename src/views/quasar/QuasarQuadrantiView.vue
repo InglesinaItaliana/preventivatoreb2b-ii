@@ -18,6 +18,10 @@ import { useAllTasks, type Task } from '../../composables/sidera/useAllTasks'
 import { useTeamMembers, displayName, starAvatarProps } from '../../composables/sidera/useTeamMembers'
 import { useQuadranti, type QuadId, type QuadTask } from '../../composables/quasar/useQuadranti'
 import { useResourceLoad } from '../../composables/quasar/useResourceLoad'
+import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
+
+const scrollEl = ref<HTMLElement | null>(null)
+const { hidden: headerHidden } = useAutoHideHeader(scrollEl)
 
 const { tasks, loading, completeTask, updateTask } = useAllTasks()
 const { members } = useTeamMembers()
@@ -161,10 +165,10 @@ async function completeFromModal() {
 </script>
 
 <template>
-  <div class="qd s-scope-quasar">
+  <div class="qd s-scope-quasar" ref="scrollEl">
     <div class="qd-content">
      <div class="panel">
-      <MdPageHeader title="Quadranti" :subtitle="subtitle" borderless>
+      <MdPageHeader title="Quadranti" :subtitle="subtitle" borderless sticky :hidden="headerHidden">
         <template #tools>
           <CepheidViewSwitcher :model-value="view" :tabs="viewTabs" @update:model-value="(v) => (view = v as ViewId)" />
         </template>
@@ -356,16 +360,19 @@ async function completeFromModal() {
 .qd {
   font-family: 'Outfit', sans-serif;
   color: var(--md-sys-color-on-surface);
-  background: #EFE7D9;
-  /* riempie .s-main (overflow:hidden) e gestisce lo scroll internamente */
+  --page-bg: #EFE7D9;
+  background: var(--page-bg);
+  /* Pattern Cruscotto: scroll sul root, niente flex column + child scroll separati.
+     Garantisce che il padding-bottom (110px+safe da SideraLayout) e il bg si
+     applichino al container scrollabile, così l'ultimo item non finisce dietro la
+     pillola fluttuante e il bg copre la zona della pillola. */
   height: 100%;
-  display: flex;
-  flex-direction: column;
+  overflow: auto;
 }
-.s-surface-dark .qd { background: #0E0C07; }
-@media (prefers-color-scheme: dark) { .qd { background: #0E0C07; } }
-/* area scrollabile della pagina */
-.qd-content { flex: 1; min-height: 0; overflow-y: auto; padding: 16px; }
+.s-surface-dark .qd { --page-bg: #0E0C07; }
+@media (prefers-color-scheme: dark) { .qd { --page-bg: #0E0C07; } }
+/* area contenuto della pagina */
+.qd-content { padding: 16px; }
 @media (min-width: 1024px) { .qd-content { padding: 24px 40px; } }
 
 /* container card unico (rif. prototipo #ax): surface chiara su fondo crema */
