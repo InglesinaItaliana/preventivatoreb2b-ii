@@ -67,7 +67,16 @@ export function useNotifications(scope: NotificationScope) {
         const messaging = await getMessagingInstance()
         if (!messaging) return true
 
-        const swReg = await navigator.serviceWorker.register('/firebase-messaging-sw.js', { scope: '/' })
+        // SW separati per scope: senza isolamento il browser deriva UN solo token FCM
+        // per dominio (VAPID + SW-registration deterministico), e tutte le PWA della suite
+        // ricevono gli stessi push. Registrando '/pulsar/firebase-messaging-sw.js' con
+        // scope '/pulsar/' (e idem per cepheid) il browser genera un token diverso per
+        // ciascuna PWA → niente leak cross-scope. SIDERA (desktop wildcard) e ogni altro
+        // scope continuano a usare il SW root per backward-compat.
+        const isolated = scope === 'pulsar' || scope === 'cepheid'
+        const swPath = isolated ? `/${scope}/firebase-messaging-sw.js` : '/firebase-messaging-sw.js'
+        const swScope = isolated ? `/${scope}/` : '/'
+        const swReg = await navigator.serviceWorker.register(swPath, { scope: swScope })
 
         const mod = await loadMessagingModule()
         const token = await mod.getToken(messaging, {

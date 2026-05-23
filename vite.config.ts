@@ -56,7 +56,11 @@ export default defineConfig({
           },
         ],
       },
-      includeAssets: ['firebase-messaging-sw.js'],
+      includeAssets: [
+        'firebase-messaging-sw.js',
+        'pulsar/firebase-messaging-sw.js',
+        'cepheid/firebase-messaging-sw.js',
+      ],
     }),
   ],
   build: {

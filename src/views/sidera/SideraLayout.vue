@@ -296,9 +296,22 @@ onMounted(async () => {
   await setupForegroundMessages()
 })
 
+// Espone l'altezza della bottom-nav (110px, allineato a .s-shell.s-mobile-layout .s-main
+// padding-bottom in fondo a questo file) come CSS variable sull'html root, così
+// componenti renderizzati fuori da .s-shell — su tutti UpdateBanner in App.vue —
+// possono posizionarsi sopra la nav senza conoscere il layout interno.
+watch(isMobileLayout, (mobile) => {
+  if (mobile) {
+    document.documentElement.style.setProperty('--bottom-nav-height', '110px')
+  } else {
+    document.documentElement.style.removeProperty('--bottom-nav-height')
+  }
+}, { immediate: true })
+
 onBeforeUnmount(() => {
   standaloneMql?.removeEventListener('change', syncStandalone)
   mobileMql?.removeEventListener('change', syncMobile)
+  document.documentElement.style.removeProperty('--bottom-nav-height')
 })
 
 watch(chats, (newChats) => {
