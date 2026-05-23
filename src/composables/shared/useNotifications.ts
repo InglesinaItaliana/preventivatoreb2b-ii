@@ -129,6 +129,15 @@ export function useNotifications(scope: NotificationScope) {
         const title = payload.notification?.title || payload.data?.title || 'PULSAR'
         const body  = payload.notification?.body  || payload.data?.body  || ''
         const url   = payload.data?.url
+        const pushScope = payload.data?.scope
+
+        // Filtro scope: se la push è destinata a una PWA diversa da quella attiva
+        // (es. push 'pulsar' ricevuta mentre l'utente è in CEPHEID), il foreground
+        // handler NON deve mostrare niente — è il SW background che decide se mostrare
+        // una notifica di sistema con la dedup IndexedDB. Senza questo filtro, l'utente
+        // su CEPHEID vede una notifica HTML5 con icona PULSAR del messaggio che aveva
+        // già ricevuto.
+        if (pushScope && pushScope !== scope) return
 
         // Suppressione: utente già sulla URL target della push → niente notifica duplicata
         if (url && typeof window !== 'undefined' && window.location.pathname === url) {

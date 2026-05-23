@@ -1384,10 +1384,17 @@ exports.onNewPulsarMessage = functions
         // 5. Invia push multicast (data-only: il SW costruisce l'unica notifica)
         // Se passassimo `notification`, la SDK FCM in background la mostrerebbe
         // automaticamente E richiamerebbe `onBackgroundMessage` → notifica doppia.
+        // - `scope`: il SW e il foreground handler scartano push destinate a una
+        //   PWA diversa da quella attiva (evita notifica PULSAR su CEPHEID).
+        // - `messageId`: chiave di dedup IndexedDB nel SW (iOS WebPush può rilanciare
+        //   un push pendente al wakeup del SW quando si apre un'altra PWA del dominio).
+        const messageId = `${chatId}:${snap.id}`;
         const res = await admin.messaging().sendEachForMulticast({
             tokens,
             data: {
                 chatId,
+                messageId,
+                scope: 'pulsar',
                 title,
                 body,
                 url: `/pulsar/chat/${chatId}`,
