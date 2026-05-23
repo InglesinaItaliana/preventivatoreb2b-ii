@@ -54,7 +54,10 @@ const isPops = computed(() => !route.path.startsWith('/sidera') &&
   position: fixed;
   left: 50%;
   transform: translateX(-50%);
-  bottom: max(1rem, env(safe-area-inset-bottom));
+  /* --bottom-nav-height è definita da SideraLayout su .s-shell.s-mobile-layout (110px,
+     allineato a SideraLayout.vue:790). Su desktop / scope senza bottom-nav la var non
+     esiste → fallback 0px. */
+  bottom: calc(var(--bottom-nav-height, 0px) + max(1rem, env(safe-area-inset-bottom)));
   z-index: 9999;
   width: min(92vw, 420px);
 }
