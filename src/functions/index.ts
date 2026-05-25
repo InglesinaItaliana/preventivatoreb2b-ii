@@ -133,16 +133,16 @@ exports.syncTeamRoleToAuth = functions
         }
 
         // --- AVATAR STELLARI: assegna hueIndex + category di default se mancanti ---
-        // Idempotente e anti-loop: scrive solo se manca almeno un campo. L'update
-        // ri-scatena onWrite, ma alla 2ª esecuzione i campi esistono -> nessuna
-        // scrittura -> il loop si chiude. L'override category dell'admin non viene mai toccato.
+        // Counter PER-CATEGORIA (`counters/teamHue_${category}`): garantisce rank
+        // sequenziale entro ogni famiglia (produzione: 0,1,2,...). Combinato col
+        // tone-cycle nell'engine, i primi 6 workers di una categoria avranno hue
+        // tutti diversi (palette 6) e dal 7 in poi stesso hue ma intensita' diversa.
         if (newData) {
             const needsHue      = typeof newData.hueIndex !== 'number';
             const needsCategory = !newData.category;
             if (needsHue || needsCategory) {
                 const db = admin.firestore();
                 const teamRef    = db.collection('team').doc(email);
-                const counterRef = db.collection('counters').doc('teamHue');
                 try {
                     await db.runTransaction(async (tx) => {
                         // Rileggi dentro la transazione: se nel frattempo i campi sono
@@ -152,6 +152,10 @@ exports.syncTeamRoleToAuth = functions
                         const fd = fresh.data() as any;
                         const patch: Record<string, any> = {};
 
+                        // Categoria effettiva: gia' su Firestore oppure derivata dal role.
+                        const effectiveCategory = fd.category || defaultCategoryForRole(fd.role);
+                        const counterRef = db.collection('counters').doc(`teamHue_${effectiveCategory}`);
+
                         if (typeof fd.hueIndex !== 'number') {
                             const counterSnap = await tx.get(counterRef);
                             const next = counterSnap.exists ? (counterSnap.data()?.next ?? 0) : 0;
@@ -159,7 +163,7 @@ exports.syncTeamRoleToAuth = functions
                             tx.set(counterRef, { next: next + 1 }, { merge: true });
                         }
                         if (!fd.category) {
-                            patch.category = defaultCategoryForRole(fd.role);
+                            patch.category = effectiveCategory;
                         }
                         if (Object.keys(patch).length > 0) {
                             tx.update(teamRef, patch);
@@ -205,9 +209,12 @@ exports.migrateAllTeamClaims = functions
         return { success: true, updated: count };
     });
 
-// --- BACKFILL AVATAR STELLARI (DA ESEGUIRE UNA VOLTA SOLA) ---
-// Per ogni doc team privo di hueIndex/category, esegue un "tocco" che fa scattare
-// il trigger syncTeamRoleToAuth, il quale assegna i campi in modo atomico.
+// --- BACKFILL AVATAR STELLARI (RE-MIGRAZIONE per-categoria) ---
+// Assegna direttamente hueIndex sequenziale entro ogni categoria, ordinando
+// per email (stabile). Allinea i counter teamHue_${category} a docs.length
+// cosi' i nuovi assunti continuano la sequenza. Cancella il vecchio counter
+// globale `teamHue` se presente. Idempotente: ri-eseguendola gli hueIndex
+// restano [0..N-1] per categoria (stesso ordering).
 exports.backfillTeamAvatars = functions
     .region('europe-west1')
     .https.onCall(async (data, context) => {
@@ -215,20 +222,49 @@ exports.backfillTeamAvatars = functions
 
         const db = admin.firestore();
         const teamSnap = await db.collection('team').get();
-        let touched = 0;
 
+        // 1. Raggruppa per categoria effettiva (preesistente o derivata dal role)
+        const byCategory: Record<string, FirebaseFirestore.QueryDocumentSnapshot[]> = {};
         for (const doc of teamSnap.docs) {
             const d = doc.data();
-            if (typeof d.hueIndex !== 'number' || !d.category) {
+            const cat = d.category || defaultCategoryForRole(d.role);
+            if (!byCategory[cat]) byCategory[cat] = [];
+            byCategory[cat].push(doc);
+        }
+
+        // 2. Per ogni categoria: ordina per email, assegna hueIndex 0..N-1
+        let updated = 0;
+        const categoriesTouched: Record<string, number> = {};
+        for (const [cat, docs] of Object.entries(byCategory)) {
+            docs.sort((a, b) => a.id.localeCompare(b.id));
+            for (let i = 0; i < docs.length; i++) {
                 try {
-                    await doc.ref.update({ _avatarTouch: admin.firestore.FieldValue.serverTimestamp() });
-                    touched++;
+                    await docs[i].ref.update({
+                        hueIndex: i,
+                        category: cat,
+                    });
+                    updated++;
                 } catch (e) {
-                    console.error(`[AVATAR BACKFILL] Errore tocco ${doc.id}`, e);
+                    console.error(`[AVATAR BACKFILL] Errore update ${docs[i].id}`, e);
                 }
             }
+            // Allinea counter per assegnazioni future (nuovi assunti)
+            try {
+                await db.collection('counters').doc(`teamHue_${cat}`).set({ next: docs.length });
+            } catch (e) {
+                console.error(`[AVATAR BACKFILL] Errore set counter teamHue_${cat}`, e);
+            }
+            categoriesTouched[cat] = docs.length;
         }
-        return { success: true, touched };
+
+        // 3. Cleanup: cancella vecchio counter globale se presente
+        try {
+            await db.collection('counters').doc('teamHue').delete();
+        } catch (e) {
+            // ok se non esiste
+        }
+
+        return { success: true, updated, categoriesTouched };
     });
 
 // --- FUNZIONE UNA TANTUM: AGGIORNAMENTO INDIRIZZI DA FIC ---

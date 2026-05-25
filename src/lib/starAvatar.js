@@ -82,6 +82,23 @@ export function hueFromIndex(index) {
   return PALETTE_HUES[i];
 }
 
+/**
+ * Tono (offset light) dallo slot: ogni "giro" della palette cambia intensita'.
+ * Ciclo 0 (rank 0..5)   -> normal:   +0
+ * Ciclo 1 (rank 6..11)  -> chiaro:   +12
+ * Ciclo 2 (rank 12..17) -> scuro:    -10
+ * Oltre 18 ricomincia. Compagna del trigger per-categoria: i primi 6 workers
+ * di una categoria hanno tutti hue diversi, dal 7 in poi stessa famiglia
+ * cromatica ma luminosita' visibilmente differente.
+ */
+const TONE_OFFSETS = [0, 12, -10];
+export function lightOffsetFromIndex(index) {
+  if (index == null) return 0;
+  const cycle = Math.floor(((Number(index) | 0)) / PALETTE_HUES.length);
+  const i = ((cycle % TONE_OFFSETS.length) + TONE_OFFSETS.length) % TONE_OFFSETS.length;
+  return TONE_OFFSETS[i];
+}
+
 /* ============================ MODELLO STELLA ============================ */
 /**
  * Costruisce i parametri (deterministici) di una stella.
@@ -94,17 +111,22 @@ export function hueFromIndex(index) {
 export function makeStar({ seed, category, hueIndex, hue }) {
   const role = CATEGORIES[category] || FALLBACK;
   const rnd = rngFrom(hashString(String(seed ?? '·')));
-  // Fallback senza hueIndex (backfill non ancora eseguito): quantizza un indice
-  // deterministico dal seed sulla stessa palette curata. Cosi' i path con/senza
-  // hueIndex condividono i 9 colori. Quando arrivera' il backfill, l'hue cambiera'
-  // dal valore "seed-quantizzato" a quello assegnato dal counter (entrambi nella palette).
+  // Fallback senza hueIndex: quantizza un indice deterministico dal seed sulla
+  // palette. Post-backfill questo path non viene piu' usato (tutti hanno hueIndex).
   const finalHue = (hue != null) ? hue
                   : (hueIndex != null) ? hueFromIndex(hueIndex)
                   : PALETTE_HUES[Math.floor(rnd() * PALETTE_HUES.length)];
+  // Tono esplicito dal ciclo dell'hueIndex (solo se assegnato dal counter
+  // per-categoria; per il fallback resta 0 e ci si affida alla variance random).
+  const toneShift = (hueIndex != null) ? lightOffsetFromIndex(hueIndex) : 0;
   return {
     category, label: role.label, points: role.points, hue: finalHue,
     sat:   role.sat   + (rnd() * 8 - 4),
-    light: role.light + (rnd() * 20 - 10),  // +/-10 (era +/-4): distingue workers che condividono lo stesso hue tramite chiaroscuro
+    // Light = base categoria + jitter +/-4 + tone-shift esplicito dal ciclo dell'hueIndex.
+    // Con hueIndex assegnato dal counter per-categoria, i primi 6 della stessa
+    // famiglia (rank 0..5) hanno toneShift=0 e si distinguono per hue; dal 7 (rank>=6)
+    // condividono l'hue ma il toneShift li separa con chiaro/scuro netti.
+    light: role.light + (rnd() * 8 - 4) + toneShift,
     coreR: role.coreR * (0.9 + rnd() * 0.2),
     halo:  role.halo  * (0.92 + rnd() * 0.16),
     spikeLen: role.spikeLen * (0.88 + rnd() * 0.24),
