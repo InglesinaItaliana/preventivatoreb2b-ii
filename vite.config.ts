@@ -83,9 +83,10 @@ export default defineConfig({
             if (id.includes('firebase') || id.includes('@firebase')) {
               return 'firebase-core'
             }
-            // NEBULA-DOCS editor: TipTap + ProseMirror (~115 KB gzip). Caricato
-            // SOLO quando si apre /nebula/docs/:docId, mai per POPS o altre PWA.
-            if (id.includes('@tiptap') || id.includes('prosemirror-')) {
+            // NEBULA-DOCS editor: TipTap + ProseMirror + tippy.js (popup slash
+            // menu / future mention popovers). ~120 KB gzip. Caricato SOLO
+            // quando si apre /nebula/docs/:docId, mai per POPS o altre PWA.
+            if (id.includes('@tiptap') || id.includes('prosemirror-') || id.includes('tippy.js')) {
               return 'nebula-docs-editor'
             }
             return 'vendor'

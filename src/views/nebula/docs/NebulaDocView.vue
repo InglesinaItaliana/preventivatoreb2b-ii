@@ -19,6 +19,12 @@ import { useRoute, useRouter } from 'vue-router'
 import { useEditor, EditorContent } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
+import { SlashCommand } from './extensions/SlashCommand'
+import { TaskMention } from './extensions/TaskMention'
+import { ProjectMention } from './extensions/ProjectMention'
+import { TaskEmbed } from './extensions/TaskEmbed'
+import { useAllTasks } from '../../../composables/sidera/useAllTasks'
+import { useProjects } from '../../../composables/sidera/useProjects'
 import { useCurrentUser } from '../../../composables/sidera/useCurrentUser'
 import { useDoc } from '../../../composables/nebula/useDoc'
 import { saveDoc, isSaveDocConflict, type SaveDocConflictDetails } from '../../../composables/nebula/useSaveDoc'
@@ -55,13 +61,27 @@ const canWrite = computed(() => {
 })
 
 // ── Editor TipTap ───────────────────────────────────────────────────────────
+// Sub a task + progetti CEPHEID per i typeahead `@` (TaskMention) e `#`
+// (ProjectMention). 1 sub ciascuna per editor mounted (riusate dai
+// Suggestion plugin). Pass come getter (no Ref): TipTap introspeziona
+// options e i Proxy reattivi rompono config (trap hasOwnProperty).
+const { tasks: allTasksRef } = useAllTasks()
+const { projects: allProjectsRef } = useProjects()
+
 const editor = useEditor({
   extensions: [
     StarterKit.configure({
       heading: { levels: [1, 2, 3] },
     }),
     Placeholder.configure({
-      placeholder: 'Inizia a scrivere…',
+      placeholder: 'Digita "/" per i comandi · "@" task · "#" progetto…',
+    }),
+    SlashCommand,
+    TaskMention.configure({ allTasks: () => allTasksRef.value }),
+    ProjectMention.configure({ allProjects: () => allProjectsRef.value }),
+    TaskEmbed.configure({
+      allTasks: () => allTasksRef.value,
+      allProjects: () => allProjectsRef.value,
     }),
   ],
   editable: false,                              // si sblocca dopo init + ACL
@@ -119,10 +139,14 @@ async function performSave(trigger: 'autosave' | 'manual') {
   saveStatus.value = 'saving'
   saveError.value = ''
   try {
+    // Deep-clone via JSON: scollega proxy Vue dentro node attrs (es. taskEmbed.filter
+    // letti via props.node.attrs reattivi). Firebase callable + Firestore non
+    // gradiscono Proxy in serializzazione (hasOwnProperty trap).
+    const rawContent = JSON.parse(JSON.stringify(editor.value.getJSON()))
     const out = await saveDoc({
       docId: doc.value.id,
       title: localTitle.value,
-      content: editor.value.getJSON(),
+      content: rawContent,
       contentText: editor.value.getText(),
       baseRevision: baseRevision.value,
       trigger,

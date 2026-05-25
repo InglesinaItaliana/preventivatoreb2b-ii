@@ -1913,4 +1913,78 @@ exports.saveDoc = functions
     }
     return { docId, revision: nextRev };
 });
+function extractRefsFromContent(content) {
+    const tasks = new Set();
+    const projects = new Set();
+    function walk(node) {
+        var _a, _b, _c;
+        if (!node || typeof node !== 'object')
+            return;
+        if (node.type === 'taskMention') {
+            const tid = (_a = node.attrs) === null || _a === void 0 ? void 0 : _a.taskId;
+            if (typeof tid === 'string' && tid)
+                tasks.add(tid);
+        }
+        else if (node.type === 'projectMention') {
+            const pid = (_b = node.attrs) === null || _b === void 0 ? void 0 : _b.projectId;
+            if (typeof pid === 'string' && pid)
+                projects.add(pid);
+        }
+        else if (node.type === 'taskEmbed') {
+            const filter = (_c = node.attrs) === null || _c === void 0 ? void 0 : _c.filter;
+            const pid = filter === null || filter === void 0 ? void 0 : filter.projectId;
+            if (typeof pid === 'string' && pid)
+                projects.add(pid);
+        }
+        if (Array.isArray(node.content)) {
+            for (const child of node.content)
+                walk(child);
+        }
+    }
+    walk(content);
+    return {
+        tasks: Array.from(tasks).sort(),
+        projects: Array.from(projects).sort(),
+    };
+}
+function arraysShallowEqual(a, b) {
+    const aa = a !== null && a !== void 0 ? a : [];
+    const bb = b !== null && b !== void 0 ? b : [];
+    if (aa.length !== bb.length)
+        return false;
+    for (let i = 0; i < aa.length; i++)
+        if (aa[i] !== bb[i])
+            return false;
+    return true;
+}
+exports.indexDocRefs = functions
+    .region('europe-west1')
+    .firestore.document('nebulaDocs/{docId}')
+    .onWrite(async (change, context) => {
+    var _a;
+    // onWrite copre create/update/delete. Su delete (after non esiste) skippiamo.
+    if (!change.after.exists)
+        return null;
+    const after = change.after.data();
+    const computed = extractRefsFromContent(after.content);
+    const currentRefs = ((_a = after.refs) !== null && _a !== void 0 ? _a : {});
+    // Loop guard: se i refs computati coincidono con quelli persistiti,
+    // la write non porta nuove mention → skip (probabile origine: indexer stesso
+    // o write non legata ai mention).
+    if (arraysShallowEqual(currentRefs.tasks, computed.tasks) &&
+        arraysShallowEqual(currentRefs.projects, computed.projects)) {
+        return null;
+    }
+    // Update solo i sotto-campi refs.tasks + refs.projects (preserva
+    // refs.deliverables/docs/users gestiti da chunks futuri).
+    const docId = context.params.docId;
+    await admin.firestore()
+        .collection('nebulaDocs').doc(docId)
+        .update({
+        'refs.tasks': computed.tasks,
+        'refs.projects': computed.projects,
+    });
+    console.log(`[indexDocRefs] ${docId} — tasks: ${computed.tasks.length}, projects: ${computed.projects.length}`);
+    return null;
+});
 //# sourceMappingURL=index.js.map

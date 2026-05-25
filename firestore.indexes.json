@@ -105,6 +105,22 @@
         { "fieldPath": "acl.owners", "arrayConfig": "CONTAINS" },
         { "fieldPath": "updatedAt",  "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "nebulaDocs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "refs.tasks", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "updatedAt",  "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "nebulaDocs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "refs.projects", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "updatedAt",     "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": [
