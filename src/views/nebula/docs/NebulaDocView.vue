@@ -76,7 +76,12 @@ watch(doc, (d) => {
   localTitle.value = d.title ?? ''
   baseRevision.value = d.revision ?? 0
   if (editor.value) {
-    editor.value.commands.setContent(d.content as any || { type: 'doc', content: [] }, false)
+    // Deep clone via JSON: scollega da reactive proxy (TipTap chiama
+    // hasOwnProperty internamente e fallisce su Proxy Vue).
+    const rawContent = d.content
+      ? JSON.parse(JSON.stringify(d.content))
+      : { type: 'doc', content: [] }
+    editor.value.commands.setContent(rawContent, false)
     editor.value.setEditable(canWrite.value)
   }
   initializedFromDoc.value = true
@@ -167,11 +172,28 @@ const currentIcon = computed<IconValue | null>({
   set: () => { /* aggiornato via saveIcon */ },
 })
 
-async function saveIcon(value: IconValue | null) {
+// Debounce per le modifiche icona: ogni click su colore/fill/icona emette,
+// ma vogliamo coalescere e NON chiudere il picker (l'utente continua a
+// scegliere). Stessa logica del save autosave del corpo.
+let iconSaveTimer: ReturnType<typeof setTimeout> | null = null
+let pendingIcon: IconValue | null | undefined = undefined  // undefined = no pending
+
+function saveIcon(value: IconValue | null) {
   if (!doc.value || !canWrite.value) return
-  // Save immediato (no debounce): le icone sono cambi discreti
+  pendingIcon = value
+  if (iconSaveTimer) clearTimeout(iconSaveTimer)
+  saveStatus.value = 'idle'
+  iconSaveTimer = setTimeout(() => {
+    void flushIconSave()
+  }, 600)
+}
+
+async function flushIconSave() {
+  if (pendingIcon === undefined || !doc.value || !canWrite.value) return
+  const value = pendingIcon
+  pendingIcon = undefined
+  saveStatus.value = 'saving'
   try {
-    saveStatus.value = 'saving'
     const out = await saveDoc({
       docId: doc.value.id,
       icon: value,
@@ -180,7 +202,6 @@ async function saveIcon(value: IconValue | null) {
     })
     baseRevision.value = out.revision
     saveStatus.value = 'saved'
-    showIconPicker.value = false
   } catch (e: any) {
     saveStatus.value = 'error'
     saveError.value = e?.message ?? String(e)
@@ -206,7 +227,7 @@ if (typeof window !== 'undefined') {
 // ── Cleanup ────────────────────────────────────────────────────────────────
 onBeforeUnmount(() => {
   if (autosaveTimer) clearTimeout(autosaveTimer)
-  // Final save sincrono se ci sono modifiche pending (no debounce)
+  if (iconSaveTimer) { clearTimeout(iconSaveTimer); void flushIconSave() }
   // editor.value?.destroy() viene chiamato da useEditor automaticamente
   if (typeof window !== 'undefined') {
     window.removeEventListener('keydown', onKeyDown)
@@ -640,9 +661,22 @@ void editorRef
   font-size: 18px; font-weight: 600; margin: 1.2em 0 0.4em;
 }
 .nd-editor :deep(.ProseMirror p) { margin: 0.5em 0; }
+/* Tailwind preflight resetta list-style sulle ul/ol — riabilitiamo
+   esplicitamente dentro l'editor. */
 .nd-editor :deep(.ProseMirror ul),
-.nd-editor :deep(.ProseMirror ol) { padding-left: 1.5em; margin: 0.5em 0; }
-.nd-editor :deep(.ProseMirror li) { margin: 0.25em 0; }
+.nd-editor :deep(.ProseMirror ol) {
+  padding-left: 1.5em;
+  margin: 0.5em 0;
+}
+.nd-editor :deep(.ProseMirror ul) { list-style-type: disc; }
+.nd-editor :deep(.ProseMirror ol) { list-style-type: decimal; }
+.nd-editor :deep(.ProseMirror ul ul) { list-style-type: circle; }
+.nd-editor :deep(.ProseMirror ul ul ul) { list-style-type: square; }
+.nd-editor :deep(.ProseMirror li) {
+  margin: 0.25em 0;
+  display: list-item;
+}
+.nd-editor :deep(.ProseMirror li p) { margin: 0; }
 .nd-editor :deep(.ProseMirror blockquote) {
   border-left: 3px solid #C46030; padding-left: 1em; margin: 0.8em 0;
   color: #555; font-style: italic;
