@@ -20,6 +20,8 @@ import { useEditor, EditorContent } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import { SlashCommand } from './extensions/SlashCommand'
+import { TaskMention } from './extensions/TaskMention'
+import { useAllTasks } from '../../../composables/sidera/useAllTasks'
 import { useCurrentUser } from '../../../composables/sidera/useCurrentUser'
 import { useDoc } from '../../../composables/nebula/useDoc'
 import { saveDoc, isSaveDocConflict, type SaveDocConflictDetails } from '../../../composables/nebula/useSaveDoc'
@@ -56,15 +58,20 @@ const canWrite = computed(() => {
 })
 
 // ── Editor TipTap ───────────────────────────────────────────────────────────
+// Sub a tutti i task CEPHEID per il typeahead `@` (TaskMention).
+// 1 sola collectionGroup query per editor mounted (riusato dal Suggestion plugin).
+const { tasks: allTasks } = useAllTasks()
+
 const editor = useEditor({
   extensions: [
     StarterKit.configure({
       heading: { levels: [1, 2, 3] },
     }),
     Placeholder.configure({
-      placeholder: 'Digita "/" per i comandi…',
+      placeholder: 'Digita "/" per i comandi · "@" per menzionare un task…',
     }),
     SlashCommand,
+    TaskMention.configure({ allTasks }),
   ],
   editable: false,                              // si sblocca dopo init + ACL
   onUpdate: () => scheduleAutosave(),

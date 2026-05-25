@@ -101,6 +101,20 @@ export const SLASH_COMMANDS: SlashCommandItem[] = [
       editor.chain().focus().deleteRange(range).setHorizontalRule().run()
     },
   },
+
+  // ── CEPHEID mentions (F2-C2+) ───────────────────────────────────────────
+  // Le mention usano trigger `@` direttamente; questi comandi slash sono
+  // shortcut: rimuovono `/task` (o /progetto, /utente) e inseriscono `@`
+  // per far partire il typeahead.
+  {
+    title: 'Menziona task',
+    description: 'Chip live a un\'azione CEPHEID',
+    icon: 'task_alt',
+    aliases: ['task', 'azione', 'mention'],
+    command: ({ editor, range }) => {
+      editor.chain().focus().deleteRange(range).insertContent('@').run()
+    },
+  },
 ]
 
 /**
