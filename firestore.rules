@@ -179,7 +179,19 @@ service cloud.firestore {
             || request.auth.token.email in acl.owners;
       }
 
-      allow read: if request.auth != null && readerOk(resource.data.acl);
+      // CORE admin bypass: Fase 1 di NEBULA-DOCS è gated CORE → diamo loro
+      // read totale su nebulaDocs così le QUERY (es. LinkedDocsPanel con
+      // where('refs.tasks', 'array-contains', id)) passano la pre-validazione
+      // del rule engine. Per query non vincolate all'ACL del doc, Firestore
+      // non può filtrare per resource.data → senza questo bypass, fail.
+      // Quando si rolla NEBULA-DOCS Fase 2 (team-wide), si introdurrà
+      // denormalizzazione `acl.readers` o query lato server via callable.
+      function isCoreAdminRead() {
+        return request.auth.token.email == 'info@inglesinaitaliana.it'
+            || request.auth.token.email in get(/databases/$(database)/documents/core/admins).data.get('emails', []);
+      }
+
+      allow read: if request.auth != null && (isCoreAdminRead() || readerOk(resource.data.acl));
       allow write: if false;   // SOLO via callable saveDoc
 
       match /presence/{userEmail} {

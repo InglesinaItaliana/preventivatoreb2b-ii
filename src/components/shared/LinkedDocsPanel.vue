@@ -77,10 +77,10 @@ function subscribe() {
       loading.value = false
     },
     (err) => {
-      // Permission denied (non ho read access ai doc) = comportamento atteso,
-      // tratta come "zero risultati". Index missing → log per debug.
+      // Permission denied = nessuna read access ai doc → 0 risultati silenziosi.
+      // Altri errori (es. index missing) loggiamo come warn per debug.
       if (err?.code !== 'permission-denied') {
-        console.warn('[LinkedDocsPanel] query error:', err)
+        console.warn('[LinkedDocsPanel] query error:', err?.code, err?.message)
       }
       docs.value = []
       loading.value = false
