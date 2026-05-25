@@ -25,14 +25,22 @@ import { VueNodeViewRenderer } from '@tiptap/vue-3'
 import Suggestion from '@tiptap/suggestion'
 import { VueRenderer } from '@tiptap/vue-3'
 import tippy, { type Instance as TippyInstance } from 'tippy.js'
-import type { Ref } from 'vue'
 import TaskMentionNode from '../components/TaskMentionNode.vue'
 import TaskSuggester from '../components/TaskSuggester.vue'
 import type { Task } from '../../../../composables/sidera/useAllTasks'
 
 export interface TaskMentionOptions {
-  /** Source di tutti i task per il typeahead. Tipicamente useAllTasks().tasks dal parent view. */
-  allTasks: Ref<Task[]>
+  /**
+   * Getter che ritorna l'array corrente dei task per il typeahead.
+   * Passare una funzione (non un Ref) — TipTap fa introspezione delle options
+   * e i Proxy reattivi Vue rompono setContent / config (stesso pattern del trap
+   * hasOwnProperty già documentato).
+   *
+   * Esempio:
+   *   const { tasks } = useAllTasks()
+   *   TaskMention.configure({ allTasks: () => tasks.value })
+   */
+  allTasks: () => Task[]
 }
 
 function filterTasks(tasks: Task[], query: string, limit = 20): Task[] {
@@ -67,8 +75,8 @@ export const TaskMention = Node.create<TaskMentionOptions>({
 
   addOptions() {
     return {
-      // Default: ref vuoto. Verrà sovrascritto da configure({ allTasks: tasks }) nel view.
-      allTasks: { value: [] } as Ref<Task[]>,
+      // Default: getter vuoto. Sovrascritto da configure({ allTasks: () => ... }).
+      allTasks: () => [] as Task[],
     }
   },
 
@@ -112,7 +120,7 @@ export const TaskMention = Node.create<TaskMentionOptions>({
         char: '@',
         startOfLine: false,
         allowSpaces: true,  // permette di cercare "stiletto rosso" non solo "stiletto"
-        items: ({ query }: { query: string }) => filterTasks(options.allTasks.value, query),
+        items: ({ query }: { query: string }) => filterTasks(options.allTasks(), query),
         command: ({ editor, range, props }: any) => {
           const { id: taskId, projectId } = props as { id: string; projectId: string }
           editor

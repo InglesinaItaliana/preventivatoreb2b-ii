@@ -60,7 +60,9 @@ const canWrite = computed(() => {
 // ── Editor TipTap ───────────────────────────────────────────────────────────
 // Sub a tutti i task CEPHEID per il typeahead `@` (TaskMention).
 // 1 sola collectionGroup query per editor mounted (riusato dal Suggestion plugin).
-const { tasks: allTasks } = useAllTasks()
+// Pass come getter NON come ref: TipTap fa introspezione delle options e i
+// Proxy reattivi rompono config (stesso pattern del trap hasOwnProperty).
+const { tasks: allTasksRef } = useAllTasks()
 
 const editor = useEditor({
   extensions: [
@@ -71,7 +73,7 @@ const editor = useEditor({
       placeholder: 'Digita "/" per i comandi · "@" per menzionare un task…',
     }),
     SlashCommand,
-    TaskMention.configure({ allTasks }),
+    TaskMention.configure({ allTasks: () => allTasksRef.value }),
   ],
   editable: false,                              // si sblocca dopo init + ACL
   onUpdate: () => scheduleAutosave(),
