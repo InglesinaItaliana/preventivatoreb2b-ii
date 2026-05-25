@@ -24,9 +24,19 @@ interface CleanupResult {
   totalChatsScanned: number
 }
 
+interface BackfillResult {
+  success: boolean
+  updated: number
+  categoriesTouched: Record<string, number>
+}
+
 const running = ref(false)
 const result = ref<CleanupResult | null>(null)
 const errorMsg = ref<string>('')
+
+const backfillRunning = ref(false)
+const backfillResult = ref<BackfillResult | null>(null)
+const backfillError = ref<string>('')
 
 async function runCleanup() {
   if (running.value) return
@@ -43,6 +53,24 @@ async function runCleanup() {
     errorMsg.value = e?.message || 'Errore sconosciuto. Vedi console.'
   } finally {
     running.value = false
+  }
+}
+
+async function runAvatarBackfill() {
+  if (backfillRunning.value) return
+  if (!confirm('Ri-assegnare hueIndex per-categoria a tutti i membri team? L\'operazione è idempotente.')) return
+  backfillRunning.value = true
+  backfillResult.value = null
+  backfillError.value = ''
+  try {
+    const fn = httpsCallable<Record<string, never>, BackfillResult>(functions, 'backfillTeamAvatars')
+    const res = await fn({})
+    backfillResult.value = res.data
+  } catch (e: any) {
+    console.error('[backfillTeamAvatars]', e)
+    backfillError.value = e?.message || 'Errore sconosciuto. Vedi console.'
+  } finally {
+    backfillRunning.value = false
   }
 }
 </script>
@@ -84,6 +112,34 @@ async function runCleanup() {
 
       <div v-if="errorMsg" class="m-error">
         <strong>Errore:</strong> {{ errorMsg }}
+      </div>
+    </div>
+
+    <div v-if="isAdmin" class="m-task">
+      <h3 class="m-task-title">Backfill avatar stellari</h3>
+      <p class="m-task-desc">
+        Ri-assegna <code>hueIndex</code> sequenziale per ogni categoria
+        (ordinando per email). Allinea i counter <code>counters/teamHue_${'{'}category{'}'}</code>
+        per future assunzioni. Idempotente: ri-eseguibile senza danni.
+        Da invocare una volta dopo deploy del trigger per-categoria.
+      </p>
+
+      <button class="m-btn" :disabled="backfillRunning" @click="runAvatarBackfill">
+        {{ backfillRunning ? 'In esecuzione…' : 'Esegui backfill' }}
+      </button>
+
+      <div v-if="backfillResult" class="m-result">
+        <h4>Risultato</h4>
+        <ul>
+          <li><strong>{{ backfillResult.updated }}</strong> documenti aggiornati</li>
+          <li v-for="(count, cat) in backfillResult.categoriesTouched" :key="cat">
+            <code>{{ cat }}</code>: {{ count }} membri (hueIndex 0..{{ count - 1 }})
+          </li>
+        </ul>
+      </div>
+
+      <div v-if="backfillError" class="m-error">
+        <strong>Errore:</strong> {{ backfillError }}
       </div>
     </div>
   </div>
