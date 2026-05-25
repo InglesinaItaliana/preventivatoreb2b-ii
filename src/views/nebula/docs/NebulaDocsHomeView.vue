@@ -185,21 +185,29 @@ function formatTime(ts: any): string {
         </div>
         <ul v-else class="ndh-list">
           <li v-for="d in docs" :key="d.id" class="ndh-item">
-            <span class="material-symbols-outlined ndh-item-icon">{{ d.iconName || 'description' }}</span>
-            <div class="ndh-item-meta">
-              <div class="ndh-item-title">{{ d.title }}</div>
-              <div class="ndh-item-sub">
-                rev {{ d.revision }} · {{ formatTime(d.updatedAt) }} ·
-                <code>{{ d.id }}</code>
+            <button
+              type="button"
+              class="ndh-item-main"
+              @click="router.push(`/nebula/docs/${d.id}`)"
+              :aria-label="`Apri ${d.title}`"
+            >
+              <span class="material-symbols-outlined ndh-item-icon">{{ d.iconName || 'description' }}</span>
+              <div class="ndh-item-meta">
+                <div class="ndh-item-title">{{ d.title }}</div>
+                <div class="ndh-item-sub">
+                  rev {{ d.revision }} · {{ formatTime(d.updatedAt) }} ·
+                  <code>{{ d.id }}</code>
+                </div>
               </div>
-            </div>
+            </button>
             <button
               type="button"
               class="ndh-update-btn"
               :disabled="updatingId === d.id"
+              :title="'Test LWW: aggiorna title via callable (resta utile anche con editor)'"
               @click="updateTitle(d)"
             >
-              {{ updatingId === d.id ? 'Salvataggio…' : 'Aggiorna title' }}
+              {{ updatingId === d.id ? '…' : 'Test LWW' }}
             </button>
           </li>
         </ul>
@@ -348,11 +356,32 @@ function formatTime(ts: any): string {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 14px;
+  padding: 4px 14px 4px 4px;
   background: var(--md-sys-color-surface-container, #fff);
   border-radius: 10px;
   border: 1px solid rgba(0,0,0,0.05);
+  transition: background 120ms ease, border-color 120ms ease;
 }
+.ndh-item:hover {
+  background: rgba(196, 96, 48, 0.04);
+  border-color: rgba(196, 96, 48, 0.18);
+}
+.ndh-item-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: transparent;
+  border: 0;
+  padding: 8px 10px;
+  cursor: pointer;
+  text-align: left;
+  border-radius: 8px;
+  font: inherit;
+  color: inherit;
+  min-width: 0;
+}
+.ndh-item-main:hover .ndh-item-title { color: #C46030; }
 .ndh-item-icon { font-size: 22px; color: #C46030; flex-shrink: 0; }
 .ndh-item-meta { flex: 1; min-width: 0; }
 .ndh-item-title {
