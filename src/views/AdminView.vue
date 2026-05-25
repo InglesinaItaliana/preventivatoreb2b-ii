@@ -271,7 +271,7 @@ const caricaTutti = () => {
     collection(db, 'preventivi'), 
     where('stato', 'in', ACTIVE_STATUSES),
     orderBy('dataCreazione', 'desc'), 
-    limit(100)
+    limit(500)
   );
 
   unsubscribe = onSnapshot(q, (snapshot) => {
