@@ -2154,3 +2154,98 @@ exports.saveDoc = functions
 
         return { docId, revision: nextRev };
     });
+
+// ============================================================================
+// NEBULA-DOCS — indexDocRefs (F2-C5)
+// onWrite trigger su nebulaDocs/{docId}: parsa il content ProseMirror JSON,
+// estrae taskId/projectId dai nodi taskMention/projectMention/taskEmbed.filter.
+// Popola refs.tasks[]/refs.projects[] denormalizzati per query inverse
+// ("quali doc citano questo task?") usate dal pannello CEPHEID (F2-C6).
+//
+// Loop prevention: confronta refs computati vs refs salvati; skip se uguali
+// (cioè la write veniva da indexDocRefs stesso o non ha modificato mention).
+//
+// Vedi docs/NEBULA-DOCS.md §10.
+// ============================================================================
+
+interface PMNode {
+    type?: string;
+    attrs?: Record<string, unknown>;
+    content?: PMNode[];
+}
+
+function extractRefsFromContent(content: unknown): { tasks: string[]; projects: string[] } {
+    const tasks = new Set<string>();
+    const projects = new Set<string>();
+
+    function walk(node: PMNode | undefined): void {
+        if (!node || typeof node !== 'object') return;
+
+        if (node.type === 'taskMention') {
+            const tid = node.attrs?.taskId;
+            if (typeof tid === 'string' && tid) tasks.add(tid);
+        } else if (node.type === 'projectMention') {
+            const pid = node.attrs?.projectId;
+            if (typeof pid === 'string' && pid) projects.add(pid);
+        } else if (node.type === 'taskEmbed') {
+            const filter = node.attrs?.filter as { projectId?: unknown } | undefined;
+            const pid = filter?.projectId;
+            if (typeof pid === 'string' && pid) projects.add(pid);
+        }
+
+        if (Array.isArray(node.content)) {
+            for (const child of node.content) walk(child);
+        }
+    }
+
+    walk(content as PMNode);
+
+    return {
+        tasks: Array.from(tasks).sort(),
+        projects: Array.from(projects).sort(),
+    };
+}
+
+function arraysShallowEqual(a: string[] | undefined, b: string[] | undefined): boolean {
+    const aa = a ?? [];
+    const bb = b ?? [];
+    if (aa.length !== bb.length) return false;
+    for (let i = 0; i < aa.length; i++) if (aa[i] !== bb[i]) return false;
+    return true;
+}
+
+exports.indexDocRefs = functions
+    .region('europe-west1')
+    .firestore.document('nebulaDocs/{docId}')
+    .onWrite(async (change, context) => {
+        // onWrite copre create/update/delete. Su delete (after non esiste) skippiamo.
+        if (!change.after.exists) return null;
+
+        const after = change.after.data() as any;
+        const computed = extractRefsFromContent(after.content);
+
+        const currentRefs = (after.refs ?? {}) as { tasks?: string[]; projects?: string[] };
+
+        // Loop guard: se i refs computati coincidono con quelli persistiti,
+        // la write non porta nuove mention → skip (probabile origine: indexer stesso
+        // o write non legata ai mention).
+        if (
+            arraysShallowEqual(currentRefs.tasks, computed.tasks) &&
+            arraysShallowEqual(currentRefs.projects, computed.projects)
+        ) {
+            return null;
+        }
+
+        // Update solo i sotto-campi refs.tasks + refs.projects (preserva
+        // refs.deliverables/docs/users gestiti da chunks futuri).
+        const docId = context.params.docId as string;
+        await admin.firestore()
+            .collection('nebulaDocs').doc(docId)
+            .update({
+                'refs.tasks': computed.tasks,
+                'refs.projects': computed.projects,
+            });
+
+        console.log(`[indexDocRefs] ${docId} — tasks: ${computed.tasks.length}, projects: ${computed.projects.length}`);
+        return null;
+    });
