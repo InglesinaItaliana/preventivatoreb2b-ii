@@ -21,7 +21,9 @@ import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import { SlashCommand } from './extensions/SlashCommand'
 import { TaskMention } from './extensions/TaskMention'
+import { ProjectMention } from './extensions/ProjectMention'
 import { useAllTasks } from '../../../composables/sidera/useAllTasks'
+import { useProjects } from '../../../composables/sidera/useProjects'
 import { useCurrentUser } from '../../../composables/sidera/useCurrentUser'
 import { useDoc } from '../../../composables/nebula/useDoc'
 import { saveDoc, isSaveDocConflict, type SaveDocConflictDetails } from '../../../composables/nebula/useSaveDoc'
@@ -58,11 +60,12 @@ const canWrite = computed(() => {
 })
 
 // ── Editor TipTap ───────────────────────────────────────────────────────────
-// Sub a tutti i task CEPHEID per il typeahead `@` (TaskMention).
-// 1 sola collectionGroup query per editor mounted (riusato dal Suggestion plugin).
-// Pass come getter NON come ref: TipTap fa introspezione delle options e i
-// Proxy reattivi rompono config (stesso pattern del trap hasOwnProperty).
+// Sub a task + progetti CEPHEID per i typeahead `@` (TaskMention) e `#`
+// (ProjectMention). 1 sub ciascuna per editor mounted (riusate dai
+// Suggestion plugin). Pass come getter (no Ref): TipTap introspeziona
+// options e i Proxy reattivi rompono config (trap hasOwnProperty).
 const { tasks: allTasksRef } = useAllTasks()
+const { projects: allProjectsRef } = useProjects()
 
 const editor = useEditor({
   extensions: [
@@ -70,10 +73,11 @@ const editor = useEditor({
       heading: { levels: [1, 2, 3] },
     }),
     Placeholder.configure({
-      placeholder: 'Digita "/" per i comandi · "@" per menzionare un task…',
+      placeholder: 'Digita "/" per i comandi · "@" task · "#" progetto…',
     }),
     SlashCommand,
     TaskMention.configure({ allTasks: () => allTasksRef.value }),
+    ProjectMention.configure({ allProjects: () => allProjectsRef.value }),
   ],
   editable: false,                              // si sblocca dopo init + ACL
   onUpdate: () => scheduleAutosave(),

@@ -115,6 +115,15 @@ export const SLASH_COMMANDS: SlashCommandItem[] = [
       editor.chain().focus().deleteRange(range).insertContent('@').run()
     },
   },
+  {
+    title: 'Menziona progetto',
+    description: 'Chip live a un progetto CEPHEID',
+    icon: 'folder',
+    aliases: ['progetto', 'project', 'cartella'],
+    command: ({ editor, range }) => {
+      editor.chain().focus().deleteRange(range).insertContent('#').run()
+    },
+  },
 ]
 
 /**
