@@ -1803,4 +1803,114 @@ exports.logPreventivoActivity = functions
             return; // DRAFT, PENDING_VAL, QUOTE_READY, WAITING_SIGN, WAITING_FAST, DELIVERY → nessun evento
     }
 });
+function nebulaNormalizeEmail(e) {
+    return (e !== null && e !== void 0 ? e : '').toLowerCase().trim();
+}
+exports.saveDoc = functions
+    .region('europe-west1')
+    .https.onCall(async (data, context) => {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Richiesto login');
+    }
+    const userEmail = nebulaNormalizeEmail(context.auth.token.email);
+    if (!userEmail) {
+        throw new functions.https.HttpsError('failed-precondition', 'Email utente mancante');
+    }
+    const db = admin.firestore();
+    const trigger = ((_a = data === null || data === void 0 ? void 0 : data.trigger) !== null && _a !== void 0 ? _a : 'autosave');
+    const docId = data === null || data === void 0 ? void 0 : data.docId;
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    // ── CREATE ──────────────────────────────────────────────────────────
+    if (!docId) {
+        const newRef = db.collection('nebulaDocs').doc();
+        const acl = {
+            visibility: 'private', // decisione §12 #1
+            readers: [],
+            writers: [],
+            owners: [userEmail],
+        };
+        const title = (_b = data === null || data === void 0 ? void 0 : data.title) !== null && _b !== void 0 ? _b : 'Nuovo documento';
+        const content = (_c = data === null || data === void 0 ? void 0 : data.content) !== null && _c !== void 0 ? _c : { type: 'doc', content: [] };
+        await newRef.set({
+            title,
+            icon: (_d = data === null || data === void 0 ? void 0 : data.icon) !== null && _d !== void 0 ? _d : null,
+            content,
+            contentText: ((_e = data === null || data === void 0 ? void 0 : data.contentText) !== null && _e !== void 0 ? _e : '').slice(0, 10000),
+            parentId: (_f = data === null || data === void 0 ? void 0 : data.parentId) !== null && _f !== void 0 ? _f : null,
+            order: 0,
+            depth: 0,
+            refs: { tasks: [], projects: [], deliverables: [], docs: [], users: [] },
+            archived: false,
+            archivedAt: null,
+            revision: 1,
+            createdAt: now,
+            createdBy: userEmail,
+            updatedAt: now,
+            updatedBy: userEmail,
+            acl,
+        });
+        // Snapshot iniziale sempre (anche su autosave) per il primo punto.
+        await newRef.collection('history').add({
+            revision: 1,
+            title,
+            content,
+            savedAt: now,
+            savedBy: userEmail,
+            trigger,
+        });
+        return { docId: newRef.id, revision: 1 };
+    }
+    // ── UPDATE (LWW per documento, vedi §5.3) ───────────────────────────
+    const ref = db.collection('nebulaDocs').doc(docId);
+    const snap = await ref.get();
+    if (!snap.exists) {
+        throw new functions.https.HttpsError('not-found', 'Documento non trovato');
+    }
+    const current = snap.data();
+    const acl = current.acl;
+    // Permessi: solo writer o owner
+    const isWriter = acl.writers.includes(userEmail) || acl.owners.includes(userEmail);
+    if (!isWriter) {
+        throw new functions.https.HttpsError('permission-denied', 'Permesso di scrittura negato');
+    }
+    // LWW revision check
+    const baseRev = (_g = data === null || data === void 0 ? void 0 : data.baseRevision) !== null && _g !== void 0 ? _g : -1;
+    if (baseRev !== current.revision) {
+        throw new functions.https.HttpsError('failed-precondition', `Conflitto revisione (corrente ${current.revision}, ricevuta ${baseRev})`, {
+            currentRevision: current.revision,
+            currentTitle: current.title,
+            currentContent: current.content,
+        });
+    }
+    const nextRev = current.revision + 1;
+    const update = {
+        revision: nextRev,
+        updatedAt: now,
+        updatedBy: userEmail,
+    };
+    if ((data === null || data === void 0 ? void 0 : data.title) !== undefined)
+        update.title = data.title;
+    if ((data === null || data === void 0 ? void 0 : data.icon) !== undefined)
+        update.icon = data.icon;
+    if ((data === null || data === void 0 ? void 0 : data.content) !== undefined)
+        update.content = data.content;
+    if ((data === null || data === void 0 ? void 0 : data.contentText) !== undefined)
+        update.contentText = ((_h = data.contentText) !== null && _h !== void 0 ? _h : '').slice(0, 10000);
+    if ((data === null || data === void 0 ? void 0 : data.parentId) !== undefined)
+        update.parentId = data.parentId;
+    await ref.update(update);
+    // History snapshot solo su trigger 'manual'/'mcp' (autosave no → meno bloat).
+    if (trigger === 'manual' || trigger === 'mcp') {
+        await ref.collection('history').add({
+            revision: nextRev,
+            title: (_j = update.title) !== null && _j !== void 0 ? _j : current.title,
+            content: (_k = update.content) !== null && _k !== void 0 ? _k : current.content,
+            savedAt: now,
+            savedBy: userEmail,
+            trigger,
+        });
+    }
+    return { docId, revision: nextRev };
+});
 //# sourceMappingURL=index.js.map

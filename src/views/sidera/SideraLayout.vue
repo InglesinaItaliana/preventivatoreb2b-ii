@@ -299,8 +299,17 @@ function persistExpanded(name: string | null) {
   } catch {}
 }
 
+/**
+ * Filtra le voci nav che richiedono CORE admin (es. "Doc" sotto NEBULA in
+ * Fase 1 di NEBULA-DOCS). Coerente col filtro applicato in ContextualBottomNav.
+ */
+function visibleItems(mod: typeof modules[0]) {
+  const userEmail = currentUser.value?.email
+  return mod.items.filter((it: any) => !it.requiresCoreAdmin || isCoreAdmin(userEmail))
+}
+
 function selectSection(mod: typeof modules[0]) {
-  const first: any = mod.items[0]
+  const first: any = visibleItems(mod)[0]
   if (first?.path) {
     // Naviga alla prima pagina interna: il watcher su activeModule
     // espanderà la sezione corrispondente
@@ -553,7 +562,7 @@ const roleLabel: Record<string, string> = {
             :style="{ '--s-accent': mod.accent, '--s-accent-glow-soft': mod.accent + '1F' }"
           >
             <div class="s-section-items-inner">
-              <template v-for="(item, idx) in mod.items" :key="item.path ?? item.href">
+              <template v-for="(item, idx) in visibleItems(mod)" :key="item.path ?? item.href">
                 <a
                   v-if="item.href"
                   :href="item.href"
@@ -587,7 +596,7 @@ const roleLabel: Record<string, string> = {
                   >★</span>
                 </RouterLink>
               </template>
-              <div v-if="mod.items.length === 0" class="s-nav-empty">
+              <div v-if="visibleItems(mod).length === 0" class="s-nav-empty">
                 <span class="s-soon" :style="{ borderColor: mod.accent + '44', color: mod.accent + 'AA' }">In arrivo</span>
               </div>
             </div>

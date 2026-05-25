@@ -16,7 +16,23 @@ export interface NavItem {
   exact: boolean
   label: string
   icon: string
+  /**
+   * Quando true, l'entry è visibile solo agli utenti per cui
+   * useCoreAdmins().isCoreAdmin === true. I consumer (SideraLayout sidebar,
+   * ContextualBottomNav) filtrano prima del render.
+   */
+  requiresCoreAdmin?: boolean
 }
+
+/**
+ * Feature flag NEBULA-DOCS (vedi docs/NEBULA-DOCS.md §12).
+ * - true  = la feature esiste, ma in Fase 1 è gate'd da requiresCoreAdmin sulla
+ *           voce nav e dal guard router (route /nebula/docs/* redirige fuori
+ *           per non-CORE-admin).
+ * - false = kill switch totale (route 404 per tutti).
+ * In Fase 2 (rollout generale) togliere requiresCoreAdmin dalla voce Doc.
+ */
+export const ENABLE_NEBULA_DOCS = true
 
 export interface FabConfig {
   icon: string
@@ -82,9 +98,10 @@ export const SCOPE_CONFIGS: Record<Exclude<ScopeId, 'sidera'>, ScopeConfig> = {
     wordmark: 'NEBULA',
     brandSvg: 'nebula',
     mobileNav: [
-      { path: '/nebula', exact: true, label: 'Team', icon: 'group' },
+      { path: '/nebula',      exact: true,  label: 'Team', icon: 'group' },
+      { path: '/nebula/docs', exact: false, label: 'Doc',  icon: 'description', requiresCoreAdmin: true },
     ],
-    isTopLevelPath: (p) => p === '/nebula',
+    isTopLevelPath: (p) => p === '/nebula' || p === '/nebula/docs',
     loginPath: '/nebula/login',
     notificationScope: 'nebula',
   },

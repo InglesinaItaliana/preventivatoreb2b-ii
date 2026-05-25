@@ -167,6 +167,38 @@ service cloud.firestore {
       allow write: if false;   // Admin SDK (Cloud Functions) bypassa le regole
     }
 
+    // ── NEBULA-DOCS (vedi docs/NEBULA-DOCS.md §3, §9) ───────────────────────
+    // Documenti stile Notion. Write SOLO via callable saveDoc (Admin SDK bypassa).
+    // Default visibility = 'private' (decisione §12 #1). ACL email in lowercase.
+    match /nebulaDocs/{docId} {
+      function readerOk(acl) {
+        return acl.visibility == 'public'
+            || (acl.visibility == 'team' && request.auth.token.email != null)
+            || request.auth.token.email in acl.readers
+            || request.auth.token.email in acl.writers
+            || request.auth.token.email in acl.owners;
+      }
+
+      allow read: if request.auth != null && readerOk(resource.data.acl);
+      allow write: if false;   // SOLO via callable saveDoc
+
+      match /presence/{userEmail} {
+        // Lettura: chiunque autenticato vede chi sta editando (UI presence
+        // mostra avatar stack). Scrittura: solo per il proprio record.
+        allow read:  if request.auth != null;
+        allow write: if request.auth != null
+                     && request.auth.token.email == userEmail;
+      }
+
+      match /history/{revId} {
+        // Stessa ACL del parent. get() = 1 read fatturata, cached per request.
+        allow read: if request.auth != null && readerOk(
+          get(/databases/$(database)/documents/nebulaDocs/$(docId)).data.acl
+        );
+        allow write: if false;   // SOLO snapshot da saveDoc
+      }
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }
