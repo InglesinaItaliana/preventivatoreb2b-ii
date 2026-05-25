@@ -12,6 +12,7 @@ import StarAvatar from '../../components/shared/StarAvatar.vue'
 import CepheidTimeline from '../../components/cepheid/CepheidTimeline.vue'
 import CepheidCreateMenu from '../../components/cepheid/CepheidCreateMenu.vue'
 import CepheidCreateModal from '../../components/cepheid/CepheidCreateModal.vue'
+import LinkedDocsPanel from '../../components/shared/LinkedDocsPanel.vue'
 
 const route   = useRoute()
 const router  = useRouter()
@@ -241,6 +242,9 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
             {{ descExpanded ? 'mostra meno' : 'leggi tutto' }}
           </button>
         </div>
+
+        <!-- NEBULA-DOCS: pannello "Citato in N doc" (hidden se zero refs). -->
+        <LinkedDocsPanel kind="project" :id="projectId" />
       </div>
     </header>
 

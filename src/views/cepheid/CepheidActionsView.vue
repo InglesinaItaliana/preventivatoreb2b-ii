@@ -12,6 +12,7 @@ import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
 const scrollEl = ref<HTMLElement | null>(null)
 const { hidden: headerHidden } = useAutoHideHeader(scrollEl)
 import StarAvatar from '../../components/shared/StarAvatar.vue'
+import LinkedDocsPanel from '../../components/shared/LinkedDocsPanel.vue'
 
 const { tasks, loading: tasksLoading, completeTask, uncompleteTask, createTask, updateTask, deleteTask } = useAllTasks()
 const { activeProjects } = useProjects()
@@ -443,6 +444,14 @@ onMounted(() => {
                 <input v-model="taskForm.dueDate" type="date" class="field-input field-date" />
               </div>
             </div>
+
+            <!-- NEBULA-DOCS: pannello "Citato in N doc" (hidden se zero refs).
+                 Visibile solo quando si edita un task esistente (non in create). -->
+            <LinkedDocsPanel
+              v-if="editingTask"
+              kind="task"
+              :id="editingTask.id"
+            />
           </div>
           <div class="modal-footer md-modal-footer">
             <button
