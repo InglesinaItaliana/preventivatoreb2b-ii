@@ -10,7 +10,7 @@
  * L'implementazione reale (gerarchia, sidebar, editor) arriva in chunk 4 e fasi
  * successive (vedi docs/NEBULA-DOCS.md §11).
  */
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { collection, query, where, orderBy, onSnapshot, type Unsubscribe } from 'firebase/firestore'
 import { db } from '../../../firebase'
@@ -68,7 +68,26 @@ function subscribeDocs() {
   )
 }
 
-onMounted(() => { if (allowed.value) subscribeDocs() })
+// Watch su [allowed, myEmail]: `currentUser` carica async dopo mount, quindi
+// onMounted può vedere allowed=false e non sottoscrivere mai. Watch immediate
+// risubentra appena le condizioni diventano valide (e ri-sottoscrive su
+// cambio account).
+watch(
+  [allowed, myEmail],
+  ([can, email]) => {
+    if (unsubscribe) {
+      unsubscribe()
+      unsubscribe = null
+    }
+    if (!can || !email) {
+      docs.value = []
+      docsLoading.value = false
+      return
+    }
+    subscribeDocs()
+  },
+  { immediate: true }
+)
 onUnmounted(() => { if (unsubscribe) unsubscribe() })
 
 // ── Azioni test ─────────────────────────────────────────────────────────────
