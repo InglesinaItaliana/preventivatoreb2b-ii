@@ -59,21 +59,21 @@ function rngFrom(seedInt) {
 }
 
 /**
- * Palette M3 curata: 9 hue molto distanti (min ~35° tra qualsiasi coppia,
- * ~115° tra hueIndex consecutivi assegnati dal counter monotono).
- * Pochi colori, scelti per massima distinguibilita' su cielo notturno scuro
- * - non c'e' giallo puro perche' si appiattisce e si sovrappone all'ambra.
+ * Palette M3 curata: 6 hue in famiglie cromatiche nettamente diverse
+ * (red, amber, green, blue, violet, pink). Distanza minima ~50° HSL
+ * (vs 35° prima); ordine alternato caldo/freddo per il counter monotono.
+ * Niente cyan/sky/indigo/lime: erano percettivamente troppo vicini ai
+ * vicini di palette su sfondo scuro a 40px (vedi feedback prod 2026-05-25).
+ * Per workers che condividono lo stesso hue (categorie numerose), la
+ * distinzione la fa la variance di luminosita' (+/-10) per individuo.
  */
 export const PALETTE_HUES = [
   10,   // red
-  180,  // cyan
-  50,   // amber/orange
-  220,  // sky blue
-  95,   // green-lime
-  255,  // indigo
-  140,  // green
-  295,  // violet
-  335,  // pink-magenta
+  220,  // blue
+  45,   // amber
+  285,  // violet
+  130,  // green
+  335,  // pink
 ];
 
 /** Colore-firma dallo slot del registro: lookup su palette curata. */
@@ -104,7 +104,7 @@ export function makeStar({ seed, category, hueIndex, hue }) {
   return {
     category, label: role.label, points: role.points, hue: finalHue,
     sat:   role.sat   + (rnd() * 8 - 4),
-    light: role.light + (rnd() * 8 - 4),
+    light: role.light + (rnd() * 20 - 10),  // +/-10 (era +/-4): distingue workers che condividono lo stesso hue tramite chiaroscuro
     coreR: role.coreR * (0.9 + rnd() * 0.2),
     halo:  role.halo  * (0.92 + rnd() * 0.16),
     spikeLen: role.spikeLen * (0.88 + rnd() * 0.24),
