@@ -59,28 +59,21 @@ function rngFrom(seedInt) {
 }
 
 /**
- * Palette M3 curata: 16 hue scelti a mano, ben distanziati percettivamente,
- * evitando le zone giallo-fluo che si appiattiscono su sfondo scuro.
- * L'ordine non e' lineare: alterna calde/fredde per ridurre le collisioni
- * tra hueIndex consecutivi (counter monotono).
+ * Palette M3 curata: 9 hue molto distanti (min ~35° tra qualsiasi coppia,
+ * ~115° tra hueIndex consecutivi assegnati dal counter monotono).
+ * Pochi colori, scelti per massima distinguibilita' su cielo notturno scuro
+ * - non c'e' giallo puro perche' si appiattisce e si sovrappone all'ambra.
  */
 export const PALETTE_HUES = [
-  8,    // red
-  200,  // sky cyan
-  48,   // amber
-  258,  // indigo
-  130,  // green cool
-  308,  // magenta
-  185,  // teal
-  28,   // coral
-  238,  // blue
-  75,   // lime
-  288,  // violet
-  162,  // green-teal
-  348,  // pink
-  105,  // green warm
-  218,  // light blue
-  328,  // rose
+  10,   // red
+  180,  // cyan
+  50,   // amber/orange
+  220,  // sky blue
+  95,   // green-lime
+  255,  // indigo
+  140,  // green
+  295,  // violet
+  335,  // pink-magenta
 ];
 
 /** Colore-firma dallo slot del registro: lookup su palette curata. */
