@@ -97,6 +97,14 @@
         { "fieldPath": "stato",          "order": "ASCENDING" },
         { "fieldPath": "dataSpedizione", "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "nebulaDocs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "acl.owners", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "updatedAt",  "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": [
