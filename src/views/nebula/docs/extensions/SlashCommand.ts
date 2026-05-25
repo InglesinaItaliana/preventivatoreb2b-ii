@@ -15,9 +15,16 @@
 import { Extension } from '@tiptap/core'
 import Suggestion from '@tiptap/suggestion'
 import { VueRenderer } from '@tiptap/vue-3'
+import { PluginKey } from '@tiptap/pm/state'
 import tippy, { type Instance as TippyInstance } from 'tippy.js'
 import SlashMenu from '../components/SlashMenu.vue'
 import { SLASH_COMMANDS, filterSlashCommands, type SlashCommandItem } from '../slashCommands'
+
+// Key distinta per il Suggestion plugin: serve perché TaskMention (e in
+// futuro project/user mention) usano anch'essi @tiptap/suggestion. Senza
+// pluginKey custom, ProseMirror crasha "Adding different instances of a
+// keyed plugin (suggestion$)" al mount dell'editor.
+const SLASH_PLUGIN_KEY = new PluginKey('nebula-slash-command')
 
 export const SlashCommand = Extension.create({
   name: 'slashCommand',
@@ -41,6 +48,7 @@ export const SlashCommand = Extension.create({
     return [
       Suggestion({
         editor: this.editor,
+        pluginKey: SLASH_PLUGIN_KEY,
         ...this.options.suggestion,
         // Adattatore: Suggestion passa selected item come `props` al command
         // sopra; qui mappiamo l'item.command in props.command.

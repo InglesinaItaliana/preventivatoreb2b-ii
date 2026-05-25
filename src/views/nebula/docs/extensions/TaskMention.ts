@@ -24,10 +24,16 @@ import { Node, mergeAttributes } from '@tiptap/core'
 import { VueNodeViewRenderer } from '@tiptap/vue-3'
 import Suggestion from '@tiptap/suggestion'
 import { VueRenderer } from '@tiptap/vue-3'
+import { PluginKey } from '@tiptap/pm/state'
 import tippy, { type Instance as TippyInstance } from 'tippy.js'
 import TaskMentionNode from '../components/TaskMentionNode.vue'
 import TaskSuggester from '../components/TaskSuggester.vue'
 import type { Task } from '../../../../composables/sidera/useAllTasks'
+
+// Key distinta dal SlashCommand Suggestion (ProseMirror crasha se 2 plugin
+// hanno la stessa key). Anche project/user mention futuri devono avere la
+// loro PluginKey unica.
+const TASK_MENTION_PLUGIN_KEY = new PluginKey('nebula-task-mention')
 
 export interface TaskMentionOptions {
   /**
@@ -117,6 +123,7 @@ export const TaskMention = Node.create<TaskMentionOptions>({
     return [
       Suggestion({
         editor: this.editor,
+        pluginKey: TASK_MENTION_PLUGIN_KEY,
         char: '@',
         startOfLine: false,
         allowSpaces: true,  // permette di cercare "stiletto rosso" non solo "stiletto"

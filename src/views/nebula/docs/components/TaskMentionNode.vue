@@ -14,6 +14,7 @@
  * Click: per ora alert TODO (F2-C6 collegherà al TaskDetailModal CEPHEID).
  */
 import { computed, toRef } from 'vue'
+import { NodeViewWrapper } from '@tiptap/vue-3'
 import { useTaskMini } from '../../../../composables/nebula/useTaskMini'
 import MaterialIcon from './MaterialIcon.vue'
 
@@ -52,7 +53,8 @@ function onClick() {
 </script>
 
 <template>
-  <span
+  <NodeViewWrapper
+    as="span"
     class="tm-chip"
     :class="{
       'tm-loading': loading,
@@ -77,7 +79,7 @@ function onClick() {
       <template v-else-if="notFound">[Task eliminato]</template>
       <template v-else>{{ truncatedTitle }}</template>
     </span>
-  </span>
+  </NodeViewWrapper>
 </template>
 
 <style scoped>
