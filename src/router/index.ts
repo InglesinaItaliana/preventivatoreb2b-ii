@@ -143,6 +143,9 @@ const router = createRouter({
         // - guard nella beforeEach controlla ENABLE_NEBULA_DOCS + isCoreAdmin
         // Stub view in Fase 1; editor reale in chunk 4 (vedi docs/NEBULA-DOCS.md §11).
         { path: 'docs', name: 'nebula-docs', component: () => import('../views/nebula/docs/NebulaDocsHomeView.vue') },
+        // Dev page per testare l'IconPicker isolato (chunk 2). Stesso gate del
+        // parent /nebula/docs. Da rimuovere a Fase 1 conclusa.
+        { path: 'docs/_dev/icons', name: 'nebula-docs-dev-icons', component: () => import('../views/nebula/docs/_dev/IconPickerDevView.vue') },
       ]
     },
 
