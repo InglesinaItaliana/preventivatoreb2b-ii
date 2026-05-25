@@ -124,6 +124,26 @@ export const SLASH_COMMANDS: SlashCommandItem[] = [
       editor.chain().focus().deleteRange(range).insertContent('#').run()
     },
   },
+  {
+    title: 'Lista task',
+    description: 'Vista filtrata di task CEPHEID inline',
+    icon: 'list_alt',
+    aliases: ['lista-task', 'database', 'embed', 'list', 'task-list'],
+    command: ({ editor, range }) => {
+      editor
+        .chain()
+        .focus()
+        .deleteRange(range)
+        .insertContent({
+          type: 'taskEmbed',
+          attrs: {
+            filter: { status: 'todo', projectId: null, type: 'task', limit: 20 },
+            view: 'list',
+          },
+        })
+        .run()
+    },
+  },
 ]
 
 /**

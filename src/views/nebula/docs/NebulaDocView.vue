@@ -22,6 +22,7 @@ import Placeholder from '@tiptap/extension-placeholder'
 import { SlashCommand } from './extensions/SlashCommand'
 import { TaskMention } from './extensions/TaskMention'
 import { ProjectMention } from './extensions/ProjectMention'
+import { TaskEmbed } from './extensions/TaskEmbed'
 import { useAllTasks } from '../../../composables/sidera/useAllTasks'
 import { useProjects } from '../../../composables/sidera/useProjects'
 import { useCurrentUser } from '../../../composables/sidera/useCurrentUser'
@@ -78,6 +79,10 @@ const editor = useEditor({
     SlashCommand,
     TaskMention.configure({ allTasks: () => allTasksRef.value }),
     ProjectMention.configure({ allProjects: () => allProjectsRef.value }),
+    TaskEmbed.configure({
+      allTasks: () => allTasksRef.value,
+      allProjects: () => allProjectsRef.value,
+    }),
   ],
   editable: false,                              // si sblocca dopo init + ACL
   onUpdate: () => scheduleAutosave(),
