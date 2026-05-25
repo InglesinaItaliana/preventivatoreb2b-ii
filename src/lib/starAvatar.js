@@ -94,9 +94,13 @@ export function hueFromIndex(index) {
 export function makeStar({ seed, category, hueIndex, hue }) {
   const role = CATEGORIES[category] || FALLBACK;
   const rnd = rngFrom(hashString(String(seed ?? '·')));
+  // Fallback senza hueIndex (backfill non ancora eseguito): quantizza un indice
+  // deterministico dal seed sulla stessa palette curata. Cosi' i path con/senza
+  // hueIndex condividono i 9 colori. Quando arrivera' il backfill, l'hue cambiera'
+  // dal valore "seed-quantizzato" a quello assegnato dal counter (entrambi nella palette).
   const finalHue = (hue != null) ? hue
                   : (hueIndex != null) ? hueFromIndex(hueIndex)
-                  : rnd() * 360; // fallback: dal seed (sconsigliato in prod)
+                  : PALETTE_HUES[Math.floor(rnd() * PALETTE_HUES.length)];
   return {
     category, label: role.label, points: role.points, hue: finalHue,
     sat:   role.sat   + (rnd() * 8 - 4),
