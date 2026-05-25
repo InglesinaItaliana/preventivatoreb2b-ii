@@ -19,6 +19,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { useEditor, EditorContent } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
+import { SlashCommand } from './extensions/SlashCommand'
 import { useCurrentUser } from '../../../composables/sidera/useCurrentUser'
 import { useDoc } from '../../../composables/nebula/useDoc'
 import { saveDoc, isSaveDocConflict, type SaveDocConflictDetails } from '../../../composables/nebula/useSaveDoc'
@@ -61,8 +62,9 @@ const editor = useEditor({
       heading: { levels: [1, 2, 3] },
     }),
     Placeholder.configure({
-      placeholder: 'Inizia a scrivere…',
+      placeholder: 'Digita "/" per i comandi…',
     }),
+    SlashCommand,
   ],
   editable: false,                              // si sblocca dopo init + ACL
   onUpdate: () => scheduleAutosave(),
