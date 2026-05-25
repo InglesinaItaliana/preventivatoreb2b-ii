@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { auth, db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
+import { ENABLE_NEBULA_DOCS } from '../views/sidera/scopeConfig';
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -136,7 +137,12 @@ const router = createRouter({
       component: () => import('../views/sidera/SideraLayout.vue'),
       meta: { requiresAuth: true, nebulaScope: true },
       children: [
-        { path: '', name: 'nebula-team', component: () => import('../views/nebula/NebulaTeamView.vue') },
+        { path: '',     name: 'nebula-team', component: () => import('../views/nebula/NebulaTeamView.vue') },
+        // NEBULA-DOCS (Fase 1): visibile solo a CORE admin. Gate doppio:
+        // - voce nav filtrata in SideraLayout/ContextualBottomNav via requiresCoreAdmin
+        // - guard nella beforeEach controlla ENABLE_NEBULA_DOCS + isCoreAdmin
+        // Stub view in Fase 1; editor reale in chunk 4 (vedi docs/NEBULA-DOCS.md §11).
+        { path: 'docs', name: 'nebula-docs', component: () => import('../views/nebula/docs/NebulaDocsHomeView.vue') },
       ]
     },
 
@@ -230,6 +236,31 @@ router.beforeEach(async (to, _from, next) => {
   if (currentUser.email === 'info@inglesinaitaliana.it') {
     next();
     return;
+  }
+
+  // A-bis. NEBULA-DOCS Fase 1 gate (vedi docs/NEBULA-DOCS.md §11/12).
+  // In Fase 1 la feature è visibile solo a CORE admin (super admin sopra è già
+  // passato). Quando si rolla in generale (Fase 2), togliere questo blocco e
+  // rimuovere requiresCoreAdmin dalla voce nav in scopeConfig.nebula.mobileNav.
+  if (to.path.startsWith('/nebula/docs')) {
+    if (!ENABLE_NEBULA_DOCS) {
+      next('/nebula');
+      return;
+    }
+    try {
+      const adminsSnap = await getDoc(doc(db, 'core', 'admins'));
+      const emails = (adminsSnap.exists() ? (adminsSnap.data().emails ?? []) : []) as unknown[];
+      const userEmail = (currentUser.email ?? '').toLowerCase().trim();
+      const isCoreAdmin = emails.some(e => typeof e === 'string' && e.toLowerCase().trim() === userEmail);
+      if (!isCoreAdmin) {
+        next('/nebula');
+        return;
+      }
+    } catch (e) {
+      console.error('[guard nebula-docs] core/admins read failed:', e);
+      next('/nebula');
+      return;
+    }
   }
 
   // B. CONTROLLO TEAM (Database)
