@@ -58,9 +58,35 @@ function rngFrom(seedInt) {
   };
 }
 
-/** Colore-firma dallo slot del registro: angolo aureo = massima separazione. */
-export function hueFromIndex(index, base = 20) {
-  return (base + index * 137.508) % 360;
+/**
+ * Palette M3 curata: 16 hue scelti a mano, ben distanziati percettivamente,
+ * evitando le zone giallo-fluo che si appiattiscono su sfondo scuro.
+ * L'ordine non e' lineare: alterna calde/fredde per ridurre le collisioni
+ * tra hueIndex consecutivi (counter monotono).
+ */
+export const PALETTE_HUES = [
+  8,    // red
+  200,  // sky cyan
+  48,   // amber
+  258,  // indigo
+  130,  // green cool
+  308,  // magenta
+  185,  // teal
+  28,   // coral
+  238,  // blue
+  75,   // lime
+  288,  // violet
+  162,  // green-teal
+  348,  // pink
+  105,  // green warm
+  218,  // light blue
+  328,  // rose
+];
+
+/** Colore-firma dallo slot del registro: lookup su palette curata. */
+export function hueFromIndex(index) {
+  const i = ((Number(index) | 0) % PALETTE_HUES.length + PALETTE_HUES.length) % PALETTE_HUES.length;
+  return PALETTE_HUES[i];
 }
 
 /* ============================ MODELLO STELLA ============================ */
@@ -86,6 +112,9 @@ export function makeStar({ seed, category, hueIndex, hue }) {
     halo:  role.halo  * (0.92 + rnd() * 0.16),
     spikeLen: role.spikeLen * (0.88 + rnd() * 0.24),
     spikeW:   role.spikeW   * (0.85 + rnd() * 0.30),
+    // Varianza forma intra-categoria (stesso numero punte, geometria diversa):
+    innerRatio:  0.12 + rnd() * 0.10,                                  // base spike piu' tozza/affilata
+    phaseOffset: rnd() * (Math.PI * 2 / Math.max(1, role.points)),     // orientamento di partenza
     pulseSpeed: role.pulseTempo * (0.85 + rnd() * 0.30),
     pulseAmp:   role.pulseAmp   * (0.85 + rnd() * 0.30),
     pulsePhase: rnd() * Math.PI * 2,
@@ -98,14 +127,16 @@ export function makeStar({ seed, category, hueIndex, hue }) {
 /* ============================ RENDER (canvas) ============================ */
 const hsla = (h, s, l, a) => `hsla(${h},${s}%,${l}%,${a})`;
 
-function drawSpike(ctx, cx, cy, a, len, w, h, s, l, alpha) {
+function drawSpike(ctx, cx, cy, a, len, w, h, s, l, alpha, innerRatio) {
   const tx = cx + Math.cos(a) * len, ty = cy + Math.sin(a) * len;
-  const pa = a + Math.PI / 2, baseD = len * 0.16;
+  const pa = a + Math.PI / 2, baseD = len * (innerRatio ?? 0.16);
   const bx = cx + Math.cos(a) * baseD, by = cy + Math.sin(a) * baseD;
   const sx = Math.cos(pa) * w, sy = Math.sin(pa) * w;
   const grd = ctx.createLinearGradient(cx, cy, tx, ty);
+  // Fade spostato piu' avanti (0.55) per dare un corpo "pieno" piu' definito
+  // prima della sfumatura: contorni leggibili anche a 28px.
   grd.addColorStop(0, hsla(h, s, Math.min(94, l + 20), alpha));
-  grd.addColorStop(0.35, hsla(h, s, l, alpha * 0.5));
+  grd.addColorStop(0.55, hsla(h, s, l, alpha * 0.65));
   grd.addColorStop(1, hsla(h, s, l, 0));
   ctx.fillStyle = grd;
   ctx.beginPath();
@@ -134,12 +165,12 @@ export function drawStar(ctx, size, star, t = 0) {
   ctx.beginPath(); ctx.arc(cx, cy, glowR, 0, 7); ctx.fill();
 
   if (star.points > 1 && star.spikeLen > 0) {
-    const spin = t * star.spin + star.spinPhase;
+    const spin = t * star.spin + star.spinPhase + (star.phaseOffset ?? 0);
     const len = size * star.spikeLen * pulse;
     const w = coreR * star.spikeW;
     for (let i = 0; i < star.points; i++) {
       const a = spin + i * (Math.PI * 2 / star.points);
-      drawSpike(ctx, cx, cy, a, len, w, star.hue, star.sat, star.light, 0.7);
+      drawSpike(ctx, cx, cy, a, len, w, star.hue, star.sat, star.light, 0.7, star.innerRatio);
     }
   }
 

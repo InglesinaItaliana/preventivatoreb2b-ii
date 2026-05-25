@@ -57,8 +57,10 @@ onUnmounted(() => {
   display: block;
   border-radius: 50%;
   flex-shrink: 0;
-  /* bollino con lo stesso fondo scuro della sidebar SIDERA: le stelle (rese con
-     composite "lighter") risaltano come nel riferimento */
-  background: #05090F;
+  /* Cielo notturno piu' caldo (#141b26 vs #05090F precedente) per non
+     "buttare via" i blu delle stelle, + anello sottile che stacca il bollino
+     anche su sfondi chiari (cards M3, sidera light). */
+  background: #141b26;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 </style>
