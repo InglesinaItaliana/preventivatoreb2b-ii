@@ -281,6 +281,74 @@ function sectionActive(mod: typeof modules[0]) {
   return activeModule.value?.name === mod.name
 }
 
+// ── Accordion esclusivo della sidebar ───────────────────────────────────────
+// Una sola sezione espansa per volta. Il click su una label di sezione naviga
+// direttamente alla prima voce della sezione (o apre il link esterno se la
+// sezione è di soli href, es. MAGNETAR); il route-watcher poi sincronizza
+// `expandedSection` con la sezione attiva. Niente chevron: l'affordance di
+// stato è data da glow stellari (vedi CSS). La preferenza è persistita in
+// localStorage tra sessioni per coprire il caso "primo accesso a route non
+// modulare" (es. /sidera/admin/...) dove `activeModule` è nullo.
+const EXPANDED_KEY = 'sidera-sidebar-expanded-section'
+const expandedSection = ref<string | null>(null)
+
+function persistExpanded(name: string | null) {
+  try {
+    if (name) localStorage.setItem(EXPANDED_KEY, name)
+    else localStorage.removeItem(EXPANDED_KEY)
+  } catch {}
+}
+
+function selectSection(mod: typeof modules[0]) {
+  const first: any = mod.items[0]
+  if (first?.path) {
+    // Naviga alla prima pagina interna: il watcher su activeModule
+    // espanderà la sezione corrispondente
+    router.push(first.path)
+    return
+  }
+  // Sezione senza path interno (es. MAGNETAR, solo href esterno) o vuota:
+  // espandi visivamente senza aprire alcun link — sarà l'utente a cliccare
+  // l'eventuale voce per aprire la destinazione esterna.
+  expandedSection.value = mod.name
+  persistExpanded(mod.name)
+}
+
+function selectCoreSection() {
+  router.push('/sidera/admin/maintenance')
+}
+
+function isSectionExpanded(name: string) {
+  return expandedSection.value === name
+}
+
+// Inizializza: ultima sezione aperta da localStorage, fallback su quella della
+// route corrente, fallback finale sul primo modulo. Il route-watcher sotto
+// gestisce poi i cambi di navigazione.
+let storedExpanded: string | null = null
+try { storedExpanded = localStorage.getItem(EXPANDED_KEY) } catch {}
+expandedSection.value = storedExpanded ?? activeModule.value?.name ?? modules[0].name
+
+// Cambio rotta verso un'altra sezione → apri quella sezione automaticamente.
+// Non sovrascrive una collapse-all volontaria finché la route non cambia.
+watch(() => activeModule.value?.name, (name, prev) => {
+  if (name && name !== prev) {
+    expandedSection.value = name
+    persistExpanded(name)
+  }
+})
+
+// CORE non è in `modules` (template separato), quindi serve un watcher dedicato
+// sulle sue route per tenere sincronizzata `expandedSection`.
+watch(() => route.path, (path) => {
+  if (path.startsWith('/sidera/admin/maintenance') || path.startsWith('/sidera/core')) {
+    if (expandedSection.value !== 'CORE') {
+      expandedSection.value = 'CORE'
+      persistExpanded('CORE')
+    }
+  }
+}, { immediate: true })
+
 // ── Notifiche browser ────────────────────────────────────────────────────────
 const initialized   = ref(false)
 const lastSeenTimes = new Map<string, number>()
@@ -468,59 +536,93 @@ const roleLabel: Record<string, string> = {
 
       <nav class="s-nav">
         <template v-for="mod in modules" :key="mod.name">
-          <p
+          <button
+            type="button"
             class="s-section-label"
-            :style="{ color: sectionActive(mod) ? mod.accent : undefined }"
-          >{{ mod.name }}</p>
-          <template v-for="item in mod.items" :key="item.path ?? item.href">
-            <a
-              v-if="item.href"
-              :href="item.href"
-              target="_blank"
-              rel="noopener noreferrer"
-              class="s-nav-item"
-            >
-              <MIcon :name="item.icon" :size="18" class="s-nav-icon" />
-              {{ item.label }}
-            </a>
-            <RouterLink
-              v-else
-              :to="item.path"
-              class="s-nav-item"
-              :style="activeStyle(item.path, item.exact, mod.accent, item.excludePaths)"
-            >
-              <MIcon
-                :name="item.icon"
-                :size="18"
-                :filled="isActive(item.path, item.exact, item.excludePaths)"
-                :weight="isActive(item.path, item.exact, item.excludePaths) ? 500 : 400"
-                class="s-nav-icon"
-                :style="activeIconStyle(item.path, item.exact, mod.accent, item.excludePaths)"
-              />
-              {{ item.label }}
-              <span
-                v-if="item.path === '/cepheid/smistamento' && triageCount > 0"
-                class="s-triage-star"
-                aria-label="Task da smistare"
-              >★</span>
-            </RouterLink>
-          </template>
-          <div v-if="mod.items.length === 0" class="s-nav-empty">
-            <span class="s-soon" :style="{ borderColor: mod.accent + '44', color: mod.accent + 'AA' }">In arrivo</span>
+            :class="{
+              's-is-expanded': isSectionExpanded(mod.name),
+              's-is-active':   sectionActive(mod),
+            }"
+            :style="{ '--s-accent': mod.accent, '--s-accent-glow': mod.accent + '33', '--s-accent-glow-soft': mod.accent + '1F' }"
+            @click="selectSection(mod)"
+          >{{ mod.name }}</button>
+          <div
+            :id="`s-sec-${mod.name}`"
+            class="s-section-items"
+            :class="{ 's-is-open': isSectionExpanded(mod.name) }"
+            :style="{ '--s-accent': mod.accent, '--s-accent-glow-soft': mod.accent + '1F' }"
+          >
+            <div class="s-section-items-inner">
+              <template v-for="(item, idx) in mod.items" :key="item.path ?? item.href">
+                <a
+                  v-if="item.href"
+                  :href="item.href"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  class="s-nav-item"
+                  :style="{ '--s-idx': idx } as any"
+                >
+                  <MIcon :name="item.icon" :size="18" class="s-nav-icon" />
+                  {{ item.label }}
+                </a>
+                <RouterLink
+                  v-else
+                  :to="item.path"
+                  class="s-nav-item"
+                  :style="{ ...activeStyle(item.path, item.exact, mod.accent, item.excludePaths), '--s-idx': idx } as any"
+                >
+                  <MIcon
+                    :name="item.icon"
+                    :size="18"
+                    :filled="isActive(item.path, item.exact, item.excludePaths)"
+                    :weight="isActive(item.path, item.exact, item.excludePaths) ? 500 : 400"
+                    class="s-nav-icon"
+                    :style="activeIconStyle(item.path, item.exact, mod.accent, item.excludePaths)"
+                  />
+                  {{ item.label }}
+                  <span
+                    v-if="item.path === '/cepheid/smistamento' && triageCount > 0"
+                    class="s-triage-star"
+                    aria-label="Task da smistare"
+                  >★</span>
+                </RouterLink>
+              </template>
+              <div v-if="mod.items.length === 0" class="s-nav-empty">
+                <span class="s-soon" :style="{ borderColor: mod.accent + '44', color: mod.accent + 'AA' }">In arrivo</span>
+              </div>
+            </div>
           </div>
         </template>
 
         <!-- CORE: sezione admin-only in fondo (manutenzione + impostazioni) -->
         <template v-if="canAccessCore">
-          <p class="s-section-label" :style="{ color: route.path.startsWith('/sidera/admin/maintenance') || route.path.startsWith('/sidera/core') ? CORE_ACCENT : undefined }">CORE</p>
-          <RouterLink to="/sidera/admin/maintenance" class="s-nav-item" :style="activeStyle('/sidera/admin/maintenance', false, CORE_ACCENT)">
-            <MIcon name="build" :size="18" :filled="isActive('/sidera/admin/maintenance', false)" class="s-nav-icon" :style="activeIconStyle('/sidera/admin/maintenance', false, CORE_ACCENT)" />
-            Manutenzione
-          </RouterLink>
-          <RouterLink to="/sidera/core/settings" class="s-nav-item" :style="activeStyle('/sidera/core/settings', false, CORE_ACCENT)">
-            <MIcon name="settings" :size="18" :filled="isActive('/sidera/core/settings', false)" class="s-nav-icon" :style="activeIconStyle('/sidera/core/settings', false, CORE_ACCENT)" />
-            Impostazioni
-          </RouterLink>
+          <button
+            type="button"
+            class="s-section-label"
+            :class="{
+              's-is-expanded': isSectionExpanded('CORE'),
+              's-is-active':   route.path.startsWith('/sidera/admin/maintenance') || route.path.startsWith('/sidera/core'),
+            }"
+            :style="{ '--s-accent': CORE_ACCENT, '--s-accent-glow': CORE_ACCENT + '33', '--s-accent-glow-soft': CORE_ACCENT + '1F' }"
+            @click="selectCoreSection"
+          >CORE</button>
+          <div
+            id="s-sec-CORE"
+            class="s-section-items"
+            :class="{ 's-is-open': isSectionExpanded('CORE') }"
+            :style="{ '--s-accent': CORE_ACCENT, '--s-accent-glow-soft': CORE_ACCENT + '1F' }"
+          >
+            <div class="s-section-items-inner">
+              <RouterLink to="/sidera/admin/maintenance" class="s-nav-item" :style="{ ...activeStyle('/sidera/admin/maintenance', false, CORE_ACCENT), '--s-idx': 0 } as any">
+                <MIcon name="build" :size="18" :filled="isActive('/sidera/admin/maintenance', false)" class="s-nav-icon" :style="activeIconStyle('/sidera/admin/maintenance', false, CORE_ACCENT)" />
+                Manutenzione
+              </RouterLink>
+              <RouterLink to="/sidera/core/settings" class="s-nav-item" :style="{ ...activeStyle('/sidera/core/settings', false, CORE_ACCENT), '--s-idx': 1 } as any">
+                <MIcon name="settings" :size="18" :filled="isActive('/sidera/core/settings', false)" class="s-nav-icon" :style="activeIconStyle('/sidera/core/settings', false, CORE_ACCENT)" />
+                Impostazioni
+              </RouterLink>
+            </div>
+          </div>
         </template>
       </nav>
 
@@ -594,6 +696,10 @@ const roleLabel: Record<string, string> = {
   width: 220px;
   flex-shrink: 0;
   background: #05090F;
+  /* Forza il color al livello sidebar così tutti i descendant senza color
+     esplicito (es. .s-user-name, .s-user-info) ereditano il bianco-soft
+     locale anziché il color scuro ereditato da .s-shell. */
+  color: var(--s-text);
   border-right: 1px solid rgba(255,255,255,0.07);
   display: flex;
   flex-direction: column;
@@ -642,17 +748,80 @@ const roleLabel: Record<string, string> = {
 }
 
 .s-section-label {
-  /* M3 label-small: 11px, ma qui 10px per dare aria al letter-spacing maggiorato (0.1em) */
+  /* M3 label-small: 11px, ma qui 10px per dare aria al letter-spacing maggiorato (0.1em).
+     Trasformata in <button> per l'accordion esclusivo: stile reset di base + affordance
+     di stato data da bordo accent + glow stellari (niente chevron). */
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-radius: var(--md-sys-shape-corner-small);
+  cursor: pointer;
+  position: relative;
+
   font-family: var(--md-sys-typescale-label-small-font);
-  font-size: 10px;
+  font-size: 13px; /* 1.3× rispetto al 10px M3 label-small originale: leggibile ma non gridato */
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--s-text-dim);
-  padding-left: 12px;
-  margin-top: 18px;
-  margin-bottom: 6px;
-  transition: color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
+  /* Ogni sezione mostra sempre il proprio accent come "firma" del modulo,
+     anche da non selezionata. La differenza tra selezionata/non selezionata
+     resta visibile via glow (vedi .s-is-expanded). */
+  color: var(--s-accent);
+  padding: 4px 12px; /* +4 vertical per area click, label allineata alle voci sotto */
+  margin-top: 14px;
+  margin-bottom: 4px;
+  transition: box-shadow var(--md-sys-motion-duration-medium2) var(--md-sys-motion-easing-emphasized);
+}
+
+/* Hover su sezione collassata: soft glow ring (stella distante che si accende) */
+.s-section-label:hover:not(.s-is-expanded) {
+  box-shadow: 0 0 10px 1px var(--s-accent-glow-soft);
+}
+
+/* Sezione espansa: glow stellare pieno attorno alla label */
+.s-section-label.s-is-expanded {
+  box-shadow: 0 0 14px 1px var(--s-accent-glow),
+              0 0 0 1px var(--s-accent-glow-soft);
+}
+
+/* Container collassabile: trick grid-template-rows 0fr↔1fr per height animata
+   senza JS, fully accelerated via grid. */
+.s-section-items {
+  display: grid;
+  grid-template-rows: 0fr;
+  transition: grid-template-rows var(--md-sys-motion-duration-long2) var(--md-sys-motion-easing-emphasized);
+}
+.s-section-items.s-is-open {
+  grid-template-rows: 1fr;
+}
+.s-section-items-inner {
+  overflow: hidden;
+  min-height: 0;
+  border-radius: var(--md-sys-shape-corner-small);
+  transition: box-shadow var(--md-sys-motion-duration-long2) var(--md-sys-motion-easing-emphasized);
+}
+
+/* Quando aperto: inner glow in alto come "nebulosa" che si dirama dalla label */
+.s-section-items.s-is-open .s-section-items-inner {
+  box-shadow: inset 0 10px 18px -10px var(--s-accent-glow-soft);
+}
+
+/* Stagger fade-in delle voci all'apertura: effetto "costellazione che si rivela" */
+.s-section-items.s-is-open .s-nav-item {
+  animation: s-item-reveal var(--md-sys-motion-duration-medium2) var(--md-sys-motion-easing-emphasized-decelerate) both;
+  animation-delay: calc(var(--s-idx, 0) * 30ms + 60ms);
+}
+@keyframes s-item-reveal {
+  from { opacity: 0; transform: translateY(-3px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .s-section-label,
+  .s-section-items,
+  .s-section-items-inner { transition: none; }
+  .s-section-items.s-is-open .s-nav-item { animation: none; }
 }
 
 .s-nav-item {

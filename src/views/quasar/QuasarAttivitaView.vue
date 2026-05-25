@@ -18,7 +18,8 @@ const { events, loading } = useActivityLog(100)
 const { members } = useTeamMembers()
 
 // ── Risoluzione attore ──────────────────────────────────────────────────────
-// Priorità: membro del team (email/uid) → actorName (es. cliente POPS) → "Sistema".
+// Priorità: membro del team (email/uid) → actorName (es. cliente POPS) →
+// "Inglesina Italiana" (eventi di sistema / azioni automatiche del backend).
 function resolveMember(e: ActivityEvent) {
   if (e.actorEmail) return members.value.find(m => m.email === e.actorEmail) ?? null
   if (e.actorUid)   return members.value.find(m => m.uid === e.actorUid) ?? null
@@ -29,7 +30,7 @@ function actorLabel(e: ActivityEvent): string {
   if (m) return displayName(m.email, members.value)
   if (e.actorName) return e.actorName
   if (e.actorEmail) return displayName(e.actorEmail, members.value)
-  return 'Sistema'
+  return 'Inglesina Italiana'
 }
 // Override di presentazione (indipendenti dal dato storico scritto dai trigger):
 // - "completato" → check ; "confermato ordine" → carrello.

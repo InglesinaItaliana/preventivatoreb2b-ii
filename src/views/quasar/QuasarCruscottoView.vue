@@ -7,6 +7,7 @@ import { useAllTasks }     from '../../composables/sidera/useAllTasks'
 import { useProjects }     from '../../composables/sidera/useProjects'
 import { useCurrentUser }  from '../../composables/sidera/useCurrentUser'
 import { useTeamMembers, displayName, starAvatarProps } from '../../composables/sidera/useTeamMembers'
+import { useActivityLog, type ActivityEvent } from '../../composables/quasar/useActivityLog'
 import StarAvatar from '../../components/shared/StarAvatar.vue'
 import { ref } from 'vue'
 
@@ -71,14 +72,12 @@ function formatDue(d: Date | null) {
 const prioColor: Record<string, string> = { alta: '#C8521A', media: '#D4A020', bassa: '#7A8FA6' }
 const prioLabel: Record<string, string> = { alta: 'Alta', media: 'Media', bassa: 'Bassa' }
 
-// ── Feed team reale ───────────────────────────────────────────────────────
-interface FeedEvent {
-  key: string
-  actor: string
-  action: string
-  what: string
-  when: Date
-}
+// ── Feed Attività ─────────────────────────────────────────────────────────
+// Mostriamo gli ultimi eventi dal registro `activityLog` (scritto dalle Cloud
+// Functions, single-source-of-truth condivisa con QuasarAttivitaView). In
+// passato qui era un feed locale derivato da tasks (create/complete): è stato
+// rimpiazzato per allinearsi al registro completo.
+const { events: activityEvents, loading: feedLoading } = useActivityLog(8)
 
 function timeAgo(d: Date): string {
   const diff = Date.now() - d.getTime()
@@ -88,34 +87,29 @@ function timeAgo(d: Date): string {
   return Math.floor(diff / 86_400_000) + 'g fa'
 }
 
-const feedEvents = computed((): FeedEvent[] => {
-  const events: FeedEvent[] = []
-
-  for (const t of tasks.value) {
-    if (t.createdByEmail && t.createdAt) {
-      events.push({
-        key:    'c-' + t.id,
-        actor:  t.createdByEmail,
-        action: 'ha creato',
-        what:   t.title,
-        when:   t.createdAt,
-      })
-    }
-    if (t.completedBy && t.completedAt) {
-      events.push({
-        key:    'd-' + t.id,
-        actor:  t.completedBy,
-        action: 'ha completato',
-        what:   t.title,
-        when:   t.completedAt,
-      })
-    }
-  }
-
-  return events
-    .sort((a, b) => b.when.getTime() - a.when.getTime())
-    .slice(0, 6)
-})
+// Risoluzione attore: stessa priorità di QuasarAttivitaView per coerenza
+// (team member email/uid → actorName → email → "Inglesina Italiana").
+function resolveMember(e: ActivityEvent) {
+  if (e.actorEmail) return members.value.find(m => m.email === e.actorEmail) ?? null
+  if (e.actorUid)   return members.value.find(m => m.uid === e.actorUid) ?? null
+  return null
+}
+function actorLabel(e: ActivityEvent): string {
+  const m = resolveMember(e)
+  if (m) return displayName(m.email, members.value)
+  if (e.actorName) return e.actorName
+  if (e.actorEmail) return displayName(e.actorEmail, members.value)
+  return 'Inglesina Italiana'
+}
+// Tone/icon helpers replicati dalla view Attività: stesso vocabolario visivo.
+function iconFor(e: ActivityEvent): string {
+  if (e.eventType === 'completed') return 'check'
+  if (e.eventType === 'confirmed') return 'shopping_cart'
+  return e.icon
+}
+function toneFor(e: ActivityEvent): string {
+  return e.eventType === 'in_produzione' ? 'gold' : e.tone
+}
 
 // ── KPI ───────────────────────────────────────────────────────────────────
 function formatEuro(v: number) {
@@ -284,22 +278,36 @@ function urgenzaLabel(giorni: number) {
         </a>
       </div>
 
-      <!-- Aggiornamenti team -->
+      <!-- Attività — feed in tempo reale (stessa sorgente di /quasar/attivita) -->
       <div>
-        <p class="s-label">Aggiornamenti team</p>
-        <div v-if="tasksLoading" class="skeleton-rows">
+        <p class="s-label">Attività</p>
+        <div v-if="feedLoading" class="skeleton-rows">
           <div v-for="i in 4" :key="i" class="row-skel row-skel--feed" />
         </div>
-        <div v-else-if="!feedEvents.length" class="empty-today">Nessuna attività recente.</div>
-        <div v-for="e in feedEvents" :key="e.key" class="feed-item">
-          <StarAvatar v-bind="starAvatarProps(e.actor, members)" :size="32" />
-          <div>
+        <div v-else-if="!activityEvents.length" class="empty-today">Nessuna attività recente.</div>
+        <div v-for="e in activityEvents" :key="e.id" class="feed-item">
+          <!-- Team member → StarAvatar, altrimenti pallino tonato con icona evento -->
+          <StarAvatar
+            v-if="resolveMember(e)"
+            v-bind="starAvatarProps(resolveMember(e)!.email, members)"
+            :size="32"
+          />
+          <div v-else class="feed-node" :class="`feed-node--${toneFor(e)}`">
+            <MIcon :name="iconFor(e)" :size="16" />
+          </div>
+          <div class="feed-body">
             <div class="feed-text">
-              <span class="feed-who">{{ displayName(e.actor, members) }}</span>
-              {{ e.action }}
-              <span class="feed-what">{{ e.what }}</span>
+              <span class="feed-who">{{ actorLabel(e) }}</span>
+              {{ e.verb }}
+              <span class="feed-what">«{{ e.objectLabel }}»</span>
             </div>
-            <div class="feed-when">{{ timeAgo(e.when) }}</div>
+            <div class="feed-meta">
+              <span
+                class="feed-sys"
+                :class="e.system === 'SIDERA' ? 'feed-sys--sidera' : 'feed-sys--pops'"
+              >{{ e.system }}</span>
+              · {{ timeAgo(e.ts) }}
+            </div>
           </div>
         </div>
       </div>
@@ -595,11 +603,39 @@ function urgenzaLabel(giorni: number) {
   flex-shrink: 0; letter-spacing: 0.02em;
 }
 
-/* ── Feed ── */
-.feed-item { display: flex; gap: 10px; margin-bottom: 14px; }
+/* ── Feed Attività ── */
+.feed-item { display: flex; gap: 10px; margin-bottom: 14px; align-items: center; }
+.feed-body { min-width: 0; flex: 1; }
 
 .feed-text { font-size: 12px; line-height: 1.6; color: var(--md-sys-color-on-surface); }
 .feed-who  { color: var(--md-sys-color-on-surface); font-weight: 600; }
 .feed-what { color: #98C0D0; font-weight: 500; }
-.feed-when { font-size: 10px; color: var(--md-sys-color-on-surface-variant); margin-top: 1px; }
+
+/* Meta-line: badge sistema (SIDERA/POPS) + tempo relativo. Stessi colori-firma
+   della view Attività per coerenza visiva tra widget compatto e feed esteso. */
+.feed-meta {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 10px; color: var(--md-sys-color-on-surface-variant);
+  margin-top: 1px;
+}
+.feed-sys {
+  font-size: 9px; font-weight: 600; letter-spacing: .7px;
+  text-transform: uppercase; padding: 2px 6px; border-radius: 999px;
+  line-height: 1;
+}
+.feed-sys--sidera { background: color-mix(in srgb, #D4C498 28%, transparent); color: #8a7633; }
+.feed-sys--pops   { background: color-mix(in srgb, #FBBF24 26%, transparent); color: #9a6b0c; }
+
+/* Pallino tonato per eventi senza un team-member (sistema / cliente POPS).
+   Replica condensata dei .node di QuasarAttivitaView, dimensione 32 per
+   allinearsi all'avatar. */
+.feed-node {
+  width: 32px; height: 32px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  flex: 0 0 auto;
+  background: var(--md-sys-color-surface);
+}
+.feed-node--gold    { background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); }
+.feed-node--neutral { background: var(--md-sys-color-surface-variant); color: var(--md-sys-color-on-surface-variant); border: 1px solid var(--md-sys-color-outline-variant); }
+.feed-node--red     { background: #E5534B; color: #fff; }
 </style>
