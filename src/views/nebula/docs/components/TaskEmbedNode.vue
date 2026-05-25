@@ -63,7 +63,11 @@ function openFilters() {
 }
 
 function applyFilters() {
-  props.updateAttributes({ filter: { ...draftFilter.value } })
+  // Deep clone via JSON: la draftFilter è in un ref reattivo. Spread superficiale
+  // funziona per primitivi ma vogliamo zero rischio Proxy nella struttura
+  // persistita nei node attrs (verrebbe poi serializzata da editor.getJSON).
+  const safe = JSON.parse(JSON.stringify(draftFilter.value))
+  props.updateAttributes({ filter: safe })
   showFilters.value = false
 }
 

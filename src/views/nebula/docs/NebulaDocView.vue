@@ -139,10 +139,14 @@ async function performSave(trigger: 'autosave' | 'manual') {
   saveStatus.value = 'saving'
   saveError.value = ''
   try {
+    // Deep-clone via JSON: scollega proxy Vue dentro node attrs (es. taskEmbed.filter
+    // letti via props.node.attrs reattivi). Firebase callable + Firestore non
+    // gradiscono Proxy in serializzazione (hasOwnProperty trap).
+    const rawContent = JSON.parse(JSON.stringify(editor.value.getJSON()))
     const out = await saveDoc({
       docId: doc.value.id,
       title: localTitle.value,
-      content: editor.value.getJSON(),
+      content: rawContent,
       contentText: editor.value.getText(),
       baseRevision: baseRevision.value,
       trigger,
