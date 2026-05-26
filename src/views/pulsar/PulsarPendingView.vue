@@ -332,8 +332,6 @@ async function submitTask() {
       :hidden="headerHidden"
     />
 
-    <div class="pv-content">
-
     <div v-if="loading" class="loading-list">
       <div v-for="i in 4" :key="i" class="msg-skel" />
     </div>
@@ -512,8 +510,6 @@ async function submitTask() {
         <p>Nessuna pendenza. Tutto in ordine!</p>
       </div>
     </template>
-
-    </div>
   </div>
 </template>
 
@@ -540,18 +536,27 @@ async function submitTask() {
   :deep(.md-page-header) { padding: 24px max(40px, calc(50% - 410px)) 18px; }
 }
 
-.pv-content {
+/* Sezioni dirette dentro .pv (niente wrapper extra: lo sticky di MdPageHeader
+   si attacca al primo ancestor scrollabile = .pv stesso). Padding e
+   max-width applicati a ciascuna sezione. */
+.loading-list,
+.section,
+.empty-state {
   max-width: 920px;
-  margin: 0 auto;
-  width: 100%;
-  padding: 16px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 16px;
+  padding-right: 16px;
   box-sizing: border-box;
 }
+.loading-list { padding-top: 16px; padding-bottom: 0; display: flex; flex-direction: column; gap: 10px; }
 @media (min-width: 1024px) {
-  .pv-content { padding: 24px 40px; max-width: 900px; }
+  .loading-list, .section, .empty-state {
+    max-width: 900px;
+    padding-left: 40px;
+    padding-right: 40px;
+  }
 }
-
-.loading-list { display: flex; flex-direction: column; gap: 10px; }
 
 .msg-skel {
   height: 90px; border-radius: 16px;
@@ -569,7 +574,7 @@ async function submitTask() {
 
 .empty-icon { color: var(--md-sys-color-primary); opacity: 0.35; }
 
-.section { margin-bottom: 16px; }
+.section { margin-bottom: 16px; padding-top: 16px; padding-bottom: 0; }
 
 .section-header {
   display: flex;
