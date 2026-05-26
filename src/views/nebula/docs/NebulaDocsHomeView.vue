@@ -223,11 +223,20 @@ function formatTime(ts: any): string {
 
 <style scoped>
 .ndh-root {
-  min-height: 100%;
+  /* Pattern PWA mobile: .s-main parent overflow:hidden → root scrollabile +
+     overflow-x:hidden anti-spill (memoria feedback_pwa_mobile_view_pattern). */
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
   max-width: 920px;
   margin: 0 auto;
   padding: 24px 20px 60px;
   font-family: 'Outfit', system-ui, sans-serif;
+  box-sizing: border-box;
+}
+
+@media (max-width: 600px) {
+  .ndh-root { padding: 16px 12px 60px; }
 }
 
 /* Denied */

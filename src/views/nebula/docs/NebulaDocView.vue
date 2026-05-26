@@ -462,11 +462,20 @@ void editorRef
 
 <style scoped>
 .nd-root {
+  /* Pattern PWA mobile (memoria feedback_pwa_mobile_view_pattern):
+     .s-main parent ha overflow:hidden → la view deve essere scrollabile
+     da sola (root: height 100% + overflow-y auto). overflow-x:hidden
+     blinda contro elementi che fuoriescono (es. toolbar molto larghe). */
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
   max-width: 820px;
   margin: 0 auto;
   padding: 24px 20px 80px;
   font-family: 'Outfit', system-ui, sans-serif;
   color: var(--md-sys-color-on-surface, #1a1a1a);
+  /* Box-sizing border-box per coerenza padding ↔ max-width */
+  box-sizing: border-box;
 }
 
 /* Loading / error */
@@ -573,6 +582,9 @@ void editorRef
   align-items: center;
   gap: 12px;
   margin: 24px 0 12px;
+  /* Permette al child .nd-title-input (flex:1) di shrinkare oltre la sua
+     intrinsic min-width per non far overflow su mobile. */
+  min-width: 0;
 }
 .nd-icon-btn {
   background: transparent;
@@ -591,6 +603,8 @@ void editorRef
 
 .nd-title-input {
   flex: 1;
+  min-width: 0;            /* essenziale, vedi .nd-title-row */
+  width: 100%;
   border: 0;
   outline: 0;
   background: transparent;
@@ -787,4 +801,43 @@ void editorRef
 .nd-modal-btn-primary:hover { background: #B85425; }
 .nd-modal-btn-secondary { background: rgba(0,0,0,0.06); color: #444; }
 .nd-modal-btn-secondary:hover { background: rgba(0,0,0,0.10); }
+
+/* ProseMirror: no overflow orizzontale (pre/table/img possono spillare) */
+.nd-editor :deep(.ProseMirror) {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+.nd-editor :deep(.ProseMirror img) { max-width: 100%; height: auto; }
+.nd-editor :deep(.ProseMirror pre) {
+  max-width: 100%;
+  overflow-x: auto;        /* code block scrolla orizzontalmente al suo interno */
+  white-space: pre;
+  word-wrap: normal;
+}
+.nd-editor :deep(.ProseMirror table) { max-width: 100%; }
+
+/* Mobile: meno padding, title più piccolo, toolbar compatta */
+@media (max-width: 600px) {
+  .nd-root {
+    padding: 16px 12px 80px;
+  }
+  .nd-title-input {
+    font-size: 28px;
+  }
+  .nd-toolbar {
+    padding: 4px 6px;
+    gap: 1px;
+  }
+  .nd-toolbar button {
+    padding: 5px 7px;
+    min-width: 26px;
+    height: 28px;
+    font-size: 12px;
+  }
+  .nd-toolbar .tb-sep { margin: 0 2px; }
+  .nd-icon-picker-wrap {
+    margin: 0 0 24px 0;
+  }
+  .nd-modal { padding: 18px 18px; }
+}
 </style>
