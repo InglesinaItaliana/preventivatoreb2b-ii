@@ -17,6 +17,7 @@ const emit = defineEmits(['close', 'confirmFast', 'confirmSign', 'confirmProduct
 const legalCheck1 = ref(false);
 const legalCheck2 = ref(false);
 const isConfirming = ref(false);
+const showDetractionAlert = ref(false);
 
 // Reset quando si apre
 watch(() => props.show, (val) => {
@@ -24,6 +25,9 @@ watch(() => props.show, (val) => {
     legalCheck1.value = false;
     legalCheck2.value = false;
     isConfirming.value = false;
+    if (props.mode === 'PRODUCTION' && props.order?.order_detraction_value) {
+      showDetractionAlert.value = true;
+    }
   }
 });
 
@@ -212,7 +216,7 @@ const handleProductionConfirm = () => emit('confirmProduction');
         <div class="bg-white p-4 rounded-lg shadow-sm mb-6 border border-gray-200 flex justify-between items-center">
           <div><p class="text-sm text-gray-500 uppercase font-bold">Cliente</p><p class="text-xl font-bold text-gray-900">{{ clientName }}</p></div>
           <div class="text-right"><p class="text-sm text-gray-500 uppercase font-bold">Commessa</p><p class="font-medium">{{ order?.commessa || order?.codice }}</p></div>
-          <div v-if="order.order_detraction_value" class="mt-1 inline-flex items-center gap-1.5 px-2 py-0.5 rounded bg-blue-50 border border-blue-100 text-blue-800 text-xs font-bold">
+          <div v-if="order.order_detraction_value" class="mt-1 inline-flex items-center gap-1.5 px-3 py-1 rounded bg-blue-50 border border-blue-100 text-blue-800 text-sm font-bold">
             <span>Detrazione Specifica: -{{ order.order_detraction_value }}</span>
           </div>
         </div>
@@ -236,6 +240,22 @@ const handleProductionConfirm = () => emit('confirmProduction');
       <div class="p-4 border-t bg-white shrink-0 flex justify-end gap-3 rounded-b-xl">
         <button @click="close" class="px-4 py-2 text-gray-500 font-bold hover:bg-gray-100 rounded-lg transition-colors">Annulla</button>
         <button @click="handleProductionConfirm" class="bg-amber-400 text-amber-950 px-6 py-2 rounded-lg font-bold shadow-md hover:bg-amber-300 flex items-center gap-2">AVVIA PRODUZIONE</button>
+      </div>
+    </div>
+
+    <div v-if="showDetractionAlert" class="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-gray-900/50 backdrop-blur-sm transition-opacity">
+      <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 text-center transform transition-all scale-100">
+        <h3 class="text-lg font-bold text-gray-900 mb-2">⚠️ Attenzione Detrazione</h3>
+        <p class="text-gray-600 mb-6 text-sm">
+          Questo ordine ha una detrazione specifica
+          <span class="font-bold text-blue-800">-{{ order.order_detraction_value }}</span>
+          diversa da quella abituale del cliente.
+        </p>
+        <div class="flex justify-center">
+          <button @click="showDetractionAlert = false" class="px-6 py-2 rounded-lg bg-amber-400 text-amber-950 font-bold hover:bg-amber-300 shadow-md transition-colors">
+            Ho capito
+          </button>
+        </div>
       </div>
     </div>
   </div>
