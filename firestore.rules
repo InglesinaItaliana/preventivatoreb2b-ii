@@ -211,6 +211,13 @@ service cloud.firestore {
       }
     }
 
+    // ── NEBULA-DOCS API keys (F4-C2) ────────────────────────────────────────
+    // Le chiavi non si leggono né si scrivono dal client. Tutto via callable:
+    // generate/revoke/list passano per Admin SDK con check userEmail.
+    match /nebulaApiKeys/{keyHash} {
+      allow read, write: if false;
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

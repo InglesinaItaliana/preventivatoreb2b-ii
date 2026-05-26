@@ -12,6 +12,8 @@
   },
   "compileOnSave": true,
   "include": [
-    "index.ts"
+    "index.ts",
+    "lib_md/**/*.ts",
+    "lib_mcp/**/*.ts"
   ]
 }

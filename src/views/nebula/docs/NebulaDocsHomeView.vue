@@ -198,6 +198,15 @@ function formatTime(ts: any): string {
         </div>
         <button
           type="button"
+          class="ndh-integrations-btn"
+          title="Integrazioni · Connetti Claude (MCP)"
+          aria-label="Integrazioni"
+          @click="router.push('/nebula/docs/settings/integrations')"
+        >
+          <span class="material-symbols-outlined">vpn_key</span>
+        </button>
+        <button
+          type="button"
           class="ndh-create-btn"
           :disabled="creating"
           @click="createTestDoc"
@@ -342,8 +351,23 @@ function formatTime(ts: any): string {
   margin: 2px 0 0;
 }
 
-.ndh-create-btn {
+.ndh-integrations-btn {
   margin-left: auto;
+  background: transparent;
+  border: 1px solid rgba(196, 96, 48, 0.35);
+  color: #C46030;
+  border-radius: 999px;
+  padding: 8px;
+  font: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  transition: background 120ms ease;
+}
+.ndh-integrations-btn:hover { background: rgba(196, 96, 48, 0.08); }
+.ndh-integrations-btn .material-symbols-outlined { font-size: 18px; }
+
+.ndh-create-btn {
   background: #C46030;
   color: white;
   border: 0;
