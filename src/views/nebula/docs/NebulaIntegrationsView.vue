@@ -245,7 +245,32 @@ const revokedKeys = computed(() => keys.value.filter(k => k.revoked))
     </section>
 
     <section class="ni-section">
-      <h3>Setup Claude Desktop</h3>
+      <h3>Opzione A · claude.ai web (Recommended, zero install)</h3>
+      <p>
+        Setup più rapido — funziona dal browser anche da mobile. Nessuna
+        chiave da copiare manualmente: autorizza il connettore con un click,
+        come "Connetti con Google".
+      </p>
+      <ol class="ni-steps">
+        <li>Vai su <a href="https://claude.ai" target="_blank" rel="noopener noreferrer"><code>claude.ai</code></a> → Settings → Connectors</li>
+        <li>Click <strong>Add custom connector</strong></li>
+        <li>Incolla questo URL:</li>
+      </ol>
+      <pre class="ni-code">{{ MCP_URL }}</pre>
+      <ol class="ni-steps" start="4">
+        <li>Click <strong>Connect</strong></li>
+        <li>Si aprirà una pagina di NEBULA-DOCS con "Autorizza" → conferma</li>
+        <li>Torni su claude.ai con il connettore attivo. Pronto.</li>
+      </ol>
+      <p class="ni-note">
+        Niente API key da gestire — l'autorizzazione è legata al tuo login
+        Firebase su NEBULA. Per revocare, da claude.ai disconnetti il
+        connettore (oppure scadenza automatica dopo 90 giorni).
+      </p>
+    </section>
+
+    <section class="ni-section">
+      <h3>Opzione B · Claude Desktop (via mcp-remote bridge)</h3>
       <ol class="ni-steps">
         <li>Genera una chiave qui sopra e copiala (visibile UNA SOLA volta!).</li>
         <li>Apri o crea il file <code>~/Library/Application Support/Claude/claude_desktop_config.json</code> (macOS) — o <code>%APPDATA%\Claude\claude_desktop_config.json</code> (Windows).</li>
@@ -259,10 +284,6 @@ const revokedKeys = computed(() => keys.value.filter(k => k.revoked))
       </p>
       <p class="ni-note">
         URL MCP server: <code>{{ MCP_URL }}</code>
-      </p>
-      <p class="ni-note">
-        <strong>claude.ai web</strong>: i Custom Connector richiedono OAuth
-        (non Bearer diretto). Non ancora supportato — usa Claude Desktop.
       </p>
     </section>
 

@@ -149,6 +149,10 @@ const router = createRouter({
         { path: 'docs/:docId/history', name: 'nebula-doc-history', component: () => import('../views/nebula/docs/NebulaDocHistoryView.vue') },
         // Integrazioni (F4-C2): API key management per MCP server Claude.
         { path: 'docs/settings/integrations', name: 'nebula-docs-integrations', component: () => import('../views/nebula/docs/NebulaIntegrationsView.vue') },
+        // OAuth 2.0 consent page (F6): claude.ai redirige qui dopo /authorize
+        // per chiedere all'utente "Vuoi autorizzare?". Richiede login Firebase
+        // (gestito dal guard requiresAuth nel parent route).
+        { path: 'docs/oauth/consent', name: 'nebula-docs-oauth-consent', component: () => import('../views/nebula/docs/NebulaOAuthConsentView.vue') },
         // Dev page per testare l'IconPicker isolato (chunk 2). Stesso gate del
         // parent /nebula/docs. Da rimuovere a Fase 1 conclusa.
         { path: 'docs/_dev/icons', name: 'nebula-docs-dev-icons', component: () => import('../views/nebula/docs/_dev/IconPickerDevView.vue') },
