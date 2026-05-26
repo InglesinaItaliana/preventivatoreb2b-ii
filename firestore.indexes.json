@@ -126,6 +126,14 @@
       "collectionGroup": "nebulaDocs",
       "queryScope": "COLLECTION",
       "fields": [
+        { "fieldPath": "refs.users", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "updatedAt",  "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "nebulaDocs",
+      "queryScope": "COLLECTION",
+      "fields": [
         { "fieldPath": "acl.writers", "arrayConfig": "CONTAINS" },
         { "fieldPath": "updatedAt",   "order": "DESCENDING" }
       ]
