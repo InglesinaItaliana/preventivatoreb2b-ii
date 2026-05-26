@@ -44,6 +44,7 @@ exports.handleMcpRequest = handleMcpRequest;
  */
 const auth_1 = require("./auth");
 const Tools = __importStar(require("./tools"));
+const oauth_1 = require("./oauth");
 const SERVER_NAME = 'nebula';
 const SERVER_VERSION = '1.0.0';
 const PROTOCOL_VERSION = '2024-11-05';
@@ -241,6 +242,7 @@ async function dispatch(req, userEmail) {
     }
 }
 async function handleMcpRequest(req) {
+    var _a, _b, _c;
     // CORS preflight (Claude Desktop non lo manda, ma claude.ai web sì)
     if (req.method === 'OPTIONS') {
         return {
@@ -248,12 +250,34 @@ async function handleMcpRequest(req) {
             body: '',
             headers: {
                 'Access-Control-Allow-Origin': '*',
-                'Access-Control-Allow-Methods': 'POST, OPTIONS',
+                'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
                 'Access-Control-Allow-Headers': 'Content-Type, Authorization',
                 'Access-Control-Max-Age': '86400',
             },
         };
     }
+    // ─── F6 OAuth sub-paths (no Bearer auth richiesto su questi) ──────────
+    // Cloud Function HTTP path arriva con prefix `/mcpNebula/...` o solo `...`
+    // a seconda dell'env. Normalizziamo.
+    const rawPath = (_a = req.path) !== null && _a !== void 0 ? _a : '';
+    const path = rawPath.replace(/^\/mcpNebula\/?/, '/').replace(/^\/+/, '/');
+    if (req.method === 'GET' && path === '/.well-known/oauth-authorization-server') {
+        return (0, oauth_1.handleAsMetadata)();
+    }
+    if (req.method === 'GET' && path === '/.well-known/oauth-protected-resource') {
+        return (0, oauth_1.handleResourceMetadata)();
+    }
+    if (req.method === 'POST' && (path === '/register' || path === '/oauth/register')) {
+        return (0, oauth_1.handleRegister)(req.body);
+    }
+    if (req.method === 'GET' && (path === '/authorize' || path === '/oauth/authorize')) {
+        return (0, oauth_1.handleAuthorize)((_b = req.query) !== null && _b !== void 0 ? _b : {});
+    }
+    if (req.method === 'POST' && (path === '/token' || path === '/oauth/token')) {
+        const contentType = ((_c = req.headers['content-type']) !== null && _c !== void 0 ? _c : req.headers['Content-Type']);
+        return (0, oauth_1.handleToken)(req.body, contentType);
+    }
+    // ─── MCP JSON-RPC (POST root o /mcpNebula direttamente) ───────────────
     if (req.method && req.method !== 'POST') {
         return {
             status: 405,
@@ -293,7 +317,7 @@ async function handleMcpRequest(req) {
         if (!parsedBody || typeof parsedBody !== 'object')
             throw new Error('Invalid body');
     }
-    catch (_a) {
+    catch (_d) {
         return {
             status: 400,
             body: JSON.stringify({
