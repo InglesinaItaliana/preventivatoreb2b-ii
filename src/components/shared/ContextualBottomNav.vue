@@ -67,11 +67,18 @@ const items = computed(() =>
           :filled="isActive(item)"
           class="cm-pill-icon"
         />
-        <span
-          v-if="item.path === '/cepheid/smistamento' && (triageCount ?? 0) > 0"
-          class="cm-triage-star"
-          aria-label="Task da smistare"
-        >★</span>
+        <template v-if="item.path === '/cepheid/smistamento'">
+          <span
+            v-if="(triageCount ?? 0) > 0"
+            class="cm-triage-star"
+            aria-label="Task da smistare"
+          >★</span>
+          <span
+            v-else
+            class="cm-triage-quiet"
+            aria-label="Tutto smistato"
+          ></span>
+        </template>
       </button>
     </div>
     <slot name="fab" />
@@ -131,7 +138,8 @@ const items = computed(() =>
 
 .cm-pill-icon { font-size: 36px; }
 
-/* indicatore "c'è lavoro": stella oro CEPHEID che pulsa quando ci sono task da smistare */
+/* Indicatore Smistamento (LYRA): stella pulsante quando c'è lavoro,
+   punto oro tenue quando inbox in quiete. */
 .cm-triage-star {
   position: absolute;
   top: 6px;
@@ -149,5 +157,18 @@ const items = computed(() =>
 }
 @media (prefers-reduced-motion: reduce) {
   .cm-triage-star { animation: none; }
+}
+
+.cm-triage-quiet {
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #D4A020;
+  opacity: 0.45;
+  box-shadow: 0 0 6px rgba(212, 160, 32, 0.35);
+  pointer-events: none;
 }
 </style>

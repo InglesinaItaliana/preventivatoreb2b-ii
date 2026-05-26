@@ -599,11 +599,18 @@ const roleLabel: Record<string, string> = {
                     :style="activeIconStyle(item.path, item.exact, mod.accent, item.excludePaths)"
                   />
                   {{ item.label }}
-                  <span
-                    v-if="item.path === '/cepheid/smistamento' && triageCount > 0"
-                    class="s-triage-star"
-                    aria-label="Task da smistare"
-                  >★</span>
+                  <template v-if="item.path === '/cepheid/smistamento'">
+                    <span
+                      v-if="triageCount > 0"
+                      class="s-triage-star"
+                      aria-label="Task da smistare"
+                    >★</span>
+                    <span
+                      v-else
+                      class="s-triage-quiet"
+                      aria-label="Tutto smistato"
+                    ></span>
+                  </template>
                 </RouterLink>
               </template>
               <div v-if="visibleItems(mod).length === 0" class="s-nav-empty">
@@ -864,7 +871,8 @@ const roleLabel: Record<string, string> = {
 
 .s-nav-item:hover { background: var(--s-border); color: var(--s-text-mid); }
 
-/* indicatore "c'è lavoro": stella oro CEPHEID che pulsa quando ci sono task da smistare */
+/* Indicatore Smistamento (LYRA): stella pulsante quando c'è lavoro,
+   punto oro tenue quando inbox in quiete. */
 .s-triage-star {
   margin-left: auto;
   color: #D4A020;
@@ -879,6 +887,17 @@ const roleLabel: Record<string, string> = {
 }
 @media (prefers-reduced-motion: reduce) {
   .s-triage-star { animation: none; }
+}
+
+.s-triage-quiet {
+  margin-left: auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #D4A020;
+  opacity: 0.45;
+  box-shadow: 0 0 6px rgba(212, 160, 32, 0.35);
+  flex-shrink: 0;
 }
 
 .s-nav-icon {
