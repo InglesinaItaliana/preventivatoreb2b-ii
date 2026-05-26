@@ -35,15 +35,20 @@ const MCP_URL = computed(() =>
   'https://europe-west1-preventivatoreb2b-ii.cloudfunctions.net/mcpNebula'
 )
 
+// Config Claude Desktop via bridge `mcp-remote` (Claude Desktop attualmente
+// supporta meglio MCP stdio; il bridge mcp-remote proxa stdio → HTTP remoto).
 const claudeDesktopConfig = computed(() => {
   return JSON.stringify({
     mcpServers: {
       nebula: {
-        type: 'http',
-        url: MCP_URL.value,
-        headers: {
-          Authorization: 'Bearer <INCOLLA_QUI_LA_TUA_CHIAVE>',
-        },
+        command: 'npx',
+        args: [
+          '-y',
+          'mcp-remote',
+          MCP_URL.value,
+          '--header',
+          'Authorization:Bearer <INCOLLA_QUI_LA_TUA_CHIAVE>',
+        ],
       },
     },
   }, null, 2)
@@ -159,11 +164,20 @@ const revokedKeys = computed(() => keys.value.filter(k => k.revoked))
       <h3>Come funziona</h3>
       <p>
         Genera una <strong>chiave API</strong> da incollare nella configurazione di
-        <strong>Claude Desktop</strong> o nei <strong>connettori claude.ai</strong>.
-        Claude potrà cercare, creare e modificare i tuoi documenti NEBULA via
-        protocollo MCP — con i tuoi stessi permessi (i doc privati restano tuoi,
-        i doc del team team-visibili).
+        <strong>Claude Desktop</strong> (vedi setup sotto). Claude potrà cercare,
+        creare e modificare i tuoi documenti NEBULA via protocollo MCP — con i
+        tuoi stessi permessi (doc privati restano tuoi, doc team team-visibili).
       </p>
+      <div class="ni-callout">
+        <MaterialIcon name="info" :size="16" />
+        <span>
+          <strong>Importante:</strong> ogni chiave è legata all'utente che la
+          genera (l'account con cui sei loggato adesso). Se vuoi che Claude
+          veda i tuoi doc personali, genera la chiave loggato col tuo account.
+          Per usare Claude su doc di altri, fatti aggiungere come writer
+          oppure chiedi a un owner di renderli "visibili al team".
+        </span>
+      </div>
     </section>
 
     <section v-if="lastError" class="ni-toast ni-toast-err">
@@ -234,15 +248,40 @@ const revokedKeys = computed(() => keys.value.filter(k => k.revoked))
       <h3>Setup Claude Desktop</h3>
       <ol class="ni-steps">
         <li>Genera una chiave qui sopra e copiala (visibile UNA SOLA volta!).</li>
-        <li>Apri Claude Desktop → Settings → Developer → Edit Config.</li>
-        <li>Incolla questo snippet sostituendo <code>&lt;INCOLLA_QUI_LA_TUA_CHIAVE&gt;</code>:</li>
+        <li>Apri o crea il file <code>~/Library/Application Support/Claude/claude_desktop_config.json</code> (macOS) — o <code>%APPDATA%\Claude\claude_desktop_config.json</code> (Windows).</li>
+        <li>Incolla il contenuto di <code>mcpServers</code> dentro il JSON esistente, sostituendo <code>&lt;INCOLLA_QUI_LA_TUA_CHIAVE&gt;</code>:</li>
       </ol>
       <pre class="ni-code">{{ claudeDesktopConfig }}</pre>
+      <p class="ni-note">
+        <strong>Riavvia completamente Claude Desktop</strong> (Cmd+Q, non solo finestra)
+        per applicare la config. Al primo avvio <code>npx</code> scaricherà
+        <code>mcp-remote</code> (~5 sec una tantum).
+      </p>
       <p class="ni-note">
         URL MCP server: <code>{{ MCP_URL }}</code>
       </p>
       <p class="ni-note">
-        Per <strong>claude.ai web</strong>: Profile → Connectors → Add custom connector, stesso URL + Bearer header.
+        <strong>claude.ai web</strong>: i Custom Connector richiedono OAuth
+        (non Bearer diretto). Non ancora supportato — usa Claude Desktop.
+      </p>
+    </section>
+
+    <section class="ni-section">
+      <h3>Cosa può fare Claude</h3>
+      <p>Una volta connesso, Claude può:</p>
+      <ul class="ni-tools-list">
+        <li><strong>Cercare</strong> nei tuoi doc per parola chiave</li>
+        <li><strong>Leggere</strong> contenuto di un doc (in markdown o JSON)</li>
+        <li><strong>Listare</strong> doc accessibili (con filtro parent)</li>
+        <li><strong>Creare</strong> nuovi doc con contenuto markdown</li>
+        <li><strong>Aggiungere</strong> blocchi in fondo a un doc</li>
+        <li><strong>Sostituire</strong> una sezione (identificata dal titolo heading)</li>
+        <li><strong>Collegare</strong> task / progetti CEPHEID come chip live</li>
+      </ul>
+      <p class="ni-note">
+        Ogni write da Claude crea uno snapshot in storia con badge
+        <strong>"Claude (MCP)"</strong> — puoi sempre ripristinare versioni
+        precedenti dalla vista history.
       </p>
     </section>
 
@@ -466,6 +505,32 @@ const revokedKeys = computed(() => keys.value.filter(k => k.revoked))
   background: rgba(0,0,0,0.05); padding: 1px 5px; border-radius: 4px;
   word-break: break-all;
 }
+
+.ni-callout {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px 14px;
+  background: rgba(196, 96, 48, 0.08);
+  border-left: 3px solid #C46030;
+  border-radius: 6px;
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #444;
+}
+.ni-callout strong { color: #8E4621; }
+
+.ni-tools-list {
+  list-style: disc;
+  padding-left: 22px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: #444;
+  margin: 4px 0;
+}
+.ni-tools-list li { display: list-item; margin: 4px 0; }
+.ni-tools-list strong { color: var(--md-sys-color-on-surface, #1a1a1a); }
 
 /* Modal */
 .ni-modal-backdrop {

@@ -147,6 +147,23 @@ async function saveDocCore(input: SaveCoreInput, userEmail: string): Promise<Sav
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// TOOL: whoami (diagnostico)
+// ─────────────────────────────────────────────────────────────────────────────
+
+export async function whoami(_args: unknown, ctx: ToolContext) {
+    const db = admin.firestore();
+    const [owned, written, read, team] = await Promise.all([
+        db.collection('nebulaDocs').where('acl.owners', 'array-contains', ctx.userEmail).get(),
+        db.collection('nebulaDocs').where('acl.writers', 'array-contains', ctx.userEmail).get(),
+        db.collection('nebulaDocs').where('acl.readers', 'array-contains', ctx.userEmail).get(),
+        db.collection('nebulaDocs').where('acl.visibility', '==', 'team').get(),
+    ]);
+    return {
+        text: `Identificato come **${ctx.userEmail}**.\n\nVisibilità doc:\n- owner di **${owned.size}** doc\n- writer su **${written.size}** doc\n- reader su **${read.size}** doc\n- doc con visibility=team: **${team.size}**`,
+    };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // TOOL: search
 // ─────────────────────────────────────────────────────────────────────────────
 

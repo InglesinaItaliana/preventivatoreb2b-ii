@@ -33,7 +33,13 @@ interface JsonRpcRes {
 
 const TOOLS = [
     {
-        name: 'nebula.search',
+        name: 'nebula_whoami',
+        description: 'Diagnostico: ritorna l\'email dell\'utente associato all\'API key in uso + conteggio doc visibili per categoria (owner/writer/reader/team). Utile per verificare l\'identità.',
+        inputSchema: { type: 'object', properties: {} },
+        handler: Tools.whoami,
+    },
+    {
+        name: 'nebula_search',
         description: 'Cerca documenti NEBULA per substring nel titolo o contenuto. Ritorna lista di doc accessibili all\'utente con snippet.',
         inputSchema: {
             type: 'object',
@@ -46,7 +52,7 @@ const TOOLS = [
         handler: Tools.search,
     },
     {
-        name: 'nebula.getDoc',
+        name: 'nebula_getDoc',
         description: 'Recupera il contenuto di un documento NEBULA per docId. Default format markdown (incluso sintassi @task:id / @project:id / {{embed-tasks}}).',
         inputSchema: {
             type: 'object',
@@ -59,7 +65,7 @@ const TOOLS = [
         handler: Tools.getDoc,
     },
     {
-        name: 'nebula.listDocs',
+        name: 'nebula_listDocs',
         description: 'Lista documenti accessibili. Filtra opzionalmente per parentId (gerarchia).',
         inputSchema: {
             type: 'object',
@@ -71,7 +77,7 @@ const TOOLS = [
         handler: Tools.listDocs,
     },
     {
-        name: 'nebula.createDoc',
+        name: 'nebula_createDoc',
         description: 'Crea un nuovo documento NEBULA. Default visibility=private, owner=chiamante.',
         inputSchema: {
             type: 'object',
@@ -95,7 +101,7 @@ const TOOLS = [
         handler: Tools.createDoc,
     },
     {
-        name: 'nebula.appendBlock',
+        name: 'nebula_appendBlock',
         description: 'Aggiunge blocchi markdown in fondo a un documento esistente. Supporta sintassi NEBULA (@task:id, @project:id, {{embed-tasks ...}}).',
         inputSchema: {
             type: 'object',
@@ -108,7 +114,7 @@ const TOOLS = [
         handler: Tools.appendBlock,
     },
     {
-        name: 'nebula.replaceSection',
+        name: 'nebula_replaceSection',
         description: 'Sostituisce una sezione del documento identificata da heading text. Se non trova l\'anchor, aggiunge come nuova sezione H2.',
         inputSchema: {
             type: 'object',
@@ -122,7 +128,7 @@ const TOOLS = [
         handler: Tools.replaceSection,
     },
     {
-        name: 'nebula.linkTask',
+        name: 'nebula_linkTask',
         description: 'Aggiunge un chip task-mention CEPHEID in fondo al documento.',
         inputSchema: {
             type: 'object',
@@ -136,7 +142,7 @@ const TOOLS = [
         handler: Tools.linkTask,
     },
     {
-        name: 'nebula.linkProject',
+        name: 'nebula_linkProject',
         description: 'Aggiunge un chip project-mention CEPHEID in fondo al documento.',
         inputSchema: {
             type: 'object',
