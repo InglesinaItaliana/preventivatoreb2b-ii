@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import MIcon from '../../components/shared/MIcon.vue'
 import MdPageHeader from '../../components/shared/MdPageHeader.vue'
 import CepheidInboxCard from '../../components/cepheid/CepheidInboxCard.vue'
 import { useAllTasks, type Task } from '../../composables/sidera/useAllTasks'
@@ -77,9 +76,9 @@ async function onDelete(task: Task) {
 
       <div v-if="loading" class="ib-loading">Caricamento…</div>
 
-      <!-- LYRA §6 — quiete inbox-zero: stella oro senza animazione, niente confetti -->
+      <!-- LYRA §6 — quiete inbox-zero: stella osservata (glifo unificato), no animazione -->
       <div v-else-if="!top" class="ib-fin">
-        <div class="ib-rk"><MIcon name="star" filled :size="40" /></div>
+        <div class="ib-rk"><span class="lyra-star lyra-star--celebration" aria-hidden="true" /></div>
         <div class="ib-ft">Inbox pulita</div>
         <div class="ib-fs">Tutto smistato. Il cielo è sereno.</div>
       </div>
@@ -134,8 +133,9 @@ async function onDelete(task: Task) {
 
 .ib-fin { position: relative; overflow: hidden; margin-top: 16px; padding: 36px 18px; border-radius: 20px; background: #FFF8F0; text-align: center; }
 .s-surface-dark .ib-fin { background: #16130B; }
-/* LYRA — stella oro CEPHEID quieta, glow soffuso senza animazione. */
-.ib-rk { display: inline-flex; align-items: center; justify-content: center; margin-bottom: 10px; color: #D4A020; filter: drop-shadow(0 0 10px rgba(212, 160, 32, 0.4)); }
+/* Container che ospita .lyra-star (definita in src/style.css §LYRA) — niente
+   styling visivo qui: la stella ha già size/glow/spike intrinseci. */
+.ib-rk { display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px; margin-bottom: 8px; }
 .ib-ft { font-family: var(--md-sys-typescale-headline-small-font, serif); font-size: 24px; color: var(--md-sys-color-on-surface); }
 .ib-fs { font-size: 13px; color: var(--md-sys-color-on-surface-variant); margin-top: 4px; }
 </style>

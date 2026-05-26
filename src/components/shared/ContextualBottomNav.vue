@@ -67,18 +67,12 @@ const items = computed(() =>
           :filled="isActive(item)"
           class="cm-pill-icon"
         />
-        <template v-if="item.path === '/cepheid/smistamento'">
-          <span
-            v-if="(triageCount ?? 0) > 0"
-            class="cm-triage-star"
-            aria-label="Task da smistare"
-          >★</span>
-          <span
-            v-else
-            class="cm-triage-quiet"
-            aria-label="Tutto smistato"
-          ></span>
-        </template>
+        <span
+          v-if="item.path === '/cepheid/smistamento'"
+          class="lyra-star cm-triage-indicator"
+          :class="(triageCount ?? 0) > 0 ? 'lyra-star--busy' : 'lyra-star--quiet'"
+          :aria-label="(triageCount ?? 0) > 0 ? 'Task da smistare' : 'Tutto smistato'"
+        />
       </button>
     </div>
     <slot name="fab" />
@@ -138,37 +132,12 @@ const items = computed(() =>
 
 .cm-pill-icon { font-size: 36px; }
 
-/* Indicatore Smistamento (LYRA): stella pulsante quando c'è lavoro,
-   punto oro tenue quando inbox in quiete. */
-.cm-triage-star {
+/* Indicatore Smistamento — posizionamento del glifo unificato .lyra-star
+   (definito in src/style.css §LYRA). Il modificatore --busy/--quiet
+   gestisce il visual e l'animazione. */
+.cm-triage-indicator {
   position: absolute;
-  top: 6px;
-  right: 10px;
-  color: #D4A020;
-  font-size: 14px;
-  line-height: 1;
-  text-shadow: 0 0 6px rgba(212, 160, 32, 0.6);
-  pointer-events: none;
-  animation: cph-star-pulse 1.6s ease-in-out infinite;
-}
-@keyframes cph-star-pulse {
-  0%, 100% { transform: scale(1);    opacity: 0.85; }
-  50%      { transform: scale(1.3);  opacity: 1; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .cm-triage-star { animation: none; }
-}
-
-.cm-triage-quiet {
-  position: absolute;
-  top: 12px;
-  right: 14px;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #D4A020;
-  opacity: 0.45;
-  box-shadow: 0 0 6px rgba(212, 160, 32, 0.35);
-  pointer-events: none;
+  top: 10px;
+  right: 12px;
 }
 </style>

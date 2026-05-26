@@ -315,14 +315,14 @@ defineExpose({ expanded })
         <CepheidTimelineMilestone v-if="g.milestoneId !== '__none__'" :group="g" />
       </template>
 
-      <!-- celebrazione (LYRA §6) — 5 stelle che si compongono in costellazione, niente confetti -->
+      <!-- celebrazione (LYRA §6) — 5 stelle osservate compongono una costellazione (cluster, no spike) -->
       <div v-if="projectComplete" ref="finRef" class="fin">
         <div class="constellation" aria-hidden="true">
-          <span class="cstar cstar--1" />
-          <span class="cstar cstar--2" />
-          <span class="cstar cstar--3" />
-          <span class="cstar cstar--4" />
-          <span class="cstar cstar--5" />
+          <span class="lyra-star cstar cstar--1" />
+          <span class="lyra-star cstar cstar--2" />
+          <span class="lyra-star cstar cstar--3" />
+          <span class="lyra-star cstar cstar--4" />
+          <span class="lyra-star cstar cstar--5" />
         </div>
         <div class="ft">Progetto completato</div>
         <div class="fs">obiettivo raggiunto</div>
@@ -433,11 +433,14 @@ defineExpose({ expanded })
 .fin .ft { font-family: var(--md-sys-typescale-headline-small-font, serif); font-size: 24px; color: var(--md-sys-color-on-surface); }
 .fin .fs { font-size: 13px; color: var(--md-sys-color-on-surface-variant); margin-top: 4px; }
 
-/* LYRA §6 — costellazione mono-cromatica oro CEPHEID che si compone (sostituisce confetti+trophy). */
+/* LYRA §6 — costellazione: cluster di .lyra-star (src/style.css §LYRA) senza
+   spike, posizionate a forma di W di Cassiopea. */
 .constellation { position: relative; width: 140px; height: 50px; margin: 0 auto 14px; }
 .cstar {
-  position: absolute; width: 6px; height: 6px; border-radius: 50%;
-  background: #D4A020; box-shadow: 0 0 8px rgba(212, 160, 32, 0.6);
+  --lyra-star-size: 6px;
+  --lyra-star-glow-radius: 8px;
+  --lyra-star-glow-color: rgba(212, 160, 32, 0.6);
+  position: absolute;
   opacity: 0.85;
 }
 .cstar--1 { left:   5px; top:  5px; }

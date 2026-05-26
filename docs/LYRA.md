@@ -228,11 +228,21 @@ Una celebrazione vale solo se è **rara**, **meritata** e **discreta**. Tre filt
 
 ### Forma: visiva e silenziosa
 
-Il veicolo migliore è **visivo, non testuale**:
+Il veicolo migliore è **visivo, non testuale**.
 
-- **Inbox zero (sidebar).** Voce "Smistamento": stella oro pulsante "c'è lavoro" → punto oro tenue statico "quiete" quando triageCount torna a 0. *(✓ implementato 2026-05-26 — commit `a0b6540`, sia ContextualBottomNav mobile sia SideraLayout desktop)*
-- **Inbox pulita / Tutto fatto (pannello).** Stati "all clear" in CepheidInbox + CepheidActions: stella oro CEPHEID `#D4A020` con glow soffuso (`drop-shadow 10px @ 0.4`) al posto del trophy `emoji_events`. CepheidActions aggiunge un'**onda di luce singola** al mount (~900ms, ripple radiale mono-cromatico che si espande e svanisce). Nessun confetto multicolor. *(✓ implementato 2026-05-26)*
-- **Progetto completato (timeline).** CepheidTimeline finale: **5 stelle si compongono in costellazione** Cassiopea-like W (~1.2s totali, dot oro che convergono dagli angoli con cascading delay 0/80/160/240/320ms e leggero overshoot, glow finale persistente). Sostituisce trophy + confetti. *(✓ implementato 2026-05-26)*
+#### Glifo unificato — *stella osservata*
+
+LYRA usa un **singolo glifo primitivo** per tutti i momenti stellari della suite: un punto luminoso oro CEPHEID + alone radiale + (opzionali) 4 spike di diffrazione in croce. È letteralmente come si fotografa una stella brillante al telescopio (Hubble, JWST). Sostituisce la 5-point star (Unicode `★` / Material `star`) che è un'icona scolastica, non un'osservazione astronomica.
+
+Implementazione: classe CSS `.lyra-star` definita in `src/style.css` (sezione *LYRA — stella osservata*), con modificatori `--quiet` (sidebar inbox-zero, no spike, no anim), `--busy` (sidebar "c'è lavoro", spike sottili + pulse), `--celebration` (pannello "all clear", spike marcati + glow forte). I cluster (es. costellazione Timeline) usano la base senza modificatore: cinque stelle "a occhio nudo" che insieme fanno il coro — niente spike singoli, parla l'insieme.
+
+Variabili CSS esposte (`--lyra-star-size`, `--lyra-star-glow-radius`, `--lyra-star-glow-color`, `--lyra-spike-length`, ...) per varianti future senza nuove classi.
+
+#### Pattern in uso
+
+- **Inbox zero (sidebar).** Voce "Smistamento": `.lyra-star--busy` (richiamo "c'è lavoro") → `.lyra-star--quiet` (quiete) quando triageCount torna a 0. *(✓ implementato 2026-05-26 — `a0b6540` + unificazione glifo, mobile + desktop)*
+- **Inbox pulita / Tutto fatto (pannello).** Stati "all clear" in CepheidInbox + CepheidActions: `.lyra-star--celebration` al posto del trophy `emoji_events`. CepheidActions aggiunge un'**onda di luce singola** al mount (~900ms, ripple radiale mono-cromatico). Nessun confetto multicolor. *(✓ implementato 2026-05-26)*
+- **Progetto completato (timeline).** CepheidTimeline finale: **5 `.lyra-star` senza modificatore** si compongono in costellazione Cassiopea-like W (~1.2s totali, dot oro che convergono dagli angoli con cascading delay 0/80/160/240/320ms e leggero overshoot, glow finale persistente). Sostituisce trophy + confetti. *(✓ implementato 2026-05-26)*
 - **StarAvatar come trofeo vivo.** Streak 5 giorni → la StarAvatar nel topbar acquista un sottile alone (drop-shadow di 1 tono più chiaro). Sparisce a fine streak o dopo 7 giorni. *(da implementare — richiede tracking streak su Firestore)*
 - **Chiusura progetto dalla lista.** Il nome del progetto fade-out (400ms) dall'elenco "in corso", poi appare per 1.5s come puntino luminoso nell'angolo prima di scomparire. Diverso dal "progetto completato (timeline)" qui sopra: questo è la transizione *lista in corso → archivio*. *(da implementare)*
 - **Costellazione mensile dei progetti chiusi.** Mappa stellare cumulativa in CEPHEID dove ogni progetto chiuso è una stella posizionata per data. A fine mese è un artefatto, non una notifica. *(da implementare)*

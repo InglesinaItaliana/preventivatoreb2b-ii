@@ -599,18 +599,12 @@ const roleLabel: Record<string, string> = {
                     :style="activeIconStyle(item.path, item.exact, mod.accent, item.excludePaths)"
                   />
                   {{ item.label }}
-                  <template v-if="item.path === '/cepheid/smistamento'">
-                    <span
-                      v-if="triageCount > 0"
-                      class="s-triage-star"
-                      aria-label="Task da smistare"
-                    >★</span>
-                    <span
-                      v-else
-                      class="s-triage-quiet"
-                      aria-label="Tutto smistato"
-                    ></span>
-                  </template>
+                  <span
+                    v-if="item.path === '/cepheid/smistamento'"
+                    class="lyra-star s-triage-indicator"
+                    :class="triageCount > 0 ? 'lyra-star--busy' : 'lyra-star--quiet'"
+                    :aria-label="triageCount > 0 ? 'Task da smistare' : 'Tutto smistato'"
+                  />
                 </RouterLink>
               </template>
               <div v-if="visibleItems(mod).length === 0" class="s-nav-empty">
@@ -871,33 +865,10 @@ const roleLabel: Record<string, string> = {
 
 .s-nav-item:hover { background: var(--s-border); color: var(--s-text-mid); }
 
-/* Indicatore Smistamento (LYRA): stella pulsante quando c'è lavoro,
-   punto oro tenue quando inbox in quiete. */
-.s-triage-star {
+/* Indicatore Smistamento — posizionamento del glifo unificato .lyra-star
+   (definito in src/style.css §LYRA). */
+.s-triage-indicator {
   margin-left: auto;
-  color: #D4A020;
-  font-size: 13px;
-  line-height: 1;
-  text-shadow: 0 0 6px rgba(212, 160, 32, 0.5);
-  animation: cph-star-pulse 1.6s ease-in-out infinite;
-}
-@keyframes cph-star-pulse {
-  0%, 100% { transform: scale(1);    opacity: 0.85; }
-  50%      { transform: scale(1.25); opacity: 1; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .s-triage-star { animation: none; }
-}
-
-.s-triage-quiet {
-  margin-left: auto;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: #D4A020;
-  opacity: 0.45;
-  box-shadow: 0 0 6px rgba(212, 160, 32, 0.35);
-  flex-shrink: 0;
 }
 
 .s-nav-icon {
