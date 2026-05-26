@@ -861,12 +861,43 @@ void editorRef
   user-select: none;
   cursor: pointer;
 }
+/* Checkbox custom: native input nascosto + box CSS coerente cross-browser
+   (accent-color è ignorato da iOS Safari < 18, da qui il render manuale). */
 .nd-editor :deep(.ProseMirror ul[data-type="taskList"] li > label input[type="checkbox"]) {
-  width: 16px;
-  height: 16px;
-  accent-color: #C46030;     /* NEBULA primary */
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border: 2px solid #C46030;     /* NEBULA primary */
+  border-radius: 4px;
+  background: white;
   cursor: pointer;
   margin: 0;
+  position: relative;
+  transition: background 120ms ease, border-color 120ms ease;
+  flex-shrink: 0;
+}
+.nd-editor :deep(.ProseMirror ul[data-type="taskList"] li > label input[type="checkbox"]:hover) {
+  border-color: #A04E25;
+}
+.nd-editor :deep(.ProseMirror ul[data-type="taskList"] li > label input[type="checkbox"]:checked) {
+  background: #C46030;
+  border-color: #C46030;
+}
+.nd-editor :deep(.ProseMirror ul[data-type="taskList"] li > label input[type="checkbox"]:checked::after) {
+  content: '';
+  position: absolute;
+  left: 4px;
+  top: 0px;
+  width: 5px;
+  height: 10px;
+  border: solid white;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.nd-editor :deep(.ProseMirror ul[data-type="taskList"] li > label input[type="checkbox"]:focus-visible) {
+  outline: 2px solid rgba(196, 96, 48, 0.4);
+  outline-offset: 2px;
 }
 .nd-editor :deep(.ProseMirror ul[data-type="taskList"] li > div) {
   flex: 1;
