@@ -17,6 +17,17 @@ const SERVER_NAME = 'nebula';
 const SERVER_VERSION = '1.0.0';
 const PROTOCOL_VERSION = '2024-11-05';
 
+// URL base del MCP server (per costruire resource_metadata in WWW-Authenticate)
+const MCP_BASE_URL = 'https://europe-west1-preventivatoreb2b-ii.cloudfunctions.net/mcpNebula';
+const RESOURCE_METADATA_URL = `${MCP_BASE_URL}/.well-known/oauth-protected-resource`;
+
+/**
+ * Header WWW-Authenticate per 401 risposte. Include resource_metadata URL
+ * per indicare ai client (claude.ai) dove trovare la AS discovery (RFC 9728 /
+ * MCP Authorization spec).
+ */
+const WWW_AUTH_HEADER = `Bearer realm="nebula-mcp", resource_metadata="${RESOURCE_METADATA_URL}"`;
+
 interface JsonRpcReq {
     jsonrpc: '2.0';
     id?: number | string | null;
@@ -258,7 +269,10 @@ export async function handleMcpRequest(req: McpRequestLike): Promise<McpResponse
             headers: {
                 'Access-Control-Allow-Origin': '*',
                 'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-                'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+                // Permissive: claude.ai può mandare headers custom MCP-Protocol-Version,
+                // mcp-session-id, ecc. Reflection-style (* ammesso da CORS-spec).
+                'Access-Control-Allow-Headers': '*',
+                'Access-Control-Expose-Headers': 'WWW-Authenticate, MCP-Session-Id',
                 'Access-Control-Max-Age': '86400',
             },
         };
@@ -288,6 +302,25 @@ export async function handleMcpRequest(req: McpRequestLike): Promise<McpResponse
     }
 
     // ─── MCP JSON-RPC (POST root o /mcpNebula direttamente) ───────────────
+    // GET su base URL: probe di discovery. Spec MCP Authorization → rispondiamo
+    // 401 con WWW-Authenticate resource_metadata, claude.ai segue il hint.
+    if (req.method === 'GET' || req.method === 'HEAD') {
+        return {
+            status: 401,
+            body: req.method === 'HEAD' ? '' : JSON.stringify({
+                error: 'unauthorized',
+                error_description: 'Auth required. Vedi resource_metadata per OAuth discovery.',
+                resource_metadata: RESOURCE_METADATA_URL,
+            }),
+            headers: {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Expose-Headers': 'WWW-Authenticate',
+                'WWW-Authenticate': WWW_AUTH_HEADER,
+                'Content-Type': 'application/json',
+            },
+        };
+    }
+
     if (req.method && req.method !== 'POST') {
         return {
             status: 405,
@@ -311,7 +344,8 @@ export async function handleMcpRequest(req: McpRequestLike): Promise<McpResponse
                 }),
                 headers: {
                     'Access-Control-Allow-Origin': '*',
-                    'WWW-Authenticate': 'Bearer realm="nebula-mcp"',
+                    'Access-Control-Expose-Headers': 'WWW-Authenticate',
+                    'WWW-Authenticate': WWW_AUTH_HEADER,
                 },
             };
         }
