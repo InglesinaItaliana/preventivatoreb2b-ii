@@ -50,10 +50,6 @@ async function onDelete(task: Task) {
   catch (e) { console.error('[SMISTAMENTO] errore delete', e) }
 }
 
-const reduceMotion = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-const confetti = computed(() => Array.from({ length: 14 }, (_, k) => ({
-  left: Math.round(6 + k * 88 / 14), color: ['#D4A020', '#C4941C', '#3AAF98', '#C46030', '#98C0D0', '#B06842'][k % 6], delay: ((k % 5) * 90) / 1000,
-})))
 </script>
 
 <template>
@@ -81,12 +77,9 @@ const confetti = computed(() => Array.from({ length: 14 }, (_, k) => ({
 
       <div v-if="loading" class="ib-loading">Caricamento…</div>
 
-      <!-- reward -->
+      <!-- LYRA §6 — quiete inbox-zero: stella oro senza animazione, niente confetti -->
       <div v-else-if="!top" class="ib-fin">
-        <template v-if="!reduceMotion">
-          <span v-for="(c, i) in confetti" :key="i" class="ib-pc" :style="{ left: c.left + '%', background: c.color, animationDelay: c.delay + 's' }" />
-        </template>
-        <div class="ib-rk"><MIcon name="emoji_events" :size="28" /></div>
+        <div class="ib-rk"><MIcon name="star" filled :size="40" /></div>
         <div class="ib-ft">Inbox pulita</div>
         <div class="ib-fs">Tutto smistato. Il cielo è sereno.</div>
       </div>
@@ -141,12 +134,8 @@ const confetti = computed(() => Array.from({ length: 14 }, (_, k) => ({
 
 .ib-fin { position: relative; overflow: hidden; margin-top: 16px; padding: 36px 18px; border-radius: 20px; background: #FFF8F0; text-align: center; }
 .s-surface-dark .ib-fin { background: #16130B; }
-.ib-rk { display: inline-flex; align-items: center; justify-content: center; width: 58px; height: 58px; border-radius: 50%; background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); margin-bottom: 10px; }
+/* LYRA — stella oro CEPHEID quieta, glow soffuso senza animazione. */
+.ib-rk { display: inline-flex; align-items: center; justify-content: center; margin-bottom: 10px; color: #D4A020; filter: drop-shadow(0 0 10px rgba(212, 160, 32, 0.4)); }
 .ib-ft { font-family: var(--md-sys-typescale-headline-small-font, serif); font-size: 24px; color: var(--md-sys-color-on-surface); }
 .ib-fs { font-size: 13px; color: var(--md-sys-color-on-surface-variant); margin-top: 4px; }
-.ib-pc { position: absolute; top: 8px; width: 8px; height: 8px; border-radius: 2px; opacity: 0; }
-@media (prefers-reduced-motion: no-preference) {
-  @keyframes ibconf { 0% { transform: translateY(0) rotate(0); opacity: 0 } 12% { opacity: 1 } 100% { transform: translateY(200px) rotate(420deg); opacity: 0 } }
-  .ib-pc { animation: ibconf 1.7s cubic-bezier(.3,.1,.5,1) forwards; }
-}
 </style>
