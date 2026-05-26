@@ -1987,4 +1987,183 @@ exports.indexDocRefs = functions
     console.log(`[indexDocRefs] ${docId} — tasks: ${computed.tasks.length}, projects: ${computed.projects.length}`);
     return null;
 });
+// ============================================================================
+// NEBULA-DOCS — shareDoc callable (F3-C2.5)
+// Aggiorna ACL del doc (visibility + writers). SOLO owner può chiamare.
+// Endpoint separato da saveDoc per audit chiaro e per evitare che un writer
+// si "auto-promuova" owner via call accidentale.
+//
+// Input  : { docId, visibility?, writers? }
+// Output : { docId, acl }
+// Errori : unauthenticated | permission-denied | not-found | invalid-argument
+// ============================================================================
+const VALID_VISIBILITIES = new Set(['private', 'team', 'public']);
+exports.shareDoc = functions
+    .region('europe-west1')
+    .https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Richiesto login');
+    }
+    const userEmail = nebulaNormalizeEmail(context.auth.token.email);
+    if (!userEmail) {
+        throw new functions.https.HttpsError('failed-precondition', 'Email utente mancante');
+    }
+    const docId = data === null || data === void 0 ? void 0 : data.docId;
+    if (!docId) {
+        throw new functions.https.HttpsError('invalid-argument', 'docId mancante');
+    }
+    const db = admin.firestore();
+    const ref = db.collection('nebulaDocs').doc(docId);
+    const snap = await ref.get();
+    if (!snap.exists) {
+        throw new functions.https.HttpsError('not-found', 'Documento non trovato');
+    }
+    const current = snap.data();
+    const acl = current.acl;
+    if (!acl) {
+        throw new functions.https.HttpsError('failed-precondition', 'Documento senza ACL');
+    }
+    // SOLO owner può modificare ACL
+    if (!acl.owners.includes(userEmail)) {
+        throw new functions.https.HttpsError('permission-denied', 'Solo gli owner possono modificare la condivisione');
+    }
+    // Validazione + normalizzazione input
+    const visibility = data === null || data === void 0 ? void 0 : data.visibility;
+    if (visibility !== undefined && !VALID_VISIBILITIES.has(visibility)) {
+        throw new functions.https.HttpsError('invalid-argument', `visibility non valida: ${visibility}`);
+    }
+    let writers;
+    if ((data === null || data === void 0 ? void 0 : data.writers) !== undefined) {
+        if (!Array.isArray(data.writers)) {
+            throw new functions.https.HttpsError('invalid-argument', 'writers deve essere array');
+        }
+        writers = data.writers
+            .filter((e) => typeof e === 'string')
+            .map((e) => nebulaNormalizeEmail(e))
+            .filter((e) => e.length > 0);
+        // Owners restano sempre writers di fatto (saveDoc accetta sia owner
+        // che writer). Niente bisogno di duplicarli qui.
+    }
+    // Build update solo sui campi forniti
+    const update = {
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedBy: userEmail,
+    };
+    if (visibility !== undefined)
+        update['acl.visibility'] = visibility;
+    if (writers !== undefined)
+        update['acl.writers'] = writers;
+    await ref.update(update);
+    const updatedSnap = await ref.get();
+    const newAcl = updatedSnap.data().acl;
+    return { docId, acl: newAcl };
+});
+// ============================================================================
+// NEBULA-DOCS — presenceCleanup (F3-C4) scheduled every 5 min
+// Elimina records di presence stale (utenti che chiudono tab senza che il
+// best-effort delete su unmount/beforeunload parta). Garantisce che
+// l'avatar stack nell'editor non mostri utenti realmente offline.
+//
+// Threshold: 5 min. Coerente col PRESENCE_FRESH_MS=30s client (la UI filtra
+// più aggressivamente; questo è il garbage collector lungo).
+//
+// Query: collectionGroup('presence') con where('lastSeenAt', '<', cutoff).
+// Richiede field override su `presence/lastSeenAt` scope COLLECTION_GROUP
+// (vedi firestore.indexes.json).
+// ============================================================================
+exports.presenceCleanup = functions
+    .region('europe-west1')
+    .pubsub.schedule('every 5 minutes')
+    .timeZone('Europe/Rome')
+    .onRun(async () => {
+    const db = admin.firestore();
+    const STALE_MS = 5 * 60 * 1000;
+    const cutoff = admin.firestore.Timestamp.fromMillis(Date.now() - STALE_MS);
+    const snap = await db.collectionGroup('presence')
+        .where('lastSeenAt', '<', cutoff)
+        .get();
+    if (snap.empty) {
+        console.log('[presenceCleanup] no stale records');
+        return null;
+    }
+    // Batch delete (max 500 ops/batch — split se serve)
+    const chunks = [];
+    for (let i = 0; i < snap.docs.length; i += 450) {
+        chunks.push(snap.docs.slice(i, i + 450));
+    }
+    for (const chunk of chunks) {
+        const batch = db.batch();
+        chunk.forEach(d => batch.delete(d.ref));
+        await batch.commit();
+    }
+    console.log(`[presenceCleanup] deleted ${snap.size} stale presence records`);
+    return null;
+});
+// ============================================================================
+// NEBULA-DOCS — historyPrune (F3-C4) scheduled daily 03:00 Europe/Rome
+// Mantiene per ogni nebulaDocs:
+//   - Ultimi 50 snapshot (più recenti per savedAt DESC)
+//   - 1 snapshot al giorno per gli ultimi 30 giorni (primo del giorno per
+//     savedAt DESC = ultimo salvato nel giorno = stato finale del giorno)
+//   - Elimina tutto il resto.
+//
+// Vedi docs/NEBULA-DOCS.md §3.4 retention policy.
+// ============================================================================
+exports.historyPrune = functions
+    .region('europe-west1')
+    .pubsub.schedule('0 3 * * *') // ogni giorno alle 03:00
+    .timeZone('Europe/Rome')
+    .onRun(async () => {
+    const db = admin.firestore();
+    const KEEP_RECENT = 50;
+    const KEEP_DAYS = 30;
+    const KEEP_DAYS_MS = KEEP_DAYS * 24 * 60 * 60 * 1000;
+    const nowMs = Date.now();
+    const docsSnap = await db.collection('nebulaDocs').get();
+    let totalDeleted = 0;
+    let docsProcessed = 0;
+    for (const docRef of docsSnap.docs) {
+        const histSnap = await docRef.ref.collection('history')
+            .orderBy('savedAt', 'desc')
+            .get();
+        if (histSnap.size <= KEEP_RECENT) {
+            docsProcessed++;
+            continue;
+        }
+        const keep = new Set();
+        // 1. Ultimi N più recenti
+        histSnap.docs.slice(0, KEEP_RECENT).forEach(h => keep.add(h.id));
+        // 2. 1 al giorno per ultimi 30 gg. Iterando DESC, il primo che
+        //    incontriamo per ogni giorno è il più recente di quel giorno.
+        const dayKeep = new Map();
+        for (const h of histSnap.docs) {
+            const ts = h.data().savedAt;
+            if (!ts)
+                continue;
+            const savedAt = ts.toMillis();
+            if (nowMs - savedAt > KEEP_DAYS_MS)
+                continue;
+            const date = new Date(savedAt).toISOString().slice(0, 10); // YYYY-MM-DD
+            if (!dayKeep.has(date))
+                dayKeep.set(date, h.id);
+        }
+        dayKeep.forEach(id => keep.add(id));
+        // 3. Delete il resto
+        const toDelete = histSnap.docs.filter(h => !keep.has(h.id));
+        if (toDelete.length === 0) {
+            docsProcessed++;
+            continue;
+        }
+        // Batch (max 500)
+        for (let i = 0; i < toDelete.length; i += 450) {
+            const batch = db.batch();
+            toDelete.slice(i, i + 450).forEach(h => batch.delete(h.ref));
+            await batch.commit();
+        }
+        totalDeleted += toDelete.length;
+        docsProcessed++;
+    }
+    console.log(`[historyPrune] processed ${docsProcessed} docs, deleted ${totalDeleted} old snapshots`);
+    return null;
+});
 //# sourceMappingURL=index.js.map

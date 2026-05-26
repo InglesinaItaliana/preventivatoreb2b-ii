@@ -25,6 +25,9 @@ import { ProjectMention } from './extensions/ProjectMention'
 import { TaskEmbed } from './extensions/TaskEmbed'
 import { useAllTasks } from '../../../composables/sidera/useAllTasks'
 import { useProjects } from '../../../composables/sidera/useProjects'
+import { useDocPresence } from '../../../composables/nebula/useDocPresence'
+import PresenceStack from './components/PresenceStack.vue'
+import ShareDocModal from './components/ShareDocModal.vue'
 import { useCurrentUser } from '../../../composables/sidera/useCurrentUser'
 import { useDoc } from '../../../composables/nebula/useDoc'
 import { saveDoc, isSaveDocConflict, type SaveDocConflictDetails } from '../../../composables/nebula/useSaveDoc'
@@ -51,6 +54,7 @@ const initializedFromDoc = ref(false)          // ha già preso il contenuto ini
 const saveStatus = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
 const saveError = ref<string>('')
 const showIconPicker = ref(false)
+const showShareModal = ref(false)
 const conflict = ref<SaveDocConflictDetails | null>(null)
 
 const myEmail = computed(() => (currentUser.value?.email ?? '').toLowerCase().trim())
@@ -58,6 +62,10 @@ const canWrite = computed(() => {
   if (!doc.value) return false
   const acl = doc.value.acl
   return acl.writers.includes(myEmail.value) || acl.owners.includes(myEmail.value)
+})
+const isOwner = computed(() => {
+  if (!doc.value) return false
+  return doc.value.acl.owners.includes(myEmail.value)
 })
 
 // ── Editor TipTap ───────────────────────────────────────────────────────────
@@ -67,6 +75,10 @@ const canWrite = computed(() => {
 // options e i Proxy reattivi rompono config (trap hasOwnProperty).
 const { tasks: allTasksRef } = useAllTasks()
 const { projects: allProjectsRef } = useProjects()
+
+// Presence: sub al sub-collezione nebulaDocs/{docId}/presence + heartbeat 15s.
+// Espone peers (altri utenti attivi visti <30s fa).
+const { peers } = useDocPresence(docId, currentUser)
 
 const editor = useEditor({
   extensions: [
@@ -91,34 +103,55 @@ const editor = useEditor({
 const editorRef = shallowRef(editor)
 
 // ── Init: al primo load del doc, popola editor + title ──────────────────────
-watch(doc, (d) => {
-  if (!d || initializedFromDoc.value) return
+// + auto-merge passivo: se l'utente NON ha modifiche locali (isDirty=false)
+//   e arriva un update remoto, applichiamo silenziosamente (pattern Google
+//   Docs "passive viewer auto-syncs"). Se invece HA modifiche pending, si
+//   tiene il warning + il dialog di conflitto si aprirà al prossimo save.
+const isDirty = ref(false)
+
+function applyRemoteContent(d: NonNullable<typeof doc.value>) {
+  if (!editor.value) return
+  // Preserva selection se siamo in lettura passiva (cursor potrebbe non
+  // essere mai stato dentro l'editor). TipTap setContent(_, false) NON
+  // emette update → no loop con onUpdate.
+  const rawContent = d.content
+    ? JSON.parse(JSON.stringify(d.content))
+    : { type: 'doc', content: [] }
+  editor.value.commands.setContent(rawContent, false)
   localTitle.value = d.title ?? ''
   baseRevision.value = d.revision ?? 0
-  if (editor.value) {
-    // Deep clone via JSON: scollega da reactive proxy (TipTap chiama
-    // hasOwnProperty internamente e fallisce su Proxy Vue).
-    const rawContent = d.content
-      ? JSON.parse(JSON.stringify(d.content))
-      : { type: 'doc', content: [] }
-    editor.value.commands.setContent(rawContent, false)
-    editor.value.setEditable(canWrite.value)
+  isDirty.value = false
+}
+
+watch(doc, (d) => {
+  if (!d) return
+  if (!initializedFromDoc.value) {
+    // Primo load
+    applyRemoteContent(d)
+    editor.value?.setEditable(canWrite.value)
+    initializedFromDoc.value = true
+    return
   }
-  initializedFromDoc.value = true
+  // Update remoto post-init
+  if (d.revision > baseRevision.value && !isDirty.value) {
+    applyRemoteContent(d)   // auto-merge silenzioso
+  }
+  // Se isDirty → externalUpdatePending warning resta visibile, conflict
+  // verrà gestito al prossimo save (LWW + dialog)
 }, { immediate: true })
 
-// Se il doc viene aggiornato esternamente DOPO l'init, NON ri-clobberiamo
-// l'editor (potremmo distruggere modifiche locali in corso). Il conflitto
-// viene catturato al prossimo save. La UI mostra solo un warning soft.
+// Se il doc viene aggiornato esternamente E ho modifiche locali pending,
+// mostro warning soft. Il conflict viene catturato al prossimo save.
 const externalUpdatePending = computed(() => {
   if (!doc.value || !initializedFromDoc.value) return false
-  return doc.value.revision > baseRevision.value
+  return doc.value.revision > baseRevision.value && isDirty.value
 })
 
 // ── Autosave (debounce 1.5s) ────────────────────────────────────────────────
 let autosaveTimer: ReturnType<typeof setTimeout> | null = null
 function scheduleAutosave() {
   if (!initializedFromDoc.value || !canWrite.value) return
+  isDirty.value = true
   if (autosaveTimer) clearTimeout(autosaveTimer)
   saveStatus.value = 'idle'
   autosaveTimer = setTimeout(() => {
@@ -152,6 +185,7 @@ async function performSave(trigger: 'autosave' | 'manual') {
       trigger,
     })
     baseRevision.value = out.revision
+    isDirty.value = false
     saveStatus.value = 'saved'
   } catch (e: any) {
     if (isSaveDocConflict(e)) {
@@ -178,8 +212,10 @@ function resolveReload() {
   // Scarta modifiche locali, ricarica contenuto server.
   if (!conflict.value || !editor.value) return
   localTitle.value = conflict.value.currentTitle
-  editor.value.commands.setContent(conflict.value.currentContent as any, false)
+  const rawContent = JSON.parse(JSON.stringify(conflict.value.currentContent))
+  editor.value.commands.setContent(rawContent, false)
   baseRevision.value = conflict.value.currentRevision
+  isDirty.value = false
   conflict.value = null
   saveStatus.value = 'saved'
   saveError.value = ''
@@ -293,6 +329,8 @@ void editorRef
           <MaterialIcon name="arrow_back" :size="20" />
         </button>
 
+        <PresenceStack :peers="peers" :maxVisible="3" />
+
         <div class="nd-status" :class="`nd-status-${saveStatus}`">
           <template v-if="!canWrite">
             <MaterialIcon name="visibility" :size="14" color="#888" />
@@ -315,6 +353,27 @@ void editorRef
             <span>rev {{ baseRevision }}</span>
           </template>
         </div>
+
+        <button
+          type="button"
+          class="nd-history-btn"
+          title="Storia revisioni"
+          aria-label="Storia revisioni"
+          @click="doc && router.push(`/nebula/docs/${doc.id}/history`)"
+        >
+          <MaterialIcon name="history" :size="14" />
+        </button>
+
+        <button
+          v-if="isOwner"
+          type="button"
+          class="nd-share-btn"
+          title="Condividi documento"
+          @click="showShareModal = true"
+        >
+          <MaterialIcon name="share" :size="14" />
+          <span class="nd-share-label">Condividi</span>
+        </button>
 
         <button
           v-if="canWrite"
@@ -457,16 +516,47 @@ void editorRef
         </div>
       </div>
     </div>
+
+    <!-- Share modal (solo per owner) -->
+    <ShareDocModal
+      v-if="showShareModal && doc"
+      :docId="doc.id"
+      :acl="doc.acl"
+      @close="showShareModal = false"
+      @updated="showShareModal = false"
+    />
   </div>
 </template>
 
 <style scoped>
 .nd-root {
+  /* Pattern PWA mobile (memoria feedback_pwa_mobile_view_pattern):
+     .s-main parent ha overflow:hidden → la view deve essere scrollabile
+     da sola (root: height 100% + overflow-y auto). overflow-x:hidden
+     blinda contro elementi che fuoriescono (es. toolbar molto larghe).
+     min-width:0 + width:100% spezza la catena flex-min-content che
+     altrimenti propaga il min-content dei children nowrap up to .s-main. */
+  height: 100%;
+  min-width: 0;
+  width: 100%;
   max-width: 820px;
+  overflow-y: auto;
+  overflow-x: hidden;
   margin: 0 auto;
   padding: 24px 20px 80px;
   font-family: 'Outfit', system-ui, sans-serif;
   color: var(--md-sys-color-on-surface, #1a1a1a);
+  /* Box-sizing border-box per coerenza padding ↔ max-width */
+  box-sizing: border-box;
+}
+
+/* Defensive border-box scope: previene overflow su mobile di child con
+   width:100% + padding (es. button manual save, toolbar). */
+.nd-root,
+.nd-root *,
+.nd-root *::before,
+.nd-root *::after {
+  box-sizing: border-box;
 }
 
 /* Loading / error */
@@ -538,7 +628,9 @@ void editorRef
   to { transform: rotate(360deg); }
 }
 
-.nd-manual-save {
+.nd-manual-save,
+.nd-share-btn,
+.nd-history-btn {
   background: transparent;
   border: 1px solid rgba(196, 96, 48, 0.35);
   color: #C46030;
@@ -551,8 +643,12 @@ void editorRef
   align-items: center;
   gap: 5px;
 }
-.nd-manual-save:hover:not(:disabled) { background: rgba(196, 96, 48, 0.08); }
+.nd-manual-save:hover:not(:disabled),
+.nd-share-btn:hover,
+.nd-history-btn:hover { background: rgba(196, 96, 48, 0.08); }
 .nd-manual-save:disabled { opacity: 0.5; cursor: wait; }
+.nd-share-btn { padding: 6px 12px; }
+.nd-history-btn { padding: 6px; }
 
 /* External update warning */
 .nd-external-warn {
@@ -573,6 +669,9 @@ void editorRef
   align-items: center;
   gap: 12px;
   margin: 24px 0 12px;
+  /* Permette al child .nd-title-input (flex:1) di shrinkare oltre la sua
+     intrinsic min-width per non far overflow su mobile. */
+  min-width: 0;
 }
 .nd-icon-btn {
   background: transparent;
@@ -591,6 +690,8 @@ void editorRef
 
 .nd-title-input {
   flex: 1;
+  min-width: 0;            /* essenziale, vedi .nd-title-row */
+  width: 100%;
   border: 0;
   outline: 0;
   background: transparent;
@@ -787,4 +888,46 @@ void editorRef
 .nd-modal-btn-primary:hover { background: #B85425; }
 .nd-modal-btn-secondary { background: rgba(0,0,0,0.06); color: #444; }
 .nd-modal-btn-secondary:hover { background: rgba(0,0,0,0.10); }
+
+/* ProseMirror: no overflow orizzontale (pre/table/img possono spillare) */
+.nd-editor :deep(.ProseMirror) {
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+.nd-editor :deep(.ProseMirror img) { max-width: 100%; height: auto; }
+.nd-editor :deep(.ProseMirror pre) {
+  max-width: 100%;
+  overflow-x: auto;        /* code block scrolla orizzontalmente al suo interno */
+  white-space: pre;
+  word-wrap: normal;
+}
+.nd-editor :deep(.ProseMirror table) { max-width: 100%; }
+
+/* Mobile: meno padding, title più piccolo, toolbar compatta */
+@media (max-width: 600px) {
+  .nd-root {
+    padding: 16px 12px 80px;
+  }
+  .nd-title-input {
+    font-size: 28px;
+  }
+  .nd-toolbar {
+    padding: 4px 6px;
+    gap: 1px;
+  }
+  .nd-toolbar button {
+    padding: 5px 7px;
+    min-width: 26px;
+    height: 28px;
+    font-size: 12px;
+  }
+  .nd-toolbar .tb-sep { margin: 0 2px; }
+  .nd-icon-picker-wrap {
+    margin: 0 0 24px 0;
+  }
+  .nd-modal { padding: 18px 18px; }
+  /* Share button su mobile: solo icona per non rubare spazio */
+  .nd-share-label { display: none; }
+  .nd-share-btn { padding: 6px; }
+}
 </style>
