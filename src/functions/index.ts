@@ -2450,3 +2450,120 @@ exports.historyPrune = functions
         console.log(`[historyPrune] processed ${docsProcessed} docs, deleted ${totalDeleted} old snapshots`);
         return null;
     });
+
+// ============================================================================
+// NEBULA-DOCS — API key management (F4-C2)
+// Schema nebulaApiKeys/{keyHash}:
+//   - userEmail: string (lowercase) — owner della chiave
+//   - label: string (es. "Claude Desktop Marco")
+//   - prefix: string (primi 12 char della chiave plain, per display)
+//   - createdAt: Timestamp
+//   - lastUsedAt: Timestamp | null  (aggiornato dal MCP server)
+//   - revoked: boolean
+//   - revokedAt: Timestamp | null
+//
+// Lo storage usa il HASH della chiave come ID Firestore: il MCP server
+// hasha la Bearer token in arrivo e fa getDoc diretto → O(1) lookup +
+// niente plain key salvata. Il prefix (12 char) è per display nella lista.
+// ============================================================================
+
+import { randomBytes, createHash } from 'crypto';
+
+function generateApiKeyPair(): { plain: string; hash: string; prefix: string } {
+    const random = randomBytes(32).toString('hex'); // 64 hex chars
+    const plain = `nbk_${random}`;                  // total 68 chars
+    const hash = createHash('sha256').update(plain).digest('hex');
+    const prefix = plain.substring(0, 12);          // "nbk_a3b8c2d1"
+    return { plain, hash, prefix };
+}
+
+exports.generateNebulaApiKey = functions
+    .region('europe-west1')
+    .https.onCall(async (data, context) => {
+        if (!context.auth) {
+            throw new functions.https.HttpsError('unauthenticated', 'Richiesto login');
+        }
+        const userEmail = nebulaNormalizeEmail(context.auth.token.email);
+        if (!userEmail) {
+            throw new functions.https.HttpsError('failed-precondition', 'Email utente mancante');
+        }
+        const label = ((data?.label ?? '') as string).trim() || 'Chiave senza nome';
+
+        const { plain, hash, prefix } = generateApiKeyPair();
+        const db = admin.firestore();
+        const now = admin.firestore.FieldValue.serverTimestamp();
+
+        await db.collection('nebulaApiKeys').doc(hash).set({
+            userEmail,
+            label,
+            prefix,
+            createdAt: now,
+            lastUsedAt: null,
+            revoked: false,
+            revokedAt: null,
+        });
+
+        // Ritorna la chiave plain UNA SOLA VOLTA (server non la salva)
+        return {
+            id: hash,
+            prefix,
+            plainKey: plain,
+            label,
+        };
+    });
+
+exports.revokeNebulaApiKey = functions
+    .region('europe-west1')
+    .https.onCall(async (data, context) => {
+        if (!context.auth) {
+            throw new functions.https.HttpsError('unauthenticated', 'Richiesto login');
+        }
+        const userEmail = nebulaNormalizeEmail(context.auth.token.email);
+        const id: string | undefined = data?.id;
+        if (!id) throw new functions.https.HttpsError('invalid-argument', 'id mancante');
+
+        const db = admin.firestore();
+        const ref = db.collection('nebulaApiKeys').doc(id);
+        const snap = await ref.get();
+        if (!snap.exists) throw new functions.https.HttpsError('not-found', 'Chiave non trovata');
+
+        const k = snap.data() as { userEmail?: string };
+        if (k.userEmail !== userEmail) {
+            throw new functions.https.HttpsError('permission-denied', 'Non puoi revocare chiavi di altri utenti');
+        }
+
+        await ref.update({
+            revoked: true,
+            revokedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        return { id, revoked: true };
+    });
+
+exports.listNebulaApiKeys = functions
+    .region('europe-west1')
+    .https.onCall(async (_data, context) => {
+        if (!context.auth) {
+            throw new functions.https.HttpsError('unauthenticated', 'Richiesto login');
+        }
+        const userEmail = nebulaNormalizeEmail(context.auth.token.email);
+        const db = admin.firestore();
+
+        const snap = await db.collection('nebulaApiKeys')
+            .where('userEmail', '==', userEmail)
+            .get();
+
+        return {
+            keys: snap.docs.map(d => {
+                const x = d.data() as any;
+                return {
+                    id: d.id,
+                    prefix: x.prefix,
+                    label: x.label,
+                    createdAt: x.createdAt?.toMillis?.() ?? null,
+                    lastUsedAt: x.lastUsedAt?.toMillis?.() ?? null,
+                    revoked: !!x.revoked,
+                    revokedAt: x.revokedAt?.toMillis?.() ?? null,
+                };
+            }).sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0)),
+        };
+    });

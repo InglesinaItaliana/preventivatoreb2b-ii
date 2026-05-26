@@ -2166,4 +2166,111 @@ exports.historyPrune = functions
     console.log(`[historyPrune] processed ${docsProcessed} docs, deleted ${totalDeleted} old snapshots`);
     return null;
 });
+// ============================================================================
+// NEBULA-DOCS — API key management (F4-C2)
+// Schema nebulaApiKeys/{keyHash}:
+//   - userEmail: string (lowercase) — owner della chiave
+//   - label: string (es. "Claude Desktop Marco")
+//   - prefix: string (primi 12 char della chiave plain, per display)
+//   - createdAt: Timestamp
+//   - lastUsedAt: Timestamp | null  (aggiornato dal MCP server)
+//   - revoked: boolean
+//   - revokedAt: Timestamp | null
+//
+// Lo storage usa il HASH della chiave come ID Firestore: il MCP server
+// hasha la Bearer token in arrivo e fa getDoc diretto → O(1) lookup +
+// niente plain key salvata. Il prefix (12 char) è per display nella lista.
+// ============================================================================
+const crypto_1 = require("crypto");
+function generateApiKeyPair() {
+    const random = (0, crypto_1.randomBytes)(32).toString('hex'); // 64 hex chars
+    const plain = `nbk_${random}`; // total 68 chars
+    const hash = (0, crypto_1.createHash)('sha256').update(plain).digest('hex');
+    const prefix = plain.substring(0, 12); // "nbk_a3b8c2d1"
+    return { plain, hash, prefix };
+}
+exports.generateNebulaApiKey = functions
+    .region('europe-west1')
+    .https.onCall(async (data, context) => {
+    var _a;
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Richiesto login');
+    }
+    const userEmail = nebulaNormalizeEmail(context.auth.token.email);
+    if (!userEmail) {
+        throw new functions.https.HttpsError('failed-precondition', 'Email utente mancante');
+    }
+    const label = ((_a = data === null || data === void 0 ? void 0 : data.label) !== null && _a !== void 0 ? _a : '').trim() || 'Chiave senza nome';
+    const { plain, hash, prefix } = generateApiKeyPair();
+    const db = admin.firestore();
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    await db.collection('nebulaApiKeys').doc(hash).set({
+        userEmail,
+        label,
+        prefix,
+        createdAt: now,
+        lastUsedAt: null,
+        revoked: false,
+        revokedAt: null,
+    });
+    // Ritorna la chiave plain UNA SOLA VOLTA (server non la salva)
+    return {
+        id: hash,
+        prefix,
+        plainKey: plain,
+        label,
+    };
+});
+exports.revokeNebulaApiKey = functions
+    .region('europe-west1')
+    .https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Richiesto login');
+    }
+    const userEmail = nebulaNormalizeEmail(context.auth.token.email);
+    const id = data === null || data === void 0 ? void 0 : data.id;
+    if (!id)
+        throw new functions.https.HttpsError('invalid-argument', 'id mancante');
+    const db = admin.firestore();
+    const ref = db.collection('nebulaApiKeys').doc(id);
+    const snap = await ref.get();
+    if (!snap.exists)
+        throw new functions.https.HttpsError('not-found', 'Chiave non trovata');
+    const k = snap.data();
+    if (k.userEmail !== userEmail) {
+        throw new functions.https.HttpsError('permission-denied', 'Non puoi revocare chiavi di altri utenti');
+    }
+    await ref.update({
+        revoked: true,
+        revokedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    return { id, revoked: true };
+});
+exports.listNebulaApiKeys = functions
+    .region('europe-west1')
+    .https.onCall(async (_data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Richiesto login');
+    }
+    const userEmail = nebulaNormalizeEmail(context.auth.token.email);
+    const db = admin.firestore();
+    const snap = await db.collection('nebulaApiKeys')
+        .where('userEmail', '==', userEmail)
+        .get();
+    return {
+        keys: snap.docs.map(d => {
+            var _a, _b, _c, _d, _e, _f, _g, _h, _j;
+            const x = d.data();
+            return {
+                id: d.id,
+                prefix: x.prefix,
+                label: x.label,
+                createdAt: (_c = (_b = (_a = x.createdAt) === null || _a === void 0 ? void 0 : _a.toMillis) === null || _b === void 0 ? void 0 : _b.call(_a)) !== null && _c !== void 0 ? _c : null,
+                lastUsedAt: (_f = (_e = (_d = x.lastUsedAt) === null || _d === void 0 ? void 0 : _d.toMillis) === null || _e === void 0 ? void 0 : _e.call(_d)) !== null && _f !== void 0 ? _f : null,
+                revoked: !!x.revoked,
+                revokedAt: (_j = (_h = (_g = x.revokedAt) === null || _g === void 0 ? void 0 : _g.toMillis) === null || _h === void 0 ? void 0 : _h.call(_g)) !== null && _j !== void 0 ? _j : null,
+            };
+        }).sort((a, b) => { var _a, _b; return ((_a = b.createdAt) !== null && _a !== void 0 ? _a : 0) - ((_b = a.createdAt) !== null && _b !== void 0 ? _b : 0); }),
+    };
+});
 //# sourceMappingURL=index.js.map
