@@ -12,6 +12,11 @@ import { useProjects } from '../../composables/sidera/useProjects'
 import { useChats } from '../../composables/pulsar/useChats'
 import { createStandaloneTask } from '../../composables/sidera/useAllTasks'
 import MIcon from '../../components/shared/MIcon.vue'
+import MdPageHeader from '../../components/shared/MdPageHeader.vue'
+import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
+
+const scrollEl = ref<HTMLElement | null>(null)
+const { hidden: headerHidden } = useAutoHideHeader(scrollEl)
 
 const router = useRouter()
 const { members } = useTeamMembers()
@@ -317,14 +322,15 @@ async function submitTask() {
 </script>
 
 <template>
-  <div class="pv">
-    <div class="pv-header">
-      <h2 class="pv-title">Pendenze</h2>
-      <p class="pv-sub">
-        <template v-if="loading">Caricamento…</template>
-        <template v-else>{{ pendingQuestions.length }} domande · {{ pendingTasks.length }} azioni da creare</template>
-      </p>
-    </div>
+  <div class="pv" ref="scrollEl">
+    <MdPageHeader
+      title="Pendenze"
+      :subtitle="loading
+        ? 'Caricamento…'
+        : `${pendingQuestions.length} domande · ${pendingTasks.length} azioni da creare`"
+      sticky
+      :hidden="headerHidden"
+    />
 
     <div v-if="loading" class="loading-list">
       <div v-for="i in 4" :key="i" class="msg-skel" />
@@ -343,7 +349,6 @@ async function submitTask() {
             <MIcon :name="group.chatIsGroup ? 'group' : 'person'" filled :size="18" class="group-icon" />
             <span class="group-name">{{ group.chatName }}</span>
             <span class="group-count">{{ group.msgs.length }}</span>
-            <MIcon :name="isExpanded(group.chatId) ? 'expand_less' : 'expand_more'" :size="20" class="group-chevron" />
           </button>
           <div v-if="isExpanded(group.chatId)" class="group-body">
             <div v-for="msg in group.msgs" :key="msg.id" class="msg-card">
@@ -401,7 +406,6 @@ async function submitTask() {
             <MIcon :name="group.chatIsGroup ? 'group' : 'person'" filled :size="18" class="group-icon" />
             <span class="group-name">{{ group.chatName }}</span>
             <span class="group-count">{{ group.msgs.length }}</span>
-            <MIcon :name="isExpanded(group.chatId) ? 'expand_less' : 'expand_more'" :size="20" class="group-chevron" />
           </button>
           <div v-if="isExpanded(group.chatId)" class="group-body">
             <div v-for="msg in group.msgs" :key="msg.id" class="msg-card">
@@ -512,34 +516,51 @@ async function submitTask() {
 <style scoped>
 .pv {
   font-family: 'Outfit', sans-serif;
-  color: #1A1917;
+  color: var(--md-sys-color-on-surface);
   height: 100%;
   overflow: auto;
+  --page-bg: #EFE7D9;
+  background: var(--page-bg);
+}
+.s-surface-dark .pv { --page-bg: #0E0C07; }
+@media (prefers-color-scheme: dark) {
+  .pv { --page-bg: #0E0C07; }
 }
 
-.pv-header {
-  padding: 18px 20px 14px;
-  border-bottom: 1px solid #E8E5DF;
-  background: #fff;
+:deep(.md-page-header) { padding: 18px 16px 14px; }
+:deep(.md-page-header.is-sticky) {
+  background: var(--md-sys-color-surface);
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+}
+@media (min-width: 1024px) {
+  :deep(.md-page-header) { padding: 24px max(40px, calc(50% - 410px)) 18px; }
 }
 
-.pv-title {
-  font-family: 'Outfit', sans-serif;
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: #1A1917;
-  margin: 0 0 4px 0;
+/* Sezioni dirette dentro .pv (niente wrapper extra: lo sticky di MdPageHeader
+   si attacca al primo ancestor scrollabile = .pv stesso). Padding e
+   max-width applicati a ciascuna sezione. */
+.loading-list,
+.section,
+.empty-state {
+  max-width: 920px;
+  margin-left: auto;
+  margin-right: auto;
+  padding-left: 16px;
+  padding-right: 16px;
+  box-sizing: border-box;
 }
-
-.pv-sub { font-size: 12px; color: #9B9590; }
-
-.loading-list { padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; }
+.loading-list { padding-top: 16px; padding-bottom: 0; display: flex; flex-direction: column; gap: 10px; }
+@media (min-width: 1024px) {
+  .loading-list, .section, .empty-state {
+    max-width: 900px;
+    padding-left: 40px;
+    padding-right: 40px;
+  }
+}
 
 .msg-skel {
-  height: 90px; border-radius: 14px;
-  background: #E8E5DF;
+  height: 90px; border-radius: 16px;
+  background: color-mix(in srgb, var(--md-sys-color-outline-variant) 60%, transparent);
   animation: pulse 1.4s ease-in-out infinite;
 }
 
@@ -547,21 +568,20 @@ async function submitTask() {
 
 .empty-state {
   padding: 60px 20px; text-align: center;
-  color: #9B9590; font-size: 14px;
+  color: var(--md-sys-color-on-surface-variant); font-size: 14px;
   display: flex; flex-direction: column; align-items: center; gap: 10px;
 }
 
 .empty-icon { color: var(--md-sys-color-primary); opacity: 0.35; }
 
-.section { margin-bottom: 4px; }
+.section { margin-bottom: 16px; padding-top: 16px; padding-bottom: 0; }
 
 .section-header {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 16px 20px 12px;
-  background: var(--md-sys-color-surface-container);
-  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+  padding: 8px 4px 10px;
+  background: transparent;
 }
 
 .section-icon {
@@ -590,10 +610,19 @@ async function submitTask() {
   text-align: center;
 }
 
-/* ── Gruppi per chat dentro le sezioni ────────────────────────────────── */
+/* ── Gruppi per chat — card surface con stato collassato/aperto via
+   bordo accent (memoria feedback_no_chevrons) ─────────────────────── */
 .chat-group {
-  background: #fff;
-  border-bottom: 1px solid #E8E5DF;
+  background: var(--md-sys-color-surface);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: 16px;
+  box-shadow: var(--md-sys-elevation-level-1);
+  margin-bottom: 10px;
+  overflow: hidden;
+  transition: border-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
+}
+.chat-group:has(.group-body) {
+  border-left: 3px solid var(--md-sys-color-primary);
 }
 
 .group-header {
@@ -601,10 +630,9 @@ async function submitTask() {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 20px;
-  background: #fff;
+  padding: 12px 16px;
+  background: transparent;
   border: none;
-  border-bottom: 1px solid #F4F2EE;
   cursor: pointer;
   font-family: inherit;
   text-align: left;
@@ -623,7 +651,7 @@ async function submitTask() {
   flex: 1;
   font-size: 13px;
   font-weight: 600;
-  color: #1A1917;
+  color: var(--md-sys-color-on-surface);
   letter-spacing: 0.01em;
 }
 
@@ -633,34 +661,27 @@ async function submitTask() {
   color: var(--md-sys-color-primary);
   background: color-mix(in srgb, var(--md-sys-color-primary) 12%, transparent);
   padding: 2px 8px;
-  border-radius: 20px;
+  border-radius: var(--md-sys-shape-corner-full);
   min-width: 22px;
   text-align: center;
 }
 
-.group-chevron {
-  color: #9B9590;
-  flex-shrink: 0;
-}
-
 .group-body {
-  background: #FAF9F6;
-  padding: 2px 0;
+  background: color-mix(in srgb, var(--md-sys-color-primary) 3%, var(--md-sys-color-surface));
+  border-top: 1px solid var(--md-sys-color-outline-variant);
 }
 .group-body .msg-card {
   background: transparent;
-  border-bottom: 1px solid #F0EDE8;
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
 }
 .group-body .msg-card:last-child {
   border-bottom: none;
 }
-/* dentro un gruppo, il chat-name nella card-meta è ridondante (è nel header del gruppo) */
 .group-body .card-chat { display: none; }
 
 .msg-card {
-  background: #fff;
-  padding: 14px 20px;
-  border-bottom: 1px solid #F0EDE8;
+  background: var(--md-sys-color-surface);
+  padding: 14px 16px;
 }
 
 .card-header {
@@ -677,12 +698,12 @@ async function submitTask() {
 }
 
 .card-meta { flex: 1; }
-.card-sender { font-size: 13px; font-weight: 600; color: #1A1917; }
-.card-chat   { font-size: 11px; color: #9B9590; }
-.card-time   { font-size: 11px; color: #B0ADA8; flex-shrink: 0; }
+.card-sender { font-size: 13px; font-weight: 600; color: var(--md-sys-color-on-surface); }
+.card-chat   { font-size: 11px; color: var(--md-sys-color-on-surface-variant); }
+.card-time   { font-size: 11px; color: var(--md-sys-color-on-surface-variant); flex-shrink: 0; }
 
 .card-text {
-  font-size: 14px; line-height: 1.5; color: #3A3835;
+  font-size: 14px; line-height: 1.5; color: var(--md-sys-color-on-surface);
   margin: 0 0 10px; word-break: break-word;
 }
 

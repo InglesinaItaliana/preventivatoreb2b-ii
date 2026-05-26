@@ -1,17 +1,22 @@
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { collectionGroup, query, where, orderBy, onSnapshot, getDoc, doc, setDoc, deleteDoc } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { displayName, useTeamMembers, starAvatarProps } from '../../composables/sidera/useTeamMembers'
 import StarAvatar from '../../components/shared/StarAvatar.vue'
 import MIcon from '../../components/shared/MIcon.vue'
+import MdPageHeader from '../../components/shared/MdPageHeader.vue'
+import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
 
 const route  = useRoute()
 const router = useRouter()
 const { members } = useTeamMembers()
 
 const tagName = route.params.tag as string
+
+const scrollEl = ref<HTMLElement | null>(null)
+const { hidden: headerHidden } = useAutoHideHeader(scrollEl)
 
 interface TagMessage {
   id: string
@@ -72,7 +77,6 @@ const unsubscribe = onSnapshot(q, async (snap) => {
   tagMessages.value = results
   loading.value = false
   // Riallinea il contatore denormalizzato al numero reale di messaggi.
-  // Se non ne resta nessuno, elimino il doc così l'hashtag sparisce dai chip.
   if (results.length === 0) {
     deleteDoc(doc(db, 'chatHashtags', tagName)).catch(() => {})
   } else {
@@ -97,42 +101,45 @@ function renderText(t: string) {
 </script>
 
 <template>
-  <div class="hv">
-    <!-- Header -->
-    <div class="hv-header">
-      <h2 class="hv-title">#{{ tagName }}</h2>
-      <p class="hv-sub">{{ tagMessages.length }} messaggi</p>
-    </div>
+  <div class="hv" ref="scrollEl">
+    <MdPageHeader
+      :title="'#' + tagName"
+      :subtitle="`${tagMessages.length} ${tagMessages.length === 1 ? 'messaggio' : 'messaggi'}`"
+      sticky
+      :hidden="headerHidden"
+    />
 
-    <!-- Loading -->
-    <div v-if="loading" class="loading-list">
-      <div v-for="i in 4" :key="i" class="msg-skel" />
-    </div>
+    <div class="hv-content">
+      <!-- Loading -->
+      <div v-if="loading" class="loading-list">
+        <div v-for="i in 4" :key="i" class="msg-skel" />
+      </div>
 
-    <!-- Empty -->
-    <div v-else-if="!tagMessages.length" class="empty-state">
-      Nessun messaggio con #{{ tagName }} ancora.
-    </div>
+      <!-- Empty -->
+      <div v-else-if="!tagMessages.length" class="empty-state">
+        Nessun messaggio con #{{ tagName }} ancora.
+      </div>
 
-    <!-- Message cards -->
-    <div v-else class="msg-cards">
-      <div v-for="msg in tagMessages" :key="msg.id" class="msg-card">
-        <div class="card-header">
-          <StarAvatar v-bind="starAvatarProps(msg.from, members)" :size="32" />
-          <div class="card-meta">
-            <div class="card-sender">{{ displayName(msg.from, members) }}</div>
-            <div class="card-chat">in {{ msg.chatName }}</div>
+      <!-- Message cards -->
+      <div v-else class="msg-cards">
+        <div v-for="msg in tagMessages" :key="msg.id" class="msg-card">
+          <div class="card-header">
+            <StarAvatar v-bind="starAvatarProps(msg.from, members)" :size="32" />
+            <div class="card-meta">
+              <div class="card-sender">{{ displayName(msg.from, members) }}</div>
+              <div class="card-chat">in {{ msg.chatName }}</div>
+            </div>
+            <div class="card-time">{{ formatTime(msg.createdAt) }}</div>
           </div>
-          <div class="card-time">{{ formatTime(msg.createdAt) }}</div>
+          <p class="card-text" v-html="renderText(msg.text)" />
+          <button
+            class="open-btn"
+            @click="router.push('/pulsar/chat/' + msg.chatId + '?msg=' + msg.id)"
+          >
+            Apri in chat
+            <MIcon name="open_in_new" :size="14" class="open-btn-icon" />
+          </button>
         </div>
-        <p class="card-text" v-html="renderText(msg.text)" />
-        <button
-          class="open-btn"
-          @click="router.push('/pulsar/chat/' + msg.chatId + '?msg=' + msg.id)"
-        >
-          Apri in chat
-          <MIcon name="open_in_new" :size="14" class="open-btn-icon" />
-        </button>
       </div>
     </div>
   </div>
@@ -140,35 +147,50 @@ function renderText(t: string) {
 
 <style scoped>
 .hv {
-  padding: 0;
   font-family: 'Outfit', sans-serif;
-  color: #1A1917;
+  color: var(--md-sys-color-on-surface);
+  height: 100%;
+  width: 100%;
+  overflow: auto;
+  --page-bg: #EFE7D9;
+  background: var(--page-bg);
+}
+.s-surface-dark .hv { --page-bg: #0E0C07; }
+@media (prefers-color-scheme: dark) {
+  .hv { --page-bg: #0E0C07; }
 }
 
-.hv-header {
-  padding: 18px 20px 14px;
-  border-bottom: 1px solid #E8E5DF;
-  background: #fff;
+:deep(.md-page-header) { padding: 18px 16px 14px; }
+:deep(.md-page-header.is-sticky) {
+  background: var(--md-sys-color-surface);
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
 }
-
-.hv-title {
-  font-family: 'Outfit', sans-serif;
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
+:deep(.md-page-header__title) {
   text-transform: lowercase;
-  color: var(--md-sys-color-primary-hover);
-  margin: 0 0 4px 0;
+  letter-spacing: 0.04em;
+  color: var(--md-sys-color-primary);
+}
+@media (min-width: 1024px) {
+  :deep(.md-page-header) { padding: 24px max(40px, calc(50% - 410px)) 18px; }
 }
 
-.hv-sub { font-size: 12px; color: #9B9590; }
+.hv-content {
+  max-width: 920px;
+  margin: 0 auto;
+  width: 100%;
+  padding: 16px;
+  box-sizing: border-box;
+}
+@media (min-width: 1024px) {
+  .hv-content { padding: 24px 40px; max-width: 900px; }
+}
 
 /* Loading */
-.loading-list { padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; }
+.loading-list { display: flex; flex-direction: column; gap: 10px; }
 
 .msg-skel {
-  height: 90px; border-radius: 14px;
-  background: #E8E5DF;
+  height: 90px; border-radius: 16px;
+  background: color-mix(in srgb, var(--md-sys-color-outline-variant) 60%, transparent);
   animation: pulse 1.4s ease-in-out infinite;
 }
 
@@ -177,17 +199,20 @@ function renderText(t: string) {
 .empty-state {
   padding: 60px 20px;
   text-align: center;
-  color: #9B9590;
+  color: var(--md-sys-color-on-surface-variant);
   font-size: 14px;
 }
 
 /* Cards */
-.msg-cards { display: flex; flex-direction: column; gap: 1px; }
+.msg-cards { display: flex; flex-direction: column; gap: 10px; }
 
 .msg-card {
-  background: #fff;
-  padding: 14px 20px;
-  border-bottom: 1px solid #F0EDE8;
+  background: var(--md-sys-color-surface);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: 16px;
+  box-shadow: var(--md-sys-elevation-level-1);
+  padding: 14px 16px;
+  transition: border-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
 }
 
 .card-header {
@@ -197,28 +222,21 @@ function renderText(t: string) {
   margin-bottom: 10px;
 }
 
-.card-avatar {
-  width: 36px; height: 36px;
-  border-radius: var(--md-sys-shape-corner-full);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 13px; font-weight: 700; flex-shrink: 0;
-}
-
 .card-meta { flex: 1; }
 
-.card-sender { font-size: 13px; font-weight: 600; color: #1A1917; }
-.card-chat   { font-size: 11px; color: #9B9590; }
-.card-time   { font-size: 11px; color: #B0ADA8; flex-shrink: 0; }
+.card-sender { font-size: 13px; font-weight: 600; color: var(--md-sys-color-on-surface); }
+.card-chat   { font-size: 11px; color: var(--md-sys-color-on-surface-variant); }
+.card-time   { font-size: 11px; color: var(--md-sys-color-on-surface-variant); flex-shrink: 0; }
 
 .card-text {
   font-size: 14px;
   line-height: 1.5;
-  color: #3A3835;
+  color: var(--md-sys-color-on-surface);
   margin: 0 0 10px;
   word-break: break-word;
 }
 
-:deep(.msg-hashtag) { color: var(--md-sys-color-primary-hover); font-weight: 600; }
+:deep(.msg-hashtag) { color: var(--md-sys-color-primary); font-weight: 600; }
 :deep(.msg-mention) { color: #2F6B4A; font-weight: 600; }
 
 .open-btn {
@@ -227,8 +245,8 @@ function renderText(t: string) {
   gap: 6px;
   padding: 8px 16px;
   border-radius: var(--md-sys-shape-corner-full);
-  border: 1px solid transparent;
-  background: var(--md-sys-color-surface-container);
+  border: 1px solid color-mix(in srgb, var(--md-sys-color-primary) 30%, transparent);
+  background: transparent;
   font-size: 12px;
   font-weight: 600;
   font-family: 'Outfit', sans-serif;
@@ -237,6 +255,9 @@ function renderText(t: string) {
   transition: all 0.18s ease;
 }
 
-.open-btn:hover { background: color-mix(in srgb, var(--md-sys-color-primary) 20%, transparent); }
+.open-btn:hover {
+  background: color-mix(in srgb, var(--md-sys-color-primary) 8%, transparent);
+  border-color: var(--md-sys-color-primary);
+}
 .open-btn-icon { opacity: 0.8; }
 </style>

@@ -2,12 +2,17 @@
 import { ref, computed, inject, watch, onMounted, nextTick, type Ref } from 'vue'
 import { useRouter } from 'vue-router'
 import MIcon from '../../components/shared/MIcon.vue'
+import MdPageHeader from '../../components/shared/MdPageHeader.vue'
+import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
 import { useChats } from '../../composables/pulsar/useChats'
 import { useUnreadChats } from '../../composables/pulsar/usePulsarUnread'
 import { useTeamMembers, displayName, starAvatarProps } from '../../composables/sidera/useTeamMembers'
 import { pulsarAvatarColor } from '../../composables/pulsar/usePulsarAvatar'
 import StarAvatar from '../../components/shared/StarAvatar.vue'
 import { auth } from '../../firebase'
+
+const scrollEl = ref<HTMLElement | null>(null)
+const { hidden: headerHidden } = useAutoHideHeader(scrollEl)
 
 const router = useRouter()
 const { chats, loading, createChat, deleteChat } = useChats()
@@ -116,15 +121,15 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="cv">
-    <header class="cv-header">
-      <h2 class="p-page-title">Messaggi</h2>
-      <p class="p-page-sub">
-        {{ unreadCount === 0
-          ? 'Nessun messaggio da leggere'
-          : (unreadCount === 1 ? '1 chat con messaggi non letti' : unreadCount + ' chat con messaggi non letti') }}
-      </p>
-    </header>
+  <div class="cv" ref="scrollEl">
+    <MdPageHeader
+      title="Messaggi"
+      :subtitle="unreadCount === 0
+        ? 'Nessun messaggio da leggere'
+        : (unreadCount === 1 ? '1 chat con messaggi non letti' : unreadCount + ' chat con messaggi non letti')"
+      sticky
+      :hidden="headerHidden"
+    />
 
     <!-- Loading -->
     <div v-if="loading" class="loading-list">
@@ -263,42 +268,42 @@ onMounted(() => {
 
 <style scoped>
 .cv {
-  padding: 0;
+  /* Pattern condiviso suite (CEPHEID Progetti / NEBULA Docs): scroll sul root,
+     page-bg beige caldo, header sticky con bg surface. */
+  height: 100%;
+  width: 100%;
+  overflow: auto;
   position: relative;
-  min-height: calc(100vh - 120px);
+  --page-bg: #EFE7D9;
+  background: var(--page-bg);
+}
+.s-surface-dark .cv { --page-bg: #0E0C07; }
+@media (prefers-color-scheme: dark) {
+  .cv { --page-bg: #0E0C07; }
 }
 
-/* Page header (stile uniforme PULSAR) */
-.cv-header {
-  padding: 18px 20px 14px;
-  background: #fff;
-  border-bottom: 1px solid #E8E5DF;
+/* header sticky con bg surface (stacca dalla pagina), gutter mobile 16px */
+:deep(.md-page-header) { padding: 18px 16px 14px; }
+:deep(.md-page-header.is-sticky) {
+  background: var(--md-sys-color-surface);
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
 }
-
-.p-page-title {
-  font-family: 'Outfit', sans-serif;
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: #1A1917;
-  margin: 0 0 4px 0;
+@media (min-width: 1024px) {
+  :deep(.md-page-header) { padding: 24px max(40px, calc(50% - 410px)) 18px; }
 }
-
-.p-page-sub { font-size: 12px; color: #9B9590; margin: 0; }
 
 /* Loading */
 .loading-list {
-  padding: 16px 20px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 }
 
 .chat-skel {
-  height: 62px;
-  border-radius: var(--md-sys-shape-corner-medium);
-  background: #E8E5DF;
+  height: 70px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--md-sys-color-outline-variant) 60%, transparent);
   animation: pulse 1.4s ease-in-out infinite;
 }
 
@@ -308,26 +313,48 @@ onMounted(() => {
 .empty-state {
   padding: 60px 20px;
   text-align: center;
-  color: #9B9590;
+  color: var(--md-sys-color-on-surface-variant);
   font-size: 14px;
   line-height: 1.7;
 }
 
-/* Chat list */
-.chat-list { display: flex; flex-direction: column; }
+/* Chat list — card surface per riga, allineate a NEBULA Docs */
+.chat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  max-width: 920px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+}
+@media (min-width: 1024px) {
+  .chat-list { padding: 24px 40px; max-width: 900px; }
+}
 
 .chat-row {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 14px 20px;
-  border-bottom: 1px solid #F0EDE8;
+  padding: 12px 14px;
+  background: var(--md-sys-color-surface);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: 16px;
+  box-shadow: var(--md-sys-elevation-level-1);
   cursor: pointer;
-  transition: background 0.15s;
-  background: #fff;
+  transition: background var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              border-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              box-shadow var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
 }
 
-.chat-row:hover { background: #F8F6F2; }
+@media (hover: hover) {
+  .chat-row:hover {
+    background: color-mix(in srgb, var(--md-sys-color-primary) 4%, var(--md-sys-color-surface));
+    border-color: color-mix(in srgb, var(--md-sys-color-primary) 30%, var(--md-sys-color-outline-variant));
+    box-shadow: var(--md-sys-elevation-level-2);
+  }
+}
 
 .chat-avatar {
   width: 46px;
@@ -350,12 +377,12 @@ onMounted(() => {
   margin-bottom: 3px;
 }
 
-.chat-name { font-size: 14px; font-weight: 600; color: #1A1917; }
-.chat-time { font-size: 11px; color: #9B9590; flex-shrink: 0; margin-left: 8px; }
+.chat-name { font-size: 14px; font-weight: 600; color: var(--md-sys-color-on-surface); }
+.chat-time { font-size: 11px; color: var(--md-sys-color-on-surface-variant); flex-shrink: 0; margin-left: 8px; }
 
 .chat-preview {
   font-size: 12px;
-  color: #6A6560;
+  color: var(--md-sys-color-on-surface-variant);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -365,16 +392,23 @@ onMounted(() => {
   background: none;
   border: none;
   cursor: pointer;
-  color: #C8C5C0;
+  color: var(--md-sys-color-on-surface-variant);
+  opacity: 0.5;
   padding: 4px 6px;
-  border-radius: 6px;
-  transition: color 0.15s, background 0.15s;
+  border-radius: var(--md-sys-shape-corner-full);
+  transition: color 0.15s, background 0.15s, opacity 0.15s;
   flex-shrink: 0;
   display: flex;
   align-items: center;
 }
 
-.delete-btn:hover { color: #C8521A; background: #C8521A10; }
+@media (hover: hover) {
+  .chat-row:hover .delete-btn { opacity: 1; }
+}
+.delete-btn:hover {
+  color: var(--md-sys-color-error);
+  background: color-mix(in srgb, var(--md-sys-color-error) 10%, transparent);
+}
 
 /* Modal */
 .modal-backdrop {
