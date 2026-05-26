@@ -15,13 +15,19 @@
  *  - Solo owner può archiviare (server-side check; UI mostra X per tutti
  *    ma il callable risponde permission-denied per non-owner)
  */
-import { ref, computed, watch, onUnmounted } from 'vue'
+import { ref, computed, watch, onUnmounted, onMounted, nextTick, inject, type Ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { collection, query, where, orderBy, onSnapshot, type Unsubscribe } from 'firebase/firestore'
 import { db } from '../../../firebase'
 import { useCurrentUser } from '../../../composables/sidera/useCurrentUser'
 import { saveDoc } from '../../../composables/nebula/useSaveDoc'
 import { archiveDoc } from '../../../composables/nebula/useArchiveDoc'
+import { useAutoHideHeader } from '../../../composables/shared/useAutoHideHeader'
+import MdPageHeader from '../../../components/shared/MdPageHeader.vue'
+import MIcon from '../../../components/shared/MIcon.vue'
+
+const scrollEl = ref<HTMLElement | null>(null)
+const { hidden: headerHidden } = useAutoHideHeader(scrollEl)
 
 const router = useRouter()
 const { currentUser } = useCurrentUser()
@@ -183,6 +189,26 @@ async function createDoc() {
   }
 }
 
+// Trigger dal FAB mobile del layout (vedi SideraLayout.onFabTrigger 'new-doc').
+const newDocTick = inject<Ref<number>>('nebula-new-doc-tick', null as any)
+if (newDocTick) watch(newDocTick, () => createDoc())
+onMounted(() => {
+  if (sessionStorage.getItem('nebula-pending-new-doc') === '1') {
+    sessionStorage.removeItem('nebula-pending-new-doc')
+    nextTick(() => createDoc())
+  }
+})
+
+// Sottotitolo MdPageHeader: privilegia il segnale "menzioni pendenti" se >0,
+// altrimenti mostra il conteggio dei propri doc.
+const mentionedSubtitle = computed(() => {
+  const m = mentionedDocs.value.length
+  if (m > 0) return `Sei menzionato in ${m} ${m === 1 ? 'documento' : 'documenti'}`
+  const n = myDocs.value.length
+  if (n === 0) return 'Nessun documento'
+  return `${n} ${n === 1 ? 'documento' : 'documenti'}`
+})
+
 function canArchive(d: DocRow): boolean {
   return myEmail.value !== '' && d.ownersSet.has(myEmail.value)
 }
@@ -321,38 +347,44 @@ function isActiveTouch(d: DocRow): boolean {
 </script>
 
 <template>
-  <div class="ndh-root" @click="closeSwipe()">
+  <div class="ndh-root" ref="scrollEl" @click="closeSwipe()">
     <div v-if="!allowed" class="ndh-denied" role="status">
       <span class="material-symbols-outlined ndh-icon">hourglass_top</span>
       <p>Caricamento sessione…</p>
     </div>
 
     <template v-else>
-      <header class="ndh-header">
-        <span class="material-symbols-outlined ndh-icon">description</span>
-        <div class="ndh-title-block">
-          <h2>NEBULA-DOCS</h2>
-          <p class="ndh-stage">I tuoi documenti</p>
-        </div>
-        <button
-          type="button"
-          class="ndh-integrations-btn"
-          title="Integrazioni · Connetti Claude (MCP)"
-          aria-label="Integrazioni"
-          @click="router.push('/nebula/docs/settings/integrations')"
-        >
-          <span class="material-symbols-outlined">vpn_key</span>
-        </button>
-        <button
-          type="button"
-          class="ndh-create-btn"
-          :disabled="creating"
-          @click="createDoc"
-        >
-          <span class="material-symbols-outlined">add</span>
-          {{ creating ? 'Creazione…' : 'Nuovo documento' }}
-        </button>
-      </header>
+      <MdPageHeader
+        title="Documenti"
+        :subtitle="mentionedSubtitle"
+        sticky
+        :hidden="headerHidden"
+      >
+        <template #tools>
+          <button
+            type="button"
+            class="ndh-integrations-btn"
+            title="Integrazioni · Connetti Claude (MCP)"
+            aria-label="Integrazioni"
+            @click="router.push('/nebula/docs/settings/integrations')"
+          >
+            <MIcon name="vpn_key" :size="18" />
+          </button>
+        </template>
+        <template #cta>
+          <button
+            type="button"
+            class="md-btn md-btn--filled md-btn--sm md-btn--square ndh-create-btn"
+            :disabled="creating"
+            @click="createDoc"
+          >
+            <MIcon name="add" :size="16" />
+            {{ creating ? 'Creazione…' : 'Nuovo documento' }}
+          </button>
+        </template>
+      </MdPageHeader>
+
+      <div class="ndh-content">
 
       <div v-if="lastError" class="ndh-toast ndh-toast-err">
         <span class="material-symbols-outlined">error</span>{{ lastError }}
@@ -361,7 +393,6 @@ function isActiveTouch(d: DocRow): boolean {
       <!-- Sezione 1: I miei documenti -->
       <section class="ndh-list-section">
         <h3>
-          <span class="material-symbols-outlined ndh-sec-icon">folder</span>
           I miei documenti
           <span v-if="!docsLoading" class="ndh-count">{{ myDocs.length }}</span>
         </h3>
@@ -434,7 +465,6 @@ function isActiveTouch(d: DocRow): boolean {
       <!-- Sezione 2: Sei menzionato (hidden se zero) -->
       <section v-if="mentionedDocs.length > 0" class="ndh-list-section">
         <h3>
-          <span class="material-symbols-outlined ndh-sec-icon">alternate_email</span>
           Sei menzionato in {{ mentionedDocs.length }} {{ mentionedDocs.length === 1 ? 'documento' : 'documenti' }}
         </h3>
         <ul class="ndh-list">
@@ -460,22 +490,28 @@ function isActiveTouch(d: DocRow): boolean {
           </li>
         </ul>
       </section>
+
+      </div>
     </template>
   </div>
 </template>
 
 <style scoped>
 .ndh-root {
+  /* Allineato al pattern Cruscotto / CepheidProjectsView: scroll sul root,
+     bg = --page-bg che fa anche da fondo dello sticky MdPageHeader. */
   height: 100%;
-  min-width: 0;
   width: 100%;
-  max-width: 920px;
-  overflow-y: auto;
-  overflow-x: hidden;
-  margin: 0 auto;
-  padding: 24px 20px 60px;
+  overflow: auto;
   font-family: 'Outfit', system-ui, sans-serif;
   box-sizing: border-box;
+  color: var(--md-sys-color-on-surface);
+  --page-bg: #EFE7D9;
+  background: var(--page-bg);
+}
+.s-surface-dark .ndh-root { --page-bg: #0E0C07; }
+@media (prefers-color-scheme: dark) {
+  .ndh-root { --page-bg: #0E0C07; }
 }
 
 .ndh-root,
@@ -485,8 +521,24 @@ function isActiveTouch(d: DocRow): boolean {
   box-sizing: border-box;
 }
 
-@media (max-width: 600px) {
-  .ndh-root { padding: 16px 12px 60px; }
+/* header allineato al contenuto: gutter mobile 16px (come .ndh-content).
+   Override bg sticky: invece di match-are il --page-bg (pattern CEPHEID),
+   l'header NEBULA usa il colore surface delle card per distinguersi visivamente
+   dallo sfondo beige. */
+:deep(.md-page-header) { padding: 18px 16px 14px; }
+:deep(.md-page-header.is-sticky) {
+  background: var(--md-sys-color-surface);
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+}
+
+.ndh-content {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 16px 16px 60px;
+}
+@media (min-width: 1024px) {
+  :deep(.md-page-header) { padding: 24px max(40px, calc(50% - 410px)) 18px; }
+  .ndh-content { padding: 24px 40px; max-width: 900px; }
 }
 
 /* Denied */
@@ -499,75 +551,32 @@ function isActiveTouch(d: DocRow): boolean {
   background: var(--md-sys-color-surface-container, #fff);
   box-shadow: var(--md-sys-elevation-level-1, 0 1px 3px rgba(0,0,0,0.06));
 }
-.ndh-denied .ndh-icon { color: #8a8a8a; }
-
-/* Header */
-.ndh-header {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin-bottom: 20px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid rgba(0,0,0,0.08);
-}
-.ndh-icon {
+.ndh-denied .ndh-icon {
   font-size: 36px;
-  color: #C46030;
+  color: #8a8a8a;
   font-variation-settings: 'FILL' 0, 'wght' 300;
   display: block;
 }
-.ndh-title-block { flex: 1; min-width: 0; }
-.ndh-header h2 {
-  font-family: 'Cormorant Garamond', serif;
-  font-weight: 600;
-  font-size: 26px;
-  margin: 0;
-}
-.ndh-stage {
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.05em;
-  text-transform: uppercase;
-  color: #C46030;
-  margin: 2px 0 0;
-}
 
+/* Pulsante Integrazioni (#tools dello sticky header) — compatto, M3-friendly */
 .ndh-integrations-btn {
   background: transparent;
-  border: 1px solid rgba(196, 96, 48, 0.35);
-  color: #C46030;
-  border-radius: 999px;
-  padding: 8px;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  color: var(--md-sys-color-on-surface-variant);
+  border-radius: var(--md-sys-shape-corner-full);
+  padding: 6px;
   font: inherit;
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  transition: background 120ms ease;
+  transition: background var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
+  margin-right: 6px;
 }
-.ndh-integrations-btn:hover { background: rgba(196, 96, 48, 0.08); }
-.ndh-integrations-btn .material-symbols-outlined { font-size: 18px; }
-
-.ndh-create-btn {
-  background: #C46030;
-  color: white;
-  border: 0;
-  border-radius: 999px;
-  padding: 10px 18px;
-  font: inherit;
-  font-size: 13.5px;
-  font-weight: 500;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  transition: background 120ms ease, transform 120ms ease;
+.ndh-integrations-btn:hover {
+  background: color-mix(in srgb, var(--md-sys-color-primary) 8%, transparent);
+  color: var(--md-sys-color-primary);
 }
-.ndh-create-btn:hover:not(:disabled) {
-  background: #B85425;
-  transform: translateY(-1px);
-}
-.ndh-create-btn:disabled { opacity: 0.6; cursor: wait; }
-.ndh-create-btn .material-symbols-outlined { font-size: 18px; }
 
 /* Toast */
 .ndh-toast {
@@ -621,12 +630,12 @@ function isActiveTouch(d: DocRow): boolean {
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 10px;
 }
 .ndh-item-wrap {
   position: relative;
   overflow: hidden;
-  border-radius: 10px;
+  border-radius: 16px;
   -webkit-tap-highlight-color: transparent;
   /* container queries: i child possono usare 100cqw = inline size del wrapper */
   container-type: inline-size;
@@ -652,11 +661,15 @@ function isActiveTouch(d: DocRow): boolean {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 4px 14px 4px 4px;
-  background: #ffffff;
-  border-radius: 10px;
-  border: 1px solid rgba(0,0,0,0.05);
-  transition: background 120ms ease, border-color 120ms ease;
+  padding: 8px 14px 8px 6px;
+  /* Pattern CepheidProjectCard: surface caldo + outline-variant + elevation 1 */
+  background: var(--md-sys-color-surface);
+  border-radius: 16px;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  box-shadow: var(--md-sys-elevation-level-1);
+  transition: background var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              border-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              box-shadow var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
   -webkit-tap-highlight-color: transparent;
   box-sizing: border-box;
 }
@@ -664,8 +677,9 @@ function isActiveTouch(d: DocRow): boolean {
    attiva al tap → flash della card durante scroll/click. */
 @media (hover: hover) {
   .ndh-item:hover {
-    background: rgba(196, 96, 48, 0.04);
-    border-color: rgba(196, 96, 48, 0.18);
+    background: color-mix(in srgb, var(--md-sys-color-primary) 4%, var(--md-sys-color-surface));
+    border-color: color-mix(in srgb, var(--md-sys-color-primary) 30%, var(--md-sys-color-outline-variant));
+    box-shadow: var(--md-sys-elevation-level-2);
   }
 }
 
@@ -683,7 +697,7 @@ function isActiveTouch(d: DocRow): boolean {
   background: #C83232;
   color: white;
   border: 0;
-  border-radius: 10px;
+  border-radius: 16px;
   margin-left: 0;
   font: inherit;
   cursor: pointer;
@@ -692,10 +706,6 @@ function isActiveTouch(d: DocRow): boolean {
 .ndh-swipe-delete:disabled { opacity: 0.7; cursor: wait; }
 .ndh-swipe-delete .material-symbols-outlined { font-size: 22px; }
 .ndh-swipe-delete-label { font-size: 11px; font-weight: 500; }
-.ndh-item:hover {
-  background: rgba(196, 96, 48, 0.04);
-  border-color: rgba(196, 96, 48, 0.18);
-}
 .ndh-item-main {
   flex: 1;
   display: flex;

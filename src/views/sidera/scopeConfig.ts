@@ -35,7 +35,7 @@ export const ENABLE_NEBULA_DOCS = true
 export interface FabConfig {
   icon: string
   /** Identifier of the action; consumed via provide/inject by the active scope view. */
-  action: 'new-chat' | 'new-task' | 'new-project' | 'new-goal' | 'none'
+  action: 'new-chat' | 'new-task' | 'new-project' | 'new-goal' | 'new-doc' | 'none'
   ariaLabel: string
 }
 
@@ -96,9 +96,10 @@ export const SCOPE_CONFIGS: Record<Exclude<ScopeId, 'sidera'>, ScopeConfig> = {
     wordmark: 'NEBULA',
     brandSvg: 'nebula',
     mobileNav: [
-      { path: '/nebula',      exact: true,  label: 'Team', icon: 'group' },
-      { path: '/nebula/docs', exact: false, label: 'Doc',  icon: 'description' },
+      { path: '/nebula/docs', exact: false, label: 'Documenti', icon: 'description' },
+      { path: '/nebula',      exact: true,  label: 'Squadra',    icon: 'group' },
     ],
+    fab: { icon: 'add', action: 'new-doc', ariaLabel: 'Nuovo documento' },
     isTopLevelPath: (p) => p === '/nebula' || p === '/nebula/docs',
     loginPath: '/nebula/login',
     notificationScope: 'nebula',
