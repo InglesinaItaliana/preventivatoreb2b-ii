@@ -103,34 +103,55 @@ const editor = useEditor({
 const editorRef = shallowRef(editor)
 
 // ── Init: al primo load del doc, popola editor + title ──────────────────────
-watch(doc, (d) => {
-  if (!d || initializedFromDoc.value) return
+// + auto-merge passivo: se l'utente NON ha modifiche locali (isDirty=false)
+//   e arriva un update remoto, applichiamo silenziosamente (pattern Google
+//   Docs "passive viewer auto-syncs"). Se invece HA modifiche pending, si
+//   tiene il warning + il dialog di conflitto si aprirà al prossimo save.
+const isDirty = ref(false)
+
+function applyRemoteContent(d: NonNullable<typeof doc.value>) {
+  if (!editor.value) return
+  // Preserva selection se siamo in lettura passiva (cursor potrebbe non
+  // essere mai stato dentro l'editor). TipTap setContent(_, false) NON
+  // emette update → no loop con onUpdate.
+  const rawContent = d.content
+    ? JSON.parse(JSON.stringify(d.content))
+    : { type: 'doc', content: [] }
+  editor.value.commands.setContent(rawContent, false)
   localTitle.value = d.title ?? ''
   baseRevision.value = d.revision ?? 0
-  if (editor.value) {
-    // Deep clone via JSON: scollega da reactive proxy (TipTap chiama
-    // hasOwnProperty internamente e fallisce su Proxy Vue).
-    const rawContent = d.content
-      ? JSON.parse(JSON.stringify(d.content))
-      : { type: 'doc', content: [] }
-    editor.value.commands.setContent(rawContent, false)
-    editor.value.setEditable(canWrite.value)
+  isDirty.value = false
+}
+
+watch(doc, (d) => {
+  if (!d) return
+  if (!initializedFromDoc.value) {
+    // Primo load
+    applyRemoteContent(d)
+    editor.value?.setEditable(canWrite.value)
+    initializedFromDoc.value = true
+    return
   }
-  initializedFromDoc.value = true
+  // Update remoto post-init
+  if (d.revision > baseRevision.value && !isDirty.value) {
+    applyRemoteContent(d)   // auto-merge silenzioso
+  }
+  // Se isDirty → externalUpdatePending warning resta visibile, conflict
+  // verrà gestito al prossimo save (LWW + dialog)
 }, { immediate: true })
 
-// Se il doc viene aggiornato esternamente DOPO l'init, NON ri-clobberiamo
-// l'editor (potremmo distruggere modifiche locali in corso). Il conflitto
-// viene catturato al prossimo save. La UI mostra solo un warning soft.
+// Se il doc viene aggiornato esternamente E ho modifiche locali pending,
+// mostro warning soft. Il conflict viene catturato al prossimo save.
 const externalUpdatePending = computed(() => {
   if (!doc.value || !initializedFromDoc.value) return false
-  return doc.value.revision > baseRevision.value
+  return doc.value.revision > baseRevision.value && isDirty.value
 })
 
 // ── Autosave (debounce 1.5s) ────────────────────────────────────────────────
 let autosaveTimer: ReturnType<typeof setTimeout> | null = null
 function scheduleAutosave() {
   if (!initializedFromDoc.value || !canWrite.value) return
+  isDirty.value = true
   if (autosaveTimer) clearTimeout(autosaveTimer)
   saveStatus.value = 'idle'
   autosaveTimer = setTimeout(() => {
@@ -164,6 +185,7 @@ async function performSave(trigger: 'autosave' | 'manual') {
       trigger,
     })
     baseRevision.value = out.revision
+    isDirty.value = false
     saveStatus.value = 'saved'
   } catch (e: any) {
     if (isSaveDocConflict(e)) {
@@ -190,8 +212,10 @@ function resolveReload() {
   // Scarta modifiche locali, ricarica contenuto server.
   if (!conflict.value || !editor.value) return
   localTitle.value = conflict.value.currentTitle
-  editor.value.commands.setContent(conflict.value.currentContent as any, false)
+  const rawContent = JSON.parse(JSON.stringify(conflict.value.currentContent))
+  editor.value.commands.setContent(rawContent, false)
   baseRevision.value = conflict.value.currentRevision
+  isDirty.value = false
   conflict.value = null
   saveStatus.value = 'saved'
   saveError.value = ''
