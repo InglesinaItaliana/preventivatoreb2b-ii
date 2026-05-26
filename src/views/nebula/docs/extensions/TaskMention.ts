@@ -41,12 +41,15 @@ export interface TaskMentionOptions {
    * Passare una funzione (non un Ref) — TipTap fa introspezione delle options
    * e i Proxy reattivi Vue rompono setContent / config (stesso pattern del trap
    * hasOwnProperty già documentato).
-   *
-   * Esempio:
-   *   const { tasks } = useAllTasks()
-   *   TaskMention.configure({ allTasks: () => tasks.value })
    */
   allTasks: () => Task[]
+  /**
+   * Se true (default) il trigger `@` apre il TaskSuggester. Quando si usa
+   * UniversalMention (F5+), passare false per evitare doppio suggester su `@`.
+   * Il nodo `taskMention` resta nello schema (i chip esistenti continuano a
+   * renderizzarsi) ma l'inserimento via `@` passa per UniversalMention.
+   */
+  enableSuggester?: boolean
 }
 
 function filterTasks(tasks: Task[], query: string, limit = 20): Task[] {
@@ -83,6 +86,7 @@ export const TaskMention = Node.create<TaskMentionOptions>({
     return {
       // Default: getter vuoto. Sovrascritto da configure({ allTasks: () => ... }).
       allTasks: () => [] as Task[],
+      enableSuggester: true,
     }
   },
 
@@ -120,6 +124,7 @@ export const TaskMention = Node.create<TaskMentionOptions>({
 
   addProseMirrorPlugins() {
     const options = this.options
+    if (options.enableSuggester === false) return []
     return [
       Suggestion({
         editor: this.editor,

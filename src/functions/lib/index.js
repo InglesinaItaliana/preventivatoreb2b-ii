@@ -1916,8 +1916,9 @@ exports.saveDoc = functions
 function extractRefsFromContent(content) {
     const tasks = new Set();
     const projects = new Set();
+    const users = new Set();
     function walk(node) {
-        var _a, _b, _c;
+        var _a, _b, _c, _d;
         if (!node || typeof node !== 'object')
             return;
         if (node.type === 'taskMention') {
@@ -1936,6 +1937,11 @@ function extractRefsFromContent(content) {
             if (typeof pid === 'string' && pid)
                 projects.add(pid);
         }
+        else if (node.type === 'userMention') {
+            const em = (_d = node.attrs) === null || _d === void 0 ? void 0 : _d.email;
+            if (typeof em === 'string' && em)
+                users.add(em.toLowerCase().trim());
+        }
         if (Array.isArray(node.content)) {
             for (const child of node.content)
                 walk(child);
@@ -1945,6 +1951,7 @@ function extractRefsFromContent(content) {
     return {
         tasks: Array.from(tasks).sort(),
         projects: Array.from(projects).sort(),
+        users: Array.from(users).sort(),
     };
 }
 function arraysShallowEqual(a, b) {
@@ -1972,19 +1979,21 @@ exports.indexDocRefs = functions
     // la write non porta nuove mention → skip (probabile origine: indexer stesso
     // o write non legata ai mention).
     if (arraysShallowEqual(currentRefs.tasks, computed.tasks) &&
-        arraysShallowEqual(currentRefs.projects, computed.projects)) {
+        arraysShallowEqual(currentRefs.projects, computed.projects) &&
+        arraysShallowEqual(currentRefs.users, computed.users)) {
         return null;
     }
-    // Update solo i sotto-campi refs.tasks + refs.projects (preserva
-    // refs.deliverables/docs/users gestiti da chunks futuri).
+    // Update i sotto-campi refs.tasks + refs.projects + refs.users
+    // (preserva refs.deliverables/docs gestiti da chunks futuri).
     const docId = context.params.docId;
     await admin.firestore()
         .collection('nebulaDocs').doc(docId)
         .update({
         'refs.tasks': computed.tasks,
         'refs.projects': computed.projects,
+        'refs.users': computed.users,
     });
-    console.log(`[indexDocRefs] ${docId} — tasks: ${computed.tasks.length}, projects: ${computed.projects.length}`);
+    console.log(`[indexDocRefs] ${docId} — tasks: ${computed.tasks.length}, projects: ${computed.projects.length}, users: ${computed.users.length}`);
     return null;
 });
 // ============================================================================
@@ -2300,5 +2309,104 @@ exports.mcpNebula = functions
         }
     }
     res.status(result.status).send(result.body);
+});
+// ============================================================================
+// NEBULA-DOCS — notifyOnMention (F5-C3) onWrite su nebulaDocs/{docId}
+// Diff refs.users[] prima/dopo. Per gli utenti AGGIUNTI (mention nuovi)
+// invia push FCM data-only scope='nebula' con titolo doc + URL.
+// Skip su delete + skip se l'utente menzionato è chi ha scritto (auto-mention).
+//
+// Pattern coerente con [PULSAR push] esistente:
+//  - team/{email}.fcmTokens map { tokenStr: { ts, scope, ua? } | Timestamp legacy }
+//  - filter scope 'nebula' o 'sidera' (desktop wildcard); legacy = pulsar → skip
+//  - data-only payload (SW costruisce notifica → evita doppia)
+//  - cleanup token invalidi best-effort
+// ============================================================================
+exports.notifyOnMention = functions
+    .region('europe-west1')
+    .firestore.document('nebulaDocs/{docId}')
+    .onWrite(async (change, context) => {
+    var _a, _b, _c, _d, _e, _f, _g;
+    if (!change.after.exists)
+        return null; // doc cancellato → niente notifica
+    const after = change.after.data();
+    const before = change.before.exists ? change.before.data() : null;
+    const usersAfter = new Set(((_b = (_a = after.refs) === null || _a === void 0 ? void 0 : _a.users) !== null && _b !== void 0 ? _b : []).map(e => e.toLowerCase().trim()).filter(Boolean));
+    const usersBefore = new Set(((_d = (_c = before === null || before === void 0 ? void 0 : before.refs) === null || _c === void 0 ? void 0 : _c.users) !== null && _d !== void 0 ? _d : []).map(e => e.toLowerCase().trim()).filter(Boolean));
+    const newlyMentioned = [];
+    usersAfter.forEach(u => { if (!usersBefore.has(u))
+        newlyMentioned.push(u); });
+    if (newlyMentioned.length === 0)
+        return null;
+    const sender = ((_e = after.updatedBy) !== null && _e !== void 0 ? _e : '').toLowerCase().trim();
+    const targets = newlyMentioned.filter(u => u && u !== sender); // skip auto-mention
+    if (targets.length === 0)
+        return null;
+    const db = admin.firestore();
+    const docId = context.params.docId;
+    const docTitle = after.title || 'Senza titolo';
+    // Carica fcmTokens dai team docs dei target
+    const teamSnaps = await Promise.all(targets.map(email => db.collection('team').doc(email).get()));
+    const rawTokens = [];
+    for (const ts of teamSnaps) {
+        if (!ts.exists)
+            continue;
+        const tokensMap = ((_g = (_f = ts.data()) === null || _f === void 0 ? void 0 : _f.fcmTokens) !== null && _g !== void 0 ? _g : {});
+        for (const [tk, val] of Object.entries(tokensMap)) {
+            if (val && typeof val === 'object' && 'scope' in val) {
+                const scope = val.scope;
+                // Wildcard 'sidera' (desktop) + dedicato 'nebula'
+                if (scope === 'nebula' || scope === 'sidera')
+                    rawTokens.push(tk);
+            }
+            // Legacy timestamp nudo = default pulsar → skip (notifica nebula non rilevante)
+        }
+    }
+    const tokens = Array.from(new Set(rawTokens));
+    if (tokens.length === 0) {
+        console.log(`[notifyOnMention] ${docId}: ${targets.length} mention nuove ma 0 token scope=nebula/sidera`);
+        return null;
+    }
+    const senderDisplay = sender.split('@')[0] || 'Qualcuno';
+    const title = `${senderDisplay} ti ha menzionato`;
+    const body = `In "${docTitle.slice(0, 80)}"`;
+    const messageId = `nebula-doc-${docId}-${Date.now()}`;
+    const res = await admin.messaging().sendEachForMulticast({
+        tokens,
+        data: {
+            docId,
+            messageId,
+            scope: 'nebula',
+            title,
+            body,
+            url: `/nebula/docs/${docId}`,
+        },
+    });
+    // Cleanup token invalidi (stesso pattern PULSAR)
+    const invalidTokens = [];
+    res.responses.forEach((r, i) => {
+        var _a, _b;
+        if (!r.success) {
+            const code = (_b = (_a = r.error) === null || _a === void 0 ? void 0 : _a.code) !== null && _b !== void 0 ? _b : '';
+            if (code === 'messaging/invalid-registration-token' ||
+                code === 'messaging/registration-token-not-registered') {
+                invalidTokens.push(tokens[i]);
+            }
+        }
+    });
+    if (invalidTokens.length) {
+        await Promise.all(targets.map(async (email) => {
+            const updates = {};
+            invalidTokens.forEach(tk => { updates[`fcmTokens.${tk}`] = admin.firestore.FieldValue.delete(); });
+            if (Object.keys(updates).length) {
+                try {
+                    await db.collection('team').doc(email).update(updates);
+                }
+                catch ( /* ignore */_a) { /* ignore */ }
+            }
+        }));
+    }
+    console.log(`[notifyOnMention] ${docId}: target ${targets.length}, tokens ${tokens.length}, success ${res.successCount}`);
+    return null;
 });
 //# sourceMappingURL=index.js.map

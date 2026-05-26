@@ -107,10 +107,10 @@ export const SLASH_COMMANDS: SlashCommandItem[] = [
   // shortcut: rimuovono `/task` (o /progetto, /utente) e inseriscono `@`
   // per far partire il typeahead.
   {
-    title: 'Menziona task',
-    description: 'Chip live a un\'azione CEPHEID',
-    icon: 'task_alt',
-    aliases: ['task', 'azione', 'mention'],
+    title: 'Menziona (persona / task / progetto)',
+    description: 'Apre il picker @ poliglotta',
+    icon: 'alternate_email',
+    aliases: ['mention', 'menzione', 'persona', 'user', 'task', 'azione'],
     command: ({ editor, range }) => {
       editor.chain().focus().deleteRange(range).insertContent('@').run()
     },

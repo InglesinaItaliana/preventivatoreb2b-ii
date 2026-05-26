@@ -24,6 +24,7 @@ import MaterialIcon from './components/MaterialIcon.vue'
 import { TaskMention } from './extensions/TaskMention'
 import { ProjectMention } from './extensions/ProjectMention'
 import { TaskEmbed } from './extensions/TaskEmbed'
+import { UserMention } from './extensions/UserMention'
 
 const route = useRoute()
 const router = useRouter()
@@ -62,6 +63,7 @@ const previewEditor = useEditor({
       allTasks: () => allTasksRef.value,
       allProjects: () => allProjectsRef.value,
     }),
+    UserMention,
   ],
   editable: false,
   content: { type: 'doc', content: [] },

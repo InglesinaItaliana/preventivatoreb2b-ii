@@ -2174,9 +2174,10 @@ interface PMNode {
     content?: PMNode[];
 }
 
-function extractRefsFromContent(content: unknown): { tasks: string[]; projects: string[] } {
+function extractRefsFromContent(content: unknown): { tasks: string[]; projects: string[]; users: string[] } {
     const tasks = new Set<string>();
     const projects = new Set<string>();
+    const users = new Set<string>();
 
     function walk(node: PMNode | undefined): void {
         if (!node || typeof node !== 'object') return;
@@ -2191,6 +2192,9 @@ function extractRefsFromContent(content: unknown): { tasks: string[]; projects: 
             const filter = node.attrs?.filter as { projectId?: unknown } | undefined;
             const pid = filter?.projectId;
             if (typeof pid === 'string' && pid) projects.add(pid);
+        } else if (node.type === 'userMention') {
+            const em = node.attrs?.email;
+            if (typeof em === 'string' && em) users.add(em.toLowerCase().trim());
         }
 
         if (Array.isArray(node.content)) {
@@ -2203,6 +2207,7 @@ function extractRefsFromContent(content: unknown): { tasks: string[]; projects: 
     return {
         tasks: Array.from(tasks).sort(),
         projects: Array.from(projects).sort(),
+        users: Array.from(users).sort(),
     };
 }
 
@@ -2224,29 +2229,31 @@ exports.indexDocRefs = functions
         const after = change.after.data() as any;
         const computed = extractRefsFromContent(after.content);
 
-        const currentRefs = (after.refs ?? {}) as { tasks?: string[]; projects?: string[] };
+        const currentRefs = (after.refs ?? {}) as { tasks?: string[]; projects?: string[]; users?: string[] };
 
         // Loop guard: se i refs computati coincidono con quelli persistiti,
         // la write non porta nuove mention → skip (probabile origine: indexer stesso
         // o write non legata ai mention).
         if (
             arraysShallowEqual(currentRefs.tasks, computed.tasks) &&
-            arraysShallowEqual(currentRefs.projects, computed.projects)
+            arraysShallowEqual(currentRefs.projects, computed.projects) &&
+            arraysShallowEqual(currentRefs.users, computed.users)
         ) {
             return null;
         }
 
-        // Update solo i sotto-campi refs.tasks + refs.projects (preserva
-        // refs.deliverables/docs/users gestiti da chunks futuri).
+        // Update i sotto-campi refs.tasks + refs.projects + refs.users
+        // (preserva refs.deliverables/docs gestiti da chunks futuri).
         const docId = context.params.docId as string;
         await admin.firestore()
             .collection('nebulaDocs').doc(docId)
             .update({
                 'refs.tasks': computed.tasks,
                 'refs.projects': computed.projects,
+                'refs.users': computed.users,
             });
 
-        console.log(`[indexDocRefs] ${docId} — tasks: ${computed.tasks.length}, projects: ${computed.projects.length}`);
+        console.log(`[indexDocRefs] ${docId} — tasks: ${computed.tasks.length}, projects: ${computed.projects.length}, users: ${computed.users.length}`);
         return null;
     });
 
@@ -2597,4 +2604,108 @@ exports.mcpNebula = functions
             }
         }
         res.status(result.status).send(result.body);
+    });
+
+// ============================================================================
+// NEBULA-DOCS — notifyOnMention (F5-C3) onWrite su nebulaDocs/{docId}
+// Diff refs.users[] prima/dopo. Per gli utenti AGGIUNTI (mention nuovi)
+// invia push FCM data-only scope='nebula' con titolo doc + URL.
+// Skip su delete + skip se l'utente menzionato è chi ha scritto (auto-mention).
+//
+// Pattern coerente con [PULSAR push] esistente:
+//  - team/{email}.fcmTokens map { tokenStr: { ts, scope, ua? } | Timestamp legacy }
+//  - filter scope 'nebula' o 'sidera' (desktop wildcard); legacy = pulsar → skip
+//  - data-only payload (SW costruisce notifica → evita doppia)
+//  - cleanup token invalidi best-effort
+// ============================================================================
+
+exports.notifyOnMention = functions
+    .region('europe-west1')
+    .firestore.document('nebulaDocs/{docId}')
+    .onWrite(async (change, context) => {
+        if (!change.after.exists) return null;   // doc cancellato → niente notifica
+
+        const after = change.after.data() as { refs?: { users?: string[] }; title?: string; updatedBy?: string };
+        const before = change.before.exists ? (change.before.data() as { refs?: { users?: string[] } }) : null;
+
+        const usersAfter = new Set((after.refs?.users ?? []).map(e => e.toLowerCase().trim()).filter(Boolean));
+        const usersBefore = new Set((before?.refs?.users ?? []).map(e => e.toLowerCase().trim()).filter(Boolean));
+
+        const newlyMentioned: string[] = [];
+        usersAfter.forEach(u => { if (!usersBefore.has(u)) newlyMentioned.push(u); });
+
+        if (newlyMentioned.length === 0) return null;
+
+        const sender = (after.updatedBy ?? '').toLowerCase().trim();
+        const targets = newlyMentioned.filter(u => u && u !== sender);  // skip auto-mention
+        if (targets.length === 0) return null;
+
+        const db = admin.firestore();
+        const docId = context.params.docId as string;
+        const docTitle = after.title || 'Senza titolo';
+
+        // Carica fcmTokens dai team docs dei target
+        const teamSnaps = await Promise.all(targets.map(email => db.collection('team').doc(email).get()));
+        const rawTokens: string[] = [];
+        for (const ts of teamSnaps) {
+            if (!ts.exists) continue;
+            const tokensMap = (ts.data()?.fcmTokens ?? {}) as Record<string, unknown>;
+            for (const [tk, val] of Object.entries(tokensMap)) {
+                if (val && typeof val === 'object' && 'scope' in (val as Record<string, unknown>)) {
+                    const scope = (val as { scope?: string }).scope;
+                    // Wildcard 'sidera' (desktop) + dedicato 'nebula'
+                    if (scope === 'nebula' || scope === 'sidera') rawTokens.push(tk);
+                }
+                // Legacy timestamp nudo = default pulsar → skip (notifica nebula non rilevante)
+            }
+        }
+        const tokens = Array.from(new Set(rawTokens));
+
+        if (tokens.length === 0) {
+            console.log(`[notifyOnMention] ${docId}: ${targets.length} mention nuove ma 0 token scope=nebula/sidera`);
+            return null;
+        }
+
+        const senderDisplay = sender.split('@')[0] || 'Qualcuno';
+        const title = `${senderDisplay} ti ha menzionato`;
+        const body = `In "${docTitle.slice(0, 80)}"`;
+
+        const messageId = `nebula-doc-${docId}-${Date.now()}`;
+        const res = await admin.messaging().sendEachForMulticast({
+            tokens,
+            data: {
+                docId,
+                messageId,
+                scope: 'nebula',
+                title,
+                body,
+                url: `/nebula/docs/${docId}`,
+            },
+        });
+
+        // Cleanup token invalidi (stesso pattern PULSAR)
+        const invalidTokens: string[] = [];
+        res.responses.forEach((r, i) => {
+            if (!r.success) {
+                const code = r.error?.code ?? '';
+                if (
+                    code === 'messaging/invalid-registration-token' ||
+                    code === 'messaging/registration-token-not-registered'
+                ) {
+                    invalidTokens.push(tokens[i]);
+                }
+            }
+        });
+        if (invalidTokens.length) {
+            await Promise.all(targets.map(async (email) => {
+                const updates: Record<string, unknown> = {};
+                invalidTokens.forEach(tk => { updates[`fcmTokens.${tk}`] = admin.firestore.FieldValue.delete(); });
+                if (Object.keys(updates).length) {
+                    try { await db.collection('team').doc(email).update(updates); } catch { /* ignore */ }
+                }
+            }));
+        }
+
+        console.log(`[notifyOnMention] ${docId}: target ${targets.length}, tokens ${tokens.length}, success ${res.successCount}`);
+        return null;
     });
