@@ -2588,6 +2588,7 @@ exports.listNebulaApiKeys = functions
 // ============================================================================
 
 import { handleMcpRequest } from './lib_mcp/server';
+import { issueAuthCodeForConsent, cleanupOAuthStale } from './lib_mcp/oauth';
 
 exports.mcpNebula = functions
     .region('europe-west1')
@@ -2597,6 +2598,9 @@ exports.mcpNebula = functions
             headers: req.headers as Record<string, unknown>,
             method: req.method,
             body: req.body,
+            // F6: routing OAuth sub-paths
+            path: req.path,
+            query: req.query as Record<string, string | undefined>,
         });
         if (result.headers) {
             for (const [k, v] of Object.entries(result.headers)) {
@@ -2604,6 +2608,83 @@ exports.mcpNebula = functions
             }
         }
         res.status(result.status).send(result.body);
+    });
+
+// ============================================================================
+// NEBULA-DOCS — consentOAuthRequest callable (F6)
+// Chiamata dalla consent UI (/nebula/docs/oauth/consent) dopo che l'utente
+// Firebase-loggato clicca "Autorizza". Genera auth code + ritorna URL di
+// redirect (claude.ai redirect_uri + code + state).
+// ============================================================================
+
+exports.consentOAuthRequest = functions
+    .region('europe-west1')
+    .https.onCall(async (data, context) => {
+        if (!context.auth) {
+            throw new functions.https.HttpsError('unauthenticated', 'Richiesto login');
+        }
+        const userEmail = nebulaNormalizeEmail(context.auth.token.email);
+        if (!userEmail) {
+            throw new functions.https.HttpsError('failed-precondition', 'Email utente mancante');
+        }
+        const authRequestId: string | undefined = data?.authRequestId;
+        if (!authRequestId) {
+            throw new functions.https.HttpsError('invalid-argument', 'authRequestId mancante');
+        }
+        try {
+            const { redirectUri } = await issueAuthCodeForConsent(authRequestId, userEmail);
+            return { redirectUri };
+        } catch (e: any) {
+            throw new functions.https.HttpsError('failed-precondition', e?.message ?? 'Errore consent');
+        }
+    });
+
+// getOAuthAuthRequest: la consent UI chiama qui per mostrare "Claude vuole
+// accesso come <userEmail>" + nome del client. Read-only, non emette code.
+exports.getOAuthAuthRequest = functions
+    .region('europe-west1')
+    .https.onCall(async (data, context) => {
+        if (!context.auth) {
+            throw new functions.https.HttpsError('unauthenticated', 'Richiesto login');
+        }
+        const userEmail = nebulaNormalizeEmail(context.auth.token.email);
+        const authRequestId: string | undefined = data?.authRequestId;
+        if (!authRequestId) {
+            throw new functions.https.HttpsError('invalid-argument', 'authRequestId mancante');
+        }
+        const snap = await admin.firestore().collection('nebulaOauthAuthRequests').doc(authRequestId).get();
+        if (!snap.exists) {
+            throw new functions.https.HttpsError('not-found', 'Authorization request scaduta o non trovata');
+        }
+        const r = snap.data() as {
+            client_id: string; client_name?: string; redirect_uri: string;
+            scope?: string; createdAt?: admin.firestore.Timestamp;
+        };
+        return {
+            authRequestId,
+            clientName: r.client_name ?? r.client_id,
+            redirectUri: r.redirect_uri,
+            scope: r.scope ?? 'mcp',
+            userEmail,           // per display "verrai autorizzato come …"
+        };
+    });
+
+// ============================================================================
+// NEBULA-DOCS — oauthCleanup scheduled (F6)
+// Ogni ora elimina:
+//   - nebulaOauthAuthRequests con createdAt < now - 15 min
+//   - nebulaOauthCodes con createdAt < now - 10 min
+//   - nebulaOauthTokens con expiresAt < now
+// ============================================================================
+
+exports.oauthCleanup = functions
+    .region('europe-west1')
+    .pubsub.schedule('every 60 minutes')
+    .timeZone('Europe/Rome')
+    .onRun(async () => {
+        const r = await cleanupOAuthStale();
+        console.log(`[oauthCleanup] deleted requests=${r.requests} codes=${r.codes} tokens=${r.tokens}`);
+        return null;
     });
 
 // ============================================================================

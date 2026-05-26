@@ -234,6 +234,21 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // ── NEBULA-DOCS OAuth 2.0 (F6) ──────────────────────────────────────────
+    // Tutto deny-all client. Letture e scritture esclusivamente da
+    // Cloud Functions (Admin SDK bypassa rules):
+    //   - nebulaOauthClients: scritti da /register (DCR)
+    //   - nebulaOauthAuthRequests: scritti da /authorize, letti dalla consent UI
+    //     ATTENZIONE: la consent UI legge tramite callable, NON direct. Quindi
+    //     deny-all è OK anche per authRequests.
+    //   - nebulaOauthCodes: scritti dalla consent callable, letti+eliminati
+    //     dal /token endpoint
+    //   - nebulaOauthTokens: scritti da /token, validati dal MCP server auth
+    match /nebulaOauthClients/{id} { allow read, write: if false; }
+    match /nebulaOauthAuthRequests/{id} { allow read, write: if false; }
+    match /nebulaOauthCodes/{code} { allow read, write: if false; }
+    match /nebulaOauthTokens/{hash} { allow read, write: if false; }
+
     match /{document=**} {
       allow read, write: if false;
     }
