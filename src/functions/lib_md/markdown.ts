@@ -10,6 +10,7 @@
  *
  * Nodi PM supportati:
  *  Block: doc, paragraph, heading (1-3), bulletList, orderedList, listItem,
+ *         taskList, taskItem (GFM `- [ ]` / `- [x]`),
  *         blockquote, codeBlock, horizontalRule, taskEmbed
  *  Inline: text, hardBreak, taskMention, projectMention
  *  Marks: bold, italic, code, strike
@@ -220,6 +221,24 @@ function tokenToBlock(
     }
     if (tt === 'list') {
         const l = t as Tokens.List;
+        // GFM task list: se almeno un item ha `task: true`, emetti taskList
+        // (gli item non-task in mezzo li trattiamo comunque come taskItem unchecked
+        // per coerenza visiva — i parser marked di solito non li mescolano).
+        const isTaskList = !l.ordered && (l.items ?? []).some(item => (item as any).task === true);
+        if (isTaskList) {
+            const items = (l.items ?? []).map(item => {
+                // marked emette un token `checkbox` separato + il contenuto: scartiamo
+                // il checkbox (lo stato è già in item.checked).
+                const childTokens = (item.tokens ?? []).filter(c => c.type !== 'checkbox');
+                const inner = childTokens.map(c => tokenToBlock(c, placeholders)).filter(Boolean) as PMNode[];
+                return {
+                    type: 'taskItem',
+                    attrs: { checked: !!(item as any).checked },
+                    content: inner.length ? inner : [{ type: 'paragraph', content: [] }],
+                };
+            });
+            return { type: 'taskList', content: items };
+        }
         const items = (l.items ?? []).map(item => {
             const inner = (item.tokens ?? []).map(c => tokenToBlock(c, placeholders)).filter(Boolean) as PMNode[];
             return { type: 'listItem', content: inner.length ? inner : [{ type: 'paragraph', content: [] }] };
@@ -241,7 +260,12 @@ function tokenToBlock(
         return { type: 'horizontalRule' };
     }
     if (tt === 'text') {
-        // Top-level text (raro): wrap in paragrafo
+        // Top-level text (es. dentro list_item): se ha sub-tokens inline,
+        // delegali a tokensToInline per non perdere bold/italic/code/strike.
+        const sub = (t as any).tokens;
+        if (Array.isArray(sub) && sub.length) {
+            return { type: 'paragraph', content: tokensToInline(sub, placeholders) };
+        }
         const txt = (t as any).text ?? '';
         return { type: 'paragraph', content: expandPlaceholdersInText(txt, [], placeholders) };
     }
@@ -332,6 +356,25 @@ function listItemToMd(node: PMNode, ordered: boolean, idx: number, depth: number
     return rest ? `${line}\n${rest}` : line;
 }
 
+function taskItemToMd(node: PMNode, depth: number): string {
+    const checked = !!node.attrs?.checked;
+    const marker = checked ? '- [x] ' : '- [ ] ';
+    const indent = '  '.repeat(depth);
+    if (!node.content || node.content.length === 0) return `${indent}${marker}`;
+
+    const first = node.content[0];
+    const restBlocks = node.content.slice(1);
+    let line = '';
+    if (first.type === 'paragraph') {
+        line = `${indent}${marker}${inlineToMd(first.content)}`;
+    } else {
+        line = `${indent}${marker}`;
+        restBlocks.unshift(first);
+    }
+    const rest = restBlocks.map(b => blockToMd(b, depth + 1)).join('\n');
+    return rest ? `${line}\n${rest}` : line;
+}
+
 function blockToMd(node: PMNode, depth = 0): string {
     switch (node.type) {
         case 'paragraph':
@@ -347,6 +390,10 @@ function blockToMd(node: PMNode, depth = 0): string {
         case 'orderedList':
             return (node.content ?? [])
                 .map((li, i) => listItemToMd(li, true, i, depth))
+                .join('\n');
+        case 'taskList':
+            return (node.content ?? [])
+                .map(ti => taskItemToMd(ti, depth))
                 .join('\n');
         case 'blockquote':
             return (node.content ?? [])
@@ -391,7 +438,7 @@ export function extractText(doc: PMNode): string {
         else if (n.type === 'taskMention') out.push(`[task ${n.attrs?.taskId}]`);
         else if (n.type === 'projectMention') out.push(`[project ${n.attrs?.projectId}]`);
         if (n.content) {
-            const isBlock = ['paragraph', 'heading', 'blockquote', 'listItem', 'codeBlock'].includes(n.type);
+            const isBlock = ['paragraph', 'heading', 'blockquote', 'listItem', 'taskItem', 'codeBlock'].includes(n.type);
             n.content.forEach(walk);
             if (isBlock) out.push('\n');
         }
