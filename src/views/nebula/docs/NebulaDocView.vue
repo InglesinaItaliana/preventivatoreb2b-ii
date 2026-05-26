@@ -25,6 +25,8 @@ import { ProjectMention } from './extensions/ProjectMention'
 import { TaskEmbed } from './extensions/TaskEmbed'
 import { useAllTasks } from '../../../composables/sidera/useAllTasks'
 import { useProjects } from '../../../composables/sidera/useProjects'
+import { useDocPresence } from '../../../composables/nebula/useDocPresence'
+import PresenceStack from './components/PresenceStack.vue'
 import { useCurrentUser } from '../../../composables/sidera/useCurrentUser'
 import { useDoc } from '../../../composables/nebula/useDoc'
 import { saveDoc, isSaveDocConflict, type SaveDocConflictDetails } from '../../../composables/nebula/useSaveDoc'
@@ -67,6 +69,10 @@ const canWrite = computed(() => {
 // options e i Proxy reattivi rompono config (trap hasOwnProperty).
 const { tasks: allTasksRef } = useAllTasks()
 const { projects: allProjectsRef } = useProjects()
+
+// Presence: sub al sub-collezione nebulaDocs/{docId}/presence + heartbeat 15s.
+// Espone peers (altri utenti attivi visti <30s fa).
+const { peers } = useDocPresence(docId, currentUser)
 
 const editor = useEditor({
   extensions: [
@@ -292,6 +298,8 @@ void editorRef
         >
           <MaterialIcon name="arrow_back" :size="20" />
         </button>
+
+        <PresenceStack :peers="peers" :maxVisible="3" />
 
         <div class="nd-status" :class="`nd-status-${saveStatus}`">
           <template v-if="!canWrite">
