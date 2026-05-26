@@ -1,8 +1,13 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
 import MIcon from '../../components/shared/MIcon.vue'
+import MdPageHeader from '../../components/shared/MdPageHeader.vue'
+import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
 import { useAllTasks }    from '../../composables/sidera/useAllTasks'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
+
+const scrollEl = ref<HTMLElement | null>(null)
+const { hidden: headerHidden } = useAutoHideHeader(scrollEl)
 
 const { tasks, loading: tasksLoading, completeTask, uncompleteTask } = useAllTasks()
 const { currentUser } = useCurrentUser()
@@ -57,15 +62,15 @@ const showDone = ref(false)
 </script>
 
 <template>
-  <div class="seq">
-    <header class="seq-header">
-      <h2 class="p-page-title">Azioni</h2>
-      <p class="p-page-sub">
-        {{ dueTodayCount === 0
-          ? 'Nessuna in scadenza oggi'
-          : (dueTodayCount === 1 ? '1 in scadenza oggi' : dueTodayCount + ' in scadenza oggi') }}
-      </p>
-    </header>
+  <div class="seq" ref="scrollEl">
+    <MdPageHeader
+      title="Azioni"
+      :subtitle="dueTodayCount === 0
+        ? 'Nessuna in scadenza oggi'
+        : (dueTodayCount === 1 ? '1 in scadenza oggi' : dueTodayCount + ' in scadenza oggi')"
+      sticky
+      :hidden="headerHidden"
+    />
 
     <div class="seq-content">
       <div v-if="tasksLoading" class="loading-rows">
@@ -87,7 +92,8 @@ const showDone = ref(false)
         </div>
       </div>
 
-      <!-- Completate di recente: collassabile -->
+      <!-- Completate di recente: collassabile (memoria feedback_no_chevrons:
+           niente chevron, lo stato espanso si segnala con bordo accent + bg) -->
       <button
         v-if="doneTasks.length"
         class="collapse-toggle"
@@ -95,10 +101,7 @@ const showDone = ref(false)
         @click="showDone = !showDone"
       >
         <span>Completate di recente</span>
-        <span class="collapse-meta">
-          <span class="collapse-count">{{ doneTasks.length }}</span>
-          <MIcon :name="showDone ? 'expand_less' : 'expand_more'" :size="20" class="collapse-chevron" />
-        </span>
+        <span class="collapse-count">{{ doneTasks.length }}</span>
       </button>
 
       <div v-if="showDone" class="done-list">
@@ -116,30 +119,37 @@ const showDone = ref(false)
 <style scoped>
 .seq {
   font-family: 'Outfit', sans-serif;
-  color: #1A1917;
-  min-height: calc(100vh - 120px);
+  color: var(--md-sys-color-on-surface);
+  height: 100%;
+  width: 100%;
+  overflow: auto;
+  --page-bg: #EFE7D9;
+  background: var(--page-bg);
+}
+.s-surface-dark .seq { --page-bg: #0E0C07; }
+@media (prefers-color-scheme: dark) {
+  .seq { --page-bg: #0E0C07; }
 }
 
-/* Page header */
-.seq-header {
-  padding: 18px 20px 14px;
-  background: #fff;
-  border-bottom: 1px solid #E8E5DF;
+:deep(.md-page-header) { padding: 18px 16px 14px; }
+:deep(.md-page-header.is-sticky) {
+  background: var(--md-sys-color-surface);
+  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+}
+@media (min-width: 1024px) {
+  :deep(.md-page-header) { padding: 24px max(40px, calc(50% - 410px)) 18px; }
 }
 
-.p-page-title {
-  font-family: 'Outfit', sans-serif;
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: #1A1917;
-  margin: 0 0 4px 0;
+.seq-content {
+  padding: 16px;
+  max-width: 920px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
 }
-
-.p-page-sub { font-size: 12px; color: #9B9590; margin: 0; }
-
-.seq-content { padding: 20px 16px; }
+@media (min-width: 1024px) {
+  .seq-content { padding: 24px 40px; max-width: 900px; }
+}
 
 .s-label {
   font-size: 10px;
@@ -154,34 +164,36 @@ const showDone = ref(false)
 .loading-rows { display: flex; flex-direction: column; gap: 6px; }
 
 .row-skel {
-  height: 48px; border-radius: 10px;
-  background: #E8E5DF;
+  height: 56px; border-radius: 16px;
+  background: color-mix(in srgb, var(--md-sys-color-outline-variant) 60%, transparent);
   animation: pulse 1.4s ease-in-out infinite;
 }
 
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 
-.empty-state { font-size: 14px; color: #9B9590; padding: 20px 0; }
+.empty-state { font-size: 14px; color: var(--md-sys-color-on-surface-variant); padding: 20px 0; }
 .empty-state-icon { color: var(--md-sys-color-primary); margin-right: 6px; vertical-align: -4px; }
 
-/* Task rows */
+/* Task rows — card surface allineate al pattern NEBULA Docs */
 .task-row {
   display: flex; align-items: center; gap: 10px;
   padding: 12px 14px;
-  background: #fff;
-  border-radius: 10px;
-  border: 1px solid #E8E5DF;
+  background: var(--md-sys-color-surface);
+  border-radius: 16px;
+  border: 1px solid var(--md-sys-color-outline-variant);
   border-left: 6px solid transparent;
-  margin-bottom: 6px;
+  margin-bottom: 10px;
   box-shadow: var(--md-sys-elevation-level-1);
+  transition: background var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
+              border-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
 }
 
-.task-row--done { opacity: 0.5; border-left: 6px solid #E8E5DF; }
+.task-row--done { opacity: 0.55; border-left: 6px solid var(--md-sys-color-outline-variant); }
 
 .checkbox {
   width: 18px; height: 18px;
   border-radius: 5px;
-  border: 1.5px solid #C8C5C0;
+  border: 1.5px solid var(--md-sys-color-outline);
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0; cursor: pointer;
   transition: all 0.15s;
@@ -190,61 +202,65 @@ const showDone = ref(false)
 .checkbox:hover { border-color: var(--md-sys-color-primary); }
 .check-icon { color: var(--md-sys-color-primary); }
 
-.row-title { flex: 1; font-size: 14px; color: #1A1917; }
-.row-title--done { text-decoration: line-through; color: #9B9590; }
+.row-title { flex: 1; font-size: 14px; color: var(--md-sys-color-on-surface); }
+.row-title--done { text-decoration: line-through; color: var(--md-sys-color-on-surface-variant); }
 
-.row-due { font-size: 11px; color: #9B9590; display: flex; align-items: center; gap: 3px; flex-shrink: 0; }
+.row-due { font-size: 11px; color: var(--md-sys-color-on-surface-variant); display: flex; align-items: center; gap: 3px; flex-shrink: 0; }
 
 .undo-btn {
   background: none; border: none; cursor: pointer;
-  color: #9B9590; padding: 2px; border-radius: var(--md-sys-shape-corner-extra-small);
+  color: var(--md-sys-color-on-surface-variant);
+  padding: 2px; border-radius: var(--md-sys-shape-corner-extra-small);
   display: flex; align-items: center;
   transition: color 0.15s;
   flex-shrink: 0;
 }
 
-.undo-btn:hover { color: var(--md-sys-color-primary-hover); }
+.undo-btn:hover { color: var(--md-sys-color-primary); }
 
-/* Collapsible "Completate di recente" */
+/* Collapsible "Completate di recente": niente chevron (memoria
+   feedback_no_chevrons). Stato aperto = bordo accent left + bg surface-container. */
 .collapse-toggle {
   width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 0;
-  margin-top: 12px;
-  background: none;
-  border: none;
-  border-top: 1px solid #E8E5DF;
+  padding: 10px 14px;
+  margin: 16px 0 8px;
+  background: var(--md-sys-color-surface-container-low);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-left: 3px solid var(--md-sys-color-outline-variant);
+  border-radius: 12px;
   cursor: pointer;
   font-family: inherit;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: #9B9590;
-  transition: color 0.15s;
+  color: var(--md-sys-color-on-surface-variant);
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
 }
 
-.collapse-toggle:hover { color: var(--md-sys-color-primary-hover); }
+.collapse-toggle:hover {
+  color: var(--md-sys-color-on-surface);
+  border-color: color-mix(in srgb, var(--md-sys-color-primary) 30%, var(--md-sys-color-outline-variant));
+}
 
-.collapse-meta {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+.collapse-toggle.is-open {
+  border-left-color: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-surface);
+  background: color-mix(in srgb, var(--md-sys-color-primary) 5%, var(--md-sys-color-surface));
 }
 
 .collapse-count {
-  background: #F4F2EE;
-  color: #6A6560;
+  background: color-mix(in srgb, var(--md-sys-color-primary) 12%, transparent);
+  color: var(--md-sys-color-primary);
   font-size: 11px;
-  font-weight: 600;
-  padding: 1px 7px;
+  font-weight: 700;
+  padding: 1px 8px;
   border-radius: var(--md-sys-shape-corner-full);
   letter-spacing: 0;
 }
-
-.collapse-chevron { color: inherit; }
 
 .done-list { display: flex; flex-direction: column; }
 </style>
