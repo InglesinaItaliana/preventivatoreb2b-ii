@@ -198,7 +198,7 @@ Gli stati vuoti hanno **cinque tipi diversi**. Confonderli è il bug più comune
 **Lettura dell'audit.**
 
 - **Tipologia dominante**: *atteso* (~19) > *primo-uso* (~11) > *filtro* (~12) > *pulizia* (~6). Nessuno stato di tipo *errore camuffato* è renderizzato come empty state — i fallimenti di query passano dai toast (gestione robusta, allineata al §5 *Regola tecnica importante*).
-- **Violazioni anti-pattern §7** (6 punti, marcati 🚫): emoji 🎉 in CepheidActionsView (3 punti), CepheidInboxView, QuasarQuadrantiView (Q1), PulsarPendingView (esclamativo). Da bonificare quando si tocca il modulo.
+- **Violazioni anti-pattern §7** (7 punti, marcati 🚫 nel catalogo): emoji 🎉 in CepheidActionsView (3 punti), CepheidInboxView, QuasarQuadrantiView (Q1), CepheidTimeline (componente, non in catalogo); esclamativi in PulsarPendingView e PulsarMessageView. **Bonificate 2026-05-26** — i marcatori 🚫 restano come traccia storica dell'audit.
 - **Stati primo-uso** sono il punto di maggior valore identitario: la suite accoglie l'utente nuovo. Gli inviti pratici ("Crea la prima", "Inizia ora") restano allineati a LYRA — niente bisogno di astrologizzare.
 - **Stati pulizia** sono i candidati naturali per micro-celebrazioni §6 (StarAvatar quieto, punto luminoso, glow).
 

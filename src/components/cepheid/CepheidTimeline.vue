@@ -327,7 +327,7 @@ defineExpose({ expanded })
         </template>
         <div class="rk"><MIcon name="emoji_events" :size="28" /></div>
         <div class="ft">Progetto completato</div>
-        <div class="fs">obiettivo raggiunto 🎉</div>
+        <div class="fs">obiettivo raggiunto</div>
       </div>
 
       <!-- empty -->

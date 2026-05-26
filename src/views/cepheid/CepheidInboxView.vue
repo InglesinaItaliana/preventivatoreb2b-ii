@@ -88,7 +88,7 @@ const confetti = computed(() => Array.from({ length: 14 }, (_, k) => ({
         </template>
         <div class="ib-rk"><MIcon name="emoji_events" :size="28" /></div>
         <div class="ib-ft">Inbox pulita</div>
-        <div class="ib-fs">Tutto smistato. Niente da fare qui. 🎉</div>
+        <div class="ib-fs">Tutto smistato. Il cielo è sereno.</div>
       </div>
 
       <!-- stack -->

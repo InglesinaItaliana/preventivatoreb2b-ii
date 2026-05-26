@@ -325,11 +325,11 @@ onMounted(() => {
           </template>
           <div class="av-rk"><MIcon name="emoji_events" :size="28" /></div>
           <div class="av-ft">{{ filter === 'mine' ? 'Tutto fatto' : 'Nessuna azione aperta' }}</div>
-          <div class="av-fs">{{ filter === 'mine' ? 'Nessuna azione assegnata da fare. 🎉' : 'Niente in sospeso qui. 🎉' }}</div>
+          <div class="av-fs">{{ filter === 'mine' ? 'Nessuna azione assegnata da fare.' : 'Niente in sospeso qui.' }}</div>
         </div>
         <div v-else-if="!visibleOpen.length" class="empty-state">
           <MIcon name="check_circle" filled :size="20" class="empty-state-icon" />
-          Nessuna azione in ritardo. 🎉
+          Nessuna azione in ritardo. Stato sereno.
         </div>
 
         <template v-for="g in groups" :key="g.key">
