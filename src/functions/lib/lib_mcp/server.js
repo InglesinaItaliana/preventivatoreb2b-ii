@@ -251,7 +251,10 @@ async function dispatch(req, userEmail) {
     }
 }
 async function handleMcpRequest(req) {
-    var _a, _b, _c;
+    var _a, _b, _c, _d, _e, _f;
+    // DEBUG: log ogni request per vedere cosa claude.ai sta facendo
+    const ua = ((_a = req.headers['user-agent']) !== null && _a !== void 0 ? _a : req.headers['User-Agent']);
+    console.log(`[mcp] ${req.method} ${(_b = req.path) !== null && _b !== void 0 ? _b : '/'} ua=${(_c = ua === null || ua === void 0 ? void 0 : ua.slice(0, 80)) !== null && _c !== void 0 ? _c : '?'}`);
     // CORS preflight (Claude Desktop non lo manda, ma claude.ai web sì)
     if (req.method === 'OPTIONS') {
         return {
@@ -271,9 +274,14 @@ async function handleMcpRequest(req) {
     // ─── F6 OAuth sub-paths (no Bearer auth richiesto su questi) ──────────
     // Cloud Function HTTP path arriva con prefix `/mcpNebula/...` o solo `...`
     // a seconda dell'env. Normalizziamo.
-    const rawPath = (_a = req.path) !== null && _a !== void 0 ? _a : '';
+    const rawPath = (_d = req.path) !== null && _d !== void 0 ? _d : '';
     const path = rawPath.replace(/^\/mcpNebula\/?/, '/').replace(/^\/+/, '/');
-    if (req.method === 'GET' && path === '/.well-known/oauth-authorization-server') {
+    if (req.method === 'GET' && (path === '/.well-known/oauth-authorization-server' ||
+        path === '/.well-known/openid-configuration')) {
+        // claude.ai web (osservato 2026-05-26) probe `openid-configuration`
+        // come OIDC Discovery anziché RFC 8414. Ritorniamo lo stesso JSON di
+        // metadata OAuth 2.0 — claude.ai estrae solo authorization_endpoint /
+        // token_endpoint / registration_endpoint, non valida campi OIDC.
         return (0, oauth_1.handleAsMetadata)();
     }
     if (req.method === 'GET' && path === '/.well-known/oauth-protected-resource') {
@@ -283,36 +291,49 @@ async function handleMcpRequest(req) {
         return (0, oauth_1.handleRegister)(req.body);
     }
     if (req.method === 'GET' && (path === '/authorize' || path === '/oauth/authorize')) {
-        return (0, oauth_1.handleAuthorize)((_b = req.query) !== null && _b !== void 0 ? _b : {});
+        return (0, oauth_1.handleAuthorize)((_e = req.query) !== null && _e !== void 0 ? _e : {});
     }
     if (req.method === 'POST' && (path === '/token' || path === '/oauth/token')) {
-        const contentType = ((_c = req.headers['content-type']) !== null && _c !== void 0 ? _c : req.headers['Content-Type']);
+        const contentType = ((_f = req.headers['content-type']) !== null && _f !== void 0 ? _f : req.headers['Content-Type']);
         return (0, oauth_1.handleToken)(req.body, contentType);
     }
-    // ─── MCP JSON-RPC (POST root o /mcpNebula direttamente) ───────────────
-    // GET su base URL: probe di discovery. Spec MCP Authorization → rispondiamo
-    // 401 con WWW-Authenticate resource_metadata, claude.ai segue il hint.
+    // ─── MCP JSON-RPC (POST root) ─────────────────────────────────────────
+    // Spec Streamable HTTP (MCP 2025-06-18): GET sul MCP endpoint = client
+    // apre SSE stream per messaggi server→client. Server DEVE ritornare
+    // Content-Type: text/event-stream OPPURE HTTP 405 Method Not Allowed.
+    // Noi non supportiamo SSE (request/response sufficiente per i nostri tool)
+    // → 405. WWW-Authenticate aggiunto come hint per OAuth (claude.ai farà
+    // POST dopo che ha visto 405).
     if (req.method === 'GET' || req.method === 'HEAD') {
         return {
-            status: 401,
+            status: 405,
             body: req.method === 'HEAD' ? '' : JSON.stringify({
-                error: 'unauthorized',
-                error_description: 'Auth required. Vedi resource_metadata per OAuth discovery.',
-                resource_metadata: RESOURCE_METADATA_URL,
+                jsonrpc: '2.0', id: null,
+                error: { code: -32000, message: 'SSE stream not supported on this MCP endpoint. Use POST.' },
             }),
             headers: {
                 'Access-Control-Allow-Origin': '*',
                 'Access-Control-Expose-Headers': 'WWW-Authenticate',
                 'WWW-Authenticate': WWW_AUTH_HEADER,
+                'Allow': 'POST, OPTIONS',
                 'Content-Type': 'application/json',
             },
+        };
+    }
+    if (req.method === 'DELETE') {
+        // Streamable HTTP session DELETE (Mcp-Session-Id): noi non gestiamo
+        // sessioni stateful, rispondiamo 405 come da spec.
+        return {
+            status: 405,
+            body: JSON.stringify({ error: 'session_terminate_not_supported' }),
+            headers: { 'Access-Control-Allow-Origin': '*', 'Allow': 'POST, OPTIONS' },
         };
     }
     if (req.method && req.method !== 'POST') {
         return {
             status: 405,
             body: JSON.stringify({ error: 'Method Not Allowed' }),
-            headers: { 'Access-Control-Allow-Origin': '*' },
+            headers: { 'Access-Control-Allow-Origin': '*', 'Allow': 'POST, OPTIONS' },
         };
     }
     // Auth
@@ -348,7 +369,7 @@ async function handleMcpRequest(req) {
         if (!parsedBody || typeof parsedBody !== 'object')
             throw new Error('Invalid body');
     }
-    catch (_d) {
+    catch (_g) {
         return {
             status: 400,
             body: JSON.stringify({

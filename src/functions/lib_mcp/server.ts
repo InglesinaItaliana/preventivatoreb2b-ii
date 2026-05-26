@@ -261,6 +261,10 @@ export interface McpResponseLike {
 }
 
 export async function handleMcpRequest(req: McpRequestLike): Promise<McpResponseLike> {
+    // DEBUG: log ogni request per vedere cosa claude.ai sta facendo
+    const ua = (req.headers['user-agent'] ?? req.headers['User-Agent']) as string | undefined;
+    console.log(`[mcp] ${req.method} ${req.path ?? '/'} ua=${ua?.slice(0, 80) ?? '?'}`);
+
     // CORS preflight (Claude Desktop non lo manda, ma claude.ai web sì)
     if (req.method === 'OPTIONS') {
         return {
@@ -284,7 +288,14 @@ export async function handleMcpRequest(req: McpRequestLike): Promise<McpResponse
     const rawPath = req.path ?? '';
     const path = rawPath.replace(/^\/mcpNebula\/?/, '/').replace(/^\/+/, '/');
 
-    if (req.method === 'GET' && path === '/.well-known/oauth-authorization-server') {
+    if (req.method === 'GET' && (
+        path === '/.well-known/oauth-authorization-server' ||
+        path === '/.well-known/openid-configuration'
+    )) {
+        // claude.ai web (osservato 2026-05-26) probe `openid-configuration`
+        // come OIDC Discovery anziché RFC 8414. Ritorniamo lo stesso JSON di
+        // metadata OAuth 2.0 — claude.ai estrae solo authorization_endpoint /
+        // token_endpoint / registration_endpoint, non valida campi OIDC.
         return handleAsMetadata();
     }
     if (req.method === 'GET' && path === '/.well-known/oauth-protected-resource') {
@@ -301,23 +312,37 @@ export async function handleMcpRequest(req: McpRequestLike): Promise<McpResponse
         return handleToken(req.body, contentType);
     }
 
-    // ─── MCP JSON-RPC (POST root o /mcpNebula direttamente) ───────────────
-    // GET su base URL: probe di discovery. Spec MCP Authorization → rispondiamo
-    // 401 con WWW-Authenticate resource_metadata, claude.ai segue il hint.
+    // ─── MCP JSON-RPC (POST root) ─────────────────────────────────────────
+    // Spec Streamable HTTP (MCP 2025-06-18): GET sul MCP endpoint = client
+    // apre SSE stream per messaggi server→client. Server DEVE ritornare
+    // Content-Type: text/event-stream OPPURE HTTP 405 Method Not Allowed.
+    // Noi non supportiamo SSE (request/response sufficiente per i nostri tool)
+    // → 405. WWW-Authenticate aggiunto come hint per OAuth (claude.ai farà
+    // POST dopo che ha visto 405).
     if (req.method === 'GET' || req.method === 'HEAD') {
         return {
-            status: 401,
+            status: 405,
             body: req.method === 'HEAD' ? '' : JSON.stringify({
-                error: 'unauthorized',
-                error_description: 'Auth required. Vedi resource_metadata per OAuth discovery.',
-                resource_metadata: RESOURCE_METADATA_URL,
+                jsonrpc: '2.0', id: null,
+                error: { code: -32000, message: 'SSE stream not supported on this MCP endpoint. Use POST.' },
             }),
             headers: {
                 'Access-Control-Allow-Origin': '*',
                 'Access-Control-Expose-Headers': 'WWW-Authenticate',
                 'WWW-Authenticate': WWW_AUTH_HEADER,
+                'Allow': 'POST, OPTIONS',
                 'Content-Type': 'application/json',
             },
+        };
+    }
+
+    if (req.method === 'DELETE') {
+        // Streamable HTTP session DELETE (Mcp-Session-Id): noi non gestiamo
+        // sessioni stateful, rispondiamo 405 come da spec.
+        return {
+            status: 405,
+            body: JSON.stringify({ error: 'session_terminate_not_supported' }),
+            headers: { 'Access-Control-Allow-Origin': '*', 'Allow': 'POST, OPTIONS' },
         };
     }
 
@@ -325,7 +350,7 @@ export async function handleMcpRequest(req: McpRequestLike): Promise<McpResponse
         return {
             status: 405,
             body: JSON.stringify({ error: 'Method Not Allowed' }),
-            headers: { 'Access-Control-Allow-Origin': '*' },
+            headers: { 'Access-Control-Allow-Origin': '*', 'Allow': 'POST, OPTIONS' },
         };
     }
 
