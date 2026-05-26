@@ -355,6 +355,16 @@ void editorRef
         </div>
 
         <button
+          type="button"
+          class="nd-history-btn"
+          title="Storia revisioni"
+          aria-label="Storia revisioni"
+          @click="doc && router.push(`/nebula/docs/${doc.id}/history`)"
+        >
+          <MaterialIcon name="history" :size="14" />
+        </button>
+
+        <button
           v-if="isOwner"
           type="button"
           class="nd-share-btn"
@@ -619,7 +629,8 @@ void editorRef
 }
 
 .nd-manual-save,
-.nd-share-btn {
+.nd-share-btn,
+.nd-history-btn {
   background: transparent;
   border: 1px solid rgba(196, 96, 48, 0.35);
   color: #C46030;
@@ -633,9 +644,11 @@ void editorRef
   gap: 5px;
 }
 .nd-manual-save:hover:not(:disabled),
-.nd-share-btn:hover { background: rgba(196, 96, 48, 0.08); }
+.nd-share-btn:hover,
+.nd-history-btn:hover { background: rgba(196, 96, 48, 0.08); }
 .nd-manual-save:disabled { opacity: 0.5; cursor: wait; }
 .nd-share-btn { padding: 6px 12px; }
+.nd-history-btn { padding: 6px; }
 
 /* External update warning */
 .nd-external-warn {

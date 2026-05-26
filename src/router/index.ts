@@ -145,6 +145,8 @@ const router = createRouter({
         { path: 'docs', name: 'nebula-docs', component: () => import('../views/nebula/docs/NebulaDocsHomeView.vue') },
         // Editor singolo documento (chunk 4). Stesso gate /nebula/docs/*.
         { path: 'docs/:docId', name: 'nebula-doc', component: () => import('../views/nebula/docs/NebulaDocView.vue') },
+        // History view (F3-C3): timeline snapshots + restore.
+        { path: 'docs/:docId/history', name: 'nebula-doc-history', component: () => import('../views/nebula/docs/NebulaDocHistoryView.vue') },
         // Dev page per testare l'IconPicker isolato (chunk 2). Stesso gate del
         // parent /nebula/docs. Da rimuovere a Fase 1 conclusa.
         { path: 'docs/_dev/icons', name: 'nebula-docs-dev-icons', component: () => import('../views/nebula/docs/_dev/IconPickerDevView.vue') },
