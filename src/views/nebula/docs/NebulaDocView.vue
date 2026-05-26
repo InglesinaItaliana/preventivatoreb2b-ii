@@ -24,6 +24,8 @@ import { TaskMention } from './extensions/TaskMention'
 import { ProjectMention } from './extensions/ProjectMention'
 import { TaskEmbed } from './extensions/TaskEmbed'
 import { UserMention } from './extensions/UserMention'
+import { UniversalMention } from './extensions/UniversalMention'
+import { useTeamMembers } from '../../../composables/sidera/useTeamMembers'
 import { useAllTasks } from '../../../composables/sidera/useAllTasks'
 import { useProjects } from '../../../composables/sidera/useProjects'
 import { useDocPresence } from '../../../composables/nebula/useDocPresence'
@@ -70,12 +72,15 @@ const isOwner = computed(() => {
 })
 
 // ── Editor TipTap ───────────────────────────────────────────────────────────
-// Sub a task + progetti CEPHEID per i typeahead `@` (TaskMention) e `#`
-// (ProjectMention). 1 sub ciascuna per editor mounted (riusate dai
-// Suggestion plugin). Pass come getter (no Ref): TipTap introspeziona
-// options e i Proxy reattivi rompono config (trap hasOwnProperty).
+// Sub a task + progetti CEPHEID + team per i typeahead. UniversalMention
+// (`@` poliglotta) consuma tutti e 3. ProjectMention (`#`) resta fast-path
+// solo progetti. TaskMention disabilita il suo suggester `@` (era duplicato
+// con UniversalMention) ma mantiene il nodo schema per render chip esistenti.
+// Pass come getter (no Ref): TipTap introspeziona options e i Proxy
+// reattivi rompono config (trap hasOwnProperty).
 const { tasks: allTasksRef } = useAllTasks()
 const { projects: allProjectsRef } = useProjects()
+const { members: allTeamRef } = useTeamMembers()
 
 // Presence: sub al sub-collezione nebulaDocs/{docId}/presence + heartbeat 15s.
 // Espone peers (altri utenti attivi visti <30s fa).
@@ -87,16 +92,23 @@ const editor = useEditor({
       heading: { levels: [1, 2, 3] },
     }),
     Placeholder.configure({
-      placeholder: 'Digita "/" per i comandi · "@" task · "#" progetto…',
+      placeholder: 'Digita "/" per i comandi · "@" per menzionare persone/task/progetti · "#" progetto…',
     }),
     SlashCommand,
-    TaskMention.configure({ allTasks: () => allTasksRef.value }),
+    // TaskMention con suggester disabilitato: il nodo schema resta (chip
+    // esistenti renderizzano), l'inserimento via `@` passa per UniversalMention.
+    TaskMention.configure({ allTasks: () => allTasksRef.value, enableSuggester: false }),
     ProjectMention.configure({ allProjects: () => allProjectsRef.value }),
     TaskEmbed.configure({
       allTasks: () => allTasksRef.value,
       allProjects: () => allProjectsRef.value,
     }),
     UserMention,
+    UniversalMention.configure({
+      allTeam: () => allTeamRef.value,
+      allTasks: () => allTasksRef.value,
+      allProjects: () => allProjectsRef.value,
+    }),
   ],
   editable: false,                              // si sblocca dopo init + ACL
   onUpdate: () => scheduleAutosave(),
