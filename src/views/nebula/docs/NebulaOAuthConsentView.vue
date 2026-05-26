@@ -15,6 +15,8 @@
  */
 import { ref, onMounted, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
+import { signOut, signInWithEmailAndPassword } from 'firebase/auth'
+import { auth } from '../../../firebase'
 import { useCurrentUser } from '../../../composables/sidera/useCurrentUser'
 import {
   fetchAuthRequest, approveAuthRequest,
@@ -31,6 +33,53 @@ const info = ref<OAuthAuthRequestInfo | null>(null)
 const loading = ref(true)
 const approving = ref(false)
 const error = ref('')
+
+// ── Switch account (mini-login inline) ───────────────────────────────────
+// User connected with account A but wants to grant OAuth to claude.ai per
+// account B → signOut + signIn senza lasciare la consent view, così l'auth
+// request mantiene lo stesso `req` ID e claude.ai non perde il contesto.
+const switching = ref(false)
+const switchEmail = ref('')
+const switchPassword = ref('')
+const switchBusy = ref(false)
+const switchError = ref('')
+
+async function startSwitchAccount() {
+  switchError.value = ''
+  switchEmail.value = ''
+  switchPassword.value = ''
+  try {
+    await signOut(auth)
+  } catch { /* ignore */ }
+  switching.value = true
+}
+
+function cancelSwitchAccount() {
+  switching.value = false
+  switchError.value = ''
+}
+
+async function confirmSwitchAccount() {
+  if (!switchEmail.value.trim() || !switchPassword.value) {
+    switchError.value = 'Email e password obbligatorie.'
+    return
+  }
+  switchBusy.value = true
+  switchError.value = ''
+  try {
+    await signInWithEmailAndPassword(auth, switchEmail.value.trim(), switchPassword.value)
+    // Refetch dell'info OAuth per aggiornare userEmail (server riflette nuova identità)
+    try { info.value = await fetchAuthRequest(authRequestId.value) } catch { /* ignore */ }
+    switching.value = false
+    switchPassword.value = ''
+  } catch (e: any) {
+    switchError.value = e?.code === 'auth/invalid-credential'
+      ? 'Email o password errate.'
+      : (e?.message ?? String(e))
+  } finally {
+    switchBusy.value = false
+  }
+}
 
 onMounted(async () => {
   if (!authRequestId.value) {
@@ -69,7 +118,9 @@ function deny() {
 }
 
 const safeClientName = computed(() => info.value?.clientName ?? 'Applicazione esterna')
-const safeUserEmail = computed(() => info.value?.userEmail ?? currentUser.value?.email ?? '')
+// Preferiamo currentUser (reattivo: si aggiorna subito dopo switch account)
+// e usiamo info.userEmail come fallback se currentUser non è ancora pronto.
+const safeUserEmail = computed(() => currentUser.value?.email ?? info.value?.userEmail ?? '')
 // Estrai origine del redirect_uri per mostrarla all'utente (es. "claude.ai")
 const redirectHost = computed(() => {
   if (!info.value?.redirectUri) return ''
@@ -101,8 +152,60 @@ const redirectHost = computed(() => {
       <template v-else-if="info">
         <p class="oc-lead">
           <strong>{{ safeClientName }}</strong> vuole connettersi a <strong>NEBULA-DOCS</strong>
-          per conto tuo (<code>{{ safeUserEmail }}</code>).
+          per conto tuo (<code>{{ safeUserEmail || '…' }}</code>).
         </p>
+
+        <!-- Switch account: link discreto sotto al lead. -->
+        <div v-if="!switching" class="oc-switch-row">
+          <button
+            type="button"
+            class="oc-switch-link"
+            :disabled="approving"
+            @click="startSwitchAccount"
+          >
+            <MaterialIcon name="switch_account" :size="14" />
+            Non sei tu? Cambia account
+          </button>
+        </div>
+
+        <div v-else class="oc-switch-form">
+          <h3>Accedi con un altro account</h3>
+          <label class="oc-field">
+            <span>Email</span>
+            <input
+              v-model="switchEmail"
+              type="email"
+              autocomplete="username"
+              :disabled="switchBusy"
+              @keydown.enter.prevent="confirmSwitchAccount"
+            />
+          </label>
+          <label class="oc-field">
+            <span>Password</span>
+            <input
+              v-model="switchPassword"
+              type="password"
+              autocomplete="current-password"
+              :disabled="switchBusy"
+              @keydown.enter.prevent="confirmSwitchAccount"
+            />
+          </label>
+          <p v-if="switchError" class="oc-switch-error">{{ switchError }}</p>
+          <div class="oc-switch-actions">
+            <button
+              type="button"
+              class="oc-btn oc-btn-secondary"
+              :disabled="switchBusy"
+              @click="cancelSwitchAccount"
+            >Annulla</button>
+            <button
+              type="button"
+              class="oc-btn oc-btn-primary"
+              :disabled="switchBusy"
+              @click="confirmSwitchAccount"
+            >{{ switchBusy ? 'Accesso…' : 'Accedi' }}</button>
+          </div>
+        </div>
 
         <div class="oc-permissions">
           <h3>Cosa potrà fare</h3>
@@ -130,7 +233,7 @@ const redirectHost = computed(() => {
           <button
             type="button"
             class="oc-btn oc-btn-secondary"
-            :disabled="approving"
+            :disabled="approving || switching"
             @click="deny"
           >
             Annulla
@@ -138,7 +241,7 @@ const redirectHost = computed(() => {
           <button
             type="button"
             class="oc-btn oc-btn-primary"
-            :disabled="approving"
+            :disabled="approving || switching || !safeUserEmail"
             @click="authorize"
           >
             <MaterialIcon name="check" :size="16" />
@@ -292,6 +395,77 @@ const redirectHost = computed(() => {
   font-size: 12px;
   color: #888;
   text-align: center;
+}
+
+/* Switch account */
+.oc-switch-row {
+  margin: -10px 0 16px;
+}
+.oc-switch-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: transparent;
+  border: 0;
+  padding: 4px 6px;
+  margin-left: -6px;
+  border-radius: 6px;
+  color: #C46030;
+  font: inherit;
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+.oc-switch-link:hover:not(:disabled) {
+  background: rgba(196, 96, 48, 0.08);
+}
+.oc-switch-link:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.oc-switch-form {
+  background: rgba(196, 96, 48, 0.05);
+  border: 1px solid rgba(196, 96, 48, 0.15);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin-bottom: 16px;
+}
+.oc-switch-form h3 {
+  font-size: 13px;
+  font-weight: 600;
+  color: #C46030;
+  margin: 0 0 10px;
+}
+.oc-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.oc-field span {
+  font-size: 11.5px;
+  color: #777;
+}
+.oc-field input {
+  font: inherit;
+  font-size: 14px;
+  padding: 8px 10px;
+  border: 1px solid rgba(0,0,0,0.15);
+  border-radius: 8px;
+  background: white;
+}
+.oc-field input:focus {
+  outline: none;
+  border-color: #C46030;
+  box-shadow: 0 0 0 3px rgba(196,96,48,0.15);
+}
+.oc-switch-error {
+  margin: 4px 0 10px;
+  font-size: 12.5px;
+  color: #a82020;
+}
+.oc-switch-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
 }
 
 /* States */
