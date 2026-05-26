@@ -12,6 +12,7 @@
   },
   "compileOnSave": true,
   "include": [
-    "index.ts"
+    "index.ts",
+    "lib_md/**/*.ts"
   ]
 }
