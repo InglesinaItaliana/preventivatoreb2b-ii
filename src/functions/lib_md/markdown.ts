@@ -25,7 +25,7 @@ import { marked, Tokens } from 'marked';
 // MARKDOWN → PROSEMIRROR
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface PMNode {
+export interface PMNode {
     type: string;
     attrs?: Record<string, unknown>;
     content?: PMNode[];

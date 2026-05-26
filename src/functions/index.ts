@@ -2567,3 +2567,34 @@ exports.listNebulaApiKeys = functions
             }).sort((a, b) => (b.createdAt ?? 0) - (a.createdAt ?? 0)),
         };
     });
+
+// ============================================================================
+// NEBULA-DOCS — MCP server endpoint (F4-C3)
+// Cloud Function HTTP che parla JSON-RPC al protocollo MCP. Claude Desktop /
+// claude.ai connector point qui via Bearer API key (F4-C2).
+//
+// Tools (8): nebula.search, getDoc, listDocs, createDoc, appendBlock,
+// replaceSection, linkTask, linkProject. Implementazioni in lib_mcp/tools.ts.
+// JSON-RPC dispatcher + auth in lib_mcp/server.ts.
+//
+// URL: https://europe-west1-preventivatoreb2b-ii.cloudfunctions.net/mcpNebula
+// ============================================================================
+
+import { handleMcpRequest } from './lib_mcp/server';
+
+exports.mcpNebula = functions
+    .region('europe-west1')
+    .runWith({ memory: '256MB', timeoutSeconds: 60 })
+    .https.onRequest(async (req, res) => {
+        const result = await handleMcpRequest({
+            headers: req.headers as Record<string, unknown>,
+            method: req.method,
+            body: req.body,
+        });
+        if (result.headers) {
+            for (const [k, v] of Object.entries(result.headers)) {
+                res.set(k, v);
+            }
+        }
+        res.status(result.status).send(result.body);
+    });
