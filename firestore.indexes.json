@@ -157,6 +157,14 @@
         { "arrayConfig": "CONTAINS", "queryScope": "COLLECTION" },
         { "order": "DESCENDING", "queryScope": "COLLECTION_GROUP" }
       ]
+    },
+    {
+      "collectionGroup": "presence",
+      "fieldPath": "lastSeenAt",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" }
+      ]
     }
   ]
 }
