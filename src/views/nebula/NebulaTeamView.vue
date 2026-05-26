@@ -1,9 +1,22 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { ListBulletIcon, RectangleGroupIcon, PencilSquareIcon } from '@heroicons/vue/24/outline'
+import { PencilSquareIcon } from '@heroicons/vue/24/outline'
 import { useNebulaTeam, POSITION_OPTIONS, CATEGORY_OPTIONS, type NebulaMember } from '../../composables/nebula/useNebulaTeam'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
 import StarAvatar from '../../components/shared/StarAvatar.vue'
+import MdPageHeader from '../../components/shared/MdPageHeader.vue'
+import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
+// View-switcher pillola riutilizzato da CEPHEID Azioni/Progetti (vive sotto
+// components/cepheid/ ma è agnostico — usa solo MIcon + token M3).
+import CepheidViewSwitcher from '../../components/cepheid/CepheidViewSwitcher.vue'
+
+const scrollEl = ref<HTMLElement | null>(null)
+const { hidden: headerHidden } = useAutoHideHeader(scrollEl)
+
+const viewTabs: { id: 'org' | 'list'; label: string; icon: string }[] = [
+  { id: 'org',  label: 'Organigramma', icon: 'account_tree' },
+  { id: 'list', label: 'Lista',        icon: 'list' },
+]
 
 const { members, loading, updatePosition, updateCategory } = useNebulaTeam()
 const { currentUser } = useCurrentUser()
@@ -91,25 +104,23 @@ const roleAccent: Record<string, string> = {
 </script>
 
 <template>
-  <div class="nb-shell">
+  <div class="nb-shell" ref="scrollEl">
 
-    <!-- ── Header ── -->
-    <header class="nb-header">
-      <div>
-        <h1 class="nb-title">Team</h1>
-        <p class="nb-sub">{{ active.length }} membri attivi · {{ all.length - active.length }} inattivi</p>
-      </div>
-      <div class="nb-toggle">
-        <button class="nb-toggle-btn" :class="{ active: view === 'org' }" @click="view = 'org'">
-          <RectangleGroupIcon class="nb-toggle-icon" />
-          Organigramma
-        </button>
-        <button class="nb-toggle-btn" :class="{ active: view === 'list' }" @click="view = 'list'">
-          <ListBulletIcon class="nb-toggle-icon" />
-          Lista
-        </button>
-      </div>
-    </header>
+    <!-- ── Header (MdPageHeader: stile coerente con NEBULA-DOCS / CEPHEID Progetti) ── -->
+    <MdPageHeader
+      title="Squadra"
+      :subtitle="`${active.length} membri attivi · ${all.length - active.length} inattivi`"
+      sticky
+      :hidden="headerHidden"
+    >
+      <template #tools>
+        <CepheidViewSwitcher
+          :model-value="view"
+          :tabs="viewTabs"
+          @update:model-value="(v) => (view = v as 'org' | 'list')"
+        />
+      </template>
+    </MdPageHeader>
 
     <div v-if="loading" class="nb-loading">Caricamento…</div>
 
@@ -220,81 +231,30 @@ const roleAccent: Record<string, string> = {
    ───────────────────────────────────────────────────────────────────── */
 .nb-shell {
   font-family: var(--md-sys-typescale-body-medium-font);
-  background: var(--md-sys-color-surface);
   color: var(--md-sys-color-on-surface);
   height: 100%;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+  /* Page-bg beige caldo (allineato a CEPHEID Progetti + NEBULA-DOCS). */
+  --page-bg: #EFE7D9;
+  background: var(--page-bg);
+}
+.s-surface-dark .nb-shell { --page-bg: #0E0C07; }
+@media (prefers-color-scheme: dark) {
+  .nb-shell { --page-bg: #0E0C07; }
 }
 
-/* ── Header ── */
-.nb-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 28px 32px 20px;
+/* Header MdPageHeader sticky con bg surface delle card (non page-bg).
+   Stesso pattern di NebulaDocsHomeView. */
+:deep(.md-page-header) { padding: 18px 16px 14px; }
+:deep(.md-page-header.is-sticky) {
+  background: var(--md-sys-color-surface);
   border-bottom: 1px solid var(--md-sys-color-outline-variant);
-  flex-shrink: 0;
 }
-
-.nb-title {
-  font-family: var(--md-sys-typescale-headline-medium-font);
-  font-size: var(--md-sys-typescale-headline-medium-size);
-  line-height: var(--md-sys-typescale-headline-medium-line-height);
-  font-weight: var(--md-sys-typescale-headline-medium-weight);
-  letter-spacing: 0.04em;
-  color: var(--md-sys-color-on-surface);
-  margin: 0 0 2px;
+@media (min-width: 1024px) {
+  :deep(.md-page-header) { padding: 24px max(40px, calc(50% - 410px)) 18px; }
 }
-
-.nb-sub {
-  font-family: var(--md-sys-typescale-body-small-font);
-  font-size: var(--md-sys-typescale-body-small-size);
-  line-height: var(--md-sys-typescale-body-small-line-height);
-  letter-spacing: var(--md-sys-typescale-body-small-tracking);
-  color: var(--md-sys-color-on-surface-variant);
-}
-
-/* Segmented control (M3 segmented button) */
-.nb-toggle {
-  display: flex;
-  gap: 4px;
-  background: var(--md-sys-color-surface-container);
-  padding: 3px;
-  border-radius: var(--md-sys-shape-corner-medium);
-}
-
-.nb-toggle-btn {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
-  border: none;
-  background: none;
-  border-radius: var(--md-sys-shape-corner-small);
-  font-family: var(--md-sys-typescale-label-medium-font);
-  font-size: var(--md-sys-typescale-label-medium-size);
-  line-height: var(--md-sys-typescale-label-medium-line-height);
-  font-weight: var(--md-sys-typescale-label-medium-weight);
-  letter-spacing: var(--md-sys-typescale-label-medium-tracking);
-  color: var(--md-sys-color-on-surface-variant);
-  cursor: pointer;
-  transition: background var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
-              color      var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
-}
-
-.nb-toggle-btn:hover:not(.active) {
-  background: color-mix(in srgb, var(--md-sys-color-on-surface) 8%, transparent);
-  color: var(--md-sys-color-on-surface);
-}
-
-.nb-toggle-btn.active {
-  background: var(--md-sys-color-secondary-container, var(--md-sys-color-surface-container-highest));
-  color: var(--md-sys-color-on-surface);
-}
-
-.nb-toggle-icon { width: 14px; height: 14px; }
 
 .nb-loading, .nb-empty {
   text-align: center;
@@ -338,12 +298,13 @@ const roleAccent: Record<string, string> = {
   gap: 12px;
 }
 
-/* ── Member card (org) ── M3 outlined card */
+/* ── Member card (org) ── allineata alle card NEBULA-DOCS / CEPHEID Progetti */
 .nb-card {
   width: 118px;
-  background: var(--md-sys-color-surface-container-low);
+  background: var(--md-sys-color-surface);
   border: 1px solid var(--md-sys-color-outline-variant);
-  border-radius: var(--md-sys-shape-corner-medium);
+  border-radius: 16px;
+  box-shadow: var(--md-sys-elevation-level-1);
   padding: 18px 12px 14px;
   display: flex;
   flex-direction: column;
@@ -355,8 +316,8 @@ const roleAccent: Record<string, string> = {
 }
 
 .nb-card:hover {
-  border-color: var(--md-sys-color-primary);
-  background: color-mix(in srgb, var(--md-sys-color-primary) 4%, var(--md-sys-color-surface-container-low));
+  border-color: color-mix(in srgb, var(--md-sys-color-primary) 30%, var(--md-sys-color-outline-variant));
+  background: color-mix(in srgb, var(--md-sys-color-primary) 4%, var(--md-sys-color-surface));
   box-shadow: var(--md-sys-elevation-level-2);
 }
 
@@ -495,9 +456,10 @@ const roleAccent: Record<string, string> = {
   display: flex;
   align-items: center;
   gap: 14px;
-  background: var(--md-sys-color-surface-container-low);
+  background: var(--md-sys-color-surface);
   border: 1px solid var(--md-sys-color-outline-variant);
-  border-radius: var(--md-sys-shape-corner-medium);
+  border-radius: 16px;
+  box-shadow: var(--md-sys-elevation-level-1);
   padding: 14px 16px;
   transition: border-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
               background   var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
@@ -505,9 +467,9 @@ const roleAccent: Record<string, string> = {
 }
 
 .nb-list-card:hover {
-  border-color: color-mix(in srgb, var(--md-sys-color-primary) 40%, transparent);
-  background: color-mix(in srgb, var(--md-sys-color-primary) 4%, var(--md-sys-color-surface-container-low));
-  box-shadow: var(--md-sys-elevation-level-1);
+  border-color: color-mix(in srgb, var(--md-sys-color-primary) 30%, var(--md-sys-color-outline-variant));
+  background: color-mix(in srgb, var(--md-sys-color-primary) 4%, var(--md-sys-color-surface));
+  box-shadow: var(--md-sys-elevation-level-2);
 }
 .nb-list-card.inactive { opacity: 0.45; }
 

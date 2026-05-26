@@ -72,6 +72,15 @@ export const SLASH_COMMANDS: SlashCommandItem[] = [
       editor.chain().focus().deleteRange(range).toggleOrderedList().run()
     },
   },
+  {
+    title: 'Lista todo',
+    description: 'Checkbox interattive inline',
+    icon: 'check_box',
+    aliases: ['todo', 'checkbox', 'check', 'task', 'to-do', 'spunte'],
+    command: ({ editor, range }) => {
+      editor.chain().focus().deleteRange(range).toggleTaskList().run()
+    },
+  },
 
   // ── Blocchi ─────────────────────────────────────────────────────────────
   {

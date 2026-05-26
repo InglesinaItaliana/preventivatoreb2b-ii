@@ -19,6 +19,8 @@ import { useRoute, useRouter } from 'vue-router'
 import { useEditor, EditorContent } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
+import TaskList from '@tiptap/extension-task-list'
+import TaskItem from '@tiptap/extension-task-item'
 import { SlashCommand } from './extensions/SlashCommand'
 import { TaskMention } from './extensions/TaskMention'
 import { ProjectMention } from './extensions/ProjectMention'
@@ -94,6 +96,11 @@ const editor = useEditor({
     Placeholder.configure({
       placeholder: 'Digita "/" per i comandi · "@" per menzionare persone/task/progetti · "#" progetto…',
     }),
+    // TaskList nativo: checkbox interattive nested-friendly. Lo stato `checked`
+    // è persistito dentro al content del doc (data-checked attr) e ri-serializzato
+    // come parte della revision. Niente Cloud Function necessaria.
+    TaskList,
+    TaskItem.configure({ nested: true }),
     SlashCommand,
     // TaskMention con suggester disabilitato: il nodo schema resta (chip
     // esistenti renderizzano), l'inserimento via `@` passa per UniversalMention.
@@ -408,8 +415,9 @@ void editorRef
         salvataggio aprirà il dialog di conflitto.
       </div>
 
-      <!-- Title + icon -->
-      <div class="nd-title-row">
+      <!-- Title block: icona stand-alone SOPRA al titolo (pattern Notion-like),
+           titolo grande/bold sotto. Vedi piano Task 1. -->
+      <div class="nd-title-block">
         <button
           type="button"
           class="nd-icon-btn"
@@ -420,11 +428,11 @@ void editorRef
           <MaterialIcon
             v-if="currentIcon"
             :name="currentIcon.name"
-            :size="36"
+            :size="48"
             :color="currentIcon.color"
             :fill="currentIcon.fill"
           />
-          <MaterialIcon v-else name="add_photo_alternate" :size="32" color="#bbb" />
+          <MaterialIcon v-else name="add_photo_alternate" :size="44" color="#bbb" />
         </button>
 
         <input
@@ -477,6 +485,11 @@ void editorRef
           @click="tb(() => editor!.chain().focus().toggleOrderedList().run())()"
           title="Lista numerata">
           <MaterialIcon name="format_list_numbered" :size="16" />
+        </button>
+        <button type="button" :class="{ 'tb-active': editor.isActive('taskList') }"
+          @click="tb(() => editor!.chain().focus().toggleTaskList().run())()"
+          title="Lista task con checkbox">
+          <MaterialIcon name="check_box" :size="16" />
         </button>
         <span class="tb-sep"></span>
         <button type="button" :class="{ 'tb-active': editor.isActive('blockquote') }"
@@ -553,15 +566,21 @@ void editorRef
   height: 100%;
   min-width: 0;
   width: 100%;
-  max-width: 820px;
   overflow-y: auto;
   overflow-x: hidden;
-  margin: 0 auto;
-  padding: 24px 20px 80px;
+  padding: 24px max(20px, calc(50% - 400px)) 80px;
   font-family: 'Outfit', system-ui, sans-serif;
   color: var(--md-sys-color-on-surface, #1a1a1a);
   /* Box-sizing border-box per coerenza padding ↔ max-width */
   box-sizing: border-box;
+  /* Pattern visivo allineato a CEPHEID Progetti: sfondo beige caldo per dare
+     continuità navigando lista → doc → lista (vedi piano Task 5). */
+  --page-bg: #EFE7D9;
+  background: var(--page-bg);
+}
+.s-surface-dark .nd-root { --page-bg: #0E0C07; }
+@media (prefers-color-scheme: dark) {
+  .nd-root { --page-bg: #0E0C07; }
 }
 
 /* Defensive border-box scope: previene overflow su mobile di child con
@@ -677,52 +696,55 @@ void editorRef
   margin-bottom: 16px;
 }
 
-/* Title row */
-.nd-title-row {
+/* Title block: icona standalone SOPRA, titolo sotto (no più flex row).
+   Pattern Notion-like — vedi piano Task 1. */
+.nd-title-block {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 24px 0 12px;
-  /* Permette al child .nd-title-input (flex:1) di shrinkare oltre la sua
-     intrinsic min-width per non far overflow su mobile. */
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  margin: 32px 0 16px;
   min-width: 0;
+  width: 100%;
 }
 .nd-icon-btn {
   background: transparent;
   border: 0;
-  padding: 8px;
+  padding: 6px;
+  margin-left: -6px;       /* allinea l'icona al baseline sinistro del titolo */
   border-radius: 10px;
   cursor: pointer;
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  transition: background 120ms ease;
+  transition: background var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
   flex-shrink: 0;
 }
 .nd-icon-btn:hover:not(:disabled) { background: rgba(0,0,0,0.04); }
 .nd-icon-btn:disabled { cursor: default; opacity: 0.5; }
 
 .nd-title-input {
-  flex: 1;
-  min-width: 0;            /* essenziale, vedi .nd-title-row */
   width: 100%;
+  min-width: 0;
   border: 0;
   outline: 0;
   background: transparent;
   font-family: 'Cormorant Garamond', serif;
-  font-weight: 600;
-  font-size: 36px;
-  line-height: 1.2;
+  font-weight: 700;
+  font-size: 44px;
+  line-height: 1.1;
+  letter-spacing: -0.005em;
   color: var(--md-sys-color-on-surface, #1a1a1a);
   padding: 4px 0;
 }
 .nd-title-input:focus { border-bottom: 1px solid rgba(196, 96, 48, 0.4); }
-.nd-title-input::placeholder { color: #ccc; font-style: italic; }
+.nd-title-input::placeholder { color: #ccc; font-style: italic; font-weight: 600; }
 
-/* Icon picker wrap */
+/* Icon picker wrap: l'icona è ora full-width block-aligned, il picker apre
+   sotto al titolo senza offset laterale. */
 .nd-icon-picker-wrap {
   position: relative;
-  margin: 0 0 24px 56px;
+  margin: 0 0 24px 0;
 }
 .nd-icon-close {
   position: absolute;
@@ -807,15 +829,58 @@ void editorRef
   padding-left: 1.5em;
   margin: 0.5em 0;
 }
-.nd-editor :deep(.ProseMirror ul) { list-style-type: disc; }
+.nd-editor :deep(.ProseMirror ul:not([data-type="taskList"])) { list-style-type: disc; }
 .nd-editor :deep(.ProseMirror ol) { list-style-type: decimal; }
-.nd-editor :deep(.ProseMirror ul ul) { list-style-type: circle; }
-.nd-editor :deep(.ProseMirror ul ul ul) { list-style-type: square; }
+.nd-editor :deep(.ProseMirror ul:not([data-type="taskList"]) ul:not([data-type="taskList"])) { list-style-type: circle; }
+.nd-editor :deep(.ProseMirror ul:not([data-type="taskList"]) ul:not([data-type="taskList"]) ul:not([data-type="taskList"])) { list-style-type: square; }
 .nd-editor :deep(.ProseMirror li) {
   margin: 0.25em 0;
   display: list-item;
 }
 .nd-editor :deep(.ProseMirror li p) { margin: 0; }
+
+/* TaskList nativo TipTap: render checkbox + label.
+   Markup: <ul data-type="taskList"><li data-checked="false"><label><input type="checkbox" /></label><div><p>...</p></div></li>
+   Reset list-style + flex orizzontale (vedi memoria feedback_tailwind_list_reset). */
+.nd-editor :deep(.ProseMirror ul[data-type="taskList"]) {
+  list-style: none;
+  padding-left: 0;
+  margin: 0.5em 0;
+}
+.nd-editor :deep(.ProseMirror ul[data-type="taskList"] li) {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0.25em 0;
+}
+.nd-editor :deep(.ProseMirror ul[data-type="taskList"] li > label) {
+  display: inline-flex;
+  align-items: center;
+  margin-top: 0.35em;       /* allinea checkbox al baseline della prima riga */
+  flex-shrink: 0;
+  user-select: none;
+  cursor: pointer;
+}
+.nd-editor :deep(.ProseMirror ul[data-type="taskList"] li > label input[type="checkbox"]) {
+  width: 16px;
+  height: 16px;
+  accent-color: #C46030;     /* NEBULA primary */
+  cursor: pointer;
+  margin: 0;
+}
+.nd-editor :deep(.ProseMirror ul[data-type="taskList"] li > div) {
+  flex: 1;
+  min-width: 0;
+}
+.nd-editor :deep(.ProseMirror ul[data-type="taskList"] li[data-checked="true"] > div) {
+  text-decoration: line-through;
+  color: var(--md-sys-color-on-surface-variant);
+}
+/* Nested TaskList: solo indentation, nessun bullet aggiuntivo */
+.nd-editor :deep(.ProseMirror ul[data-type="taskList"] ul[data-type="taskList"]) {
+  margin-left: 0;
+  padding-left: 24px;
+}
 .nd-editor :deep(.ProseMirror blockquote) {
   border-left: 3px solid #C46030; padding-left: 1em; margin: 0.8em 0;
   color: #555; font-style: italic;
@@ -917,13 +982,15 @@ void editorRef
 }
 .nd-editor :deep(.ProseMirror table) { max-width: 100%; }
 
-/* Mobile: meno padding, title più piccolo, toolbar compatta */
+/* Mobile: meno padding, title più piccolo (ma sempre bold), toolbar compatta */
 @media (max-width: 600px) {
   .nd-root {
     padding: 16px 12px 80px;
   }
+  .nd-title-block { margin: 20px 0 12px; }
   .nd-title-input {
-    font-size: 28px;
+    font-size: 32px;
+    line-height: 1.1;
   }
   .nd-toolbar {
     padding: 4px 6px;
