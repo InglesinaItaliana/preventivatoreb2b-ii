@@ -243,29 +243,12 @@ router.beforeEach(async (to, _from, next) => {
     return;
   }
 
-  // A-bis. NEBULA-DOCS Fase 1 gate (vedi docs/NEBULA-DOCS.md §11/12).
-  // In Fase 1 la feature è visibile solo a CORE admin (super admin sopra è già
-  // passato). Quando si rolla in generale (Fase 2), togliere questo blocco e
-  // rimuovere requiresCoreAdmin dalla voce nav in scopeConfig.nebula.mobileNav.
-  if (to.path.startsWith('/nebula/docs')) {
-    if (!ENABLE_NEBULA_DOCS) {
-      next('/nebula');
-      return;
-    }
-    try {
-      const adminsSnap = await getDoc(doc(db, 'core', 'admins'));
-      const emails = (adminsSnap.exists() ? (adminsSnap.data().emails ?? []) : []) as unknown[];
-      const userEmail = (currentUser.email ?? '').toLowerCase().trim();
-      const isCoreAdmin = emails.some(e => typeof e === 'string' && e.toLowerCase().trim() === userEmail);
-      if (!isCoreAdmin) {
-        next('/nebula');
-        return;
-      }
-    } catch (e) {
-      console.error('[guard nebula-docs] core/admins read failed:', e);
-      next('/nebula');
-      return;
-    }
+  // A-bis. NEBULA-DOCS kill switch (vedi docs/NEBULA-DOCS.md §12).
+  // Post F3-C2.7: feature aperta a tutto il team. Per-doc gating gestito da
+  // Firestore rules (readerOk(acl)). Resta solo il kill switch totale.
+  if (to.path.startsWith('/nebula/docs') && !ENABLE_NEBULA_DOCS) {
+    next('/nebula');
+    return;
   }
 
   // B. CONTROLLO TEAM (Database)
@@ -277,17 +260,21 @@ router.beforeEach(async (to, _from, next) => {
       if (teamSnap.exists()) {
         const role = teamSnap.data().role; // 'ADMIN', 'PRODUZIONE', 'LOGISTICA'
         
-        // Reindirizzamenti forzati per ruoli operativi
+        // Reindirizzamenti forzati per ruoli operativi.
+        // /nebula incluso post F3-C2.7: tutto il team accede a Documentale + Team.
         if (role === 'PRODUZIONE') {
-          const allowedPaths = ['/production', '/delivery', '/pulsar', '/cepheid'];
+          const allowedPaths = ['/production', '/delivery', '/pulsar', '/cepheid', '/nebula'];
           if (!allowedPaths.some(p => to.path === p || to.path.startsWith(p + '/'))) {
              next('/production');
              return;
           }
        }
-        if (role === 'LOGISTICA' && to.path !== '/delivery') {
-           next('/delivery');
-           return;
+        if (role === 'LOGISTICA') {
+          const allowedPaths = ['/delivery', '/nebula'];
+          if (!allowedPaths.some(p => to.path === p || to.path.startsWith(p + '/'))) {
+            next('/delivery');
+            return;
+          }
         }
         
         // Se è un ADMIN del team o altro ruolo, passa

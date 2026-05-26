@@ -121,6 +121,30 @@
         { "fieldPath": "refs.projects", "arrayConfig": "CONTAINS" },
         { "fieldPath": "updatedAt",     "order": "DESCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "nebulaDocs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "acl.writers", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "updatedAt",   "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "nebulaDocs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "acl.readers", "arrayConfig": "CONTAINS" },
+        { "fieldPath": "updatedAt",   "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "nebulaDocs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "acl.visibility", "order": "ASCENDING" },
+        { "fieldPath": "updatedAt",      "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": [

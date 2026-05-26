@@ -26,11 +26,9 @@ export interface NavItem {
 
 /**
  * Feature flag NEBULA-DOCS (vedi docs/NEBULA-DOCS.md §12).
- * - true  = la feature esiste, ma in Fase 1 è gate'd da requiresCoreAdmin sulla
- *           voce nav e dal guard router (route /nebula/docs/* redirige fuori
- *           per non-CORE-admin).
+ * - true  = feature attiva e visibile a tutto il team (post F3-C2.7 rollout).
+ *           Per-doc gating gestito da Firestore rules (visibility + ACL).
  * - false = kill switch totale (route 404 per tutti).
- * In Fase 2 (rollout generale) togliere requiresCoreAdmin dalla voce Doc.
  */
 export const ENABLE_NEBULA_DOCS = true
 
@@ -99,7 +97,7 @@ export const SCOPE_CONFIGS: Record<Exclude<ScopeId, 'sidera'>, ScopeConfig> = {
     brandSvg: 'nebula',
     mobileNav: [
       { path: '/nebula',      exact: true,  label: 'Team', icon: 'group' },
-      { path: '/nebula/docs', exact: false, label: 'Doc',  icon: 'description', requiresCoreAdmin: true },
+      { path: '/nebula/docs', exact: false, label: 'Doc',  icon: 'description' },
     ],
     isTopLevelPath: (p) => p === '/nebula' || p === '/nebula/docs',
     loginPath: '/nebula/login',

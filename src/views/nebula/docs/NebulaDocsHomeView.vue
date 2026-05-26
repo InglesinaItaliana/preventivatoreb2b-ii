@@ -1,94 +1,136 @@
 <script setup lang="ts">
 /**
- * NEBULA-DOCS — Home (Fase 1, scaffolding + test E2E).
+ * NEBULA-DOCS — Home (aperta a tutto il team post F3-C2.7).
  *
- * Chunk 1: stub gate'd CORE admin.
- * Chunk 3 (questo): aggiunge bottone "Crea doc di prova" + lista doc miei
- *   (where('acl.owners', 'array-contains', myEmail)) per validare callable
- *   saveDoc + rules nebulaDocs end-to-end.
+ * Mostra "i miei doc + doc condivisi con me + doc team". 4 sub paralleli su
+ * acl.{owners,writers,readers} array-contains + acl.visibility==team. Merge
+ * + dedup client-side per id, sort updatedAt DESC.
  *
- * L'implementazione reale (gerarchia, sidebar, editor) arriva in chunk 4 e fasi
- * successive (vedi docs/NEBULA-DOCS.md §11).
+ * Per-doc visibility delegata a Firestore rules (readerOk(acl) in firestore.rules).
+ * Quindi anche se la query restituisce un doc, le rules potrebbero negare il
+ * read — onSnapshot.error catch silenziato per quei casi.
  */
 import { ref, computed, watch, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { collection, query, where, orderBy, onSnapshot, type Unsubscribe } from 'firebase/firestore'
 import { db } from '../../../firebase'
 import { useCurrentUser } from '../../../composables/sidera/useCurrentUser'
-import { useCoreAdmins } from '../../../composables/sidera/useCoreAdmins'
 import { saveDoc, isSaveDocConflict } from '../../../composables/nebula/useSaveDoc'
 
 const router = useRouter()
 const { currentUser } = useCurrentUser()
-const { isCoreAdmin } = useCoreAdmins()
 
-const allowed = computed(() => isCoreAdmin(currentUser.value?.email))
 const myEmail = computed(() => (currentUser.value?.email ?? '').toLowerCase().trim())
+// Allowed = qualunque utente autenticato del team (rules + route guard già
+// validano upstream). Resta solo come safety per evitare render prima che
+// useCurrentUser abbia caricato.
+const allowed = computed(() => Boolean(myEmail.value))
 
-// ── Lista doc di cui sono owner ─────────────────────────────────────────────
+// ── Lista doc: aggregazione di 4 query (owners / writers / readers / team) ──
 interface DocRow {
   id: string
   title: string
   revision: number
   updatedAt: any
   iconName?: string
+  /** Origine: utile per badge UI futuro ("tuo"/"team"/"condiviso") */
+  source?: 'owner' | 'writer' | 'reader' | 'team'
 }
-const docs = ref<DocRow[]>([])
-const docsLoading = ref(false)
-let unsubscribe: Unsubscribe | null = null
 
-function subscribeDocs() {
+// Una mappa per source, poi mergiamo. Ogni source ha il suo onSnapshot.
+const bySource: Record<string, Map<string, DocRow>> = {
+  owner:  new Map(),
+  writer: new Map(),
+  reader: new Map(),
+  team:   new Map(),
+}
+const tick = ref(0)   // bump per forzare re-compute del computed docs
+const docsLoading = ref(false)
+let unsubscribers: Unsubscribe[] = []
+
+function mapSnapDoc(d: any, source: DocRow['source']): DocRow {
+  const data = d.data() as any
+  return {
+    id: d.id,
+    title: data.title ?? '(senza titolo)',
+    revision: data.revision ?? 0,
+    updatedAt: data.updatedAt,
+    iconName: data.icon?.name,
+    source,
+  }
+}
+
+function subscribeAll() {
+  unsubscribeAll()
   if (!myEmail.value) return
   docsLoading.value = true
-  const q = query(
-    collection(db, 'nebulaDocs'),
-    where('acl.owners', 'array-contains', myEmail.value),
-    orderBy('updatedAt', 'desc')
-  )
-  unsubscribe = onSnapshot(
+
+  const subs: Array<[string, ReturnType<typeof query>, DocRow['source']]> = [
+    ['owner',  query(collection(db, 'nebulaDocs'), where('acl.owners',  'array-contains', myEmail.value), orderBy('updatedAt', 'desc')), 'owner'],
+    ['writer', query(collection(db, 'nebulaDocs'), where('acl.writers', 'array-contains', myEmail.value), orderBy('updatedAt', 'desc')), 'writer'],
+    ['reader', query(collection(db, 'nebulaDocs'), where('acl.readers', 'array-contains', myEmail.value), orderBy('updatedAt', 'desc')), 'reader'],
+    ['team',   query(collection(db, 'nebulaDocs'), where('acl.visibility', '==', 'team'), orderBy('updatedAt', 'desc')), 'team'],
+  ]
+
+  let firstFire = 0
+  unsubscribers = subs.map(([key, q, source]) => onSnapshot(
     q,
     (snap) => {
-      docs.value = snap.docs.map(d => {
-        const data = d.data() as any
-        return {
-          id: d.id,
-          title: data.title ?? '(senza titolo)',
-          revision: data.revision ?? 0,
-          updatedAt: data.updatedAt,
-          iconName: data.icon?.name,
-        }
-      })
-      docsLoading.value = false
+      const m = bySource[key]
+      m.clear()
+      snap.docs.forEach(d => m.set(d.id, mapSnapDoc(d, source)))
+      tick.value++
+      firstFire++
+      if (firstFire >= subs.length) docsLoading.value = false
     },
     (err) => {
-      console.error('[nebula-docs] subscribe error:', err)
-      lastError.value = err.message
-      docsLoading.value = false
+      // Permission-denied silenzioso (utente senza match in nessun sub di questa query)
+      if (err?.code !== 'permission-denied') {
+        console.warn('[nebula-docs] sub', key, 'error:', err?.code, err?.message)
+      }
+      firstFire++
+      if (firstFire >= subs.length) docsLoading.value = false
     }
-  )
+  ))
 }
 
-// Watch su [allowed, myEmail]: `currentUser` carica async dopo mount, quindi
-// onMounted può vedere allowed=false e non sottoscrivere mai. Watch immediate
-// risubentra appena le condizioni diventano valide (e ri-sottoscrive su
-// cambio account).
+function unsubscribeAll() {
+  unsubscribers.forEach(u => u())
+  unsubscribers = []
+  Object.values(bySource).forEach(m => m.clear())
+}
+
+// Merge + dedup: prioritizza source per ordine (owner > writer > reader > team).
+// Sort finale per updatedAt DESC.
+const docs = computed<DocRow[]>(() => {
+  void tick.value   // re-run su qualunque sub fire
+  const merged = new Map<string, DocRow>()
+  const priority: DocRow['source'][] = ['owner', 'writer', 'reader', 'team']
+  for (const src of priority) {
+    for (const [id, row] of bySource[src!]!) {
+      if (!merged.has(id)) merged.set(id, row)
+    }
+  }
+  return Array.from(merged.values()).sort((a, b) => {
+    const ta = a.updatedAt?.toMillis?.() ?? 0
+    const tb = b.updatedAt?.toMillis?.() ?? 0
+    return tb - ta
+  })
+})
+
 watch(
   [allowed, myEmail],
   ([can, email]) => {
-    if (unsubscribe) {
-      unsubscribe()
-      unsubscribe = null
-    }
+    unsubscribeAll()
     if (!can || !email) {
-      docs.value = []
       docsLoading.value = false
       return
     }
-    subscribeDocs()
+    subscribeAll()
   },
   { immediate: true }
 )
-onUnmounted(() => { if (unsubscribe) unsubscribe() })
+onUnmounted(() => unsubscribeAll())
 
 // ── Azioni test ─────────────────────────────────────────────────────────────
 const creating = ref(false)
@@ -143,9 +185,8 @@ function formatTime(ts: any): string {
 <template>
   <div class="ndh-root">
     <div v-if="!allowed" class="ndh-denied" role="status">
-      <span class="material-symbols-outlined ndh-icon">lock</span>
-      <h2>Accesso non autorizzato</h2>
-      <p>NEBULA-DOCS è in Fase 1 e visibile solo agli amministratori CORE.</p>
+      <span class="material-symbols-outlined ndh-icon">hourglass_top</span>
+      <p>Caricamento sessione…</p>
     </div>
 
     <template v-else>
