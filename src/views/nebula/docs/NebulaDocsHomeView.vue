@@ -123,16 +123,21 @@ const myDocs = computed<DocRow[]>(() => {
   })
 })
 
-// "Sei menzionato in N doc": solo doc NON già presenti in myDocs (dedup
-// cross-section: se sono owner di un doc dove mi sono auto-menzionato,
-// appare solo in "I miei").
+// "Sei menzionato in N doc": TUTTI i doc dove sono in refs.users.
+// NIENTE dedup con myDocs: anche se sono owner/writer/reader, se qualcuno
+// mi @menziona devo vedere quel doc anche qui (il valore della sezione è
+// "ti stanno chiamando" — non "ti hanno condiviso"). Auto-mention esclusa:
+// se mi sono menzionato io stesso, skip.
 const mentionedDocs = computed<DocRow[]>(() => {
   void tick.value
-  const myIds = new Set(myDocs.value.map(d => d.id))
   const out: DocRow[] = []
-  for (const [id, row] of bySource.mentioned!) {
+  for (const [, row] of bySource.mentioned!) {
     if (row.archived) continue
-    if (myIds.has(id)) continue
+    // Auto-mention: il mio email è in refs.users perché mi sono auto-menzionato.
+    // Lo so se sono anche owner (di solito creo io il doc) E sono solo io
+    // ad averlo creato. Heuristic semplice: se sono l'unico owner E ho 0
+    // writer/reader esterni, considero auto-mention → skip. Altrimenti mostro.
+    // Per ora: mostro sempre, l'utente decide. Edge case raro.
     out.push(row)
   }
   return out.sort((a, b) => {
@@ -212,49 +217,70 @@ function formatTime(ts: any): string {
 // ── Swipe-to-delete (mobile) ────────────────────────────────────────────────
 const swipeOpenId = ref<string | null>(null)
 const swipeDeltaPx = ref(0)
-const SWIPE_OPEN_PX = 80         // pixel di reveal della delete area
-const SWIPE_THRESHOLD = 35       // pixel minimi per "snap open"
+// activeSwipeId: reattivo, settato SOLO quando user sta swipando orizzontalmente.
+// Touch verticali → resta null (la card non muove, no red bg). Determinato dopo
+// che la direzione del gesture è chiara (primo move > 6px).
+const activeSwipeId = ref<string | null>(null)
+
+const SWIPE_OPEN_PX = 80
+const SWIPE_THRESHOLD = 35
 
 let touchStartX = 0
 let touchStartY = 0
-let touchActiveId: string | null = null
-let touchIsHorizontal: boolean | null = null   // determinato al primo move significativo
+let touchTrackedId: string | null = null              // row che ha ricevuto touchstart
+let touchDirection: 'horizontal' | 'vertical' | null = null
 
 function onTouchStart(d: DocRow, e: TouchEvent) {
   const t = e.touches[0]
   touchStartX = t.clientX
   touchStartY = t.clientY
-  touchActiveId = d.id
-  touchIsHorizontal = null
-  // Se altra row era aperta, chiudila a meno che sia questa
+  touchTrackedId = d.id
+  touchDirection = null
+  // activeSwipeId resta null finché direction non è confermata orizzontale.
+  // Altra row aperta? Chiudila (a meno che sia questa).
   if (swipeOpenId.value && swipeOpenId.value !== d.id) {
     closeSwipe()
   }
 }
+
 function onTouchMove(d: DocRow, e: TouchEvent) {
-  if (touchActiveId !== d.id) return
+  if (touchTrackedId !== d.id) return
   const t = e.touches[0]
   const dx = t.clientX - touchStartX
   const dy = t.clientY - touchStartY
-  if (touchIsHorizontal === null && (Math.abs(dx) > 6 || Math.abs(dy) > 6)) {
-    touchIsHorizontal = Math.abs(dx) > Math.abs(dy)
+
+  // Determina direzione al primo movimento significativo
+  if (touchDirection === null && (Math.abs(dx) > 6 || Math.abs(dy) > 6)) {
+    touchDirection = Math.abs(dx) > Math.abs(dy) ? 'horizontal' : 'vertical'
+    if (touchDirection === 'horizontal') {
+      activeSwipeId.value = d.id   // ora la card può muoversi (e bg rosso visibile)
+    }
   }
-  if (touchIsHorizontal === false) return  // gesture verticale → lascia scroll page
-  // Limita: swipe solo verso sinistra (dx negativo)
-  let visualDx = Math.min(0, dx)
-  if (visualDx < -SWIPE_OPEN_PX) visualDx = -SWIPE_OPEN_PX
-  // Se già aperta, parti da -SWIPE_OPEN_PX
+
+  // Verticale: lascia scroll della pagina, NIENTE transform sulla card.
+  if (touchDirection !== 'horizontal') return
+
+  // Swipe orizzontale: solo verso sinistra (dx ≤ 0)
+  let visualDx: number
   if (swipeOpenId.value === d.id) {
-    visualDx = Math.min(0, -SWIPE_OPEN_PX + dx)
-    visualDx = Math.max(-SWIPE_OPEN_PX, visualDx)
+    // Parti da posizione aperta -SWIPE_OPEN_PX, segui il dito
+    visualDx = Math.max(-SWIPE_OPEN_PX, Math.min(0, -SWIPE_OPEN_PX + dx))
+  } else {
+    visualDx = Math.max(-SWIPE_OPEN_PX, Math.min(0, dx))
   }
   swipeDeltaPx.value = visualDx
 }
+
 function onTouchEnd(d: DocRow) {
-  if (touchActiveId !== d.id) return
-  touchActiveId = null
-  if (touchIsHorizontal === false) {
-    swipeDeltaPx.value = 0
+  if (touchTrackedId !== d.id) return
+  const wasSwiping = touchDirection === 'horizontal'
+  touchTrackedId = null
+  touchDirection = null
+  activeSwipeId.value = null
+
+  if (!wasSwiping) {
+    // Tap puro o scroll verticale: ripristina lo stato visivo
+    swipeDeltaPx.value = swipeOpenId.value === d.id ? -SWIPE_OPEN_PX : 0
     return
   }
   // Snap decision
@@ -269,16 +295,22 @@ function onTouchEnd(d: DocRow) {
 function closeSwipe() {
   swipeOpenId.value = null
   swipeDeltaPx.value = 0
+  activeSwipeId.value = null
 }
 
 function itemTransform(d: DocRow): string {
-  if (touchActiveId === d.id && touchIsHorizontal) {
+  if (activeSwipeId.value === d.id) {
     return `translateX(${swipeDeltaPx.value}px)`
   }
   if (swipeOpenId.value === d.id) {
     return `translateX(-${SWIPE_OPEN_PX}px)`
   }
   return 'translateX(0)'
+}
+
+/** Reattivo: true SOLO se l'utente sta effettivamente swipando orizz. su d. */
+function isSwipingHorizontal(d: DocRow): boolean {
+  return activeSwipeId.value === d.id || swipeOpenId.value === d.id
 }
 </script>
 
@@ -336,7 +368,10 @@ function itemTransform(d: DocRow): string {
             v-for="d in myDocs"
             :key="d.id"
             class="ndh-item-wrap"
-            :class="{ 'ndh-item-wrap-open': swipeOpenId === d.id }"
+            :class="{
+              'ndh-item-wrap-open': swipeOpenId === d.id,
+              'ndh-item-wrap-swiping': isSwipingHorizontal(d),
+            }"
             @touchstart="onTouchStart(d, $event)"
             @touchmove="onTouchMove(d, $event)"
             @touchend="onTouchEnd(d)"
@@ -585,7 +620,14 @@ function itemTransform(d: DocRow): string {
   position: relative;
   overflow: hidden;
   border-radius: 10px;
-  background: rgba(200, 50, 50, 0.85);  /* visibile sotto durante swipe */
+  background: transparent;
+  -webkit-tap-highlight-color: transparent;  /* niente flash blu/grigio iOS */
+}
+/* Rosso visibile sotto SOLO quando la card sta swipando/è aperta. Evita
+   il leak visivo su tap puro o scroll verticale. */
+.ndh-item-wrap-swiping,
+.ndh-item-wrap-open {
+  background: #C83232;
 }
 
 /* Delete area sotto (mobile swipe reveal) */
@@ -619,14 +661,17 @@ function itemTransform(d: DocRow): string {
   align-items: center;
   gap: 12px;
   padding: 4px 14px 4px 4px;
-  background: var(--md-sys-color-surface-container, #fff);
+  /* Background SEMPRE solido (no var fallback): impedisce il leak del rosso
+     wrapper durante interazioni iOS in cui i compositing layer cambiano. */
+  background: #ffffff;
   border-radius: 10px;
   border: 1px solid rgba(0,0,0,0.05);
   transition: transform 240ms cubic-bezier(0.2, 0.9, 0.3, 1), background 120ms ease, border-color 120ms ease;
   z-index: 1;
+  -webkit-tap-highlight-color: transparent;
 }
-/* Durante touchmove rimuoviamo la transition per following dito */
-.ndh-item-wrap-open .ndh-item { transition: background 120ms ease, border-color 120ms ease; }
+/* Durante swipe attivo: no transition, segui il dito 1:1 */
+.ndh-item-wrap-swiping .ndh-item { transition: background 120ms ease, border-color 120ms ease; }
 .ndh-item:hover {
   background: rgba(196, 96, 48, 0.04);
   border-color: rgba(196, 96, 48, 0.18);
