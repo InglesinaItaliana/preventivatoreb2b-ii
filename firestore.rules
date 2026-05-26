@@ -179,6 +179,18 @@ service cloud.firestore {
             || request.auth.token.email in acl.owners;
       }
 
+      // Sei stato menzionato in questo doc (refs.users denormalizzato da
+      // indexDocRefs)? Allora puoi leggerlo, anche se non in ACL.
+      // Semantica: "se ti @menziono ti do accesso al doc implicitamente".
+      // Necessario anche per permettere la query collezione "doc dove sono
+      // menzionato" (where refs.users array-contains me): senza questo,
+      // permission-denied per non-CORE-admin.
+      function mentionedIn(d) {
+        return 'refs' in d
+            && 'users' in d.refs
+            && request.auth.token.email in d.refs.users;
+      }
+
       // CORE admin bypass: Fase 1 di NEBULA-DOCS è gated CORE → diamo loro
       // read totale su nebulaDocs così le QUERY (es. LinkedDocsPanel con
       // where('refs.tasks', 'array-contains', id)) passano la pre-validazione
@@ -191,7 +203,11 @@ service cloud.firestore {
             || request.auth.token.email in get(/databases/$(database)/documents/core/admins).data.get('emails', []);
       }
 
-      allow read: if request.auth != null && (isCoreAdminRead() || readerOk(resource.data.acl));
+      allow read: if request.auth != null && (
+        isCoreAdminRead()
+        || readerOk(resource.data.acl)
+        || mentionedIn(resource.data)
+      );
       allow write: if false;   // SOLO via callable saveDoc
 
       match /presence/{userEmail} {

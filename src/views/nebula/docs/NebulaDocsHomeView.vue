@@ -1,50 +1,54 @@
 <script setup lang="ts">
 /**
- * NEBULA-DOCS — Home (aperta a tutto il team post F3-C2.7).
+ * NEBULA-DOCS — Home (post F5b: archive + mentioned section).
  *
- * Mostra "i miei doc + doc condivisi con me + doc team". 4 sub paralleli su
- * acl.{owners,writers,readers} array-contains + acl.visibility==team. Merge
- * + dedup client-side per id, sort updatedAt DESC.
+ * 5 sub paralleli:
+ *  - owners/writers/readers/team → sezione "I miei documenti" (merged dedup)
+ *  - mentioned (refs.users array-contains me) → sezione separata "Sei menzionato in N doc"
+ *    Sub viene mostrata sotto la principale; doc già in I miei non duplicati.
  *
- * Per-doc visibility delegata a Firestore rules (readerOk(acl) in firestore.rules).
- * Quindi anche se la query restituisce un doc, le rules potrebbero negare il
- * read — onSnapshot.error catch silenziato per quei casi.
+ * Filter `!archived` su tutti i risultati: i soft-deleted non appaiono.
+ *
+ * Archive (F5b):
+ *  - Desktop: icona X su hover dell'item → confirm dialog → callable archiveNebulaDoc
+ *  - Mobile: swipe-left rivela bottone rosso "Elimina" → tap → archive
+ *  - Solo owner può archiviare (server-side check; UI mostra X per tutti
+ *    ma il callable risponde permission-denied per non-owner)
  */
 import { ref, computed, watch, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { collection, query, where, orderBy, onSnapshot, type Unsubscribe } from 'firebase/firestore'
 import { db } from '../../../firebase'
 import { useCurrentUser } from '../../../composables/sidera/useCurrentUser'
-import { saveDoc, isSaveDocConflict } from '../../../composables/nebula/useSaveDoc'
+import { saveDoc } from '../../../composables/nebula/useSaveDoc'
+import { archiveDoc } from '../../../composables/nebula/useArchiveDoc'
 
 const router = useRouter()
 const { currentUser } = useCurrentUser()
 
 const myEmail = computed(() => (currentUser.value?.email ?? '').toLowerCase().trim())
-// Allowed = qualunque utente autenticato del team (rules + route guard già
-// validano upstream). Resta solo come safety per evitare render prima che
-// useCurrentUser abbia caricato.
 const allowed = computed(() => Boolean(myEmail.value))
 
-// ── Lista doc: aggregazione di 4 query (owners / writers / readers / team) ──
+// ── Source maps ─────────────────────────────────────────────────────────────
 interface DocRow {
   id: string
   title: string
-  revision: number
   updatedAt: any
   iconName?: string
-  /** Origine: utile per badge UI futuro ("tuo"/"team"/"condiviso") */
-  source?: 'owner' | 'writer' | 'reader' | 'team'
+  archived?: boolean
+  /** Set di chi è owner (lowercase email). Permette UI archive solo per owner. */
+  ownersSet: Set<string>
+  source: 'owner' | 'writer' | 'reader' | 'team' | 'mentioned'
 }
 
-// Una mappa per source, poi mergiamo. Ogni source ha il suo onSnapshot.
 const bySource: Record<string, Map<string, DocRow>> = {
-  owner:  new Map(),
-  writer: new Map(),
-  reader: new Map(),
-  team:   new Map(),
+  owner:     new Map(),
+  writer:    new Map(),
+  reader:    new Map(),
+  team:      new Map(),
+  mentioned: new Map(),
 }
-const tick = ref(0)   // bump per forzare re-compute del computed docs
+const tick = ref(0)
 const docsLoading = ref(false)
 let unsubscribers: Unsubscribe[] = []
 
@@ -53,9 +57,10 @@ function mapSnapDoc(d: any, source: DocRow['source']): DocRow {
   return {
     id: d.id,
     title: data.title ?? '(senza titolo)',
-    revision: data.revision ?? 0,
     updatedAt: data.updatedAt,
     iconName: data.icon?.name,
+    archived: !!data.archived,
+    ownersSet: new Set((data.acl?.owners ?? []).map((e: string) => e.toLowerCase().trim())),
     source,
   }
 }
@@ -66,10 +71,11 @@ function subscribeAll() {
   docsLoading.value = true
 
   const subs: Array<[string, ReturnType<typeof query>, DocRow['source']]> = [
-    ['owner',  query(collection(db, 'nebulaDocs'), where('acl.owners',  'array-contains', myEmail.value), orderBy('updatedAt', 'desc')), 'owner'],
-    ['writer', query(collection(db, 'nebulaDocs'), where('acl.writers', 'array-contains', myEmail.value), orderBy('updatedAt', 'desc')), 'writer'],
-    ['reader', query(collection(db, 'nebulaDocs'), where('acl.readers', 'array-contains', myEmail.value), orderBy('updatedAt', 'desc')), 'reader'],
-    ['team',   query(collection(db, 'nebulaDocs'), where('acl.visibility', '==', 'team'), orderBy('updatedAt', 'desc')), 'team'],
+    ['owner',     query(collection(db, 'nebulaDocs'), where('acl.owners',  'array-contains', myEmail.value), orderBy('updatedAt', 'desc')), 'owner'],
+    ['writer',    query(collection(db, 'nebulaDocs'), where('acl.writers', 'array-contains', myEmail.value), orderBy('updatedAt', 'desc')), 'writer'],
+    ['reader',    query(collection(db, 'nebulaDocs'), where('acl.readers', 'array-contains', myEmail.value), orderBy('updatedAt', 'desc')), 'reader'],
+    ['team',      query(collection(db, 'nebulaDocs'), where('acl.visibility', '==', 'team'),               orderBy('updatedAt', 'desc')), 'team'],
+    ['mentioned', query(collection(db, 'nebulaDocs'), where('refs.users',  'array-contains', myEmail.value), orderBy('updatedAt', 'desc')), 'mentioned'],
   ]
 
   let firstFire = 0
@@ -84,7 +90,6 @@ function subscribeAll() {
       if (firstFire >= subs.length) docsLoading.value = false
     },
     (err) => {
-      // Permission-denied silenzioso (utente senza match in nessun sub di questa query)
       if (err?.code !== 'permission-denied') {
         console.warn('[nebula-docs] sub', key, 'error:', err?.code, err?.message)
       }
@@ -100,18 +105,37 @@ function unsubscribeAll() {
   Object.values(bySource).forEach(m => m.clear())
 }
 
-// Merge + dedup: prioritizza source per ordine (owner > writer > reader > team).
-// Sort finale per updatedAt DESC.
-const docs = computed<DocRow[]>(() => {
-  void tick.value   // re-run su qualunque sub fire
+// "I miei documenti": owner > writer > reader > team. Filter !archived.
+const myDocs = computed<DocRow[]>(() => {
+  void tick.value
   const merged = new Map<string, DocRow>()
   const priority: DocRow['source'][] = ['owner', 'writer', 'reader', 'team']
   for (const src of priority) {
-    for (const [id, row] of bySource[src!]!) {
+    for (const [id, row] of bySource[src]!) {
+      if (row.archived) continue
       if (!merged.has(id)) merged.set(id, row)
     }
   }
   return Array.from(merged.values()).sort((a, b) => {
+    const ta = a.updatedAt?.toMillis?.() ?? 0
+    const tb = b.updatedAt?.toMillis?.() ?? 0
+    return tb - ta
+  })
+})
+
+// "Sei menzionato in N doc": solo doc NON già presenti in myDocs (dedup
+// cross-section: se sono owner di un doc dove mi sono auto-menzionato,
+// appare solo in "I miei").
+const mentionedDocs = computed<DocRow[]>(() => {
+  void tick.value
+  const myIds = new Set(myDocs.value.map(d => d.id))
+  const out: DocRow[] = []
+  for (const [id, row] of bySource.mentioned!) {
+    if (row.archived) continue
+    if (myIds.has(id)) continue
+    out.push(row)
+  }
+  return out.sort((a, b) => {
     const ta = a.updatedAt?.toMillis?.() ?? 0
     const tb = b.updatedAt?.toMillis?.() ?? 0
     return tb - ta
@@ -132,21 +156,21 @@ watch(
 )
 onUnmounted(() => unsubscribeAll())
 
-// ── Azioni test ─────────────────────────────────────────────────────────────
+// ── Crea doc + Archive ──────────────────────────────────────────────────────
 const creating = ref(false)
-const updatingId = ref<string | null>(null)
-const lastResult = ref<string>('')
+const archivingId = ref<string | null>(null)
 const lastError = ref<string>('')
 
-async function createTestDoc() {
+async function createDoc() {
   creating.value = true
   lastError.value = ''
   try {
     const out = await saveDoc({
-      title: `Doc di prova ${new Date().toLocaleTimeString('it-IT')}`,
+      title: 'Nuovo documento',
       trigger: 'manual',
     })
-    lastResult.value = `Creato ${out.docId} (rev ${out.revision})`
+    // Atterra direttamente nell'editor del doc appena creato
+    router.push(`/nebula/docs/${out.docId}`)
   } catch (e: any) {
     lastError.value = e?.message ?? String(e)
   } finally {
@@ -154,25 +178,29 @@ async function createTestDoc() {
   }
 }
 
-async function updateTitle(d: DocRow) {
-  updatingId.value = d.id
+function canArchive(d: DocRow): boolean {
+  return myEmail.value !== '' && d.ownersSet.has(myEmail.value)
+}
+
+async function doArchive(d: DocRow) {
+  if (!canArchive(d)) {
+    lastError.value = 'Solo gli owner possono eliminare il documento.'
+    return
+  }
+  if (!confirm(`Eliminare "${d.title}"?\n\nIl documento andrà nel cestino (recuperabile per 90 giorni).`)) {
+    closeSwipe()
+    return
+  }
+  archivingId.value = d.id
   lastError.value = ''
   try {
-    const out = await saveDoc({
-      docId: d.id,
-      title: `${d.title} · agg ${new Date().toLocaleTimeString('it-IT')}`,
-      baseRevision: d.revision,
-      trigger: 'manual',
-    })
-    lastResult.value = `Aggiornato ${out.docId} → rev ${out.revision}`
+    await archiveDoc(d.id)
+    closeSwipe()
+    // La sub onSnapshot rimuoverà il doc dalla lista automaticamente (archived=true)
   } catch (e: any) {
-    if (isSaveDocConflict(e)) {
-      lastError.value = `Conflitto LWW: server è a rev ${e.details.currentRevision}, tu hai inviato ${d.revision}`
-    } else {
-      lastError.value = e?.message ?? String(e)
-    }
+    lastError.value = e?.message ?? String(e)
   } finally {
-    updatingId.value = null
+    archivingId.value = null
   }
 }
 
@@ -180,10 +208,82 @@ function formatTime(ts: any): string {
   if (!ts?.toDate) return '—'
   return ts.toDate().toLocaleString('it-IT', { dateStyle: 'short', timeStyle: 'short' })
 }
+
+// ── Swipe-to-delete (mobile) ────────────────────────────────────────────────
+const swipeOpenId = ref<string | null>(null)
+const swipeDeltaPx = ref(0)
+const SWIPE_OPEN_PX = 80         // pixel di reveal della delete area
+const SWIPE_THRESHOLD = 35       // pixel minimi per "snap open"
+
+let touchStartX = 0
+let touchStartY = 0
+let touchActiveId: string | null = null
+let touchIsHorizontal: boolean | null = null   // determinato al primo move significativo
+
+function onTouchStart(d: DocRow, e: TouchEvent) {
+  const t = e.touches[0]
+  touchStartX = t.clientX
+  touchStartY = t.clientY
+  touchActiveId = d.id
+  touchIsHorizontal = null
+  // Se altra row era aperta, chiudila a meno che sia questa
+  if (swipeOpenId.value && swipeOpenId.value !== d.id) {
+    closeSwipe()
+  }
+}
+function onTouchMove(d: DocRow, e: TouchEvent) {
+  if (touchActiveId !== d.id) return
+  const t = e.touches[0]
+  const dx = t.clientX - touchStartX
+  const dy = t.clientY - touchStartY
+  if (touchIsHorizontal === null && (Math.abs(dx) > 6 || Math.abs(dy) > 6)) {
+    touchIsHorizontal = Math.abs(dx) > Math.abs(dy)
+  }
+  if (touchIsHorizontal === false) return  // gesture verticale → lascia scroll page
+  // Limita: swipe solo verso sinistra (dx negativo)
+  let visualDx = Math.min(0, dx)
+  if (visualDx < -SWIPE_OPEN_PX) visualDx = -SWIPE_OPEN_PX
+  // Se già aperta, parti da -SWIPE_OPEN_PX
+  if (swipeOpenId.value === d.id) {
+    visualDx = Math.min(0, -SWIPE_OPEN_PX + dx)
+    visualDx = Math.max(-SWIPE_OPEN_PX, visualDx)
+  }
+  swipeDeltaPx.value = visualDx
+}
+function onTouchEnd(d: DocRow) {
+  if (touchActiveId !== d.id) return
+  touchActiveId = null
+  if (touchIsHorizontal === false) {
+    swipeDeltaPx.value = 0
+    return
+  }
+  // Snap decision
+  if (swipeDeltaPx.value <= -SWIPE_THRESHOLD) {
+    swipeOpenId.value = d.id
+    swipeDeltaPx.value = -SWIPE_OPEN_PX
+  } else {
+    closeSwipe()
+  }
+}
+
+function closeSwipe() {
+  swipeOpenId.value = null
+  swipeDeltaPx.value = 0
+}
+
+function itemTransform(d: DocRow): string {
+  if (touchActiveId === d.id && touchIsHorizontal) {
+    return `translateX(${swipeDeltaPx.value}px)`
+  }
+  if (swipeOpenId.value === d.id) {
+    return `translateX(-${SWIPE_OPEN_PX}px)`
+  }
+  return 'translateX(0)'
+}
 </script>
 
 <template>
-  <div class="ndh-root">
+  <div class="ndh-root" @click="closeSwipe()">
     <div v-if="!allowed" class="ndh-denied" role="status">
       <span class="material-symbols-outlined ndh-icon">hourglass_top</span>
       <p>Caricamento sessione…</p>
@@ -192,9 +292,9 @@ function formatTime(ts: any): string {
     <template v-else>
       <header class="ndh-header">
         <span class="material-symbols-outlined ndh-icon">description</span>
-        <div>
+        <div class="ndh-title-block">
           <h2>NEBULA-DOCS</h2>
-          <p class="ndh-stage">Fase 1 · Chunk 3 (schema + saveDoc)</p>
+          <p class="ndh-stage">I tuoi documenti</p>
         </div>
         <button
           type="button"
@@ -209,74 +309,121 @@ function formatTime(ts: any): string {
           type="button"
           class="ndh-create-btn"
           :disabled="creating"
-          @click="createTestDoc"
+          @click="createDoc"
         >
           <span class="material-symbols-outlined">add</span>
-          {{ creating ? 'Creazione…' : 'Crea doc di prova' }}
+          {{ creating ? 'Creazione…' : 'Nuovo documento' }}
         </button>
       </header>
 
-      <!-- Risultato / errore ultima azione -->
-      <div v-if="lastResult" class="ndh-toast ndh-toast-ok">
-        <span class="material-symbols-outlined">check_circle</span>{{ lastResult }}
-      </div>
       <div v-if="lastError" class="ndh-toast ndh-toast-err">
         <span class="material-symbols-outlined">error</span>{{ lastError }}
       </div>
 
-      <!-- Lista doc di cui sono owner -->
+      <!-- Sezione 1: I miei documenti -->
       <section class="ndh-list-section">
-        <h3>I miei documenti
-          <span class="ndh-count">{{ docs.length }}</span>
+        <h3>
+          <span class="material-symbols-outlined ndh-sec-icon">folder</span>
+          I miei documenti
+          <span v-if="!docsLoading" class="ndh-count">{{ myDocs.length }}</span>
         </h3>
         <div v-if="docsLoading" class="ndh-empty">Caricamento…</div>
-        <div v-else-if="docs.length === 0" class="ndh-empty">
-          Nessun documento. Crea il primo per testare schema + saveDoc.
+        <div v-else-if="myDocs.length === 0" class="ndh-empty">
+          Nessun documento. Crea il primo o aspetta che qualcuno te ne condivida uno.
         </div>
         <ul v-else class="ndh-list">
-          <li v-for="d in docs" :key="d.id" class="ndh-item">
+          <li
+            v-for="d in myDocs"
+            :key="d.id"
+            class="ndh-item-wrap"
+            :class="{ 'ndh-item-wrap-open': swipeOpenId === d.id }"
+            @touchstart="onTouchStart(d, $event)"
+            @touchmove="onTouchMove(d, $event)"
+            @touchend="onTouchEnd(d)"
+            @touchcancel="onTouchEnd(d)"
+          >
+            <!-- Delete area sotto (rivelata da swipe-left mobile) -->
             <button
+              v-if="canArchive(d)"
               type="button"
-              class="ndh-item-main"
-              @click="router.push(`/nebula/docs/${d.id}`)"
-              :aria-label="`Apri ${d.title}`"
+              class="ndh-swipe-delete"
+              :aria-label="`Elimina ${d.title}`"
+              @click.stop="doArchive(d)"
+              :disabled="archivingId === d.id"
             >
-              <span class="material-symbols-outlined ndh-item-icon">{{ d.iconName || 'description' }}</span>
-              <div class="ndh-item-meta">
-                <div class="ndh-item-title">{{ d.title }}</div>
-                <div class="ndh-item-sub">
-                  rev {{ d.revision }} · {{ formatTime(d.updatedAt) }} ·
-                  <code>{{ d.id }}</code>
+              <span class="material-symbols-outlined">delete</span>
+              <span class="ndh-swipe-delete-label">{{ archivingId === d.id ? '…' : 'Elimina' }}</span>
+            </button>
+
+            <!-- Riga doc (translateX da swipe) -->
+            <div
+              class="ndh-item"
+              :style="{ transform: itemTransform(d) }"
+            >
+              <button
+                type="button"
+                class="ndh-item-main"
+                @click.stop="router.push(`/nebula/docs/${d.id}`)"
+                :aria-label="`Apri ${d.title}`"
+              >
+                <span class="material-symbols-outlined ndh-item-icon">{{ d.iconName || 'description' }}</span>
+                <div class="ndh-item-meta">
+                  <div class="ndh-item-title">{{ d.title }}</div>
+                  <div class="ndh-item-sub">{{ formatTime(d.updatedAt) }}</div>
                 </div>
-              </div>
-            </button>
-            <button
-              type="button"
-              class="ndh-update-btn"
-              :disabled="updatingId === d.id"
-              :title="'Test LWW: aggiorna title via callable (resta utile anche con editor)'"
-              @click="updateTitle(d)"
-            >
-              {{ updatingId === d.id ? '…' : 'Test LWW' }}
-            </button>
+              </button>
+              <!-- Desktop: X icona su hover (canArchive only) -->
+              <button
+                v-if="canArchive(d)"
+                type="button"
+                class="ndh-x-btn"
+                :aria-label="`Elimina ${d.title}`"
+                :title="'Elimina documento'"
+                :disabled="archivingId === d.id"
+                @click.stop="doArchive(d)"
+              >
+                <span class="material-symbols-outlined">close</span>
+              </button>
+            </div>
           </li>
         </ul>
       </section>
 
-      <footer class="ndh-footer-hint">
-        Editor TipTap, mention CEPHEID e gerarchia arrivano nei prossimi chunk.
-        Vedi <code>docs/NEBULA-DOCS.md</code>.
-      </footer>
+      <!-- Sezione 2: Sei menzionato (hidden se zero) -->
+      <section v-if="mentionedDocs.length > 0" class="ndh-list-section">
+        <h3>
+          <span class="material-symbols-outlined ndh-sec-icon">alternate_email</span>
+          Sei menzionato in {{ mentionedDocs.length }} {{ mentionedDocs.length === 1 ? 'documento' : 'documenti' }}
+        </h3>
+        <ul class="ndh-list">
+          <li
+            v-for="d in mentionedDocs"
+            :key="`m-${d.id}`"
+            class="ndh-item-wrap"
+          >
+            <div class="ndh-item">
+              <button
+                type="button"
+                class="ndh-item-main"
+                @click.stop="router.push(`/nebula/docs/${d.id}`)"
+                :aria-label="`Apri ${d.title}`"
+              >
+                <span class="material-symbols-outlined ndh-item-icon ndh-item-icon-mention">{{ d.iconName || 'description' }}</span>
+                <div class="ndh-item-meta">
+                  <div class="ndh-item-title">{{ d.title }}</div>
+                  <div class="ndh-item-sub">{{ formatTime(d.updatedAt) }}</div>
+                </div>
+              </button>
+            </div>
+          </li>
+        </ul>
+      </section>
     </template>
   </div>
 </template>
 
 <style scoped>
 .ndh-root {
-  /* Pattern PWA mobile: .s-main parent overflow:hidden → root scrollabile +
-     overflow-x:hidden anti-spill (memoria feedback_pwa_mobile_view_pattern).
-     min-width:0 spezza la catena flex-min-content (children con white-space:
-     nowrap forzano altrimenti la width del flex item parent fino al min-content). */
   height: 100%;
   min-width: 0;
   width: 100%;
@@ -289,9 +436,6 @@ function formatTime(ts: any): string {
   box-sizing: border-box;
 }
 
-/* Defensive: border-box su tutti gli elementi child per evitare che
-   padding/border si sommino alla width: 100% causando overflow su mobile
-   (es. .ndh-create-btn con width:100% + padding 18px). */
 .ndh-root,
 .ndh-root *,
 .ndh-root *::before,
@@ -314,12 +458,6 @@ function formatTime(ts: any): string {
   box-shadow: var(--md-sys-elevation-level-1, 0 1px 3px rgba(0,0,0,0.06));
 }
 .ndh-denied .ndh-icon { color: #8a8a8a; }
-.ndh-denied h2 {
-  font-family: 'Cormorant Garamond', serif;
-  font-weight: 600;
-  font-size: 28px;
-  margin: 8px 0 4px;
-}
 
 /* Header */
 .ndh-header {
@@ -336,6 +474,7 @@ function formatTime(ts: any): string {
   font-variation-settings: 'FILL' 0, 'wght' 300;
   display: block;
 }
+.ndh-title-block { flex: 1; min-width: 0; }
 .ndh-header h2 {
   font-family: 'Cormorant Garamond', serif;
   font-weight: 600;
@@ -352,7 +491,6 @@ function formatTime(ts: any): string {
 }
 
 .ndh-integrations-btn {
-  margin-left: auto;
   background: transparent;
   border: 1px solid rgba(196, 96, 48, 0.35);
   color: #C46030;
@@ -399,24 +537,24 @@ function formatTime(ts: any): string {
   margin-bottom: 14px;
   font-size: 13.5px;
   word-break: break-word;
-  overflow-wrap: anywhere;
 }
 .ndh-toast .material-symbols-outlined { font-size: 18px; }
-.ndh-toast-ok { background: rgba(40, 160, 80, 0.10); color: #1e7e3e; }
 .ndh-toast-err { background: rgba(200, 50, 50, 0.10); color: #a82020; }
 
-/* Lista */
+/* Section */
+.ndh-list-section { margin-bottom: 28px; }
 .ndh-list-section h3 {
   font-size: 13px;
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: #777;
-  margin: 24px 0 12px;
+  margin: 0 0 12px;
   display: flex;
   align-items: center;
   gap: 8px;
 }
+.ndh-sec-icon { font-size: 16px; color: #C46030; }
 .ndh-count {
   background: rgba(196, 96, 48, 0.12);
   color: #C46030;
@@ -434,6 +572,7 @@ function formatTime(ts: any): string {
   font-size: 13px;
 }
 
+/* List + swipe wrapper */
 .ndh-list {
   list-style: none;
   padding: 0;
@@ -442,7 +581,40 @@ function formatTime(ts: any): string {
   flex-direction: column;
   gap: 6px;
 }
+.ndh-item-wrap {
+  position: relative;
+  overflow: hidden;
+  border-radius: 10px;
+  background: rgba(200, 50, 50, 0.85);  /* visibile sotto durante swipe */
+}
+
+/* Delete area sotto (mobile swipe reveal) */
+.ndh-swipe-delete {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 80px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  background: #C83232;
+  color: white;
+  border: 0;
+  font: inherit;
+  cursor: pointer;
+  z-index: 0;
+}
+.ndh-swipe-delete:hover { background: #B82828; }
+.ndh-swipe-delete:disabled { opacity: 0.7; cursor: wait; }
+.ndh-swipe-delete .material-symbols-outlined { font-size: 22px; }
+.ndh-swipe-delete-label { font-size: 11px; font-weight: 500; }
+
+/* Riga sopra (translatable da swipe) */
 .ndh-item {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -450,8 +622,11 @@ function formatTime(ts: any): string {
   background: var(--md-sys-color-surface-container, #fff);
   border-radius: 10px;
   border: 1px solid rgba(0,0,0,0.05);
-  transition: background 120ms ease, border-color 120ms ease;
+  transition: transform 240ms cubic-bezier(0.2, 0.9, 0.3, 1), background 120ms ease, border-color 120ms ease;
+  z-index: 1;
 }
+/* Durante touchmove rimuoviamo la transition per following dito */
+.ndh-item-wrap-open .ndh-item { transition: background 120ms ease, border-color 120ms ease; }
 .ndh-item:hover {
   background: rgba(196, 96, 48, 0.04);
   border-color: rgba(196, 96, 48, 0.18);
@@ -473,6 +648,7 @@ function formatTime(ts: any): string {
 }
 .ndh-item-main:hover .ndh-item-title { color: #C46030; }
 .ndh-item-icon { font-size: 22px; color: #C46030; flex-shrink: 0; }
+.ndh-item-icon-mention { color: #4A6B8A; }  /* blu admin per coerenza userMention */
 .ndh-item-meta { flex: 1; min-width: 0; overflow: hidden; }
 .ndh-item-title {
   font-weight: 500;
@@ -490,48 +666,38 @@ function formatTime(ts: any): string {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.ndh-item-sub code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 10.5px;
-  background: rgba(0,0,0,0.04);
-  padding: 1px 5px;
-  border-radius: 4px;
-  /* Su mobile la stringa id è 20 char + monospace: facciamola accorciare se serve */
-  word-break: break-all;
-}
-.ndh-update-btn {
+
+/* Desktop X button: visible on hover, hidden on mobile (swipe replace) */
+.ndh-x-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
   background: transparent;
-  border: 1px solid rgba(196, 96, 48, 0.40);
-  color: #C46030;
-  border-radius: 999px;
-  padding: 5px 12px;
-  font: inherit;
-  font-size: 12px;
+  border: 0;
+  color: #999;
   cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease, background 120ms ease, color 120ms ease;
   flex-shrink: 0;
-  transition: background 120ms ease;
+  margin-left: 4px;
 }
-.ndh-update-btn:hover:not(:disabled) { background: rgba(196, 96, 48, 0.08); }
-.ndh-update-btn:disabled { opacity: 0.6; cursor: wait; }
+.ndh-item:hover .ndh-x-btn,
+.ndh-x-btn:focus-visible { opacity: 1; }
+.ndh-x-btn:hover { background: rgba(200, 50, 50, 0.12); color: #C83232; }
+.ndh-x-btn:disabled { opacity: 0.5; cursor: wait; }
+.ndh-x-btn .material-symbols-outlined { font-size: 18px; }
 
-.ndh-footer-hint {
-  margin-top: 40px;
-  padding-top: 16px;
-  border-top: 1px solid rgba(0,0,0,0.06);
-  font-size: 12.5px;
-  color: #aaa;
-  text-align: center;
+/* Mobile: nasconde X desktop (swipe è la primary interaction) */
+@media (max-width: 768px) {
+  .ndh-x-btn { display: none; }
 }
-.ndh-footer-hint code {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 11.5px;
-  padding: 1px 5px;
-  background: rgba(196, 96, 48, 0.08);
-  border-radius: 4px;
-}
-
-@media (max-width: 600px) {
-  .ndh-header { flex-wrap: wrap; }
-  .ndh-create-btn { margin-left: 0; width: 100%; justify-content: center; }
+/* Desktop: nasconde swipe area (X è la primary) — niente da fare, lo swipe
+   con mouse non esiste, ma per chiarezza si nasconde visivamente il bg rosso. */
+@media (min-width: 769px) {
+  .ndh-item-wrap { background: transparent; }
+  .ndh-swipe-delete { display: none; }
 }
 </style>
