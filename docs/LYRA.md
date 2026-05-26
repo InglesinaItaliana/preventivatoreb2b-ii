@@ -20,6 +20,19 @@ Quando aggiungi una stringa visibile all'utente — un saluto, un placeholder, u
 
 Il nome viene dalla costellazione della **Lira**, lo strumento del canto: la voce della suite passa attraverso di essa.
 
+### Scope — cosa LYRA tocca, cosa lascia stare
+
+LYRA si applica **esclusivamente a SIDERA e ai suoi sotto-moduli**:
+
+- shell SIDERA (`/sidera/*`)
+- moduli galattici: QUASAR, CEPHEID, PULSAR, NEBULA, NEBULA-DOCS, NOVA
+- sezione CORE (admin, manutenzione, impostazioni)
+- componenti shared **quando usati esclusivamente da SIDERA-side**
+
+**POPS è fuori scope.** La webapp B2B + gestionale interno sotto `/` (incluse `AdminView`, `BuilderView`, `ClientDashboard`, `AdminSettings`, `ProductionDashboard`, `DeliveryView`, `LoginView`, `OnboardingView`, `CalcoliLavorazioni`, `TeaserView`) mantiene il proprio registro tecnico-neutro esistente. Nessuna sostituzione lessicale LYRA, nessun glifo `.lyra-star`, nessuna bonifica anti-pattern in nome di LYRA. Se POPS evolverà di registro lo farà su un manuale dedicato, non qui.
+
+La primitiva CSS `.lyra-star` definita in `src/style.css` resta nel bundle globale ma è **dormante in POPS** — nessun template POPS la referenzia. Coerente con lo scope.
+
 ---
 
 ## 1. Persona — il custode dell'osservatorio
@@ -138,11 +151,10 @@ Gli stati vuoti hanno **cinque tipi diversi**. Confonderli è il bug più comune
 
 ### Catalogo (audit 2026-05-26)
 
-48 stati vuoti censiti nella suite. `🚫` marca le violazioni anti-pattern §7 da bonificare (emoji, esclamativi). Le righe senza proposta indicano che la stringa attuale è già coerente con LYRA.
+39 stati vuoti censiti nei moduli **SIDERA-side** (POPS escluso per scope §0). `🚫` marca le violazioni anti-pattern §7 da bonificare (emoji, esclamativi). Le righe senza proposta indicano che la stringa attuale è già coerente con LYRA.
 
 | Modulo | Vista | File:line | Tipo | Stringa attuale | Proposta LYRA |
 |---|---|---|---|---|---|
-| CALCOLI | Tabella input | CalcoliLavorazioni.vue:110 | atteso | Nessun dato inserito. | — |
 | CEPHEID | Obiettivi (vuoto) | CepheidGoalsView.vue:138 | primo-uso | Nessun obiettivo definito. / Gli obiettivi sono le 'destinazioni' dell'anno. I progetti li servono. | Nessun obiettivo. Le destinazioni dell'anno: i progetti le servono. |
 | CEPHEID | Goal — progetti collegati | CepheidGoalDetail.vue:224 | atteso | Nessun progetto collegato a questo obiettivo. | — |
 | CEPHEID | Goal — modal collega | CepheidGoalDetail.vue:257 | filtro | — (placeholder) | Nessun progetto disponibile. |
@@ -158,14 +170,6 @@ Gli stati vuoti hanno **cinque tipi diversi**. Confonderli è il bug più comune
 | CEPHEID | Task per deliverable | CepheidProjectDetail.vue:483 | atteso | Nessun task collegato | Nessun task collegato. |
 | CEPHEID | Task lista | CepheidProjectDetail.vue:491 | atteso | Nessuna azione. / Le azioni create dal Kanban appaiono anche in lista... | — |
 | CEPHEID | Inbox vuota 🚫 | CepheidInboxView.vue:64,91 | pulizia | Nessuna task da smistare / Tutto smistato. Niente da fare qui. 🎉 | Tutto smistato. Il cielo è sereno. *(rimuovere 🎉)* |
-| POPS/ADMIN | Clienti filtrati | AdminSettings.vue:281 | filtro | Nessun cliente selezionato | Nessun cliente con questi filtri. |
-| POPS/CLIENT | Preventivi aperti | ClientDashboard.vue:616 | primo-uso | Non hai preventivi aperti al momento. / Inizia ora | Nessun preventivo aperto. Inizia ora. |
-| POPS/CLIENT | Ordini in attesa | ClientDashboard.vue:671 | atteso | Nessun ordine in attesa. | — |
-| POPS/CLIENT | Ordini in produzione | ClientDashboard.vue:729 | atteso | Nessun ordine in produzione. | — |
-| POPS/CLIENT | Ordini spediti | ClientDashboard.vue:769 | atteso | Nessun ordine spedito. | — |
-| POPS/BUILDER | Storico preventivi | BuilderView.vue:1823 | primo-uso | Nessun preventivo salvato ancora. | Nessun preventivo salvato. Inizia il primo. |
-| POPS/DELIVERY | Pool ordini | DeliveryView.vue:678 | filtro | Nessun ordine in attesa. | Nessun ordine con questi filtri. |
-| POPS/DELIVERY | Viaggi attivi | DeliveryView.vue:739 | atteso | Nessun viaggio attivo. | — |
 | QUASAR | Attività feed | QuasarAttivitaView.vue | atteso | Nessuna attività ancora — comparirà qui in tempo reale. | L'osservatorio è silenzioso. Le attività appariranno qui in tempo reale. |
 | QUASAR | Cruscotto — scadenze oggi | QuasarCruscottoView.vue | atteso | Nessuna azione in scadenza oggi | Nessuna stella si spegne oggi. |
 | QUASAR | Cruscotto — progetti | QuasarCruscottoView.vue | primo-uso | Nessun progetto attivo ancora. | Nessun progetto attivo. Traccia il primo. |
@@ -197,7 +201,7 @@ Gli stati vuoti hanno **cinque tipi diversi**. Confonderli è il bug più comune
 
 **Lettura dell'audit.**
 
-- **Tipologia dominante**: *atteso* (~19) > *primo-uso* (~11) > *filtro* (~12) > *pulizia* (~6). Nessuno stato di tipo *errore camuffato* è renderizzato come empty state — i fallimenti di query passano dai toast (gestione robusta, allineata al §5 *Regola tecnica importante*).
+- **Tipologia dominante** (SIDERA-side, 39 stati): *atteso* (~14) > *filtro* (~10) > *primo-uso* (~9) > *pulizia* (~6). Nessuno stato di tipo *errore camuffato* è renderizzato come empty state — i fallimenti di query passano dai toast (gestione robusta, allineata al §5 *Regola tecnica importante*).
 - **Violazioni anti-pattern §7** (7 punti, marcati 🚫 nel catalogo): emoji 🎉 in CepheidActionsView (3 punti), CepheidInboxView, QuasarQuadrantiView (Q1), CepheidTimeline (componente, non in catalogo); esclamativi in PulsarPendingView e PulsarMessageView. **Bonificate 2026-05-26** — i marcatori 🚫 restano come traccia storica dell'audit.
 - **Stati primo-uso** sono il punto di maggior valore identitario: la suite accoglie l'utente nuovo. Gli inviti pratici ("Crea la prima", "Inizia ora") restano allineati a LYRA — niente bisogno di astrologizzare.
 - **Stati pulizia** sono i candidati naturali per micro-celebrazioni §6 (StarAvatar quieto, punto luminoso, glow).
