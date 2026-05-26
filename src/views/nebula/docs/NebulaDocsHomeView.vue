@@ -628,14 +628,15 @@ function isActiveTouch(d: DocRow): boolean {
   overflow: hidden;
   border-radius: 10px;
   -webkit-tap-highlight-color: transparent;
-  /* NIENTE background: il track gestisce tutto. Niente leak rosso possibile. */
+  /* container queries: i child possono usare 100cqw = inline size del wrapper */
+  container-type: inline-size;
 }
 
-/* Track flex: card (100% width wrapper) + delete (80px off-screen).
+/* Track flex: card (100cqw = wrapper width) + delete (80px off-screen).
    Trasla translateX(-80px) → la delete entra in vista da destra. */
 .ndh-item-track {
   display: flex;
-  width: calc(100% + 80px);
+  width: max-content;          /* sized dai children, non da %s */
   align-items: stretch;
   transform: translateX(0);
 }
@@ -643,10 +644,11 @@ function isActiveTouch(d: DocRow): boolean {
   transition: transform 240ms cubic-bezier(0.2, 0.9, 0.3, 1);
 }
 
-/* Riga (prima cella del track, width = wrapper) */
+/* Riga (prima cella del track, larga esattamente quanto il wrapper) */
 .ndh-item {
-  flex: 0 0 100%;
-  width: 100%;
+  flex: 0 0 auto;
+  width: 100%;                 /* fallback iOS < 16 / browser senza container queries */
+  width: 100cqw;               /* wrapper inline size — preciso senza %s ambigue */
   display: flex;
   align-items: center;
   gap: 12px;
@@ -656,10 +658,15 @@ function isActiveTouch(d: DocRow): boolean {
   border: 1px solid rgba(0,0,0,0.05);
   transition: background 120ms ease, border-color 120ms ease;
   -webkit-tap-highlight-color: transparent;
+  box-sizing: border-box;
 }
-.ndh-item:hover {
-  background: rgba(196, 96, 48, 0.04);
-  border-color: rgba(196, 96, 48, 0.18);
+/* Hover SOLO su dispositivi con vero hover (desktop). Su iOS :hover si
+   attiva al tap → flash della card durante scroll/click. */
+@media (hover: hover) {
+  .ndh-item:hover {
+    background: rgba(196, 96, 48, 0.04);
+    border-color: rgba(196, 96, 48, 0.18);
+  }
 }
 
 /* Delete button (seconda cella del track, 80px). Off-screen normalmente
@@ -704,7 +711,9 @@ function isActiveTouch(d: DocRow): boolean {
   color: inherit;
   min-width: 0;
 }
-.ndh-item-main:hover .ndh-item-title { color: #C46030; }
+@media (hover: hover) {
+  .ndh-item-main:hover .ndh-item-title { color: #C46030; }
+}
 .ndh-item-icon { font-size: 22px; color: #C46030; flex-shrink: 0; }
 .ndh-item-icon-mention { color: #4A6B8A; }  /* blu admin per coerenza userMention */
 .ndh-item-meta { flex: 1; min-width: 0; overflow: hidden; }
