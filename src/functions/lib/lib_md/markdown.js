@@ -15,6 +15,7 @@ exports.extractText = extractText;
  *
  * Nodi PM supportati:
  *  Block: doc, paragraph, heading (1-3), bulletList, orderedList, listItem,
+ *         taskList, taskItem (GFM `- [ ]` / `- [x]`),
  *         blockquote, codeBlock, horizontalRule, taskEmbed
  *  Inline: text, hardBreak, taskMention, projectMention
  *  Marks: bold, italic, code, strike
@@ -172,7 +173,7 @@ function tokensToInline(tokens, placeholders, parentMarks = []) {
     return out;
 }
 function tokenToBlock(t, placeholders) {
-    var _a, _b, _c, _d, _e, _f;
+    var _a, _b, _c, _d, _e, _f, _g, _h;
     const tt = t.type;
     if (tt === 'space')
         return null;
@@ -205,7 +206,26 @@ function tokenToBlock(t, placeholders) {
     }
     if (tt === 'list') {
         const l = t;
-        const items = ((_d = l.items) !== null && _d !== void 0 ? _d : []).map(item => {
+        // GFM task list: se almeno un item ha `task: true`, emetti taskList
+        // (gli item non-task in mezzo li trattiamo comunque come taskItem unchecked
+        // per coerenza visiva — i parser marked di solito non li mescolano).
+        const isTaskList = !l.ordered && ((_d = l.items) !== null && _d !== void 0 ? _d : []).some(item => item.task === true);
+        if (isTaskList) {
+            const items = ((_e = l.items) !== null && _e !== void 0 ? _e : []).map(item => {
+                var _a;
+                // marked emette un token `checkbox` separato + il contenuto: scartiamo
+                // il checkbox (lo stato è già in item.checked).
+                const childTokens = ((_a = item.tokens) !== null && _a !== void 0 ? _a : []).filter(c => c.type !== 'checkbox');
+                const inner = childTokens.map(c => tokenToBlock(c, placeholders)).filter(Boolean);
+                return {
+                    type: 'taskItem',
+                    attrs: { checked: !!item.checked },
+                    content: inner.length ? inner : [{ type: 'paragraph', content: [] }],
+                };
+            });
+            return { type: 'taskList', content: items };
+        }
+        const items = ((_f = l.items) !== null && _f !== void 0 ? _f : []).map(item => {
             var _a;
             const inner = ((_a = item.tokens) !== null && _a !== void 0 ? _a : []).map(c => tokenToBlock(c, placeholders)).filter(Boolean);
             return { type: 'listItem', content: inner.length ? inner : [{ type: 'paragraph', content: [] }] };
@@ -227,12 +247,17 @@ function tokenToBlock(t, placeholders) {
         return { type: 'horizontalRule' };
     }
     if (tt === 'text') {
-        // Top-level text (raro): wrap in paragrafo
-        const txt = (_e = t.text) !== null && _e !== void 0 ? _e : '';
+        // Top-level text (es. dentro list_item): se ha sub-tokens inline,
+        // delegali a tokensToInline per non perdere bold/italic/code/strike.
+        const sub = t.tokens;
+        if (Array.isArray(sub) && sub.length) {
+            return { type: 'paragraph', content: tokensToInline(sub, placeholders) };
+        }
+        const txt = (_g = t.text) !== null && _g !== void 0 ? _g : '';
         return { type: 'paragraph', content: expandPlaceholdersInText(txt, [], placeholders) };
     }
     // Tabelle, html, ecc. → wrap in paragrafo con raw text
-    const raw = (_f = t.raw) !== null && _f !== void 0 ? _f : '';
+    const raw = (_h = t.raw) !== null && _h !== void 0 ? _h : '';
     if (raw)
         return { type: 'paragraph', content: [{ type: 'text', text: raw.trim() }] };
     return null;
@@ -329,8 +354,28 @@ function listItemToMd(node, ordered, idx, depth) {
     const rest = restBlocks.map(b => blockToMd(b, depth + 1)).join('\n');
     return rest ? `${line}\n${rest}` : line;
 }
+function taskItemToMd(node, depth) {
+    var _a;
+    const checked = !!((_a = node.attrs) === null || _a === void 0 ? void 0 : _a.checked);
+    const marker = checked ? '- [x] ' : '- [ ] ';
+    const indent = '  '.repeat(depth);
+    if (!node.content || node.content.length === 0)
+        return `${indent}${marker}`;
+    const first = node.content[0];
+    const restBlocks = node.content.slice(1);
+    let line = '';
+    if (first.type === 'paragraph') {
+        line = `${indent}${marker}${inlineToMd(first.content)}`;
+    }
+    else {
+        line = `${indent}${marker}`;
+        restBlocks.unshift(first);
+    }
+    const rest = restBlocks.map(b => blockToMd(b, depth + 1)).join('\n');
+    return rest ? `${line}\n${rest}` : line;
+}
 function blockToMd(node, depth = 0) {
-    var _a, _b, _c, _d, _e, _f, _g, _h;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j;
     switch (node.type) {
         case 'paragraph':
             return inlineToMd(node.content);
@@ -346,14 +391,18 @@ function blockToMd(node, depth = 0) {
             return ((_d = node.content) !== null && _d !== void 0 ? _d : [])
                 .map((li, i) => listItemToMd(li, true, i, depth))
                 .join('\n');
-        case 'blockquote':
+        case 'taskList':
             return ((_e = node.content) !== null && _e !== void 0 ? _e : [])
+                .map(ti => taskItemToMd(ti, depth))
+                .join('\n');
+        case 'blockquote':
+            return ((_f = node.content) !== null && _f !== void 0 ? _f : [])
                 .map(c => blockToMd(c, depth))
                 .join('\n\n')
                 .split('\n').map(l => '> ' + l).join('\n');
         case 'codeBlock': {
-            const lang = (_g = (_f = node.attrs) === null || _f === void 0 ? void 0 : _f.language) !== null && _g !== void 0 ? _g : '';
-            const text = ((_h = node.content) !== null && _h !== void 0 ? _h : []).map(c => { var _a; return (_a = c.text) !== null && _a !== void 0 ? _a : ''; }).join('');
+            const lang = (_h = (_g = node.attrs) === null || _g === void 0 ? void 0 : _g.language) !== null && _h !== void 0 ? _h : '';
+            const text = ((_j = node.content) !== null && _j !== void 0 ? _j : []).map(c => { var _a; return (_a = c.text) !== null && _a !== void 0 ? _a : ''; }).join('');
             return '```' + lang + '\n' + text + '\n```';
         }
         case 'horizontalRule':
@@ -394,7 +443,7 @@ function extractText(doc) {
         else if (n.type === 'projectMention')
             out.push(`[project ${(_c = n.attrs) === null || _c === void 0 ? void 0 : _c.projectId}]`);
         if (n.content) {
-            const isBlock = ['paragraph', 'heading', 'blockquote', 'listItem', 'codeBlock'].includes(n.type);
+            const isBlock = ['paragraph', 'heading', 'blockquote', 'listItem', 'taskItem', 'codeBlock'].includes(n.type);
             n.content.forEach(walk);
             if (isBlock)
                 out.push('\n');
