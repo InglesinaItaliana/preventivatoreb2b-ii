@@ -312,6 +312,12 @@ function itemTransform(d: DocRow): string {
 function isSwipingHorizontal(d: DocRow): boolean {
   return activeSwipeId.value === d.id || swipeOpenId.value === d.id
 }
+
+/** True quando il dito è ATTUALMENTE sulla row + swipa orizzontalmente.
+    Usato per disabilitare la transition CSS durante drag (follow dito 1:1). */
+function isActiveTouch(d: DocRow): boolean {
+  return activeSwipeId.value === d.id
+}
 </script>
 
 <template>
@@ -368,56 +374,57 @@ function isSwipingHorizontal(d: DocRow): boolean {
             v-for="d in myDocs"
             :key="d.id"
             class="ndh-item-wrap"
-            :class="{
-              'ndh-item-wrap-open': swipeOpenId === d.id,
-              'ndh-item-wrap-swiping': isSwipingHorizontal(d),
-            }"
             @touchstart="onTouchStart(d, $event)"
             @touchmove="onTouchMove(d, $event)"
             @touchend="onTouchEnd(d)"
             @touchcancel="onTouchEnd(d)"
           >
-            <!-- Delete area sotto (rivelata da swipe-left mobile) -->
-            <button
-              v-if="canArchive(d)"
-              type="button"
-              class="ndh-swipe-delete"
-              :aria-label="`Elimina ${d.title}`"
-              @click.stop="doArchive(d)"
-              :disabled="archivingId === d.id"
-            >
-              <span class="material-symbols-outlined">delete</span>
-              <span class="ndh-swipe-delete-label">{{ archivingId === d.id ? '…' : 'Elimina' }}</span>
-            </button>
-
-            <!-- Riga doc (translateX da swipe) -->
+            <!-- Track flex: card a sinistra (full width) + delete a destra (80px).
+                 Wrapper overflow:hidden nasconde la delete a destra normalmente.
+                 Swipe-left trasla il track → delete entra in vista. -->
             <div
-              class="ndh-item"
+              class="ndh-item-track"
+              :class="{ 'ndh-item-track-animating': !isActiveTouch(d) }"
               :style="{ transform: itemTransform(d) }"
             >
-              <button
-                type="button"
-                class="ndh-item-main"
-                @click.stop="router.push(`/nebula/docs/${d.id}`)"
-                :aria-label="`Apri ${d.title}`"
-              >
-                <span class="material-symbols-outlined ndh-item-icon">{{ d.iconName || 'description' }}</span>
-                <div class="ndh-item-meta">
-                  <div class="ndh-item-title">{{ d.title }}</div>
-                  <div class="ndh-item-sub">{{ formatTime(d.updatedAt) }}</div>
-                </div>
-              </button>
-              <!-- Desktop: X icona su hover (canArchive only) -->
+              <div class="ndh-item">
+                <button
+                  type="button"
+                  class="ndh-item-main"
+                  @click.stop="router.push(`/nebula/docs/${d.id}`)"
+                  :aria-label="`Apri ${d.title}`"
+                >
+                  <span class="material-symbols-outlined ndh-item-icon">{{ d.iconName || 'description' }}</span>
+                  <div class="ndh-item-meta">
+                    <div class="ndh-item-title">{{ d.title }}</div>
+                    <div class="ndh-item-sub">{{ formatTime(d.updatedAt) }}</div>
+                  </div>
+                </button>
+                <!-- Desktop: X icona su hover (canArchive only) -->
+                <button
+                  v-if="canArchive(d)"
+                  type="button"
+                  class="ndh-x-btn"
+                  :aria-label="`Elimina ${d.title}`"
+                  :title="'Elimina documento'"
+                  :disabled="archivingId === d.id"
+                  @click.stop="doArchive(d)"
+                >
+                  <span class="material-symbols-outlined">close</span>
+                </button>
+              </div>
+              <!-- Delete button mobile: sempre presente nel track, off-screen
+                   normalmente (a dx fuori dal wrapper). Visibile durante swipe. -->
               <button
                 v-if="canArchive(d)"
                 type="button"
-                class="ndh-x-btn"
+                class="ndh-swipe-delete"
                 :aria-label="`Elimina ${d.title}`"
-                :title="'Elimina documento'"
-                :disabled="archivingId === d.id"
                 @click.stop="doArchive(d)"
+                :disabled="archivingId === d.id"
               >
-                <span class="material-symbols-outlined">close</span>
+                <span class="material-symbols-outlined">delete</span>
+                <span class="ndh-swipe-delete-label">{{ archivingId === d.id ? '…' : 'Elimina' }}</span>
               </button>
             </div>
           </li>
@@ -620,22 +627,46 @@ function isSwipingHorizontal(d: DocRow): boolean {
   position: relative;
   overflow: hidden;
   border-radius: 10px;
-  background: transparent;
-  -webkit-tap-highlight-color: transparent;  /* niente flash blu/grigio iOS */
-}
-/* Rosso visibile sotto SOLO quando la card sta swipando/è aperta. Evita
-   il leak visivo su tap puro o scroll verticale. */
-.ndh-item-wrap-swiping,
-.ndh-item-wrap-open {
-  background: #C83232;
+  -webkit-tap-highlight-color: transparent;
+  /* NIENTE background: il track gestisce tutto. Niente leak rosso possibile. */
 }
 
-/* Delete area sotto (mobile swipe reveal) */
+/* Track flex: card (100% width wrapper) + delete (80px off-screen).
+   Trasla translateX(-80px) → la delete entra in vista da destra. */
+.ndh-item-track {
+  display: flex;
+  width: calc(100% + 80px);
+  align-items: stretch;
+  transform: translateX(0);
+}
+.ndh-item-track-animating {
+  transition: transform 240ms cubic-bezier(0.2, 0.9, 0.3, 1);
+}
+
+/* Riga (prima cella del track, width = wrapper) */
+.ndh-item {
+  flex: 0 0 100%;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 14px 4px 4px;
+  background: #ffffff;
+  border-radius: 10px;
+  border: 1px solid rgba(0,0,0,0.05);
+  transition: background 120ms ease, border-color 120ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.ndh-item:hover {
+  background: rgba(196, 96, 48, 0.04);
+  border-color: rgba(196, 96, 48, 0.18);
+}
+
+/* Delete button (seconda cella del track, 80px). Off-screen normalmente
+   perché il wrapper overflow:hidden lo nasconde a destra. Visibile solo
+   durante swipe-left. */
 .ndh-swipe-delete {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
+  flex: 0 0 80px;
   width: 80px;
   display: flex;
   flex-direction: column;
@@ -645,33 +676,15 @@ function isSwipingHorizontal(d: DocRow): boolean {
   background: #C83232;
   color: white;
   border: 0;
+  border-radius: 10px;
+  margin-left: 0;
   font: inherit;
   cursor: pointer;
-  z-index: 0;
 }
 .ndh-swipe-delete:hover { background: #B82828; }
 .ndh-swipe-delete:disabled { opacity: 0.7; cursor: wait; }
 .ndh-swipe-delete .material-symbols-outlined { font-size: 22px; }
 .ndh-swipe-delete-label { font-size: 11px; font-weight: 500; }
-
-/* Riga sopra (translatable da swipe) */
-.ndh-item {
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 4px 14px 4px 4px;
-  /* Background SEMPRE solido (no var fallback): impedisce il leak del rosso
-     wrapper durante interazioni iOS in cui i compositing layer cambiano. */
-  background: #ffffff;
-  border-radius: 10px;
-  border: 1px solid rgba(0,0,0,0.05);
-  transition: transform 240ms cubic-bezier(0.2, 0.9, 0.3, 1), background 120ms ease, border-color 120ms ease;
-  z-index: 1;
-  -webkit-tap-highlight-color: transparent;
-}
-/* Durante swipe attivo: no transition, segui il dito 1:1 */
-.ndh-item-wrap-swiping .ndh-item { transition: background 120ms ease, border-color 120ms ease; }
 .ndh-item:hover {
   background: rgba(196, 96, 48, 0.04);
   border-color: rgba(196, 96, 48, 0.18);
