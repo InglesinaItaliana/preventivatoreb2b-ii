@@ -1987,4 +1987,75 @@ exports.indexDocRefs = functions
     console.log(`[indexDocRefs] ${docId} — tasks: ${computed.tasks.length}, projects: ${computed.projects.length}`);
     return null;
 });
+// ============================================================================
+// NEBULA-DOCS — shareDoc callable (F3-C2.5)
+// Aggiorna ACL del doc (visibility + writers). SOLO owner può chiamare.
+// Endpoint separato da saveDoc per audit chiaro e per evitare che un writer
+// si "auto-promuova" owner via call accidentale.
+//
+// Input  : { docId, visibility?, writers? }
+// Output : { docId, acl }
+// Errori : unauthenticated | permission-denied | not-found | invalid-argument
+// ============================================================================
+const VALID_VISIBILITIES = new Set(['private', 'team', 'public']);
+exports.shareDoc = functions
+    .region('europe-west1')
+    .https.onCall(async (data, context) => {
+    if (!context.auth) {
+        throw new functions.https.HttpsError('unauthenticated', 'Richiesto login');
+    }
+    const userEmail = nebulaNormalizeEmail(context.auth.token.email);
+    if (!userEmail) {
+        throw new functions.https.HttpsError('failed-precondition', 'Email utente mancante');
+    }
+    const docId = data === null || data === void 0 ? void 0 : data.docId;
+    if (!docId) {
+        throw new functions.https.HttpsError('invalid-argument', 'docId mancante');
+    }
+    const db = admin.firestore();
+    const ref = db.collection('nebulaDocs').doc(docId);
+    const snap = await ref.get();
+    if (!snap.exists) {
+        throw new functions.https.HttpsError('not-found', 'Documento non trovato');
+    }
+    const current = snap.data();
+    const acl = current.acl;
+    if (!acl) {
+        throw new functions.https.HttpsError('failed-precondition', 'Documento senza ACL');
+    }
+    // SOLO owner può modificare ACL
+    if (!acl.owners.includes(userEmail)) {
+        throw new functions.https.HttpsError('permission-denied', 'Solo gli owner possono modificare la condivisione');
+    }
+    // Validazione + normalizzazione input
+    const visibility = data === null || data === void 0 ? void 0 : data.visibility;
+    if (visibility !== undefined && !VALID_VISIBILITIES.has(visibility)) {
+        throw new functions.https.HttpsError('invalid-argument', `visibility non valida: ${visibility}`);
+    }
+    let writers;
+    if ((data === null || data === void 0 ? void 0 : data.writers) !== undefined) {
+        if (!Array.isArray(data.writers)) {
+            throw new functions.https.HttpsError('invalid-argument', 'writers deve essere array');
+        }
+        writers = data.writers
+            .filter((e) => typeof e === 'string')
+            .map((e) => nebulaNormalizeEmail(e))
+            .filter((e) => e.length > 0);
+        // Owners restano sempre writers di fatto (saveDoc accetta sia owner
+        // che writer). Niente bisogno di duplicarli qui.
+    }
+    // Build update solo sui campi forniti
+    const update = {
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedBy: userEmail,
+    };
+    if (visibility !== undefined)
+        update['acl.visibility'] = visibility;
+    if (writers !== undefined)
+        update['acl.writers'] = writers;
+    await ref.update(update);
+    const updatedSnap = await ref.get();
+    const newAcl = updatedSnap.data().acl;
+    return { docId, acl: newAcl };
+});
 //# sourceMappingURL=index.js.map

@@ -27,6 +27,7 @@ import { useAllTasks } from '../../../composables/sidera/useAllTasks'
 import { useProjects } from '../../../composables/sidera/useProjects'
 import { useDocPresence } from '../../../composables/nebula/useDocPresence'
 import PresenceStack from './components/PresenceStack.vue'
+import ShareDocModal from './components/ShareDocModal.vue'
 import { useCurrentUser } from '../../../composables/sidera/useCurrentUser'
 import { useDoc } from '../../../composables/nebula/useDoc'
 import { saveDoc, isSaveDocConflict, type SaveDocConflictDetails } from '../../../composables/nebula/useSaveDoc'
@@ -53,6 +54,7 @@ const initializedFromDoc = ref(false)          // ha già preso il contenuto ini
 const saveStatus = ref<'idle' | 'saving' | 'saved' | 'error'>('idle')
 const saveError = ref<string>('')
 const showIconPicker = ref(false)
+const showShareModal = ref(false)
 const conflict = ref<SaveDocConflictDetails | null>(null)
 
 const myEmail = computed(() => (currentUser.value?.email ?? '').toLowerCase().trim())
@@ -60,6 +62,10 @@ const canWrite = computed(() => {
   if (!doc.value) return false
   const acl = doc.value.acl
   return acl.writers.includes(myEmail.value) || acl.owners.includes(myEmail.value)
+})
+const isOwner = computed(() => {
+  if (!doc.value) return false
+  return doc.value.acl.owners.includes(myEmail.value)
 })
 
 // ── Editor TipTap ───────────────────────────────────────────────────────────
@@ -325,6 +331,17 @@ void editorRef
         </div>
 
         <button
+          v-if="isOwner"
+          type="button"
+          class="nd-share-btn"
+          title="Condividi documento"
+          @click="showShareModal = true"
+        >
+          <MaterialIcon name="share" :size="14" />
+          <span class="nd-share-label">Condividi</span>
+        </button>
+
+        <button
           v-if="canWrite"
           type="button"
           class="nd-manual-save"
@@ -465,6 +482,15 @@ void editorRef
         </div>
       </div>
     </div>
+
+    <!-- Share modal (solo per owner) -->
+    <ShareDocModal
+      v-if="showShareModal && doc"
+      :docId="doc.id"
+      :acl="doc.acl"
+      @close="showShareModal = false"
+      @updated="showShareModal = false"
+    />
   </div>
 </template>
 
@@ -568,7 +594,8 @@ void editorRef
   to { transform: rotate(360deg); }
 }
 
-.nd-manual-save {
+.nd-manual-save,
+.nd-share-btn {
   background: transparent;
   border: 1px solid rgba(196, 96, 48, 0.35);
   color: #C46030;
@@ -581,8 +608,10 @@ void editorRef
   align-items: center;
   gap: 5px;
 }
-.nd-manual-save:hover:not(:disabled) { background: rgba(196, 96, 48, 0.08); }
+.nd-manual-save:hover:not(:disabled),
+.nd-share-btn:hover { background: rgba(196, 96, 48, 0.08); }
 .nd-manual-save:disabled { opacity: 0.5; cursor: wait; }
+.nd-share-btn { padding: 6px 12px; }
 
 /* External update warning */
 .nd-external-warn {
@@ -860,5 +889,8 @@ void editorRef
     margin: 0 0 24px 0;
   }
   .nd-modal { padding: 18px 18px; }
+  /* Share button su mobile: solo icona per non rubare spazio */
+  .nd-share-label { display: none; }
+  .nd-share-btn { padding: 6px; }
 }
 </style>
