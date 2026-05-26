@@ -465,16 +465,29 @@ void editorRef
   /* Pattern PWA mobile (memoria feedback_pwa_mobile_view_pattern):
      .s-main parent ha overflow:hidden → la view deve essere scrollabile
      da sola (root: height 100% + overflow-y auto). overflow-x:hidden
-     blinda contro elementi che fuoriescono (es. toolbar molto larghe). */
+     blinda contro elementi che fuoriescono (es. toolbar molto larghe).
+     min-width:0 + width:100% spezza la catena flex-min-content che
+     altrimenti propaga il min-content dei children nowrap up to .s-main. */
   height: 100%;
+  min-width: 0;
+  width: 100%;
+  max-width: 820px;
   overflow-y: auto;
   overflow-x: hidden;
-  max-width: 820px;
   margin: 0 auto;
   padding: 24px 20px 80px;
   font-family: 'Outfit', system-ui, sans-serif;
   color: var(--md-sys-color-on-surface, #1a1a1a);
   /* Box-sizing border-box per coerenza padding ↔ max-width */
+  box-sizing: border-box;
+}
+
+/* Defensive border-box scope: previene overflow su mobile di child con
+   width:100% + padding (es. button manual save, toolbar). */
+.nd-root,
+.nd-root *,
+.nd-root *::before,
+.nd-root *::after {
   box-sizing: border-box;
 }
 

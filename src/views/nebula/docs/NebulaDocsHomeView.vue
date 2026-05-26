@@ -224,14 +224,28 @@ function formatTime(ts: any): string {
 <style scoped>
 .ndh-root {
   /* Pattern PWA mobile: .s-main parent overflow:hidden → root scrollabile +
-     overflow-x:hidden anti-spill (memoria feedback_pwa_mobile_view_pattern). */
+     overflow-x:hidden anti-spill (memoria feedback_pwa_mobile_view_pattern).
+     min-width:0 spezza la catena flex-min-content (children con white-space:
+     nowrap forzano altrimenti la width del flex item parent fino al min-content). */
   height: 100%;
+  min-width: 0;
+  width: 100%;
+  max-width: 920px;
   overflow-y: auto;
   overflow-x: hidden;
-  max-width: 920px;
   margin: 0 auto;
   padding: 24px 20px 60px;
   font-family: 'Outfit', system-ui, sans-serif;
+  box-sizing: border-box;
+}
+
+/* Defensive: border-box su tutti gli elementi child per evitare che
+   padding/border si sommino alla width: 100% causando overflow su mobile
+   (es. .ndh-create-btn con width:100% + padding 18px). */
+.ndh-root,
+.ndh-root *,
+.ndh-root *::before,
+.ndh-root *::after {
   box-sizing: border-box;
 }
 
@@ -319,6 +333,8 @@ function formatTime(ts: any): string {
   border-radius: 10px;
   margin-bottom: 14px;
   font-size: 13.5px;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 .ndh-toast .material-symbols-outlined { font-size: 18px; }
 .ndh-toast-ok { background: rgba(40, 160, 80, 0.10); color: #1e7e3e; }
@@ -392,7 +408,7 @@ function formatTime(ts: any): string {
 }
 .ndh-item-main:hover .ndh-item-title { color: #C46030; }
 .ndh-item-icon { font-size: 22px; color: #C46030; flex-shrink: 0; }
-.ndh-item-meta { flex: 1; min-width: 0; }
+.ndh-item-meta { flex: 1; min-width: 0; overflow: hidden; }
 .ndh-item-title {
   font-weight: 500;
   font-size: 14.5px;
@@ -405,6 +421,9 @@ function formatTime(ts: any): string {
   font-size: 11.5px;
   color: #888;
   margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .ndh-item-sub code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -412,6 +431,8 @@ function formatTime(ts: any): string {
   background: rgba(0,0,0,0.04);
   padding: 1px 5px;
   border-radius: 4px;
+  /* Su mobile la stringa id è 20 char + monospace: facciamola accorciare se serve */
+  word-break: break-all;
 }
 .ndh-update-btn {
   background: transparent;
