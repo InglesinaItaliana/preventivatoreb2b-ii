@@ -2709,3 +2709,51 @@ exports.notifyOnMention = functions
         console.log(`[notifyOnMention] ${docId}: target ${targets.length}, tokens ${tokens.length}, success ${res.successCount}`);
         return null;
     });
+
+// ============================================================================
+// NEBULA-DOCS — archive / unarchive callable (F5b-C1)
+// Soft delete: sets archived=true + archivedAt. Doc resta in Firestore per
+// 90gg (decisione §12 #5) — trashPurge function futura farà hard delete.
+// SOLO owner può archive/unarchive. Filter `archived !== true` lato client
+// nasconde il doc dalle viste principali.
+// ============================================================================
+
+async function setArchivedFlag(docId: string, userEmail: string, archived: boolean) {
+    const db = admin.firestore();
+    const ref = db.collection('nebulaDocs').doc(docId);
+    const snap = await ref.get();
+    if (!snap.exists) throw new functions.https.HttpsError('not-found', 'Documento non trovato');
+    const acl = (snap.data() as { acl?: NebulaDocAcl }).acl;
+    if (!acl) throw new functions.https.HttpsError('failed-precondition', 'Documento senza ACL');
+    if (!acl.owners.includes(userEmail)) {
+        throw new functions.https.HttpsError('permission-denied', 'Solo gli owner possono archiviare/ripristinare');
+    }
+    const now = admin.firestore.FieldValue.serverTimestamp();
+    await ref.update({
+        archived,
+        archivedAt: archived ? now : null,
+        updatedAt: now,
+        updatedBy: userEmail,
+    });
+    return { docId, archived };
+}
+
+exports.archiveNebulaDoc = functions
+    .region('europe-west1')
+    .https.onCall(async (data, context) => {
+        if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Richiesto login');
+        const userEmail = nebulaNormalizeEmail(context.auth.token.email);
+        const docId: string | undefined = data?.docId;
+        if (!docId) throw new functions.https.HttpsError('invalid-argument', 'docId mancante');
+        return setArchivedFlag(docId, userEmail, true);
+    });
+
+exports.unarchiveNebulaDoc = functions
+    .region('europe-west1')
+    .https.onCall(async (data, context) => {
+        if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Richiesto login');
+        const userEmail = nebulaNormalizeEmail(context.auth.token.email);
+        const docId: string | undefined = data?.docId;
+        if (!docId) throw new functions.https.HttpsError('invalid-argument', 'docId mancante');
+        return setArchivedFlag(docId, userEmail, false);
+    });
