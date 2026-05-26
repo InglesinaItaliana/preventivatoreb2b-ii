@@ -17,8 +17,13 @@ import { useDocHistory, type HistorySnapshot } from '../../../composables/nebula
 import { saveDoc } from '../../../composables/nebula/useSaveDoc'
 import { useCurrentUser } from '../../../composables/sidera/useCurrentUser'
 import { useTeamMembers, displayName, starAvatarProps } from '../../../composables/sidera/useTeamMembers'
+import { useAllTasks } from '../../../composables/sidera/useAllTasks'
+import { useProjects } from '../../../composables/sidera/useProjects'
 import StarAvatar from '../../../components/shared/StarAvatar.vue'
 import MaterialIcon from './components/MaterialIcon.vue'
+import { TaskMention } from './extensions/TaskMention'
+import { ProjectMention } from './extensions/ProjectMention'
+import { TaskEmbed } from './extensions/TaskEmbed'
 
 const route = useRoute()
 const router = useRouter()
@@ -42,13 +47,39 @@ const canWrite = computed(() => {
 })
 
 // ── Editor preview (read-only, single instance riusato per snapshot espanso) ──
+// Carica TUTTE le estensioni custom: senza, i nodi taskMention/projectMention/
+// taskEmbed verrebbero droppati dalla preview rendendola vuota anche per doc
+// pieni di chip CEPHEID.
+const { tasks: allTasksRef } = useAllTasks()
+const { projects: allProjectsRef } = useProjects()
+
 const previewEditor = useEditor({
-  extensions: [StarterKit.configure({ heading: { levels: [1, 2, 3] } })],
+  extensions: [
+    StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
+    TaskMention.configure({ allTasks: () => allTasksRef.value }),
+    ProjectMention.configure({ allProjects: () => allProjectsRef.value }),
+    TaskEmbed.configure({
+      allTasks: () => allTasksRef.value,
+      allProjects: () => allProjectsRef.value,
+    }),
+  ],
   editable: false,
   content: { type: 'doc', content: [] },
 })
 const previewRef = shallowRef(previewEditor)
 void previewRef
+
+// Empty check: doc con solo paragrafo vuoto = considerato "vuoto"
+function isContentEmpty(content: any): boolean {
+  if (!content || !Array.isArray(content.content) || content.content.length === 0) return true
+  // Single empty paragraph node = empty
+  if (content.content.length === 1) {
+    const only = content.content[0]
+    if (only?.type === 'paragraph' && (!only.content || only.content.length === 0)) return true
+  }
+  return false
+}
+const expandedIsEmpty = ref(false)
 
 function toggleExpand(snap: HistorySnapshot) {
   if (expandedId.value === snap.id) {
@@ -61,6 +92,7 @@ function toggleExpand(snap: HistorySnapshot) {
     ? JSON.parse(JSON.stringify(snap.content))
     : { type: 'doc', content: [] }
   previewEditor.value?.commands.setContent(rawContent, false)
+  expandedIsEmpty.value = isContentEmpty(rawContent)
 }
 
 async function restoreSnapshot(snap: HistorySnapshot) {
@@ -225,8 +257,16 @@ onBeforeUnmount(() => {
               Versione corrente
             </span>
           </div>
+          <div class="nh-preview-label">
+            <MaterialIcon name="visibility" :size="12" />
+            Anteprima del documento a questa revisione (sola lettura)
+          </div>
+          <div v-if="expandedIsEmpty" class="nh-preview-empty">
+            <MaterialIcon name="description" :size="20" color="#bbb" />
+            <span>Il documento era vuoto a questa revisione.</span>
+          </div>
           <EditorContent
-            v-if="previewEditor"
+            v-else-if="previewEditor"
             :editor="previewEditor"
             class="nh-preview-content"
           />
@@ -452,9 +492,35 @@ onBeforeUnmount(() => {
   font-style: italic;
 }
 
+/* Preview label */
+.nh-preview-label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 8px;
+  font-size: 10.5px;
+  color: #999;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+
+.nh-preview-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px 14px;
+  background: #fafafa;
+  border-radius: 8px;
+  color: #999;
+  font-size: 13px;
+  font-style: italic;
+}
+
 /* Read-only preview content */
 .nh-preview-content {
-  margin-top: 8px;
+  margin-top: 4px;
   padding: 12px 14px;
   background: #fafafa;
   border-radius: 8px;
