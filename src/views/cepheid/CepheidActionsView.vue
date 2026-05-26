@@ -152,11 +152,8 @@ const dueTodayCount = computed(() => {
 // Completate di recente: collassabile, collassate di default
 const showDone = ref(false)
 
-// Reward "nessuna azione aperta" — stesso pattern di CepheidInboxView ("Inbox pulita")
+// Reward "nessuna azione aperta" (LYRA §6) — onda di luce singola + stella quieta
 const reduceMotion = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
-const confetti = computed(() => Array.from({ length: 14 }, (_, k) => ({
-  left: Math.round(6 + k * 88 / 14), color: ['#D4A020', '#C4941C', '#3AAF98', '#C46030', '#98C0D0', '#B06842'][k % 6], delay: ((k % 5) * 90) / 1000,
-})))
 
 // ── Modal create + edit (port da TasksView SIDERA 2026-05-20) ───────────────
 type TaskLike = { id: string; projectId: string | null; title: string; priority: 'alta' | 'media' | 'bassa'; dueDate: Date | null; assignees: string[]; completedAt: Date | null }
@@ -318,18 +315,18 @@ onMounted(() => {
 
       <!-- Tab mine/all/late: rendering group-by relative-date -->
       <template v-else>
-        <!-- reward "tutto fatto" (mine/all) — stesso linguaggio di Inbox pulita / progetto completato -->
+        <!-- reward "tutto fatto" (LYRA §6) — stella osservata + onda di luce singola al mount -->
         <div v-if="!visibleOpen.length && filter !== 'late'" class="av-fin">
-          <template v-if="!reduceMotion">
-            <span v-for="(c, i) in confetti" :key="i" class="av-pc" :style="{ left: c.left + '%', background: c.color, animationDelay: c.delay + 's' }" />
-          </template>
-          <div class="av-rk"><MIcon name="emoji_events" :size="28" /></div>
+          <div class="av-rk">
+            <span v-if="!reduceMotion" class="av-wave" aria-hidden="true" />
+            <span class="lyra-star lyra-star--celebration" aria-hidden="true" />
+          </div>
           <div class="av-ft">{{ filter === 'mine' ? 'Tutto fatto' : 'Nessuna azione aperta' }}</div>
-          <div class="av-fs">{{ filter === 'mine' ? 'Nessuna azione assegnata da fare. 🎉' : 'Niente in sospeso qui. 🎉' }}</div>
+          <div class="av-fs">{{ filter === 'mine' ? 'Nessuna azione assegnata da fare.' : 'Niente in sospeso qui.' }}</div>
         </div>
         <div v-else-if="!visibleOpen.length" class="empty-state">
           <MIcon name="check_circle" filled :size="20" class="empty-state-icon" />
-          Nessuna azione in ritardo. 🎉
+          Nessuna azione in ritardo. Stato sereno.
         </div>
 
         <template v-for="g in groups" :key="g.key">
@@ -539,13 +536,24 @@ onMounted(() => {
 .av-fin { position: relative; overflow: hidden; margin-top: 8px; padding: 36px 18px; border-radius: 16px; background: #FFF8F0; text-align: center; box-shadow: var(--md-sys-elevation-level-1); border: 1px solid var(--md-sys-color-outline-variant); }
 .s-surface-dark .av-fin { background: #16130B; }
 @media (prefers-color-scheme: dark) { .av-fin { background: #16130B; } }
-.av-rk { display: inline-flex; align-items: center; justify-content: center; width: 58px; height: 58px; border-radius: 50%; background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); margin-bottom: 10px; }
+/* Container che ospita .lyra-star (src/style.css §LYRA) + .av-wave layered.
+   La stella ha già visual intrinseco; qui solo positioning. */
+.av-rk { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 48px; height: 48px; margin-bottom: 8px; }
 .av-ft { font-family: var(--md-sys-typescale-headline-small-font, serif); font-size: 24px; color: var(--md-sys-color-on-surface); }
 .av-fs { font-size: 13px; color: var(--md-sys-color-on-surface-variant); margin-top: 4px; }
-.av-pc { position: absolute; top: 8px; width: 8px; height: 8px; border-radius: 2px; opacity: 0; }
-@media (prefers-reduced-motion: no-preference) {
-  @keyframes avconf { 0% { transform: translateY(0) rotate(0); opacity: 0 } 12% { opacity: 1 } 100% { transform: translateY(200px) rotate(420deg); opacity: 0 } }
-  .av-pc { animation: avconf 1.7s cubic-bezier(.3,.1,.5,1) forwards; }
+.av-wave {
+  position: absolute; top: 50%; left: 50%;
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(212, 160, 32, 0.5) 0%, rgba(212, 160, 32, 0) 70%);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  animation: av-wave-ripple 900ms ease-out forwards;
+}
+@keyframes av-wave-ripple {
+  0%   { transform: translate(-50%, -50%) scale(0.3); opacity: 0; }
+  25%  { opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(7); opacity: 0; }
 }
 
 /* Task group-by relative-date (port da TasksView SIDERA 2026-05-20) */

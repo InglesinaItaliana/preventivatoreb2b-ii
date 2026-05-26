@@ -337,7 +337,7 @@ function renderText(t: string) {
       <div v-if="loading" class="loading-msgs">
         <div v-for="i in 5" :key="i" class="msg-skel" :class="i % 2 ? 'msg-skel--right' : ''" />
       </div>
-      <div v-else-if="!messages.length" class="empty-msgs">Nessun messaggio ancora. Inizia la conversazione!</div>
+      <div v-else-if="!messages.length" class="empty-msgs">Nessun messaggio. Apri la conversazione.</div>
 
       <div
         v-for="msg in messages"

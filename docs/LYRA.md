@@ -20,6 +20,19 @@ Quando aggiungi una stringa visibile all'utente — un saluto, un placeholder, u
 
 Il nome viene dalla costellazione della **Lira**, lo strumento del canto: la voce della suite passa attraverso di essa.
 
+### Scope — cosa LYRA tocca, cosa lascia stare
+
+LYRA si applica **esclusivamente a SIDERA e ai suoi sotto-moduli**:
+
+- shell SIDERA (`/sidera/*`)
+- moduli galattici: QUASAR, CEPHEID, PULSAR, NEBULA, NEBULA-DOCS, NOVA
+- sezione CORE (admin, manutenzione, impostazioni)
+- componenti shared **quando usati esclusivamente da SIDERA-side**
+
+**POPS è fuori scope.** La webapp B2B + gestionale interno sotto `/` (incluse `AdminView`, `BuilderView`, `ClientDashboard`, `AdminSettings`, `ProductionDashboard`, `DeliveryView`, `LoginView`, `OnboardingView`, `CalcoliLavorazioni`, `TeaserView`) mantiene il proprio registro tecnico-neutro esistente. Nessuna sostituzione lessicale LYRA, nessun glifo `.lyra-star`, nessuna bonifica anti-pattern in nome di LYRA. Se POPS evolverà di registro lo farà su un manuale dedicato, non qui.
+
+La primitiva CSS `.lyra-star` definita in `src/style.css` resta nel bundle globale ma è **dormante in POPS** — nessun template POPS la referenzia. Coerente con lo scope.
+
 ---
 
 ## 1. Persona — il custode dell'osservatorio
@@ -85,6 +98,10 @@ Lessico interno condiviso. Da usare in modo coerente in tutta la suite.
 
 **Verbi vietati**: *cliccare* (è un'azione, non un significato), *eseguire*, *processare*, *settare*.
 
+**Termini operativi neutri** (non astrologizzare): *risultato*, *comando*, *icona*, *versione*, *filtro*, *categoria*. In stati di tipo *filtro* o *errore camuffato* preferisci chiarezza pratica al lirismo — il custode è preciso prima che poetico. Esempi: "Nessun risultato", "Nessun comando trovato", "Nessuna icona trovata per X" restano così.
+
+**Avverbi di negazione**: *nessun / nessuna* è la forma standard. *Niente* è ammesso come variante più asciutta nei contesti pulizia/atteso ("Niente in sospeso qui", "Niente da pianificare"). *Nulla* sconsigliato (suona arcaico).
+
 ---
 
 ## 4. Traduzioni 1:1
@@ -132,20 +149,64 @@ Gli stati vuoti hanno **cinque tipi diversi**. Confonderli è il bug più comune
 
 **Regola tecnica importante.** Lo stato vuoto-celebrazione deve sapere *perché* è vuoto: `items.length === 0 && lastFetch.ok === true`. Se hai dubbio sulla query, mostri il messaggio del tipo "errore camuffato", **mai** una celebrazione falsa.
 
-### Catalogo iniziale (da audit successivo)
+### Catalogo (audit 2026-05-26)
 
-| Modulo / vista | Tipo | Microcopy proposto |
-|---|---|---|
-| QUASAR / Quadranti — Q1 vuoto | Pulizia | Nessuna urgenza importante. Stato raro, custodiscilo. |
-| QUASAR / Quadranti — Q4 vuoto | Pulizia | Quadrante deserto. Così deve stare. |
-| QUASAR / Cruscotto — attività di oggi vuota | Atteso | L'osservatorio è silenzioso oggi. |
-| CEPHEID / Inbox Smistamento vuota | Pulizia | Tutto smistato. Il cielo è sereno. |
-| CEPHEID / Timeline nuovo progetto | Primo uso | Disegna la prima fase. La rotta è ancora da tracciare. |
-| SIDERA / Scadenze di oggi vuote | Atteso | Nessuna stella si spegne oggi. |
-| POPS / Lista filtrata vuota | Filtro | Nessun preventivo corrisponde. Allenta i filtri per vedere di più. |
-| NEBULA / Doc senza contenuto | Primo uso | Pagina bianca. Inizia da una nota. |
-| PULSAR / Chat nuova | Primo uso | Nessun messaggio. Apri la conversazione. |
-| Qualsiasi / Notifiche vuote | Pulizia | Tutto calmo. |
+39 stati vuoti censiti nei moduli **SIDERA-side** (POPS escluso per scope §0). `🚫` marca le violazioni anti-pattern §7 da bonificare (emoji, esclamativi). Le righe senza proposta indicano che la stringa attuale è già coerente con LYRA.
+
+| Modulo | Vista | File:line | Tipo | Stringa attuale | Proposta LYRA |
+|---|---|---|---|---|---|
+| CEPHEID | Obiettivi (vuoto) | CepheidGoalsView.vue:138 | primo-uso | Nessun obiettivo definito. / Gli obiettivi sono le 'destinazioni' dell'anno. I progetti li servono. | Nessun obiettivo. Le destinazioni dell'anno: i progetti le servono. |
+| CEPHEID | Goal — progetti collegati | CepheidGoalDetail.vue:224 | atteso | Nessun progetto collegato a questo obiettivo. | — |
+| CEPHEID | Goal — modal collega | CepheidGoalDetail.vue:257 | filtro | — (placeholder) | Nessun progetto disponibile. |
+| CEPHEID | Progetti (vuoto totale) | CepheidProjectsView.vue:230 | primo-uso | Nessun progetto. | Nessuna costellazione tracciata. Traccia la prima. |
+| CEPHEID | Progetti (filtro stato) | CepheidProjectsView.vue:258 | filtro | Nessun progetto attivo / completato. | Nessun progetto in questo stato. |
+| CEPHEID | Scadenze 7gg | CepheidDueView.vue:162 | filtro | Nessuna scadenza nei prossimi 7 giorni | Nessuna stella si spegne nei prossimi 7 giorni. |
+| CEPHEID | Scadenze vuote | CepheidDueView.vue:179 | atteso | (no microcopy) | Nessuna scadenza in vista. |
+| CEPHEID | Azioni — completate | CepheidActionsView.vue:307 | atteso | Nessuna azione completata. | — |
+| CEPHEID | Azioni — mie/tutte (clean) 🚫 | CepheidActionsView.vue:322 | pulizia | Tutto fatto / Nessuna azione assegnata da fare. 🎉 / Niente in sospeso qui. 🎉 | Niente in sospeso qui. *(rimuovere 🎉)* |
+| CEPHEID | Azioni — in ritardo (nessuna) 🚫 | CepheidActionsView.vue:330 | pulizia | Nessuna azione in ritardo. 🎉 | Nessuna azione in ritardo. Stato sereno. *(rimuovere 🎉)* |
+| CEPHEID | Milestones | CepheidProjectDetail.vue:372 | atteso | Nessuna milestone. / Una milestone è un checkpoint datato senza sotto-task... | — |
+| CEPHEID | Deliverables | CepheidProjectDetail.vue:417 | atteso | Nessun deliverable. / Un deliverable è l'output tangibile... | — |
+| CEPHEID | Task per deliverable | CepheidProjectDetail.vue:483 | atteso | Nessun task collegato | Nessun task collegato. |
+| CEPHEID | Task lista | CepheidProjectDetail.vue:491 | atteso | Nessuna azione. / Le azioni create dal Kanban appaiono anche in lista... | — |
+| CEPHEID | Inbox vuota 🚫 | CepheidInboxView.vue:64,91 | pulizia | Nessuna task da smistare / Tutto smistato. Niente da fare qui. 🎉 | Tutto smistato. Il cielo è sereno. *(rimuovere 🎉)* |
+| QUASAR | Attività feed | QuasarAttivitaView.vue | atteso | Nessuna attività ancora — comparirà qui in tempo reale. | L'osservatorio è silenzioso. Le attività appariranno qui in tempo reale. |
+| QUASAR | Cruscotto — scadenze oggi | QuasarCruscottoView.vue | atteso | Nessuna azione in scadenza oggi | Nessuna stella si spegne oggi. |
+| QUASAR | Cruscotto — progetti | QuasarCruscottoView.vue | primo-uso | Nessun progetto attivo ancora. | Nessun progetto attivo. Traccia il primo. |
+| QUASAR | Cruscotto — urgenze | QuasarCruscottoView.vue | pulizia | Nessuna urgenza al momento. | Nessuna urgenza. Stato sereno. |
+| QUASAR | Cruscotto — attività recente | QuasarCruscottoView.vue | atteso | Nessuna attività recente. | — |
+| QUASAR | Quadranti Q1 🚫 | QuasarQuadrantiView.vue | pulizia | Nessun incendio 🎉 | Nessuna urgenza importante. Stato raro, custodiscilo. *(rimuovere 🎉)* |
+| QUASAR | Quadranti Q2 | QuasarQuadrantiView.vue | atteso | Niente da pianificare | Niente da pianificare. |
+| QUASAR | Quadranti Q3 | QuasarQuadrantiView.vue | atteso | Niente da delegare | Niente da delegare. |
+| QUASAR | Quadranti Q4 | QuasarQuadrantiView.vue | pulizia | Niente da valutare | Quadrante deserto. Così deve stare. |
+| PULSAR | Messaggi conversazione 🚫 | PulsarMessageView.vue | primo-uso | Nessun messaggio ancora. Inizia la conversazione! | Nessun messaggio. Apri la conversazione. *(rimuovere !)* |
+| PULSAR | Etichette | PulsarTagsView.vue | primo-uso | Nessuna etichetta ancora. | Nessuna etichetta. Crea la prima. |
+| PULSAR | Sequentia — azioni mie | PulsarSequentia.vue | atteso | Nessuna azione assegnata. | — |
+| PULSAR | Hashtag — messaggi | PulsarHashtagView.vue | filtro | Nessun messaggio con #{tag} ancora. | Nessun messaggio con #{tag}. |
+| PULSAR | Pendenze 🚫 | PulsarPendingView.vue | pulizia | Nessuna pendenza. Tutto in ordine! | Nessuna pendenza. Tutto in ordine. *(rimuovere !)* |
+| PULSAR | Chat — conversazioni | PulsarChatsView.vue | primo-uso | Nessuna conversazione ancora. Inizia dal tasto in basso a destra. | Nessuna conversazione. Apri la prima dal "+". |
+| PULSAR | Chat — preview vuota | PulsarChatsView.vue | atteso | Nessun messaggio | Nessun messaggio. |
+| NOVA | Spedizioni — categoria | NovaSpedizioniView.vue | filtro | Nessuna spedizione in questa categoria. | — |
+| NEBULA | Team — attivi | NebulaTeamView.vue | atteso | Nessun membro attivo nel team. | — |
+| NEBULA | Team — totale | NebulaTeamView.vue | primo-uso | Nessun membro nel team. | Nessun membro nel team. Aggiungi il primo. |
+| NEBULA-DOCS | Documenti (vuoto) | NebulaDocsHomeView.vue:401 | primo-uso | Nessun documento. Crea il primo o aspetta che qualcuno te ne condivida uno. | Nessun documento. Crea il primo o aspetta una condivisione. |
+| NEBULA-DOCS | Storia versioni | NebulaDocHistoryView.vue:208 | atteso | Nessuna versione in storia. | Nessuna versione in archivio. |
+| NEBULA-DOCS | Suggester universale | UniversalSuggester.vue:128 | filtro | Nessun risultato | — |
+| NEBULA-DOCS | Suggester task | TaskSuggester.vue:68 | filtro | Nessun task trovato | — |
+| NEBULA-DOCS | Suggester progetto | ProjectSuggester.vue:62 | filtro | Nessun progetto trovato | — |
+| NEBULA-DOCS | Slash menu | SlashMenu.vue:69 | filtro | Nessun comando trovato | — |
+| NEBULA-DOCS | Icon picker — ricerca | IconPicker.vue:148 | filtro | Nessuna icona trovata per "X" | — |
+| NEBULA-DOCS | Icon picker — selezione | IconPicker.vue:220 | atteso | Nessuna icona selezionata | — |
+| NEBULA/INTEGRATIONS | API keys | NebulaIntegrationsView.vue | primo-uso | Nessuna chiave generata. | Nessuna chiave generata. Crea la prima. |
+
+**Lettura dell'audit.**
+
+- **Tipologia dominante** (SIDERA-side, 39 stati): *atteso* (~14) > *filtro* (~10) > *primo-uso* (~9) > *pulizia* (~6). Nessuno stato di tipo *errore camuffato* è renderizzato come empty state — i fallimenti di query passano dai toast (gestione robusta, allineata al §5 *Regola tecnica importante*).
+- **Violazioni anti-pattern §7** (7 punti, marcati 🚫 nel catalogo): emoji 🎉 in CepheidActionsView (3 punti), CepheidInboxView, QuasarQuadrantiView (Q1), CepheidTimeline (componente, non in catalogo); esclamativi in PulsarPendingView e PulsarMessageView. **Bonificate 2026-05-26** — i marcatori 🚫 restano come traccia storica dell'audit.
+- **Stati primo-uso** sono il punto di maggior valore identitario: la suite accoglie l'utente nuovo. Gli inviti pratici ("Crea la prima", "Inizia ora") restano allineati a LYRA — niente bisogno di astrologizzare.
+- **Stati pulizia** sono i candidati naturali per micro-celebrazioni §6 (StarAvatar quieto, punto luminoso, glow).
+
+
 
 ### Componente shared (proposta)
 
@@ -171,12 +232,24 @@ Una celebrazione vale solo se è **rara**, **meritata** e **discreta**. Tre filt
 
 ### Forma: visiva e silenziosa
 
-Il veicolo migliore è **visivo, non testuale**:
+Il veicolo migliore è **visivo, non testuale**.
 
-- **StarAvatar come trofeo vivo.** Streak 5 giorni → la StarAvatar nel topbar acquista un sottile alone (drop-shadow di 1 tono più chiaro). Sparisce a fine streak o dopo 7 giorni.
-- **Chiusura progetto = stella che si spegne.** Il nome del progetto fade-out (400ms) dall'elenco "in corso", poi appare per 1.5s come puntino luminoso nell'angolo prima di scomparire. Nessun modal.
-- **Inbox zero.** Il pulsante "Smistamento" perde il badge numerico, mostra un *singolo punto luminoso* di accent. Per la giornata.
-- **Costellazione mensile dei progetti chiusi.** In CEPHEID, una piccola mappa stellare dove ogni progetto chiuso è una stella posizionata per data. A fine mese è un artefatto, non una notifica.
+#### Glifo unificato — *stella osservata*
+
+LYRA usa un **singolo glifo primitivo** per tutti i momenti stellari della suite: un punto luminoso oro CEPHEID + alone radiale + (opzionali) 4 spike di diffrazione in croce. È letteralmente come si fotografa una stella brillante al telescopio (Hubble, JWST). Sostituisce la 5-point star (Unicode `★` / Material `star`) che è un'icona scolastica, non un'osservazione astronomica.
+
+Implementazione: classe CSS `.lyra-star` definita in `src/style.css` (sezione *LYRA — stella osservata*), con modificatori `--quiet` (sidebar inbox-zero, no spike, no anim), `--busy` (sidebar "c'è lavoro", spike sottili + pulse), `--celebration` (pannello "all clear", spike marcati + glow forte). I cluster (es. costellazione Timeline) usano la base senza modificatore: cinque stelle "a occhio nudo" che insieme fanno il coro — niente spike singoli, parla l'insieme.
+
+Variabili CSS esposte (`--lyra-star-size`, `--lyra-star-glow-radius`, `--lyra-star-glow-color`, `--lyra-spike-length`, ...) per varianti future senza nuove classi.
+
+#### Pattern in uso
+
+- **Inbox zero (sidebar).** Voce "Smistamento": `.lyra-star--busy` (richiamo "c'è lavoro") → `.lyra-star--quiet` (quiete) quando triageCount torna a 0. *(✓ implementato 2026-05-26 — `a0b6540` + unificazione glifo, mobile + desktop)*
+- **Inbox pulita / Tutto fatto (pannello).** Stati "all clear" in CepheidInbox + CepheidActions: `.lyra-star--celebration` al posto del trophy `emoji_events`. CepheidActions aggiunge un'**onda di luce singola** al mount (~900ms, ripple radiale mono-cromatico). Nessun confetto multicolor. *(✓ implementato 2026-05-26)*
+- **Progetto completato (timeline).** CepheidTimeline finale: **5 `.lyra-star` senza modificatore** si compongono in costellazione Cassiopea-like W (~1.2s totali, dot oro che convergono dagli angoli con cascading delay 0/80/160/240/320ms e leggero overshoot, glow finale persistente). Sostituisce trophy + confetti. *(✓ implementato 2026-05-26)*
+- **StarAvatar come trofeo vivo.** Streak 5 giorni → la StarAvatar nel topbar acquista un sottile alone (drop-shadow di 1 tono più chiaro). Sparisce a fine streak o dopo 7 giorni. *(da implementare — richiede tracking streak su Firestore)*
+- **Chiusura progetto dalla lista.** Il nome del progetto fade-out (400ms) dall'elenco "in corso", poi appare per 1.5s come puntino luminoso nell'angolo prima di scomparire. Diverso dal "progetto completato (timeline)" qui sopra: questo è la transizione *lista in corso → archivio*. *(da implementare)*
+- **Costellazione mensile dei progetti chiusi.** Mappa stellare cumulativa in CEPHEID dove ogni progetto chiuso è una stella posizionata per data. A fine mese è un artefatto, non una notifica. *(da implementare)*
 
 ### Cosa è vietato
 

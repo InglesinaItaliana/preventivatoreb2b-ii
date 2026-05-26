@@ -63,7 +63,6 @@ const tl = useProjectTimeline(toRef(props, 'tasks'), toRef(props, 'project'), {
 
 const { groups, phasesFlat, orphanGroup, workBar, timeBar, projectComplete, projectRange, projectStartTs } = tl
 const TODAY_TS = tl.TODAY.getTime()
-const reduceMotion = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
 
 /* ---------------- drag dei timebar ---------------- */
 const rootRef = ref<HTMLElement | null>(null)
@@ -220,10 +219,6 @@ const onSetPhaseDue = (p: { phase: PhaseVM; iso: string }) => tl.setPhaseDue(p.p
 const onApprove = (id: string) => tl.approve(id)
 const onUnapprove = (id: string) => tl.unapprove(id)
 
-const confetti = computed(() => Array.from({ length: 14 }, (_, k) => ({
-  left: Math.round(6 + k * 88 / 14), color: ['#D4A020', '#C4941C', '#3AAF98', '#C46030', '#98C0D0', '#B06842'][k % 6], delay: ((k % 5) * 90) / 1000,
-})))
-
 const hasContent = computed(() => phasesFlat.value.length > 0 || !!orphanGroup.value)
 
 // esposto al parent (card): per nascondere l'overlay di stato quando la card è aperta
@@ -320,14 +315,17 @@ defineExpose({ expanded })
         <CepheidTimelineMilestone v-if="g.milestoneId !== '__none__'" :group="g" />
       </template>
 
-      <!-- celebrazione -->
+      <!-- celebrazione (LYRA §6) — 5 stelle osservate compongono una costellazione (cluster, no spike) -->
       <div v-if="projectComplete" ref="finRef" class="fin">
-        <template v-if="!reduceMotion">
-          <span v-for="(c, i) in confetti" :key="i" class="pc" :style="{ left: c.left + '%', background: c.color, animationDelay: c.delay + 's' }" />
-        </template>
-        <div class="rk"><MIcon name="emoji_events" :size="28" /></div>
+        <div class="constellation" aria-hidden="true">
+          <span class="lyra-star cstar cstar--1" />
+          <span class="lyra-star cstar cstar--2" />
+          <span class="lyra-star cstar cstar--3" />
+          <span class="lyra-star cstar cstar--4" />
+          <span class="lyra-star cstar cstar--5" />
+        </div>
         <div class="ft">Progetto completato</div>
-        <div class="fs">obiettivo raggiunto 🎉</div>
+        <div class="fs">obiettivo raggiunto</div>
       </div>
 
       <!-- empty -->
@@ -432,13 +430,36 @@ defineExpose({ expanded })
 .add-phase--foot { margin: 12px auto 4px; display: flex; }
 
 .fin { position: relative; overflow: hidden; margin-top: 16px; padding: 24px 18px; border-radius: var(--md-sys-shape-corner-large); background: var(--md-sys-color-surface-container); text-align: center; }
-.fin .rk { display: inline-flex; align-items: center; justify-content: center; width: 58px; height: 58px; border-radius: 50%; background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); margin-bottom: 10px; }
 .fin .ft { font-family: var(--md-sys-typescale-headline-small-font, serif); font-size: 24px; color: var(--md-sys-color-on-surface); }
 .fin .fs { font-size: 13px; color: var(--md-sys-color-on-surface-variant); margin-top: 4px; }
-.pc { position: absolute; top: 8px; width: 8px; height: 8px; border-radius: 2px; opacity: 0; }
+
+/* LYRA §6 — costellazione: cluster di .lyra-star (src/style.css §LYRA) senza
+   spike, posizionate a forma di W di Cassiopea. */
+.constellation { position: relative; width: 140px; height: 50px; margin: 0 auto 14px; }
+.cstar {
+  --lyra-star-size: 6px;
+  --lyra-star-glow-radius: 8px;
+  --lyra-star-glow-color: rgba(212, 160, 32, 0.6);
+  position: absolute;
+  opacity: 0.85;
+}
+.cstar--1 { left:   5px; top:  5px; }
+.cstar--2 { left:  40px; top: 35px; }
+.cstar--3 { left:  67px; top: 10px; }
+.cstar--4 { left:  94px; top: 35px; }
+.cstar--5 { left: 129px; top:  5px; }
 @media (prefers-reduced-motion: no-preference) {
-  @keyframes cphconf { 0% { transform: translateY(0) rotate(0); opacity: 0 } 12% { opacity: 1 } 100% { transform: translateY(160px) rotate(400deg); opacity: 0 } }
-  .pc { animation: cphconf 1.6s cubic-bezier(.3,.1,.5,1) forwards; }
+  .cstar { opacity: 0; animation: cstar-converge 1.2s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+  .cstar--1 { --dx: -30px; --dy: -30px; }
+  .cstar--2 { --dx: -50px; --dy:  30px; animation-delay:  80ms; }
+  .cstar--3 { --dx:   0px; --dy: -50px; animation-delay: 160ms; }
+  .cstar--4 { --dx:  50px; --dy:  30px; animation-delay: 240ms; }
+  .cstar--5 { --dx:  30px; --dy: -30px; animation-delay: 320ms; }
+  @keyframes cstar-converge {
+    0%   { transform: translate(var(--dx, 0), var(--dy, 0)) scale(0.5); opacity: 0; }
+    60%  { opacity: 1; }
+    100% { transform: translate(0, 0) scale(1); opacity: 0.85; }
+  }
 }
 
 /* dialog */

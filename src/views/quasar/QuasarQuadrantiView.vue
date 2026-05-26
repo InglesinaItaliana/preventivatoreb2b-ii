@@ -53,7 +53,7 @@ const RQUADS: { id: QuadId; name: string; sub: string }[] = [
   { id: 'q4', name: 'Disponibile',  sub: 'carico lieve · calmo' },
 ]
 const EMPTY_T: Record<QuadId, string> = {
-  q1: 'Nessun incendio 🎉', q2: 'Niente da pianificare', q3: 'Niente da delegare', q4: 'Niente da valutare',
+  q1: 'Nessuna urgenza importante. Stato raro, custodiscilo.', q2: 'Niente da pianificare', q3: 'Niente da delegare', q4: 'Niente da valutare',
 }
 const EMPTY_R: Record<QuadId, string> = {
   q1: 'Team in equilibrio', q2: 'Nessuno', q3: 'Nessuno', q4: 'Tutti impegnati',

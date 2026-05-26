@@ -507,7 +507,7 @@ async function submitTask() {
       <!-- All resolved -->
       <div v-if="!pendingQuestions.length && !pendingTasks.length" class="empty-state">
         <MIcon name="check_circle" filled :size="40" class="empty-icon" />
-        <p>Nessuna pendenza. Tutto in ordine!</p>
+        <p>Nessuna pendenza. Tutto in ordine.</p>
       </div>
     </template>
   </div>

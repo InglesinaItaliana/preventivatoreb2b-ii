@@ -68,10 +68,11 @@ const items = computed(() =>
           class="cm-pill-icon"
         />
         <span
-          v-if="item.path === '/cepheid/smistamento' && (triageCount ?? 0) > 0"
-          class="cm-triage-star"
-          aria-label="Task da smistare"
-        >★</span>
+          v-if="item.path === '/cepheid/smistamento'"
+          class="lyra-star cm-triage-indicator"
+          :class="(triageCount ?? 0) > 0 ? 'lyra-star--busy' : 'lyra-star--quiet'"
+          :aria-label="(triageCount ?? 0) > 0 ? 'Task da smistare' : 'Tutto smistato'"
+        />
       </button>
     </div>
     <slot name="fab" />
@@ -131,23 +132,12 @@ const items = computed(() =>
 
 .cm-pill-icon { font-size: 36px; }
 
-/* indicatore "c'è lavoro": stella oro CEPHEID che pulsa quando ci sono task da smistare */
-.cm-triage-star {
+/* Indicatore Smistamento — posizionamento del glifo unificato .lyra-star
+   (definito in src/style.css §LYRA). Il modificatore --busy/--quiet
+   gestisce il visual e l'animazione. */
+.cm-triage-indicator {
   position: absolute;
-  top: 6px;
-  right: 10px;
-  color: #D4A020;
-  font-size: 14px;
-  line-height: 1;
-  text-shadow: 0 0 6px rgba(212, 160, 32, 0.6);
-  pointer-events: none;
-  animation: cph-star-pulse 1.6s ease-in-out infinite;
-}
-@keyframes cph-star-pulse {
-  0%, 100% { transform: scale(1);    opacity: 0.85; }
-  50%      { transform: scale(1.3);  opacity: 1; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .cm-triage-star { animation: none; }
+  top: 10px;
+  right: 12px;
 }
 </style>
