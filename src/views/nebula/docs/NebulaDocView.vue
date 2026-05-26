@@ -23,6 +23,7 @@ import { SlashCommand } from './extensions/SlashCommand'
 import { TaskMention } from './extensions/TaskMention'
 import { ProjectMention } from './extensions/ProjectMention'
 import { TaskEmbed } from './extensions/TaskEmbed'
+import { UserMention } from './extensions/UserMention'
 import { useAllTasks } from '../../../composables/sidera/useAllTasks'
 import { useProjects } from '../../../composables/sidera/useProjects'
 import { useDocPresence } from '../../../composables/nebula/useDocPresence'
@@ -95,6 +96,7 @@ const editor = useEditor({
       allTasks: () => allTasksRef.value,
       allProjects: () => allProjectsRef.value,
     }),
+    UserMention,
   ],
   editable: false,                              // si sblocca dopo init + ACL
   onUpdate: () => scheduleAutosave(),
