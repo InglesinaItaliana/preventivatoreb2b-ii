@@ -25,7 +25,7 @@ watch(() => props.show, (val) => {
     legalCheck1.value = false;
     legalCheck2.value = false;
     isConfirming.value = false;
-    if (props.mode === 'PRODUCTION' && props.order?.order_detraction_value) {
+    if (props.mode === 'PRODUCTION' && props.order?.order_detraction_value !== undefined) {
       showDetractionAlert.value = true;
     }
   }
@@ -216,7 +216,7 @@ const handleProductionConfirm = () => emit('confirmProduction');
         <div class="bg-white p-4 rounded-lg shadow-sm mb-6 border border-gray-200 flex justify-between items-center">
           <div><p class="text-sm text-gray-500 uppercase font-bold">Cliente</p><p class="text-xl font-bold text-gray-900">{{ clientName }}</p></div>
           <div class="text-right"><p class="text-sm text-gray-500 uppercase font-bold">Commessa</p><p class="font-medium">{{ order?.commessa || order?.codice }}</p></div>
-          <div v-if="order.order_detraction_value" class="mt-1 inline-flex items-center gap-1.5 px-3 py-1 rounded bg-blue-50 border border-blue-100 text-blue-800 text-sm font-bold">
+          <div v-if="order.order_detraction_value !== undefined" class="mt-1 inline-flex items-center gap-1.5 px-3 py-1 rounded bg-blue-50 border border-blue-100 text-blue-800 text-sm font-bold">
             <span>Detrazione Specifica: -{{ order.order_detraction_value }}</span>
           </div>
         </div>

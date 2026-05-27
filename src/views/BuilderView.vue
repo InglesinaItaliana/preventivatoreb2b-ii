@@ -73,6 +73,10 @@ const openConfirm = (message: string, callback: () => void) => {
 const userDefaultDetraction = ref(50);
 const currentDetraction = ref(50);
 const isDetractionLocked = ref(true);
+const profileLoaded = ref(false);
+watch(userDefaultDetraction, (v) => {
+  if (isDetractionLocked.value) currentDetraction.value = v;
+});
 
 const adminCustomPrice = ref<number | ''>(''); // Campo per il prezzo manuale Admin
 
@@ -714,6 +718,7 @@ const onConfirmSign = async (url: string) => {
 };
 
 const richiediConfermaOrdine = () => {
+  if (!profileLoaded.value) return showCustomToast("Caricamento profilo in corso, attendi un istante...");
   // 1. Validazioni preliminari base (vuoto o senza riferimento)
   if (preventivo.value.length === 0) return showCustomToast("Preventivo vuoto.");
   if (!riferimentoCommessa.value.trim()) return showCustomToast("Il campo 'Riferimento Cantiere' è necessario.");
@@ -1166,7 +1171,7 @@ onMounted(async() => {
     if (user) {
       if(!isNewAdminOrder.value) clienteEmail.value = user.email || '';
       caricaListaStorico();
-      
+
       try {
         const ctx = await getCustomerPricingContext(user.uid);
         currentPriceList.value = ctx.activeList;
@@ -1176,12 +1181,12 @@ onMounted(async() => {
         if (!isNewAdminOrder.value && preventivo.value.length === 0 && !route.query.codice) {
          updateShippingLine(ctx.deliveryCost, ctx.tariffName);
         }
-        
+
         try {
           const userSnap = await getDoc(doc(db, 'users', user.uid));
           if (userSnap.exists()) {
             const d = userSnap.data();
-            userDefaultDetraction.value = d.detraction_value !== undefined ? d.detraction_value : 50;
+            userDefaultDetraction.value = d.detraction_value !== undefined ? d.detraction_value : 21;
           }
         } catch (e) {
            console.error("Errore caricamento dati utente", e);
@@ -1189,6 +1194,8 @@ onMounted(async() => {
 
       } catch (e) {
         console.error("Errore caricamento contesto prezzi", e);
+      } finally {
+        profileLoaded.value = true;
       }
     }
   });

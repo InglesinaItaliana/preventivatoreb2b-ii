@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { ref, onMounted, onUnmounted, computed, nextTick } from 'vue';
+  import { ref, onMounted, onUnmounted, computed, nextTick, watch } from 'vue';
   import { collection, query, where, updateDoc, doc, serverTimestamp, getDoc, onSnapshot, deleteField,writeBatch } from 'firebase/firestore';
   import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
   import { db, auth, functions } from '../firebase';
@@ -140,9 +140,12 @@ const confermaRicezione = async (order: any) => {
     uploadedFiles.value.splice(index, 1);
   };
   
-  const userDefaultDetraction = ref(50); 
-  const currentDetraction = ref(50);     
-  const isDetractionLocked = ref(true);  
+  const userDefaultDetraction = ref(50);
+  const currentDetraction = ref(50);
+  const isDetractionLocked = ref(true);
+  watch(userDefaultDetraction, (v) => {
+    if (isDetractionLocked.value) currentDetraction.value = v;
+  });
   
   // 1. CARICAMENTO PROFILO E FLAG TOUR
   const caricaProfilo = async (uid: string) => {
@@ -300,8 +303,9 @@ const confermaRicezione = async (order: any) => {
   };
   
   const openConfirmModal = (p: any) => {
+    if (!profileLoaded.value) return openResultModal("Attendi", "Caricamento profilo in corso, riprova tra un istante.", "ERROR");
     selectedOrder.value = p;
-    userInputDate.value = ''; 
+    userInputDate.value = '';
     uploadedFiles.value = [];
     currentDetraction.value = userDefaultDetraction.value;
     isDetractionLocked.value = true;
