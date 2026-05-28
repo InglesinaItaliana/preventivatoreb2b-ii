@@ -110,6 +110,20 @@ export const SLASH_COMMANDS: SlashCommandItem[] = [
       editor.chain().focus().deleteRange(range).setHorizontalRule().run()
     },
   },
+  {
+    title: 'Tabella',
+    description: 'Tabella 3×3 con riga header',
+    icon: 'table_chart',
+    aliases: ['table', 'tabella', 'griglia', 'grid'],
+    command: ({ editor, range }) => {
+      editor
+        .chain()
+        .focus()
+        .deleteRange(range)
+        .insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+        .run()
+    },
+  },
 
   // ── CEPHEID mentions (F2-C2+) ───────────────────────────────────────────
   // Le mention usano trigger `@` direttamente; questi comandi slash sono

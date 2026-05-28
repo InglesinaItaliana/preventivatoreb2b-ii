@@ -216,7 +216,35 @@ const router = createRouter({
 });
 
 // --- GUARD DI NAVIGAZIONE ---
-router.beforeEach(async (to, _from, next) => {
+// Util: rileva se siamo in PWA standalone o viewport ≤768px (mobile layout).
+// Stessa logica di SideraLayout.vue isMobileLayout — duplicata qui perché il
+// router non può importare componable Vue (esegue prima del setup).
+function isMobileLayout(): boolean {
+  if (typeof window === 'undefined') return false
+  const standalone =
+    window.matchMedia('(display-mode: standalone)').matches ||
+    (window.navigator as { standalone?: boolean }).standalone === true
+  const narrow = window.matchMedia('(max-width: 768px)').matches
+  return standalone || narrow
+}
+
+router.beforeEach(async (to, from, next) => {
+  // NEBULA: su mobile (PWA standalone OR viewport ≤768px) la landing /nebula
+  // (Squadra) viene saltata a favore di /nebula/docs (Documenti) — la lista
+  // doc è il punto di ingresso più utile per i lavori in mobilità.
+  // IMPORTANTE: redirigi solo al primo accesso (da fuori dello scope NEBULA),
+  // così se l'utente tocca la tab "Squadra" della bottom-nav venendo da
+  // /nebula/docs il navigation funziona regolare. Senza questo check l'utente
+  // resta intrappolato su /nebula/docs.
+  if (
+    to.path === '/nebula'
+    && isMobileLayout()
+    && !from.path.startsWith('/nebula')
+  ) {
+    next('/nebula/docs');
+    return;
+  }
+
   const requiresAuth = to.matched.some(record => record.meta.requiresAuth);
   const currentUser = auth.currentUser;
 

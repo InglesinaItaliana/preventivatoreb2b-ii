@@ -748,7 +748,8 @@ const roleLabel: Record<string, string> = {
   font-family: 'Cormorant Garamond', serif;
   font-weight: 500;
   font-size: 30px;
-  color: var(--s-text);
+  /* Colore brand SIDERA (beige caldo, token --s-sidera = #D4C498) */
+  color: var(--s-sidera);
   line-height: 1;
   letter-spacing: 0.04em;
   display: inline-flex;
