@@ -228,12 +228,19 @@ function isMobileLayout(): boolean {
   return standalone || narrow
 }
 
-router.beforeEach(async (to, _from, next) => {
+router.beforeEach(async (to, from, next) => {
   // NEBULA: su mobile (PWA standalone OR viewport ≤768px) la landing /nebula
   // (Squadra) viene saltata a favore di /nebula/docs (Documenti) — la lista
-  // doc è il punto di ingresso più utile per i lavori in mobilità. Esclude
-  // sotto-rotte come /nebula/docs/:id, /nebula/login, /nebula/docs/history.
-  if (to.path === '/nebula' && isMobileLayout()) {
+  // doc è il punto di ingresso più utile per i lavori in mobilità.
+  // IMPORTANTE: redirigi solo al primo accesso (da fuori dello scope NEBULA),
+  // così se l'utente tocca la tab "Squadra" della bottom-nav venendo da
+  // /nebula/docs il navigation funziona regolare. Senza questo check l'utente
+  // resta intrappolato su /nebula/docs.
+  if (
+    to.path === '/nebula'
+    && isMobileLayout()
+    && !from.path.startsWith('/nebula')
+  ) {
     next('/nebula/docs');
     return;
   }
