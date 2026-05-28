@@ -81,7 +81,13 @@ messaging.onBackgroundMessage(async (payload) => {
   const body  = payload.notification?.body  || payload.data?.body  || ''
   const chatId = payload.data?.chatId
   const messageId = payload.data?.messageId
-  const scope = payload.data?.scope || 'pulsar'
+  // Push senza scope = misconfig Cloud Function. Il root SW serve nebula/quasar/
+  // sidera (PULSAR e CEPHEID hanno SW dedicati in /pulsar/ e /cepheid/). Il
+  // vecchio default a 'pulsar' era eredità del primo cut e taggava qualunque
+  // push malformata come PULSAR — esattamente il sintomo del bug "PULSAR appare
+  // in altre PWA". Return silenzioso = niente notifica fantasma.
+  const scope = payload.data?.scope
+  if (!scope) return
   const targetUrl = payload.data?.url || (chatId ? `/pulsar/chat/${chatId}` : '/pulsar')
 
   // 1) Dedup: se questo messageId è già stato gestito, non rimostrare nulla.
