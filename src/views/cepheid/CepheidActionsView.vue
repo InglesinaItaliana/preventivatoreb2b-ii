@@ -523,6 +523,11 @@ onMounted(() => {
   font-family: 'Outfit', sans-serif; font-size: 14px;
   color: var(--md-sys-color-on-surface);
 }
+.quick-add-input:focus {
+  outline: none;
+  box-shadow: none;
+  -webkit-tap-highlight-color: transparent;
+}
 .quick-add-input::placeholder { color: var(--md-sys-color-on-surface-variant); }
 
 /* Loading */

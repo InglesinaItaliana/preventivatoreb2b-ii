@@ -466,8 +466,10 @@ async function completeFromModal() {
 }
 /* riempie il quadrante a dimensione fissa; scrolla internamente se trabocca */
 .qlist { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; margin: 0 -3px; padding: 0 3px; }
+/* Empty state quadranti: tono grigio neutro uniforme su tutti e 4 i quadranti
+   sia su vista Task che Risorse. L'override su Q1 azzurro è stato rimosso
+   per coerenza visiva — le 8 stringhe empty hanno lo stesso peso. */
 .qempty { font-size: 11px; color: var(--md-sys-color-on-surface-variant); opacity: .6; padding: 6px 2px; }
-.quad.q1 .qempty { color: var(--md-sys-color-primary); opacity: .8; }
 
 /* fuoco pulsante su q1 sovraccarico */
 @keyframes firepulse { 0%, 100% { opacity: 1 } 50% { opacity: .4 } }

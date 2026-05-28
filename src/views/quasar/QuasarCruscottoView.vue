@@ -9,7 +9,7 @@ import { useCurrentUser }  from '../../composables/sidera/useCurrentUser'
 import { useTeamMembers, displayName, starAvatarProps } from '../../composables/sidera/useTeamMembers'
 import { useActivityLog, type ActivityEvent } from '../../composables/quasar/useActivityLog'
 import StarAvatar from '../../components/shared/StarAvatar.vue'
-import { ref } from 'vue'
+import { ref, onMounted } from 'vue'
 
 const router = useRouter()
 const { daGestire, inProduzione, pronti, valorePipeline, urgenze, loading: metricsLoading } = usePopsMetrics()
@@ -32,6 +32,35 @@ const todayLabel = computed(() =>
 )
 
 const userName = computed(() => currentUser.value?.email ? displayName(currentUser.value.email, members.value) : '…')
+
+// ── Intro animata (solo prima apertura di sessione) ──────────────────────
+// Flusso: overlay con "Buongiorno, {nome}" centrato e ingrandito → dopo 2s
+// fade-out + cascata d'entrata asimmetrica dei widget figli (.hv-section,
+// .pops-strip, .hv-grid). Il flag in sessionStorage evita che si replichi
+// al refresh nella stessa sessione del browser.
+const SESSION_KEY = 'quasar-greeting-played'
+const introActive = ref(false)        // overlay visibile?
+const introCollapsed = ref(false)     // overlay in fase di dissolvenza/scala?
+const cascadeReady = ref(false)       // children entrano in cascata?
+
+onMounted(() => {
+  // Skip animazione se già giocata in questa sessione (refresh, nav back).
+  if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(SESSION_KEY) === '1') {
+    cascadeReady.value = true
+    return
+  }
+  introActive.value = true
+  // 2000ms full center, poi collapse → fade-out + i children iniziano.
+  setTimeout(() => {
+    introCollapsed.value = true
+    cascadeReady.value = true
+  }, 2000)
+  // 2700ms: overlay completamente fuori → marca played.
+  setTimeout(() => {
+    introActive.value = false
+    try { sessionStorage.setItem(SESSION_KEY, '1') } catch { /* ignore */ }
+  }, 2700)
+})
 
 // ── Azioni di oggi ────────────────────────────────────────────────────────
 const pendingDone = ref<Set<string>>(new Set())
@@ -131,10 +160,21 @@ function urgenzaLabel(giorni: number) {
 </script>
 
 <template>
-  <div class="hv s-fade-in">
+  <div class="hv s-fade-in" :class="{ 'hv-cascade': cascadeReady }">
+
+    <!-- Intro overlay (solo prima apertura di sessione): grande centrato, 2s, poi
+         dissolvenza/scale. Mentre è visibile, l'header normale è opacità 0 e
+         viene rivelato dalla cascata, evitando il doppio greeting. -->
+    <div
+      v-if="introActive"
+      class="hv-intro-overlay"
+      :class="{ 'hv-intro-collapse': introCollapsed }"
+    >
+      <h1 class="hv-intro-greeting">{{ greeting }}, {{ userName }}.</h1>
+    </div>
 
     <!-- ── Header ──────────────────────────────────────────────────── -->
-    <div class="hv-header">
+    <div class="hv-header" data-stagger="0">
       <h1 class="hv-greeting">{{ greeting }}, {{ userName }}.</h1>
       <p class="hv-subtitle">
         {{ todayLabel }}
@@ -145,7 +185,7 @@ function urgenzaLabel(giorni: number) {
     </div>
 
     <!-- ── Le mie azioni — oggi ────────────────────────────────────── -->
-    <section class="hv-section">
+    <section class="hv-section" data-stagger="1">
       <p class="s-label">Le mie azioni — oggi</p>
 
       <div v-if="tasksLoading" class="skeleton-rows">
@@ -176,7 +216,7 @@ function urgenzaLabel(giorni: number) {
     </section>
 
     <!-- ── Progetti attivi ─────────────────────────────────────────── -->
-    <section class="hv-section">
+    <section class="hv-section" data-stagger="2">
       <p class="s-label">Progetti attivi</p>
 
       <div v-if="projsLoading" class="proj-grid">
@@ -214,7 +254,7 @@ function urgenzaLabel(giorni: number) {
     </section>
 
     <!-- ── POPS KPI strip ─────────────────────────────────────────── -->
-    <div class="pops-strip">
+    <div class="pops-strip" data-stagger="3">
       <a href="https://b2b.inglesinaitaliana.it" target="_blank" rel="noopener noreferrer" class="kpi-card">
         <div class="kpi-label">Da gestire</div>
         <div class="kpi-value" style="color:#C8521A">
@@ -250,7 +290,7 @@ function urgenzaLabel(giorni: number) {
     </div>
 
     <!-- ── Bottom grid ────────────────────────────────────────────── -->
-    <div class="hv-grid">
+    <div class="hv-grid" data-stagger="4">
 
       <!-- Urgenze produzione -->
       <div>
@@ -330,6 +370,75 @@ function urgenzaLabel(giorni: number) {
 
 @media (max-width: 768px) {
   .hv { padding: 16px; }
+}
+
+/* ── Intro animata (prima apertura sessione) ───────────────────────────── */
+/* Overlay full-page centrato per il greeting iniziale. */
+.hv-intro-overlay {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #EFE7D9;
+  z-index: 50;
+  opacity: 1;
+  transition: opacity 600ms cubic-bezier(.4, 0, .2, 1);
+  pointer-events: none;
+}
+.hv-intro-greeting {
+  font-family: 'Cormorant Garamond', serif;
+  font-weight: 600;
+  font-size: clamp(40px, 7vw, 72px);
+  letter-spacing: -0.01em;
+  color: var(--md-sys-color-on-surface);
+  margin: 0;
+  text-align: center;
+  padding: 0 24px;
+  /* Fade-in iniziale */
+  animation: hvIntroFadeIn 500ms cubic-bezier(.2, .8, .2, 1) both;
+  transform-origin: center center;
+  transition: transform 700ms cubic-bezier(.2, .8, .2, 1);
+}
+/* Fase collapse: la scritta si rimpicciolisce verso la posizione naturale e
+   l'overlay svanisce. Niente FLIP perché basta il sense of motion: la scritta
+   "vola via" mentre i widget compaiono. */
+.hv-intro-collapse {
+  opacity: 0;
+}
+.hv-intro-collapse .hv-intro-greeting {
+  transform: scale(0.42) translateY(-10vh);
+}
+@keyframes hvIntroFadeIn {
+  from { opacity: 0; transform: scale(0.94); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* ── Cascata d'entrata dei widget figli ─────────────────────────────────── */
+/* Stato di partenza: tutti i diretti figli con data-stagger nascosti. */
+.hv [data-stagger] {
+  opacity: 0;
+  transform: translateY(14px);
+}
+/* Quando la classe .hv-cascade è attiva, i figli entrano con delay asimmetrico
+   ispirato alla sequenza golden-ratio (~1.618), non a multipli regolari. */
+.hv-cascade [data-stagger] {
+  opacity: 1;
+  transform: translateY(0);
+  transition:
+    opacity 540ms cubic-bezier(.25, .9, .35, 1),
+    transform 540ms cubic-bezier(.25, .9, .35, 1);
+}
+.hv-cascade [data-stagger="0"] { transition-delay: 0ms; }
+.hv-cascade [data-stagger="1"] { transition-delay: 180ms; }
+.hv-cascade [data-stagger="2"] { transition-delay: 320ms; }
+.hv-cascade [data-stagger="3"] { transition-delay: 510ms; }
+.hv-cascade [data-stagger="4"] { transition-delay: 680ms; }
+
+/* Accessibilità: utenti con reduce-motion vedono tutto subito senza animazioni. */
+@media (prefers-reduced-motion: reduce) {
+  .hv [data-stagger] { opacity: 1 !important; transform: none !important; transition: none !important; }
+  .hv-intro-overlay { display: none; }
 }
 
 /* ── Header ── */

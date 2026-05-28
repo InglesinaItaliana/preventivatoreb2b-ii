@@ -20,6 +20,7 @@ import UniversalSuggester, { type UniversalItem } from '../components/UniversalS
 import type { Task } from '../../../../composables/sidera/useAllTasks'
 import type { Project } from '../../../../composables/sidera/useProjects'
 import type { TeamMember } from '../../../../composables/sidera/useTeamMembers'
+import type { DocLight } from '../../../../composables/nebula/useDocsLight'
 
 const UNIVERSAL_MENTION_PLUGIN_KEY = new PluginKey('nebula-universal-mention')
 
@@ -27,6 +28,9 @@ export interface UniversalMentionOptions {
   allTeam: () => TeamMember[]
   allTasks: () => Task[]
   allProjects: () => Project[]
+  allDocs: () => DocLight[]
+  /** Doc corrente: lo escludiamo dai suggerimenti (un doc non si mention da solo). */
+  currentDocId?: () => string | null
 }
 
 const MAX_PER_KIND = 6      // max per categoria nel picker (totale max 18)
@@ -36,6 +40,8 @@ function filterUniversal(
   team: TeamMember[],
   tasks: Task[],
   projects: Project[],
+  docs: DocLight[],
+  excludeDocId: string | null,
 ): UniversalItem[] {
   const q = query.toLowerCase().trim()
 
@@ -126,7 +132,28 @@ function filterUniversal(
     })
     .slice(0, MAX_PER_KIND)
 
-  return [...teamItems, ...taskItems, ...projectItems]
+  // DOCS: titolo matcha. Esclude il doc corrente. Niente status (i doc archived
+  // non arrivano da useDocsLight). Max MAX_PER_KIND.
+  const docItems: UniversalItem[] = docs
+    .filter(d => d.id !== excludeDocId)
+    .filter(d => !q || (d.title ?? '').toLowerCase().includes(q))
+    .map(d => ({
+      kind: 'doc' as const,
+      id: d.id,
+      label: d.title || '(senza titolo)',
+      searchKey: d.id,
+    }))
+    .sort((a, b) => {
+      if (q) {
+        const as = a.label.toLowerCase().startsWith(q) ? 0 : 1
+        const bs = b.label.toLowerCase().startsWith(q) ? 0 : 1
+        if (as !== bs) return as - bs
+      }
+      return 0
+    })
+    .slice(0, MAX_PER_KIND)
+
+  return [...teamItems, ...taskItems, ...projectItems, ...docItems]
 }
 
 export const UniversalMention = Extension.create<UniversalMentionOptions>({
@@ -137,6 +164,8 @@ export const UniversalMention = Extension.create<UniversalMentionOptions>({
       allTeam: () => [] as TeamMember[],
       allTasks: () => [] as Task[],
       allProjects: () => [] as Project[],
+      allDocs: () => [] as DocLight[],
+      currentDocId: () => null,
     }
   },
 
@@ -150,7 +179,14 @@ export const UniversalMention = Extension.create<UniversalMentionOptions>({
         startOfLine: false,
         allowSpaces: true,
         items: ({ query }: { query: string }) =>
-          filterUniversal(query, options.allTeam(), options.allTasks(), options.allProjects()),
+          filterUniversal(
+            query,
+            options.allTeam(),
+            options.allTasks(),
+            options.allProjects(),
+            options.allDocs(),
+            options.currentDocId?.() ?? null,
+          ),
         command: ({ editor, range, props }: any) => {
           const item = props as UniversalItem
           let nodeContent: any
@@ -158,8 +194,11 @@ export const UniversalMention = Extension.create<UniversalMentionOptions>({
             nodeContent = { type: 'userMention', attrs: { email: item.id } }
           } else if (item.kind === 'task') {
             nodeContent = { type: 'taskMention', attrs: { taskId: item.id, projectId: item.projectId ?? null } }
-          } else {
+          } else if (item.kind === 'project') {
             nodeContent = { type: 'projectMention', attrs: { projectId: item.id } }
+          } else {
+            // doc: passa anche il titolo snapshot per fallback display
+            nodeContent = { type: 'docMention', attrs: { docId: item.id, title: item.label } }
           }
           editor
             .chain()

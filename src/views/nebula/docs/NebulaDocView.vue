@@ -21,16 +21,21 @@ import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
 import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
+// TipTap v3: tutti i nodi tabella sono named exports nello stesso pacchetto.
+import { Table, TableRow, TableCell, TableHeader } from '@tiptap/extension-table'
+import { Link } from '@tiptap/extension-link'
 import { SlashCommand } from './extensions/SlashCommand'
 import { TaskMention } from './extensions/TaskMention'
 import { ProjectMention } from './extensions/ProjectMention'
 import { TaskEmbed } from './extensions/TaskEmbed'
 import { UserMention } from './extensions/UserMention'
 import { UniversalMention } from './extensions/UniversalMention'
+import { DocMention } from './extensions/DocMention'
 import { useTeamMembers } from '../../../composables/sidera/useTeamMembers'
 import { useAllTasks } from '../../../composables/sidera/useAllTasks'
 import { useProjects } from '../../../composables/sidera/useProjects'
 import { useDocPresence } from '../../../composables/nebula/useDocPresence'
+import { useDocsLight } from '../../../composables/nebula/useDocsLight'
 import PresenceStack from './components/PresenceStack.vue'
 import ShareDocModal from './components/ShareDocModal.vue'
 import { useCurrentUser } from '../../../composables/sidera/useCurrentUser'
@@ -83,6 +88,8 @@ const isOwner = computed(() => {
 const { tasks: allTasksRef } = useAllTasks()
 const { projects: allProjectsRef } = useProjects()
 const { members: allTeamRef } = useTeamMembers()
+// Lista doc light per il mention picker (F5-C2 + mention cross-doc).
+const { docs: allDocsRef } = useDocsLight()
 
 // Presence: sub al sub-collezione nebulaDocs/{docId}/presence + heartbeat 15s.
 // Espone peers (altri utenti attivi visti <30s fa).
@@ -94,7 +101,7 @@ const editor = useEditor({
       heading: { levels: [1, 2, 3] },
     }),
     Placeholder.configure({
-      placeholder: 'Digita "/" per i comandi · "@" per menzionare persone/task/progetti · "#" progetto…',
+      placeholder: 'Digita "/" per i comandi · "@" per menzionare persone/task/progetti/documenti · "#" progetto…',
     }),
     // TaskList nativo: checkbox interattive nested-friendly. Lo stato `checked`
     // è persistito dentro al content del doc (data-checked attr) e ri-serializzato
@@ -111,10 +118,29 @@ const editor = useEditor({
       allProjects: () => allProjectsRef.value,
     }),
     UserMention,
+    DocMention,
     UniversalMention.configure({
       allTeam: () => allTeamRef.value,
       allTasks: () => allTasksRef.value,
       allProjects: () => allProjectsRef.value,
+      allDocs: () => allDocsRef.value,
+      currentDocId: () => docId.value,
+    }),
+    // Tabelle: header row di default, resizable per dare freedom su larghezza
+    // colonne; bottone toolbar inserisce una 3×3 con header row.
+    Table.configure({ resizable: true, HTMLAttributes: { class: 'nd-table' } }),
+    TableRow,
+    TableHeader,
+    TableCell,
+    // Link inline con autolink (URL incollato → link) + linkOnPaste (la
+    // selezione corrente diventa link al paste di un URL). openOnClick:false
+    // così il click in editor seleziona invece di seguire l'URL (l'utente
+    // usa il bubble menu "Apri").
+    Link.configure({
+      openOnClick: false,
+      autolink: true,
+      linkOnPaste: true,
+      HTMLAttributes: { rel: 'noopener noreferrer', target: '_blank' },
     }),
   ],
   editable: false,                              // si sblocca dopo init + ACL
@@ -292,6 +318,44 @@ async function flushIconSave() {
 // ── Toolbar helpers ─────────────────────────────────────────────────────────
 function tb(action: () => void) {
   return () => { action(); editor.value?.commands.focus() }
+}
+
+// ── Link modal ──────────────────────────────────────────────────────────────
+const showLinkModal = ref(false)
+const linkUrl = ref('')
+const linkText = ref('')
+const linkInputRef = ref<HTMLInputElement | null>(null)
+
+function openLinkModal() {
+  if (!editor.value) return
+  const e = editor.value
+  // Pre-popola URL se siamo già su un link, testo dalla selezione corrente
+  const existing = e.getAttributes('link').href as string | undefined
+  linkUrl.value = existing ?? ''
+  const { from, to } = e.state.selection
+  linkText.value = e.state.doc.textBetween(from, to, ' ')
+  showLinkModal.value = true
+  setTimeout(() => linkInputRef.value?.focus(), 30)
+}
+
+function applyLink() {
+  if (!editor.value) return
+  let url = linkUrl.value.trim()
+  if (!url) { showLinkModal.value = false; return }
+  if (!/^https?:\/\//i.test(url) && !url.startsWith('mailto:')) url = 'https://' + url
+  const e = editor.value
+  if (linkText.value && e.state.selection.empty) {
+    // Inserisci testo + link
+    e.chain().focus().insertContent(`<a href="${url}">${linkText.value}</a>`).run()
+  } else {
+    e.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
+  }
+  showLinkModal.value = false
+}
+
+function removeLink() {
+  editor.value?.chain().focus().extendMarkRange('link').unsetLink().run()
+  showLinkModal.value = false
 }
 
 // ── Cmd+S manual save ───────────────────────────────────────────────────────
@@ -507,6 +571,43 @@ void editorRef
           title="Separatore">
           <MaterialIcon name="horizontal_rule" :size="16" />
         </button>
+        <span class="tb-sep"></span>
+        <button type="button"
+          :class="{ 'tb-active': editor.isActive('link') }"
+          @click="openLinkModal"
+          title="Link (URL)">
+          <MaterialIcon name="link" :size="16" />
+        </button>
+        <button type="button"
+          @click="tb(() => editor!.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run())()"
+          title="Inserisci tabella 3×3">
+          <MaterialIcon name="table_chart" :size="16" />
+        </button>
+        <!-- Comandi cell-level: visibili solo se il cursore è dentro una table.
+             Pattern compatto inline così non serve un BubbleMenu separato. -->
+        <template v-if="editor.isActive('table')">
+          <span class="tb-sep"></span>
+          <button type="button"
+            @click="tb(() => editor!.chain().focus().addRowAfter().run())()"
+            title="Aggiungi riga sotto">
+            <MaterialIcon name="add_row_below" :size="16" />
+          </button>
+          <button type="button"
+            @click="tb(() => editor!.chain().focus().addColumnAfter().run())()"
+            title="Aggiungi colonna dopo">
+            <MaterialIcon name="add_column_right" :size="16" />
+          </button>
+          <button type="button"
+            @click="tb(() => editor!.chain().focus().deleteRow().run())()"
+            title="Elimina riga">
+            <MaterialIcon name="delete_sweep" :size="16" />
+          </button>
+          <button type="button"
+            @click="tb(() => editor!.chain().focus().deleteTable().run())()"
+            title="Elimina tabella">
+            <MaterialIcon name="delete" :size="16" />
+          </button>
+        </template>
       </div>
 
       <!-- Editor content -->
@@ -552,6 +653,41 @@ void editorRef
       @close="showShareModal = false"
       @updated="showShareModal = false"
     />
+
+    <!-- Link modal: inserisci/modifica/rimuovi link inline. -->
+    <Teleport to="body">
+      <div v-if="showLinkModal" class="nd-link-backdrop" @click.self="showLinkModal = false">
+        <div class="nd-link-modal" @click.stop>
+          <div class="nd-link-modal-title">Inserisci link</div>
+          <label class="nd-link-field-label">URL</label>
+          <input
+            ref="linkInputRef"
+            v-model="linkUrl"
+            type="url"
+            class="nd-link-field-input"
+            placeholder="https://esempio.com"
+            @keyup.enter="applyLink"
+          />
+          <label class="nd-link-field-label" style="margin-top:10px">Testo (opzionale)</label>
+          <input
+            v-model="linkText"
+            type="text"
+            class="nd-link-field-input"
+            placeholder="Testo visibile"
+            @keyup.enter="applyLink"
+          />
+          <div class="nd-link-modal-footer">
+            <button class="nd-link-btn-ghost" @click="showLinkModal = false">Annulla</button>
+            <button
+              v-if="editor?.isActive('link')"
+              class="nd-link-btn-remove"
+              @click="removeLink"
+            >Rimuovi</button>
+            <button class="nd-link-btn-primary" :disabled="!linkUrl.trim()" @click="applyLink">Applica</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
   </div>
 </template>
 
@@ -737,7 +873,12 @@ void editorRef
   color: var(--md-sys-color-on-surface, #1a1a1a);
   padding: 4px 0;
 }
-.nd-title-input:focus { border-bottom: 1px solid rgba(196, 96, 48, 0.4); }
+.nd-title-input:focus {
+  outline: none;
+  box-shadow: none;
+  -webkit-tap-highlight-color: transparent;
+  border-bottom: 1px solid rgba(196, 96, 48, 0.4);
+}
 .nd-title-input::placeholder { color: #ccc; font-style: italic; font-weight: 600; }
 
 /* Icon picker wrap: l'icona è ora full-width block-aligned, il picker apre
@@ -1042,4 +1183,106 @@ void editorRef
   .nd-share-label { display: none; }
   .nd-share-btn { padding: 6px; }
 }
+
+/* ── Tabelle dentro l'editor (estensione @tiptap/extension-table) ─────────── */
+.nd-editor :deep(.nd-table) {
+  border-collapse: collapse;
+  margin: 12px 0;
+  width: 100%;
+  table-layout: fixed;
+}
+.nd-editor :deep(.nd-table td),
+.nd-editor :deep(.nd-table th) {
+  border: 1px solid var(--md-sys-color-outline-variant);
+  padding: 6px 8px;
+  vertical-align: top;
+  min-width: 60px;
+  position: relative;
+}
+.nd-editor :deep(.nd-table th) {
+  background: var(--md-sys-color-surface-container);
+  font-weight: 600;
+  text-align: left;
+}
+.nd-editor :deep(.nd-table .selectedCell::after) {
+  position: absolute; inset: 0; pointer-events: none;
+  background: color-mix(in srgb, var(--md-sys-color-primary) 12%, transparent);
+  content: '';
+}
+.nd-editor :deep(.tableWrapper) { overflow-x: auto; }
+.nd-editor :deep(.column-resize-handle) {
+  position: absolute; right: -2px; top: 0; bottom: 0; width: 4px;
+  background: var(--md-sys-color-primary); opacity: 0.5; cursor: col-resize;
+}
+
+/* ── Link inline dentro l'editor ──────────────────────────────────────────── */
+.nd-editor :deep(a) {
+  color: var(--md-sys-color-primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.nd-editor :deep(a:hover) { text-decoration-thickness: 2px; }
+
+/* ── Link modal ───────────────────────────────────────────────────────────── */
+.nd-link-backdrop {
+  position: fixed; inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000; padding: 20px;
+}
+.nd-link-modal {
+  background: var(--md-sys-color-surface);
+  border-radius: var(--md-sys-shape-corner-large);
+  padding: 20px;
+  width: 100%; max-width: 380px;
+  font-family: 'Outfit', sans-serif;
+}
+.nd-link-modal-title { font-size: 16px; font-weight: 600; margin-bottom: 14px; color: var(--md-sys-color-on-surface); }
+.nd-link-field-label {
+  display: block;
+  font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--md-sys-color-on-surface-variant);
+  margin-bottom: 6px;
+}
+.nd-link-field-input {
+  width: 100%; box-sizing: border-box;
+  background: var(--md-sys-color-surface-container);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: var(--md-sys-shape-corner-small);
+  padding: 9px 12px;
+  font-size: 16px;
+  font-family: 'Outfit', sans-serif;
+  color: var(--md-sys-color-on-surface);
+  outline: none;
+}
+.nd-link-field-input:focus { border-color: var(--md-sys-color-primary); }
+.nd-link-modal-footer {
+  display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px;
+}
+.nd-link-btn-ghost {
+  padding: 8px 14px;
+  background: none;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: 10px;
+  font-size: 13px; cursor: pointer; color: var(--md-sys-color-on-surface-variant);
+  font-family: 'Outfit', sans-serif;
+}
+.nd-link-btn-remove {
+  padding: 8px 14px;
+  background: none;
+  border: 1px solid color-mix(in srgb, #C8521A 40%, var(--md-sys-color-outline-variant));
+  border-radius: 10px;
+  font-size: 13px; cursor: pointer; color: #C8521A;
+  font-family: 'Outfit', sans-serif;
+}
+.nd-link-btn-primary {
+  padding: 8px 18px;
+  background: var(--md-sys-color-primary);
+  border: none; border-radius: 10px;
+  font-size: 13px; font-weight: 600;
+  cursor: pointer; color: var(--md-sys-color-on-primary);
+  font-family: 'Outfit', sans-serif;
+}
+.nd-link-btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>

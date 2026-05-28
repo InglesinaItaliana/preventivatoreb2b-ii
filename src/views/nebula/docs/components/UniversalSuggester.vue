@@ -18,10 +18,10 @@ import StarAvatar from '../../../../components/shared/StarAvatar.vue'
 import { useTeamMembers, starAvatarProps } from '../../../../composables/sidera/useTeamMembers'
 
 export interface UniversalItem {
-  kind: 'user' | 'task' | 'project'
-  /** ID per dispatch (email, taskId o projectId) */
+  kind: 'user' | 'task' | 'project' | 'doc'
+  /** ID per dispatch (email, taskId, projectId o docId) */
   id: string
-  /** Display label (nome utente, titolo task, nome progetto) */
+  /** Display label (nome utente, titolo task, nome progetto, titolo doc) */
   label: string
   /** Secondario per il display (es. project name per task, category per user) */
   sub?: string
@@ -78,15 +78,16 @@ defineExpose({
 })
 
 // Grouping per render con sticky headers
+type Kind = 'user' | 'task' | 'project' | 'doc'
 interface Group {
-  kind: 'user' | 'task' | 'project'
+  kind: Kind
   label: string
   startIdx: number
   items: UniversalItem[]
 }
 
 const groups = computed<Group[]>(() => {
-  const order: Array<'user' | 'task' | 'project'> = ['user', 'task', 'project']
+  const order: Kind[] = ['user', 'task', 'project', 'doc']
   const out: Group[] = []
   let cursor = 0
   for (const kind of order) {
@@ -94,7 +95,11 @@ const groups = computed<Group[]>(() => {
     if (slice.length === 0) continue
     out.push({
       kind,
-      label: kind === 'user' ? 'Persone' : kind === 'task' ? 'Task' : 'Progetti',
+      label:
+        kind === 'user'    ? 'Persone' :
+        kind === 'task'    ? 'Task' :
+        kind === 'project' ? 'Progetti' :
+                             'Documenti',
       startIdx: cursor,
       items: slice,
     })
@@ -103,16 +108,18 @@ const groups = computed<Group[]>(() => {
   return out
 })
 
-function kindAccent(kind: 'user' | 'task' | 'project'): string {
-  if (kind === 'user') return '#4A6B8A'      // blu admin (UserMention)
-  if (kind === 'task') return '#8b6a14'      // oro CEPHEID
-  return '#5B7F2E'                            // verde progetto
+function kindAccent(kind: Kind): string {
+  if (kind === 'user')    return '#4A6B8A'      // blu admin (UserMention)
+  if (kind === 'task')    return '#8b6a14'      // oro CEPHEID
+  if (kind === 'project') return '#5B7F2E'      // verde progetto
+  return '#7A3D14'                              // terracotta NEBULA-DOCS
 }
 
-function kindIcon(kind: 'user' | 'task' | 'project'): string {
-  if (kind === 'user') return 'person'
-  if (kind === 'task') return 'task_alt'
-  return 'folder'
+function kindIcon(kind: Kind): string {
+  if (kind === 'user')    return 'person'
+  if (kind === 'task')    return 'task_alt'
+  if (kind === 'project') return 'folder'
+  return 'description'
 }
 
 const isEmpty = computed(() => props.items.length === 0)
@@ -162,11 +169,17 @@ const isEmpty = computed(() => props.items.length === 0)
               :color="kindAccent(g.kind)"
             />
             <MaterialIcon
-              v-else
+              v-else-if="g.kind === 'project'"
               :name="item.status === 'completed' ? 'folder_special' : 'folder'"
               :size="16"
               :fill="item.status === 'completed' ? 1 : 0"
               :color="item.color || kindAccent(g.kind)"
+            />
+            <MaterialIcon
+              v-else
+              name="description"
+              :size="16"
+              :color="kindAccent(g.kind)"
             />
           </span>
           <span class="us-item-meta">
