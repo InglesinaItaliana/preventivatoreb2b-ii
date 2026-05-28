@@ -4,6 +4,7 @@ import {
   addDoc, deleteDoc, doc, serverTimestamp,
 } from 'firebase/firestore'
 import { db, auth } from '../../firebase'
+import { markChatRead } from './usePulsarUnread'
 
 export interface Chat {
   id: string
@@ -77,6 +78,12 @@ export function useChats() {
       lastMessageAt: serverTimestamp(),
       createdAt:     serverTimestamp(),
     })
+    // Marca la chat come già letta DAL CREATORE: senza questo, useUnreadChats
+    // confronta lastMessageAt (now, dal server) con seen[chatId] (0) e
+    // segnala la chat come non-letta → l'utente vede "1 chat con messaggi
+    // non letti" appena finisce di crearla. Usa un seenAt 60s nel futuro
+    // per assorbire eventuale clock skew client/server.
+    markChatRead(ref.id, new Date(Date.now() + 60_000))
     return ref.id
   }
 

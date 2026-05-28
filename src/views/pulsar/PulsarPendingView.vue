@@ -52,6 +52,7 @@ interface PendingMsg {
   flags: string[]
   taskId: string | null
   answeredAt: Date | null
+  rejectedAt: Date | null
 }
 
 interface ChatGroup {
@@ -132,6 +133,7 @@ const unsubscribe = onSnapshot(q, async (snap) => {
       flags:       data.flags     ?? [],
       taskId:      data.taskId    ?? null,
       answeredAt:  toDate(data.answeredAt),
+      rejectedAt:  toDate(data.rejectedAt),
     } as PendingMsg
   }))
   results.push(...enriched)
@@ -158,6 +160,7 @@ const pendingTasks = computed(() =>
   allFlagged.value.filter(m =>
     m.flags.includes('task') &&
     !m.taskId &&
+    !m.rejectedAt &&
     m.from.toLowerCase().trim() !== myEmail
   )
 )
@@ -319,6 +322,36 @@ async function submitTask() {
     taskSaving.value = false
   }
 }
+
+// ── Reject task: marca msg.rejectedAt e fa sparire la pendenza dalla lista ──
+const rejectingIds = ref<Set<string>>(new Set())  // disabilita doppio-tap
+async function rejectTaskMsg(msg: PendingMsg) {
+  if (rejectingIds.value.has(msg.id)) return
+  rejectingIds.value = new Set([...rejectingIds.value, msg.id])
+  try {
+    await updateDoc(
+      doc(db, 'chats', msg.chatId, 'messages', msg.id),
+      { rejectedAt: serverTimestamp() },
+    )
+  } catch (e) {
+    console.error('[Pendenze] task reject error', e)
+    // Ripristina lo stato se la write fallisce, così l'utente può ritentare.
+    const next = new Set(rejectingIds.value)
+    next.delete(msg.id)
+    rejectingIds.value = next
+  }
+}
+
+async function rejectFromModal() {
+  if (!taskMsg.value || taskSaving.value) return
+  taskSaving.value = true
+  try {
+    await rejectTaskMsg(taskMsg.value)
+    closeTaskModal()
+  } finally {
+    taskSaving.value = false
+  }
+}
 </script>
 
 <template>
@@ -352,10 +385,10 @@ async function submitTask() {
           </button>
           <div v-if="isExpanded(group.chatId)" class="group-body">
             <div v-for="msg in group.msgs" :key="msg.id" class="msg-card">
-              <div class="card-header">
-                <div class="card-time">{{ formatTime(msg.createdAt) }}</div>
+              <div class="card-row">
+                <p class="card-text">{{ msg.text }}</p>
+                <span class="card-time">{{ formatTime(msg.createdAt) }}</span>
               </div>
-              <p class="card-text">{{ msg.text }}</p>
 
               <div v-if="replyingTo === msg.id" class="inline-reply">
                 <textarea
@@ -409,14 +442,22 @@ async function submitTask() {
           </button>
           <div v-if="isExpanded(group.chatId)" class="group-body">
             <div v-for="msg in group.msgs" :key="msg.id" class="msg-card">
-              <div class="card-header">
-                <div class="card-time">{{ formatTime(msg.createdAt) }}</div>
+              <div class="card-row">
+                <p class="card-text">{{ msg.text }}</p>
+                <span class="card-time">{{ formatTime(msg.createdAt) }}</span>
               </div>
-              <p class="card-text">{{ msg.text }}</p>
               <div class="card-actions">
                 <button class="action-btn action-btn--primary" @click="openTaskModal(msg)">
                   <MIcon name="check_circle" filled class="action-icon" />
                   Crea azione
+                </button>
+                <button
+                  class="action-btn action-btn--reject"
+                  :disabled="rejectingIds.has(msg.id)"
+                  @click="rejectTaskMsg(msg)"
+                >
+                  <MIcon name="block" class="action-icon" />
+                  Rifiuta
                 </button>
                 <button class="action-btn" @click="openInChat(msg.chatId, msg.id)">
                   Apri in chat
@@ -495,6 +536,11 @@ async function submitTask() {
             <div class="modal-footer md-modal-footer">
               <button class="btn-ghost md-btn md-btn--outlined md-btn--rounded" @click="closeTaskModal">Annulla</button>
               <button
+                class="btn-reject"
+                :disabled="taskSaving"
+                @click="rejectFromModal"
+              >{{ taskSaving ? '…' : 'Rifiuta' }}</button>
+              <button
                 class="btn-primary md-btn md-btn--filled md-btn--rounded"
                 :disabled="!taskForm.title.trim() || taskSaving"
                 @click="submitTask"
@@ -527,10 +573,11 @@ async function submitTask() {
   .pv { --page-bg: #0E0C07; }
 }
 
-:deep(.md-page-header) { padding: 18px 16px 14px; }
-:deep(.md-page-header.is-sticky) {
-  background: var(--md-sys-color-surface);
-  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+/* Header flat: stesso bg della pagina, niente bordo/ombra. */
+:deep(.md-page-header) {
+  padding: 18px 16px 14px;
+  background: var(--page-bg);
+  border-bottom: none;
 }
 @media (min-width: 1024px) {
   :deep(.md-page-header) { padding: 24px max(40px, calc(50% - 410px)) 18px; }
@@ -610,19 +657,12 @@ async function submitTask() {
   text-align: center;
 }
 
-/* ── Gruppi per chat — card surface con stato collassato/aperto via
-   bordo accent (memoria feedback_no_chevrons) ─────────────────────── */
+/* ── Gruppi per chat — card surface flat (niente bordo/ombra/glow) ─────── */
 .chat-group {
   background: var(--md-sys-color-surface);
-  border: 1px solid var(--md-sys-color-outline-variant);
   border-radius: 16px;
-  box-shadow: var(--md-sys-elevation-level-1);
   margin-bottom: 10px;
   overflow: hidden;
-  transition: border-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
-}
-.chat-group:has(.group-body) {
-  border-left: 3px solid var(--md-sys-color-primary);
 }
 
 .group-header {
@@ -677,34 +717,38 @@ async function submitTask() {
 .group-body .msg-card:last-child {
   border-bottom: none;
 }
-.group-body .card-chat { display: none; }
 
 .msg-card {
   background: var(--md-sys-color-surface);
   padding: 14px 16px;
 }
 
-.card-header {
+/* Riga messaggio: testo a sinistra (occupa lo spazio), orario a destra in
+   cima alla prima riga di testo. Risparmia altezza rispetto al pattern
+   precedente (orario su una riga propria sopra il testo). */
+.card-row {
   display: flex;
   align-items: flex-start;
-  gap: 10px;
+  gap: 12px;
   margin-bottom: 10px;
 }
 
-.card-avatar {
-  width: 34px; height: 34px; border-radius: var(--md-sys-shape-corner-full);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 12px; font-weight: 700; color: #fff; flex-shrink: 0;
+.card-text {
+  flex: 1;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--md-sys-color-on-surface);
+  margin: 0;
+  word-break: break-word;
 }
 
-.card-meta { flex: 1; }
-.card-sender { font-size: 13px; font-weight: 600; color: var(--md-sys-color-on-surface); }
-.card-chat   { font-size: 11px; color: var(--md-sys-color-on-surface-variant); }
-.card-time   { font-size: 11px; color: var(--md-sys-color-on-surface-variant); flex-shrink: 0; }
-
-.card-text {
-  font-size: 14px; line-height: 1.5; color: var(--md-sys-color-on-surface);
-  margin: 0 0 10px; word-break: break-word;
+.card-time {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--md-sys-color-on-surface-variant);
+  /* Allinea il baseline approx con la prima riga di testo (14px×1.5 = 21px). */
+  padding-top: 4px;
+  white-space: nowrap;
 }
 
 .card-actions {
@@ -737,6 +781,20 @@ async function submitTask() {
   color: #fff;
 }
 .action-btn--primary:hover { background: var(--md-sys-color-primary-hover); border-color: var(--md-sys-color-primary-hover); color: #fff; }
+
+/* Quick-action "Rifiuta" sulla card task: outlined neutro, accent rosso
+   ruggine al hover (#C8521A, in palette con prio-alta). */
+.action-btn--reject {
+  background: transparent;
+  border-color: var(--md-sys-color-outline-variant);
+  color: var(--md-sys-color-on-surface-variant);
+}
+.action-btn--reject:hover:not(:disabled) {
+  border-color: #C8521A;
+  background: color-mix(in srgb, #C8521A 8%, transparent);
+  color: #C8521A;
+}
+.action-btn--reject:disabled { opacity: 0.5; cursor: not-allowed; }
 
 .action-icon { font-size: 16px; flex-shrink: 0; }
 .action-icon-trailing { margin-left: 2px; opacity: 0.75; }
@@ -892,4 +950,24 @@ async function submitTask() {
   font-family: 'Outfit', sans-serif;
 }
 .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Bottone "Rifiuta" del modal (footer: Annulla | Rifiuta | Crea azione) */
+.btn-reject {
+  flex: 1.2;
+  padding: 10px;
+  background: none;
+  border: 1px solid #E8E5DF;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  color: #6A6560;
+  font-family: 'Outfit', sans-serif;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+.btn-reject:hover:not(:disabled) {
+  border-color: #C8521A;
+  color: #C8521A;
+}
+.btn-reject:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>

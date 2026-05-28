@@ -160,10 +160,11 @@ function renderText(t: string) {
   .hv { --page-bg: #0E0C07; }
 }
 
-:deep(.md-page-header) { padding: 18px 16px 14px; }
-:deep(.md-page-header.is-sticky) {
-  background: var(--md-sys-color-surface);
-  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+/* Header flat: stesso bg della pagina, niente bordo/ombra. */
+:deep(.md-page-header) {
+  padding: 18px 16px 14px;
+  background: var(--page-bg);
+  border-bottom: none;
 }
 :deep(.md-page-header__title) {
   text-transform: lowercase;
@@ -208,11 +209,9 @@ function renderText(t: string) {
 
 .msg-card {
   background: var(--md-sys-color-surface);
-  border: 1px solid var(--md-sys-color-outline-variant);
   border-radius: 16px;
-  box-shadow: var(--md-sys-elevation-level-1);
   padding: 14px 16px;
-  transition: border-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
+  /* Bordi e ombre rimossi per look piatto. */
 }
 
 .card-header {

@@ -282,11 +282,11 @@ onMounted(() => {
   .cv { --page-bg: #0E0C07; }
 }
 
-/* header sticky con bg surface (stacca dalla pagina), gutter mobile 16px */
-:deep(.md-page-header) { padding: 18px 16px 14px; }
-:deep(.md-page-header.is-sticky) {
-  background: var(--md-sys-color-surface);
-  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+/* Header flat: stesso bg della pagina, niente bordo/ombra. */
+:deep(.md-page-header) {
+  padding: 18px 16px 14px;
+  background: var(--page-bg);
+  border-bottom: none;
 }
 @media (min-width: 1024px) {
   :deep(.md-page-header) { padding: 24px max(40px, calc(50% - 410px)) 18px; }
@@ -339,20 +339,15 @@ onMounted(() => {
   gap: 12px;
   padding: 12px 14px;
   background: var(--md-sys-color-surface);
-  border: 1px solid var(--md-sys-color-outline-variant);
   border-radius: 16px;
-  box-shadow: var(--md-sys-elevation-level-1);
   cursor: pointer;
-  transition: background var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
-              border-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
-              box-shadow var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
+  transition: background var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
+  /* Bordi, ombre e bagliori rimossi per look piatto. */
 }
 
 @media (hover: hover) {
   .chat-row:hover {
-    background: color-mix(in srgb, var(--md-sys-color-primary) 4%, var(--md-sys-color-surface));
-    border-color: color-mix(in srgb, var(--md-sys-color-primary) 30%, var(--md-sys-color-outline-variant));
-    box-shadow: var(--md-sys-elevation-level-2);
+    background: color-mix(in srgb, var(--md-sys-color-primary) 6%, var(--md-sys-color-surface));
   }
 }
 

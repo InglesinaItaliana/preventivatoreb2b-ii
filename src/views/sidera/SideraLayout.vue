@@ -49,6 +49,11 @@ const isMobileLayout = computed(() => isStandalone.value || isMobileViewport.val
 const currentScope = computed<ScopeId>(() => detectScope(route.path))
 const currentScopeConfig = computed(() => getScopeConfig(currentScope.value))
 
+// PULSAR — quando sei DENTRO una chat (route /pulsar/chat/:id) la
+// bottom-nav + FAB vengono nascoste: il box di scrittura messaggio diventa
+// l'unico elemento ancorato in basso, per un layout chat fullscreen.
+const isPulsarChat = computed(() => route.path.startsWith('/pulsar/chat/'))
+
 // Toggle per ripristinare la barra in alto delle PWA mobile (logo + wordmark + back).
 // Mantenuto a false per scelta di design 2026-05-23 — basta riportare a true per riabilitarla.
 const SHOW_MOBILE_HEADER = false
@@ -436,7 +441,7 @@ const roleLabel: Record<string, string> = {
 
 <template>
   <div
-    :class="['s-shell', `s-scope-${currentScope}`, { 's-mobile-layout': isMobileLayout, 's-hide-sidebar': hideSidebarOnHome }]"
+    :class="['s-shell', `s-scope-${currentScope}`, { 's-mobile-layout': isMobileLayout, 's-hide-sidebar': hideSidebarOnHome, 's-fullscreen-view': isPulsarChat }]"
     :style="{ '--module-accent': activeModule?.accent ?? 'var(--s-green)', '--module-accent-light': (activeModule?.accent ?? 'var(--s-green)') + 'DD' }"
   >
     <!-- ── SIDEBAR ── -->
@@ -680,9 +685,10 @@ const roleLabel: Record<string, string> = {
         <RouterView />
       </main>
 
-      <!-- Mobile-only: bottom-nav + FAB contestuali -->
+      <!-- Mobile-only: bottom-nav + FAB contestuali.
+           Nascosti dentro a una chat PULSAR (vedi isPulsarChat). -->
       <ContextualBottomNav
-        v-if="isMobileLayout && currentScopeConfig"
+        v-if="isMobileLayout && currentScopeConfig && !isPulsarChat"
         :config="currentScopeConfig"
         :triage-count="triageCount"
       >
@@ -980,6 +986,13 @@ const roleLabel: Record<string, string> = {
 .s-shell.s-mobile-layout .s-main > * {
   padding-bottom: calc(110px + env(safe-area-inset-bottom));
   box-sizing: border-box;
+}
+/* Fullscreen view (es. PULSAR chat aperta): la bottom-nav è nascosta, quindi
+   il padding-bottom riservato sul main child va azzerato — altrimenti
+   resterebbe una fascia vuota tra la barra di input messaggio e il bordo
+   inferiore dello schermo. Lascio solo il safe-area inset (notch iPhone). */
+.s-shell.s-fullscreen-view.s-mobile-layout .s-main > * {
+  padding-bottom: env(safe-area-inset-bottom);
 }
 
 /* Fallback graceful per viewport ≤ 768px su scope='sidera' (no module chrome): nasconde

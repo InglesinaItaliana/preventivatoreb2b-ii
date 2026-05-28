@@ -14,7 +14,10 @@ export interface Message {
   hashtags: string[]
   mentions: string[]
   taskId: string | null
+  /** Quando il destinatario ha risposto a un msg flaggato 'question'. */
   answeredAt: Date | null
+  /** Quando il destinatario ha rifiutato un msg flaggato 'task' senza crearlo. */
+  rejectedAt: Date | null
   replyToId: string | null
 }
 
@@ -48,6 +51,7 @@ export function useMessages(chatId: string) {
         mentions:   data.mentions   ?? [],
         taskId:     data.taskId     ?? null,
         answeredAt: toDate(data.answeredAt),
+        rejectedAt: toDate(data.rejectedAt),
         replyToId:  data.replyToId  ?? null,
       }
     })
@@ -76,6 +80,7 @@ export function useMessages(chatId: string) {
       mentions:   data.mentions,
       taskId:     null,
       answeredAt: null,
+      rejectedAt: null,
       replyToId:  data.replyToId ?? null,
     })
 
@@ -103,5 +108,10 @@ export function useMessages(chatId: string) {
     await updateDoc(doc(db, 'chats', chatId, 'messages', messageId), { answeredAt: serverTimestamp() })
   }
 
-  return { messages, loading, sendMessage, linkTask, markAnswered }
+  /** Segna un task proposto come "rifiutato" senza crearlo. */
+  async function rejectTask(messageId: string) {
+    await updateDoc(doc(db, 'chats', chatId, 'messages', messageId), { rejectedAt: serverTimestamp() })
+  }
+
+  return { messages, loading, sendMessage, linkTask, markAnswered, rejectTask }
 }
