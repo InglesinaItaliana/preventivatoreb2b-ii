@@ -9,23 +9,16 @@ import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
 const scrollEl = ref<HTMLElement | null>(null)
 const { hidden: headerHidden } = useAutoHideHeader(scrollEl)
 
-const { tasks, loading: tasksLoading, completeTask, uncompleteTask } = useAllTasks()
+const { tasks, loading: tasksLoading, completeTask } = useAllTasks()
 const { currentUser } = useCurrentUser()
 
 // ── Tasks ─────────────────────────────────────────────────────────────────
 const pendingDone = ref<Set<string>>(new Set())
-const pendingUndo = ref<Set<string>>(new Set())
 
 async function doComplete(t: { id: string; projectId: string }) {
   if (pendingDone.value.has(t.id)) return
   pendingDone.value = new Set([...pendingDone.value, t.id])
   await completeTask(t.projectId, t.id)
-}
-
-async function doUncomplete(t: { id: string; projectId: string }) {
-  if (pendingUndo.value.has(t.id)) return
-  pendingUndo.value = new Set([...pendingUndo.value, t.id])
-  await uncompleteTask(t.projectId, t.id)
 }
 
 const myTasks = computed(() =>
@@ -35,15 +28,6 @@ const myTasks = computed(() =>
     (t.assignees.includes(currentUser.value?.email ?? '') || t.createdBy === currentUser.value?.uid)
   )
 )
-
-const doneTasks = computed(() =>
-  tasks.value.filter(t =>
-    (t.completedAt || pendingDone.value.has(t.id)) &&
-    !pendingUndo.value.has(t.id)
-  ).slice(0, 10)
-)
-
-const prioColor: Record<string, string> = { alta: '#C8521A', media: '#D4A020', bassa: '#7A8FA6' }
 
 function formatDue(d: Date | null) {
   if (!d) return ''
@@ -56,9 +40,6 @@ const dueTodayCount = computed(() => {
   const end = new Date(start); end.setDate(end.getDate() + 1)
   return myTasks.value.filter(t => t.dueDate && t.dueDate >= start && t.dueDate < end).length
 })
-
-// Completate di recente: collassabile, collassate di default
-const showDone = ref(false)
 </script>
 
 <template>
@@ -82,34 +63,13 @@ const showDone = ref(false)
         Nessuna azione assegnata.
       </div>
 
-      <div v-for="t in myTasks" :key="t.id" class="task-row" :style="{ borderLeftColor: prioColor[t.priority] }">
+      <div v-for="t in myTasks" :key="t.id" class="task-row">
         <div class="checkbox" @click="doComplete(t)">
           <MIcon v-if="pendingDone.has(t.id)" name="check" :size="14" class="check-icon" />
         </div>
         <div class="row-title">{{ t.title }}</div>
         <div v-if="t.dueDate" class="row-due">
           <MIcon name="schedule" :size="12" />{{ formatDue(t.dueDate) }}
-        </div>
-      </div>
-
-      <!-- Completate di recente: collassabile (memoria feedback_no_chevrons:
-           niente chevron, lo stato espanso si segnala con bordo accent + bg) -->
-      <button
-        v-if="doneTasks.length"
-        class="collapse-toggle"
-        :class="{ 'is-open': showDone }"
-        @click="showDone = !showDone"
-      >
-        <span>Completate di recente</span>
-        <span class="collapse-count">{{ doneTasks.length }}</span>
-      </button>
-
-      <div v-if="showDone" class="done-list">
-        <div v-for="t in doneTasks" :key="t.id" class="task-row task-row--done">
-          <button class="undo-btn" @click="doUncomplete(t)">
-            <MIcon name="undo" :size="14" />
-          </button>
-          <div class="row-title row-title--done">{{ t.title }}</div>
         </div>
       </div>
     </div>
@@ -131,10 +91,11 @@ const showDone = ref(false)
   .seq { --page-bg: #0E0C07; }
 }
 
-:deep(.md-page-header) { padding: 18px 16px 14px; }
-:deep(.md-page-header.is-sticky) {
-  background: var(--md-sys-color-surface);
-  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+/* Header flat: stesso bg della pagina, niente bordo/ombra. */
+:deep(.md-page-header) {
+  padding: 18px 16px 14px;
+  background: var(--page-bg);
+  border-bottom: none;
 }
 @media (min-width: 1024px) {
   :deep(.md-page-header) { padding: 24px max(40px, calc(50% - 410px)) 18px; }
@@ -180,15 +141,9 @@ const showDone = ref(false)
   padding: 12px 14px;
   background: var(--md-sys-color-surface);
   border-radius: 16px;
-  border: 1px solid var(--md-sys-color-outline-variant);
-  border-left: 6px solid transparent;
   margin-bottom: 10px;
-  box-shadow: var(--md-sys-elevation-level-1);
-  transition: background var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
-              border-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
+  /* Bordi, ombre e indicatore priorità rimossi per look piatto coerente. */
 }
-
-.task-row--done { opacity: 0.55; border-left: 6px solid var(--md-sys-color-outline-variant); }
 
 .checkbox {
   width: 18px; height: 18px;
@@ -203,64 +158,6 @@ const showDone = ref(false)
 .check-icon { color: var(--md-sys-color-primary); }
 
 .row-title { flex: 1; font-size: 14px; color: var(--md-sys-color-on-surface); }
-.row-title--done { text-decoration: line-through; color: var(--md-sys-color-on-surface-variant); }
 
 .row-due { font-size: 11px; color: var(--md-sys-color-on-surface-variant); display: flex; align-items: center; gap: 3px; flex-shrink: 0; }
-
-.undo-btn {
-  background: none; border: none; cursor: pointer;
-  color: var(--md-sys-color-on-surface-variant);
-  padding: 2px; border-radius: var(--md-sys-shape-corner-extra-small);
-  display: flex; align-items: center;
-  transition: color 0.15s;
-  flex-shrink: 0;
-}
-
-.undo-btn:hover { color: var(--md-sys-color-primary); }
-
-/* Collapsible "Completate di recente": niente chevron (memoria
-   feedback_no_chevrons). Stato aperto = bordo accent left + bg surface-container. */
-.collapse-toggle {
-  width: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 14px;
-  margin: 16px 0 8px;
-  background: var(--md-sys-color-surface-container-low);
-  border: 1px solid var(--md-sys-color-outline-variant);
-  border-left: 3px solid var(--md-sys-color-outline-variant);
-  border-radius: 12px;
-  cursor: pointer;
-  font-family: inherit;
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--md-sys-color-on-surface-variant);
-  transition: color 0.15s, border-color 0.15s, background 0.15s;
-}
-
-.collapse-toggle:hover {
-  color: var(--md-sys-color-on-surface);
-  border-color: color-mix(in srgb, var(--md-sys-color-primary) 30%, var(--md-sys-color-outline-variant));
-}
-
-.collapse-toggle.is-open {
-  border-left-color: var(--md-sys-color-primary);
-  color: var(--md-sys-color-on-surface);
-  background: color-mix(in srgb, var(--md-sys-color-primary) 5%, var(--md-sys-color-surface));
-}
-
-.collapse-count {
-  background: color-mix(in srgb, var(--md-sys-color-primary) 12%, transparent);
-  color: var(--md-sys-color-primary);
-  font-size: 11px;
-  font-weight: 700;
-  padding: 1px 8px;
-  border-radius: var(--md-sys-shape-corner-full);
-  letter-spacing: 0;
-}
-
-.done-list { display: flex; flex-direction: column; }
 </style>

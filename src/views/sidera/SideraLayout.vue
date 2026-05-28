@@ -49,6 +49,11 @@ const isMobileLayout = computed(() => isStandalone.value || isMobileViewport.val
 const currentScope = computed<ScopeId>(() => detectScope(route.path))
 const currentScopeConfig = computed(() => getScopeConfig(currentScope.value))
 
+// PULSAR — quando sei DENTRO una chat (route /pulsar/chat/:id) la
+// bottom-nav + FAB vengono nascoste: il box di scrittura messaggio diventa
+// l'unico elemento ancorato in basso, per un layout chat fullscreen.
+const isPulsarChat = computed(() => route.path.startsWith('/pulsar/chat/'))
+
 // Toggle per ripristinare la barra in alto delle PWA mobile (logo + wordmark + back).
 // Mantenuto a false per scelta di design 2026-05-23 — basta riportare a true per riabilitarla.
 const SHOW_MOBILE_HEADER = false
@@ -436,7 +441,7 @@ const roleLabel: Record<string, string> = {
 
 <template>
   <div
-    :class="['s-shell', `s-scope-${currentScope}`, { 's-mobile-layout': isMobileLayout, 's-hide-sidebar': hideSidebarOnHome }]"
+    :class="['s-shell', `s-scope-${currentScope}`, { 's-mobile-layout': isMobileLayout, 's-hide-sidebar': hideSidebarOnHome, 's-fullscreen-view': isPulsarChat }]"
     :style="{ '--module-accent': activeModule?.accent ?? 'var(--s-green)', '--module-accent-light': (activeModule?.accent ?? 'var(--s-green)') + 'DD' }"
   >
     <!-- ── SIDEBAR ── -->
@@ -680,9 +685,10 @@ const roleLabel: Record<string, string> = {
         <RouterView />
       </main>
 
-      <!-- Mobile-only: bottom-nav + FAB contestuali -->
+      <!-- Mobile-only: bottom-nav + FAB contestuali.
+           Nascosti dentro a una chat PULSAR (vedi isPulsarChat). -->
       <ContextualBottomNav
-        v-if="isMobileLayout && currentScopeConfig"
+        v-if="isMobileLayout && currentScopeConfig && !isPulsarChat"
         :config="currentScopeConfig"
         :triage-count="triageCount"
       >
@@ -699,7 +705,11 @@ const roleLabel: Record<string, string> = {
   font-family: 'Outfit', sans-serif;
   background: var(--s-bg);
   color: var(--s-text);
+  /* 100dvh = dynamic viewport height: su iOS PWA si adatta correttamente
+     alla home indicator senza lasciare barre vuote che 100vh provoca.
+     Fallback a 100vh per browser senza supporto dvh. */
   height: 100vh;
+  height: 100dvh;
   display: flex;
   overflow: hidden;
 }
@@ -951,6 +961,10 @@ const roleLabel: Record<string, string> = {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  /* min-height: 0 per consentire ai children flex di restringersi sotto
+     l'altezza naturale del contenuto (essenziale su iOS dove il flex
+     altrimenti deborda fuori viewport, lasciando sezioni tagliate). */
+  min-height: 0;
   position: relative;  /* permette posizionamento absolute del bottom-nav contextual */
 }
 
@@ -959,6 +973,7 @@ const roleLabel: Record<string, string> = {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 
 /* ─── Mobile-layout adattivo ─── */
@@ -980,6 +995,15 @@ const roleLabel: Record<string, string> = {
 .s-shell.s-mobile-layout .s-main > * {
   padding-bottom: calc(110px + env(safe-area-inset-bottom));
   box-sizing: border-box;
+}
+/* Fullscreen view (es. PULSAR chat aperta): niente padding-bottom sul main
+   child (era stato aggiunto per riservare spazio alla bottom-nav che qui
+   è nascosta). La safe-area inset per la home indicator iPhone va gestita
+   DENTRO l'elemento ancorato in basso (es. .input-area della chat) così
+   il suo background si estende fino al bordo dello schermo invece di
+   lasciare una fascia beige sotto. */
+.s-shell.s-fullscreen-view.s-mobile-layout .s-main > * {
+  padding-bottom: 0;
 }
 
 /* Fallback graceful per viewport ≤ 768px su scope='sidera' (no module chrome): nasconde

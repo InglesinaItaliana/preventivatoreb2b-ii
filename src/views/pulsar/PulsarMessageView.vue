@@ -19,7 +19,7 @@ const router = useRouter()
 
 const chatId = route.params.id as string
 
-const { messages, loading, sendMessage, linkTask, markAnswered } = useMessages(chatId)
+const { messages, loading, sendMessage, linkTask, markAnswered, rejectTask } = useMessages(chatId)
 
 // Segnala al server che questa chat è aperta → niente push duplicata mentre la guardo
 usePulsarPresence(chatId)
@@ -256,9 +256,33 @@ function scrollToBottom() {
 }
 
 function scrollToMessage(id: string) {
-  const el = listRef.value?.querySelector(`[data-msg-id="${id}"]`) as HTMLElement | null
+  const list = listRef.value
+  if (!list) return false
+  const el = list.querySelector(`[data-msg-id="${id}"]`) as HTMLElement | null
   if (!el) return false
-  el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+
+  // Scroll manuale (non scrollIntoView): calcoliamo esplicitamente la
+  // posizione così il calcolo non dipende dall'interpretazione del
+  // browser di scroll-margin in combinazione con flex/sticky layout.
+  // Obiettivo: bottom della bolla a ~24px dal bottom dell'area
+  // scrollabile (= top dell'input-area, perché .msg-list è flex sibling
+  // dell'input).
+  const BOTTOM_GAP = 24
+  const doScroll = () => {
+    const listRect = list.getBoundingClientRect()
+    const elRect   = el.getBoundingClientRect()
+    // Posizione assoluta del bottom dell'elemento rispetto al list scroll
+    const elBottomInList = (elRect.bottom - listRect.top) + list.scrollTop
+    const target = Math.max(0, elBottomInList + BOTTOM_GAP - list.clientHeight)
+    list.scrollTo({ top: target, behavior: 'smooth' })
+  }
+
+  doScroll()
+  // Ri-scroll dopo che il layout si è assestato: reply-bar appena montata,
+  // tastiera virtuale iOS apparsa, font caricato. 400ms copre la maggior
+  // parte degli scenari.
+  setTimeout(doScroll, 400)
+
   highlightedMsgId.value = id
   setTimeout(() => {
     if (highlightedMsgId.value === id) highlightedMsgId.value = null
@@ -270,16 +294,21 @@ function maybeApplyQueryFocus() {
   const targetId = route.query.msg as string | undefined
   const wantReply = route.query.reply === '1'
   if (!targetId) return false
-  // Aspetta che il messaggio sia in DOM
+
+  // Setta replyTo PRIMA dello scroll, così la reply-bar è già in DOM e
+  // l'altezza del list è quella definitiva quando calcoliamo la posizione.
+  // Skip auto-focus dell'input: aprirebbe la tastiera virtuale iOS e
+  // ridurrebbe il viewport coprendo di nuovo il messaggio targettato.
+  // L'utente focusa quando vuole rispondere.
+  if (wantReply) {
+    const target = messages.value.find(m => m.id === targetId)
+    if (target && target.from !== myEmail && !target.answeredAt) {
+      replyTo.value = target
+    }
+  }
+
   return nextTick().then(() => {
     const ok = scrollToMessage(targetId)
-    if (ok && wantReply) {
-      const target = messages.value.find(m => m.id === targetId)
-      if (target && target.from !== myEmail && !target.answeredAt) {
-        replyTo.value = target
-        inputRef.value?.focus()
-      }
-    }
     focusedFromQuery.value = ok
     return ok
   })
@@ -361,6 +390,17 @@ async function createTaskFromMsg() {
   }
 }
 
+async function rejectTaskFromModal() {
+  if (!taskMsgId.value || taskSaving.value) return
+  taskSaving.value = true
+  try {
+    await rejectTask(taskMsgId.value)
+    showTaskModal.value = false
+  } finally {
+    taskSaving.value = false
+  }
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────
 function formatTime(d: Date) {
   return new Intl.DateTimeFormat('it-IT', { hour: '2-digit', minute: '2-digit' }).format(d)
@@ -377,6 +417,11 @@ function renderText(t: string) {
   <div class="mv">
     <!-- Header chat -->
     <header v-if="chatDoc" class="chat-header">
+      <button
+        class="chat-back-btn"
+        aria-label="Torna alle chat"
+        @click="router.push('/pulsar')"
+      ><MIcon name="arrow_back" :size="22" /></button>
       <StarAvatar v-if="!chatDoc.isGroup" v-bind="starAvatarProps(otherMember, members)" :size="40" />
       <div v-else class="chat-header-avatar" :style="{ background: chatAvatarBg }">
         {{ chatAvatarInitial }}
@@ -452,17 +497,25 @@ function renderText(t: string) {
               v-if="msg.flags.includes('task')"
               class="flag-pin"
               :class="[
-                msg.taskId ? 'flag-pin--done' : 'flag-pin--t',
+                (msg.taskId || msg.rejectedAt) ? 'flag-pin--done' : 'flag-pin--t',
                 msg.flags.includes('question') ? 'flag-pin--second' : '',
                 msg.from === myEmail ? 'flag-pin--readonly' : '',
               ]"
-              :disabled="msg.from === myEmail || !!msg.taskId"
+              :disabled="msg.from === myEmail || !!msg.taskId || !!msg.rejectedAt"
               :title="msg.from === myEmail
-                ? (msg.taskId ? 'Azione creata dal destinatario' : 'In attesa che venga creata l’azione')
-                : (msg.taskId ? 'Azione creata' : 'Clicca per creare azione')"
-              @click.stop="msg.from !== myEmail && !msg.taskId && openTaskModal(msg)"
+                ? (msg.taskId
+                    ? 'Azione creata dal destinatario'
+                    : (msg.rejectedAt ? 'Azione rifiutata' : 'In attesa che venga creata l’azione'))
+                : (msg.taskId
+                    ? 'Azione creata'
+                    : (msg.rejectedAt ? 'Azione rifiutata' : 'Clicca per creare o rifiutare'))"
+              @click.stop="msg.from !== myEmail && !msg.taskId && !msg.rejectedAt && openTaskModal(msg)"
             >
-              <MIcon name="check_circle" filled class="flag-pin-icon" />
+              <MIcon
+                :name="msg.rejectedAt ? 'block' : 'check_circle'"
+                filled
+                class="flag-pin-icon"
+              />
             </button>
 
             <div
@@ -665,6 +718,11 @@ function renderText(t: string) {
           <div class="modal-footer md-modal-footer">
             <button class="btn-ghost md-btn md-btn--outlined md-btn--rounded" @click="showTaskModal = false">Annulla</button>
             <button
+              class="btn-reject"
+              :disabled="taskSaving"
+              @click="rejectTaskFromModal"
+            >{{ taskSaving ? '…' : 'Rifiuta' }}</button>
+            <button
               class="btn-primary md-btn md-btn--filled md-btn--rounded"
               :disabled="!taskForm.title.trim() || taskSaving"
               @click="createTaskFromMsg"
@@ -703,14 +761,14 @@ function renderText(t: string) {
 }
 
 /* Header chat (nome + sottotitolo) — niente MdPageHeader: la chat ha
-   chrome dedicato con avatar+nome+stato del contatto, non sostituibile. */
+   chrome dedicato con avatar+nome+stato del contatto, non sostituibile.
+   Flat: stesso bg della pagina, niente bordo/ombra. */
 .chat-header {
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 12px 18px;
-  background: var(--md-sys-color-surface);
-  border-bottom: 1px solid var(--md-sys-color-outline-variant);
+  background: var(--page-bg);
   flex-shrink: 0;
 }
 .chat-header-avatar {
@@ -725,6 +783,26 @@ function renderText(t: string) {
   font-size: 14px;
   flex-shrink: 0;
 }
+/* Back button: torna alle chat (sostituisce la bottom-nav nascosta in chat).
+   Stesso pattern usato sui modal-close (icona ghost senza bg). */
+.chat-back-btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--md-sys-color-on-surface);
+  cursor: pointer;
+  padding: 0;
+  margin-left: -8px;
+  border-radius: var(--md-sys-shape-corner-full);
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s;
+}
+.chat-back-btn:active { background: color-mix(in srgb, var(--md-sys-color-primary) 12%, transparent); }
 .chat-header-info { flex: 1; min-width: 0; }
 .chat-header-name {
   font-size: 14px;
@@ -749,6 +827,9 @@ function renderText(t: string) {
   padding: 16px 16px 8px;
   display: flex;
   flex-direction: column;
+  /* min-height: 0 essenziale su iOS: senza, il flex child cresce all'altezza
+     naturale del contenuto e spinge l'input-area fuori viewport. */
+  min-height: 0;
   /* Spaziatura gestita da margin-top sulle wrap: 12px tra gruppi, 2px dentro al gruppo */
 }
 
@@ -812,11 +893,16 @@ function renderText(t: string) {
    altri offset. Per FIRST has-flags il margin-top:16px serve a separare il
    pin dal gruppo precedente. */
 
-/* Highlight quando arrivi a un messaggio specifico da Pendenze.
-   Niente elevation, solo il ring colorato. */
-.msg-row.is-highlighted .msg-bubble {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--md-sys-color-primary) 67%, transparent);
-  transition: box-shadow var(--md-sys-motion-duration-medium2) var(--md-sys-motion-easing-standard);
+/* Highlight quando arrivi a un messaggio specifico da Hashtag/Pendenze.
+   Senza ring/glow: uso una variazione momentanea del background della
+   bolla (primary-container tint) che decade dopo ~2.2s. */
+.msg-row.is-highlighted .msg-bubble:not(.is-mine) {
+  background: color-mix(in srgb, var(--md-sys-color-primary) 16%, var(--md-sys-color-surface));
+  transition: background var(--md-sys-motion-duration-medium2) var(--md-sys-motion-easing-standard);
+}
+.msg-row.is-highlighted .msg-bubble.is-mine {
+  background: color-mix(in srgb, #FFFFFF 22%, var(--md-sys-color-primary));
+  transition: background var(--md-sys-motion-duration-medium2) var(--md-sys-motion-easing-standard);
 }
 
 .msg-sender {
@@ -830,13 +916,12 @@ function renderText(t: string) {
 
 /* Bolla messaggi altrui: surface su page-bg beige.
    Border-radius default = SINGLE (tail BL=4); le varianti gruppo sotto
-   sovrascrivono in base a bubble-gp-{first|middle|last}. */
+   sovrascrivono in base a bubble-gp-{first|middle|last}.
+   Flat: niente bordo, niente ombra, niente bagliore. */
 .msg-bubble {
   background: var(--md-sys-color-surface);
-  border: 1px solid var(--md-sys-color-outline-variant);
   border-radius: 16px 16px 16px 4px;
   padding: 10px 14px;
-  /* Ombre rimosse per look più piatto/coerente */
 }
 
 /* Raggruppamento (altri, lato sinistro):
@@ -880,7 +965,6 @@ function renderText(t: string) {
 /* Bolla propria: sfondo TEAL pieno + testo bianco su contrasto */
 .msg-bubble.is-mine {
   background: var(--md-sys-color-primary);
-  border-color: var(--md-sys-color-primary);
   border-radius: 16px 16px 4px 16px;
   color: var(--md-sys-color-on-primary);
 }
@@ -903,7 +987,7 @@ function renderText(t: string) {
 .msg-bubble.is-mine :deep(.msg-hashtag),
 .msg-bubble.is-mine :deep(.msg-mention) { color: rgba(255, 255, 255, 0.95); }
 
-.msg-text { font-size: 14px; line-height: 1.5; color: var(--md-sys-color-on-surface); white-space: pre-wrap; word-break: break-word; margin: 0; }
+.msg-text { font-size: 16px; line-height: 1.5; color: var(--md-sys-color-on-surface); white-space: pre-wrap; word-break: break-word; margin: 0; }
 
 :deep(.msg-hashtag) { color: var(--md-sys-color-primary); font-weight: 600; cursor: pointer; }
 :deep(.msg-mention) { color: #2F6B4A; font-weight: 600; }
@@ -1002,6 +1086,10 @@ function renderText(t: string) {
   font-weight: 600;
   font-family: 'Outfit', sans-serif;
 }
+/* Bolla mia (sfondo teal pieno): inverti il colore del tag chip in bianco
+   così il contrasto resta leggibile. Stesso pattern già usato per gli
+   #hashtag e @mention inline dentro il testo. */
+.msg-bubble.is-mine .msg-tag { color: rgba(255, 255, 255, 0.95); }
 
 .msg-time {
   font-size: 10px;
@@ -1064,7 +1152,8 @@ function renderText(t: string) {
   border: 1px solid var(--md-sys-color-outline-variant);
   border-radius: var(--md-sys-shape-corner-small);
   padding: 8px 12px;
-  font-size: 13px;
+  /* 16px previene lo zoom automatico di iOS Safari sul focus input. */
+  font-size: 16px;
   font-family: 'Outfit', sans-serif;
   color: var(--md-sys-color-on-surface);
   outline: none;
@@ -1119,7 +1208,10 @@ function renderText(t: string) {
 .input-area {
   background: var(--md-sys-color-surface);
   border-top: 1px solid var(--md-sys-color-outline-variant);
-  padding: 10px 14px 12px;
+  /* padding-bottom = 12px standard + safe-area iPhone così l'input arriva
+     al bordo dello schermo senza lasciare zone beige sotto, ma il
+     contenuto interno resta sopra la home indicator. */
+  padding: 10px 14px calc(12px + env(safe-area-inset-bottom));
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1313,4 +1405,25 @@ function renderText(t: string) {
 }
 
 .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Bottone "Rifiuta" task: outlined neutro per non competere con il primary
+   "Crea azione". Posizionato in mezzo: Annulla | Rifiuta | Crea azione. */
+.btn-reject {
+  flex: 1.2;
+  padding: 10px;
+  background: none;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--md-sys-color-on-surface-variant);
+  font-family: 'Outfit', sans-serif;
+  transition: border-color 0.15s, color 0.15s;
+}
+.btn-reject:hover:not(:disabled) {
+  border-color: #C8521A;
+  color: #C8521A;
+}
+.btn-reject:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>
