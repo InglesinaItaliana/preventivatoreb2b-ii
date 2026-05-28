@@ -416,6 +416,12 @@ watch(chats, (newChats) => {
   }
 
   const myEmail = auth.currentUser?.email ?? ''
+  // Scope-gate: notify() solo se l'utente è in /pulsar/*. Fuori (CEPHEID/NEBULA/
+  // QUASAR) le push del modulo le gestisce FCM background SW; questo watcher
+  // in-app non deve mostrare notifiche cross-modulo. lastSeenTimes resta
+  // aggiornato anche fuori da PULSAR così al rientro non si scatena un burst
+  // retroattivo sui messaggi accumulati durante la permanenza in altri moduli.
+  const onPulsar = route.path.startsWith('/pulsar')
 
   for (const chat of newChats) {
     const prev    = lastSeenTimes.get(chat.id) ?? 0
@@ -423,6 +429,7 @@ watch(chats, (newChats) => {
 
     if (current > prev) {
       lastSeenTimes.set(chat.id, current)
+      if (!onPulsar) continue
       const chatIsOpen = route.path === `/pulsar/chat/${chat.id}`
       if (!chatIsOpen) {
         const chatName = chat.name || chat.members.find((m: string) => m !== myEmail) || 'Chat'
