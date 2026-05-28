@@ -78,6 +78,61 @@ function getRepliedMessage(id: string | null) {
   return messagesById.value.get(id) ?? null
 }
 
+// ── Raggruppamento bolle consecutive ─────────────────────────────────────
+// Stesso mittente, entro 3 min, senza flag né reply-quote (entrambi
+// rompono il gruppo perché aggiungono contesto/pin che richiedono spazio).
+type GroupPos = 'single' | 'first' | 'middle' | 'last'
+const GROUP_THRESHOLD_MS = 3 * 60 * 1000
+
+function canAttachAbove(
+  curr: typeof messages.value[0] | undefined,
+  prev: typeof messages.value[0] | undefined,
+) {
+  if (!curr || !prev) return false
+  if (curr.from !== prev.from) return false
+  if (curr.createdAt.getTime() - prev.createdAt.getTime() >= GROUP_THRESHOLD_MS) return false
+  if (curr.flags.length > 0) return false
+  if (curr.replyToId) return false
+  return true
+}
+
+const groupedMessages = computed(() => {
+  const arr = messages.value
+  return arr.map((msg, i) => {
+    const mergesUp   = canAttachAbove(msg, arr[i - 1])
+    const mergesDown = canAttachAbove(arr[i + 1], msg)
+    let groupPos: GroupPos
+    if (!mergesUp && !mergesDown) groupPos = 'single'
+    else if (!mergesUp && mergesDown) groupPos = 'first'
+    else if (mergesUp && mergesDown) groupPos = 'middle'
+    else groupPos = 'last'
+    return { ...msg, groupPos }
+  })
+})
+
+// Aggrega i messaggi consecutivi in "gruppi" renderizzabili dentro un grid
+// container (così le bolle dello stesso gruppo condividono la larghezza più
+// ampia tramite grid-template-columns: max-content).
+type GroupedMessage = typeof groupedMessages.value[number]
+interface MessageGroup {
+  from: string
+  isMine: boolean
+  messages: GroupedMessage[]
+}
+const messageGroups = computed<MessageGroup[]>(() => {
+  const groups: MessageGroup[] = []
+  let current: MessageGroup | null = null
+  for (const msg of groupedMessages.value) {
+    if (!current || msg.groupPos === 'single' || msg.groupPos === 'first') {
+      current = { from: msg.from, isMine: msg.from === myEmail, messages: [msg] }
+      groups.push(current)
+    } else {
+      current.messages.push(msg)
+    }
+  }
+  return groups
+})
+
 // ── Input state ───────────────────────────────────────────────────────────
 const text          = ref('')
 const flags         = ref<string[]>([])
@@ -340,27 +395,44 @@ function renderText(t: string) {
       <div v-else-if="!messages.length" class="empty-msgs">Nessun messaggio. Apri la conversazione.</div>
 
       <div
-        v-for="msg in messages"
-        :key="msg.id"
-        class="msg-bubble-wrap"
-        :class="{
-          'is-mine': msg.from === myEmail,
-          'has-flags': msg.flags.length > 0,
-          'is-highlighted': highlightedMsgId === msg.id,
-        }"
-        :data-msg-id="msg.id"
+        v-for="group in messageGroups"
+        :key="group.messages[0].id"
+        class="msg-group"
+        :class="{ 'is-mine': group.isMine }"
       >
-        <StarAvatar v-if="msg.from !== myEmail" v-bind="starAvatarProps(msg.from, members)" :size="32" />
+        <!-- Avatar mostrato UNA VOLTA per gruppo (solo non-mine), bottom-aligned -->
+        <StarAvatar
+          v-if="!group.isMine"
+          v-bind="starAvatarProps(group.from, members)"
+          :size="32"
+          class="msg-group-avatar"
+        />
 
-        <div class="msg-content">
-          <div v-if="msg.from !== myEmail && chatDoc?.isGroup" class="msg-sender">{{ displayName(msg.from, members) }}</div>
+        <!-- Stack delle bolle del gruppo. È un GRID con grid-template-columns:
+             max-content così tutte le bolle del gruppo prendono la larghezza
+             della più ampia (uniformità visiva richiesta). -->
+        <div class="msg-group-stack">
+          <div
+            v-if="!group.isMine && chatDoc?.isGroup"
+            class="msg-sender"
+          >{{ displayName(group.from, members) }}</div>
 
-          <!-- Anchor: posizione i flag-pin relativamente alla bolla (non a msg-content)
-               così sender name sopra non sposta i pin -->
-          <div class="msg-bubble-anchor">
+          <div
+            v-for="msg in group.messages"
+            :key="msg.id"
+            class="msg-row"
+            :class="[
+              `gp-${msg.groupPos}`,
+              {
+                'is-mine': group.isMine,
+                'has-flags': msg.flags.length > 0,
+                'is-highlighted': highlightedMsgId === msg.id,
+              },
+            ]"
+            :data-msg-id="msg.id"
+          >
             <!-- Corner flag badges (outside bubble).
-                 Per i miei messaggi i pin sono solo indicatori di stato (non cliccabili):
-                 è l'altro membro a doverli risolvere. -->
+                 Per i miei messaggi i pin sono solo indicatori di stato (non cliccabili). -->
             <button
               v-if="msg.flags.includes('question')"
               class="flag-pin"
@@ -393,8 +465,14 @@ function renderText(t: string) {
               <MIcon name="check_circle" filled class="flag-pin-icon" />
             </button>
 
-            <div class="msg-bubble" :class="{ 'is-mine': msg.from === myEmail }">
-              <!-- Reply quote (stile WhatsApp): mostra il messaggio originale sopra il testo della risposta -->
+            <div
+              class="msg-bubble"
+              :class="[
+                `bubble-gp-${msg.groupPos}`,
+                { 'is-mine': group.isMine },
+              ]"
+            >
+              <!-- Reply quote (stile WhatsApp) -->
               <div
                 v-if="getRepliedMessage(msg.replyToId)"
                 class="reply-quote"
@@ -422,7 +500,8 @@ function renderText(t: string) {
             </div>
           </div>
 
-          <div class="msg-time">{{ formatTime(msg.createdAt) }}</div>
+          <!-- Orario: ultimo del gruppo -->
+          <div class="msg-time">{{ formatTime(group.messages[group.messages.length - 1].createdAt) }}</div>
         </div>
       </div>
     </div>
@@ -670,7 +749,7 @@ function renderText(t: string) {
   padding: 16px 16px 8px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  /* Spaziatura gestita da margin-top sulle wrap: 12px tra gruppi, 2px dentro al gruppo */
 }
 
 .loading-msgs { display: flex; flex-direction: column; gap: 10px; }
@@ -697,51 +776,77 @@ function renderText(t: string) {
   padding: 40px 0;
 }
 
-.msg-bubble-wrap {
+/* Outer wrapper di un gruppo di messaggi consecutivi (stesso mittente, ≤3 min).
+   Un "gruppo" può anche contenere una sola bolla (caso single). */
+.msg-group {
   display: flex;
   align-items: flex-end;
   gap: 8px;
+  margin-top: 12px;
 }
+.msg-group:first-child { margin-top: 0; }
+.msg-group.is-mine { flex-direction: row-reverse; }
 
-.msg-bubble-wrap.is-mine {
-  flex-direction: row-reverse;
+.msg-group-avatar { flex-shrink: 0; }
+
+/* Stack delle bolle del gruppo: GRID con UNA sola colonna max-content.
+   Tutte le bolle del gruppo prendono come larghezza il max-content della
+   più ampia → uniformità visiva. Capped a 75% del container chat. */
+.msg-group-stack {
+  display: grid;
+  grid-template-columns: minmax(0, max-content);
+  row-gap: 2px;
+  max-width: 75%;
+  min-width: 0;
 }
+.msg-group.is-mine .msg-group-stack { justify-items: end; }
 
-.msg-bubble-wrap.has-flags { padding-top: 16px; }
+/* Ogni bolla in un gruppo è una riga indipendente per ospitare i flag-pin
+   in absolute. has-flags aggiunge clearance superiore per il pin. */
+.msg-row {
+  position: relative;
+  width: 100%;
+}
+.msg-row.has-flags { margin-top: 16px; }
+/* La prima riga ha già spaziatura via .msg-group { margin-top }, non servono
+   altri offset. Per FIRST has-flags il margin-top:16px serve a separare il
+   pin dal gruppo precedente. */
 
-/* Highlight quando arrivi a un messaggio specifico da Pendenze */
-.msg-bubble-wrap.is-highlighted .msg-bubble {
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--md-sys-color-primary) 67%, transparent), var(--md-sys-elevation-level-1);
+/* Highlight quando arrivi a un messaggio specifico da Pendenze.
+   Niente elevation, solo il ring colorato. */
+.msg-row.is-highlighted .msg-bubble {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--md-sys-color-primary) 67%, transparent);
   transition: box-shadow var(--md-sys-motion-duration-medium2) var(--md-sys-motion-easing-standard);
 }
 
-.msg-avatar {
-  width: 30px;
-  height: 30px;
-  border-radius: var(--md-sys-shape-corner-full);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.msg-sender {
   font-size: 11px;
-  font-weight: 700;
-  flex-shrink: 0;
+  color: var(--md-sys-color-on-surface-variant);
+  font-weight: 600;
+  padding-left: 2px;
+  justify-self: start;
 }
+.msg-group.is-mine .msg-sender { justify-self: end; padding-left: 0; padding-right: 2px; }
 
-.msg-content { display: flex; flex-direction: column; gap: 2px; max-width: 75%; }
-
-.msg-sender { font-size: 11px; color: var(--md-sys-color-on-surface-variant); font-weight: 600; padding-left: 2px; }
-
-/* Wrapper che ancora i flag-pin alla bolla (così sender name sopra non li sposta) */
-.msg-bubble-anchor { position: relative; }
-
-/* Bolla messaggi altrui: surface su page-bg beige */
+/* Bolla messaggi altrui: surface su page-bg beige.
+   Border-radius default = SINGLE (tail BL=4); le varianti gruppo sotto
+   sovrascrivono in base a bubble-gp-{first|middle|last}. */
 .msg-bubble {
   background: var(--md-sys-color-surface);
   border: 1px solid var(--md-sys-color-outline-variant);
   border-radius: 16px 16px 16px 4px;
   padding: 10px 14px;
-  box-shadow: var(--md-sys-elevation-level-1);
+  /* Ombre rimosse per look più piatto/coerente */
 }
+
+/* Raggruppamento (altri, lato sinistro):
+   gli angoli interni (toccano un'altra bolla dello stesso gruppo) → 4px.
+   - first:  top esterno (TL/TR rotondi), bottom interno (BL/BR appiattiti)
+   - middle: tutti gli angoli interni
+   - last:   top interno, bottom esterno (BL/BR rotondi, niente tail) */
+.msg-bubble.bubble-gp-first  { border-radius: 16px 16px  4px  4px; }
+.msg-bubble.bubble-gp-middle { border-radius:  4px  4px  4px  4px; }
+.msg-bubble.bubble-gp-last   { border-radius:  4px  4px 16px 16px; }
 
 /* Reply quote stile WhatsApp dentro la bolla */
 .reply-quote {
@@ -779,6 +884,13 @@ function renderText(t: string) {
   border-radius: 16px 16px 4px 16px;
   color: var(--md-sys-color-on-primary);
 }
+/* Raggruppamento (mie, lato destro):
+   - first:  bottom interno (BL/BR appiattiti)
+   - middle: tutti appiattiti
+   - last:   top interno (TL/TR appiattiti), bottom esterno rotondo */
+.msg-bubble.is-mine.bubble-gp-first  { border-radius: 16px 16px  4px  4px; }
+.msg-bubble.is-mine.bubble-gp-middle { border-radius:  4px  4px  4px  4px; }
+.msg-bubble.is-mine.bubble-gp-last   { border-radius:  4px  4px 16px 16px; }
 .msg-bubble.is-mine .msg-text { color: var(--md-sys-color-on-primary); }
 /* Reply quote dentro bolla propria: vetro chiaro su teal */
 .msg-bubble.is-mine .reply-quote {
@@ -820,8 +932,8 @@ function renderText(t: string) {
 .flag-pin--second { left: 18px; }
 
 /* Messaggi di altri: pin a destra (angolo interno rispetto alla chat) */
-.msg-bubble-wrap:not(.is-mine) .flag-pin { left: auto; right: -14px; }
-.msg-bubble-wrap:not(.is-mine) .flag-pin--second { left: auto; right: 18px; }
+.msg-row:not(.is-mine) .flag-pin { left: auto; right: -14px; }
+.msg-row:not(.is-mine) .flag-pin--second { left: auto; right: 18px; }
 
 .flag-pin:hover:not(:disabled):not(.flag-pin--done) { transform: scale(1.15); }
 
@@ -891,7 +1003,14 @@ function renderText(t: string) {
   font-family: 'Outfit', sans-serif;
 }
 
-.msg-time { font-size: 10px; color: var(--md-sys-color-on-surface-variant); padding-left: 2px; }
+.msg-time {
+  font-size: 10px;
+  color: var(--md-sys-color-on-surface-variant);
+  padding-left: 2px;
+  justify-self: start;
+  margin-top: 2px;
+}
+.msg-group.is-mine .msg-time { justify-self: end; padding-left: 0; padding-right: 2px; }
 
 /* @mention popup */
 .mention-popup {
