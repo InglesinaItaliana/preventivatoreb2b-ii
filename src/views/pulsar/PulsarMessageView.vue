@@ -417,6 +417,11 @@ function renderText(t: string) {
   <div class="mv">
     <!-- Header chat -->
     <header v-if="chatDoc" class="chat-header">
+      <button
+        class="chat-back-btn"
+        aria-label="Torna alle chat"
+        @click="router.push('/pulsar')"
+      ><MIcon name="arrow_back" :size="22" /></button>
       <StarAvatar v-if="!chatDoc.isGroup" v-bind="starAvatarProps(otherMember, members)" :size="40" />
       <div v-else class="chat-header-avatar" :style="{ background: chatAvatarBg }">
         {{ chatAvatarInitial }}
@@ -778,6 +783,26 @@ function renderText(t: string) {
   font-size: 14px;
   flex-shrink: 0;
 }
+/* Back button: torna alle chat (sostituisce la bottom-nav nascosta in chat).
+   Stesso pattern usato sui modal-close (icona ghost senza bg). */
+.chat-back-btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--md-sys-color-on-surface);
+  cursor: pointer;
+  padding: 0;
+  margin-left: -8px;
+  border-radius: var(--md-sys-shape-corner-full);
+  flex-shrink: 0;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.15s;
+}
+.chat-back-btn:active { background: color-mix(in srgb, var(--md-sys-color-primary) 12%, transparent); }
 .chat-header-info { flex: 1; min-width: 0; }
 .chat-header-name {
   font-size: 14px;
@@ -802,6 +827,9 @@ function renderText(t: string) {
   padding: 16px 16px 8px;
   display: flex;
   flex-direction: column;
+  /* min-height: 0 essenziale su iOS: senza, il flex child cresce all'altezza
+     naturale del contenuto e spinge l'input-area fuori viewport. */
+  min-height: 0;
   /* Spaziatura gestita da margin-top sulle wrap: 12px tra gruppi, 2px dentro al gruppo */
 }
 
@@ -1180,7 +1208,10 @@ function renderText(t: string) {
 .input-area {
   background: var(--md-sys-color-surface);
   border-top: 1px solid var(--md-sys-color-outline-variant);
-  padding: 10px 14px 12px;
+  /* padding-bottom = 12px standard + safe-area iPhone così l'input arriva
+     al bordo dello schermo senza lasciare zone beige sotto, ma il
+     contenuto interno resta sopra la home indicator. */
+  padding: 10px 14px calc(12px + env(safe-area-inset-bottom));
   display: flex;
   align-items: center;
   gap: 8px;

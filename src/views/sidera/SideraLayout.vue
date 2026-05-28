@@ -705,7 +705,11 @@ const roleLabel: Record<string, string> = {
   font-family: 'Outfit', sans-serif;
   background: var(--s-bg);
   color: var(--s-text);
+  /* 100dvh = dynamic viewport height: su iOS PWA si adatta correttamente
+     alla home indicator senza lasciare barre vuote che 100vh provoca.
+     Fallback a 100vh per browser senza supporto dvh. */
   height: 100vh;
+  height: 100dvh;
   display: flex;
   overflow: hidden;
 }
@@ -957,6 +961,10 @@ const roleLabel: Record<string, string> = {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  /* min-height: 0 per consentire ai children flex di restringersi sotto
+     l'altezza naturale del contenuto (essenziale su iOS dove il flex
+     altrimenti deborda fuori viewport, lasciando sezioni tagliate). */
+  min-height: 0;
   position: relative;  /* permette posizionamento absolute del bottom-nav contextual */
 }
 
@@ -965,6 +973,7 @@ const roleLabel: Record<string, string> = {
   overflow: hidden;
   display: flex;
   flex-direction: column;
+  min-height: 0;
 }
 
 /* ─── Mobile-layout adattivo ─── */
@@ -987,12 +996,14 @@ const roleLabel: Record<string, string> = {
   padding-bottom: calc(110px + env(safe-area-inset-bottom));
   box-sizing: border-box;
 }
-/* Fullscreen view (es. PULSAR chat aperta): la bottom-nav è nascosta, quindi
-   il padding-bottom riservato sul main child va azzerato — altrimenti
-   resterebbe una fascia vuota tra la barra di input messaggio e il bordo
-   inferiore dello schermo. Lascio solo il safe-area inset (notch iPhone). */
+/* Fullscreen view (es. PULSAR chat aperta): niente padding-bottom sul main
+   child (era stato aggiunto per riservare spazio alla bottom-nav che qui
+   è nascosta). La safe-area inset per la home indicator iPhone va gestita
+   DENTRO l'elemento ancorato in basso (es. .input-area della chat) così
+   il suo background si estende fino al bordo dello schermo invece di
+   lasciare una fascia beige sotto. */
 .s-shell.s-fullscreen-view.s-mobile-layout .s-main > * {
-  padding-bottom: env(safe-area-inset-bottom);
+  padding-bottom: 0;
 }
 
 /* Fallback graceful per viewport ≤ 768px su scope='sidera' (no module chrome): nasconde

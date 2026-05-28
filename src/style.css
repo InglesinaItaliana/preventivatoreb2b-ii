@@ -7,6 +7,16 @@ body {
   font-family: 'Open Sans', sans-serif;
 }
 
+/* iOS PWA: blocca lo scroll del documento e il rubber-band. Senza questo,
+   trascinando in alto/basso si rivela una zona bianca (body bg) sotto il
+   layout app, e iOS PWA standalone mostra "barre vuote" al pull. La shell
+   (.s-shell) gestisce internamente lo scroll dei suoi sub-container. */
+html, body {
+  overscroll-behavior: none;
+  height: 100%;
+  overflow: hidden;
+}
+
 /* Aggiungi in fondo al file css */
 @keyframes slideIn {
     from { transform: translateX(100%); }
