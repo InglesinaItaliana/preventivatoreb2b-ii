@@ -358,6 +358,26 @@ function removeLink() {
   showLinkModal.value = false
 }
 
+// ── iOS PWA: preserve scroll on checkbox toggle ────────────────────────────
+// TipTap TaskItem.change handler chiama editor.chain().focus(..., { scrollIntoView:false }).
+// scrollIntoView:false blocca lo scroll INTERNO di ProseMirror, ma il focus()
+// programmatico sul contenteditable fa scrollare iOS Safari al caret (posizione 0
+// se l'utente non ha mai cliccato dentro il doc) → la view salta in cima.
+// Workaround: cattura scrollTop di .nd-root al change della checkbox e
+// ripristinalo in due RAF (focus-scroll iOS arriva dopo la prima paint).
+const ndRootRef = ref<HTMLElement | null>(null)
+function preserveScrollOnCheckbox(e: Event) {
+  const t = e.target as HTMLElement | null
+  if (!(t instanceof HTMLInputElement) || t.type !== 'checkbox') return
+  const root = ndRootRef.value
+  if (!root) return
+  const saved = root.scrollTop
+  requestAnimationFrame(() => {
+    root.scrollTop = saved
+    requestAnimationFrame(() => { root.scrollTop = saved })
+  })
+}
+
 // ── Cmd+S manual save ───────────────────────────────────────────────────────
 function onKeyDown(e: KeyboardEvent) {
   if ((e.metaKey || e.ctrlKey) && e.key === 's') {
@@ -384,7 +404,7 @@ void editorRef
 </script>
 
 <template>
-  <div class="nd-root">
+  <div class="nd-root" ref="ndRootRef" @change.capture="preserveScrollOnCheckbox">
     <!-- Loading -->
     <div v-if="loading" class="nd-loading">
       <MaterialIcon name="hourglass_top" :size="36" color="#C46030" />
