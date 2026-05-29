@@ -540,7 +540,7 @@ function renderText(t: string) {
                 : (msg.answeredAt ? 'Risposta inviata' : 'Clicca per rispondere')"
               @click.stop="msg.from !== myEmail && !msg.answeredAt && startReply(msg)"
             >
-              <MIcon name="help" filled class="flag-pin-icon" />
+              <MIcon name="question_mark" filled class="flag-pin-icon" />
             </button>
             <button
               v-if="msg.flags.includes('task')"
@@ -561,7 +561,7 @@ function renderText(t: string) {
               @click.stop="msg.from !== myEmail && !msg.taskId && !msg.rejectedAt && openTaskModal(msg)"
             >
               <MIcon
-                :name="msg.rejectedAt ? 'block' : 'check_circle'"
+                :name="msg.rejectedAt ? 'block' : 'check'"
                 filled
                 class="flag-pin-icon"
               />
@@ -687,13 +687,13 @@ function renderText(t: string) {
           :class="{ 'is-active': flags.includes('question') }"
           title="Domanda"
           @click="toggleFlag('question')"
-        ><MIcon name="help" :filled="flags.includes('question')" class="pill-icon" /></button>
+        ><MIcon name="question_mark" :filled="flags.includes('question')" class="pill-icon" /></button>
         <button
           class="pill"
           :class="{ 'is-active': flags.includes('task') }"
           title="Azione"
           @click="toggleFlag('task')"
-        ><MIcon name="check_circle" :filled="flags.includes('task')" class="pill-icon" /></button>
+        ><MIcon name="check" :filled="flags.includes('task')" class="pill-icon" /></button>
         <button
           class="pill"
           :class="{ 'is-active': hashtagPicker }"
@@ -1071,15 +1071,14 @@ function renderText(t: string) {
   display: flex;
   align-items: center;
   justify-content: center;
-  /* Solo icona colorata, niente cerchio bianco. drop-shadow morbido come
-     halo per leggibilità sopra le bolle. */
+  /* Solo glifo solido colorato (question_mark / check / block): nessun
+     cerchio, nessun cutout, nessun halo. */
   background: none;
   border: none;
   cursor: pointer;
   transition: transform 0.15s, opacity 0.15s;
   z-index: 2;
   padding: 0;
-  filter: drop-shadow(0 0 1.5px var(--page-bg)) drop-shadow(0 0 1.5px var(--page-bg));
 }
 
 .flag-pin--second { left: 18px; }
