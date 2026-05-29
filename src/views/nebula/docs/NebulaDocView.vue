@@ -938,6 +938,10 @@ void editorRef
   top: 0;
   z-index: 5;
   flex-wrap: wrap;
+  /* Su desktop la toolbar non deve estendersi oltre i pulsanti: senza
+     fit-content la superficie surface continua bianca per cm a destra. */
+  width: fit-content;
+  max-width: 100%;
 }
 .nd-toolbar button {
   background: transparent;
