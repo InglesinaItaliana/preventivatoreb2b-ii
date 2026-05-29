@@ -541,6 +541,19 @@ void editorRef
 
       <!-- Toolbar TipTap (solo se canWrite) -->
       <div v-if="canWrite && editor" class="nd-toolbar">
+        <button type="button"
+          :disabled="!editor.can().undo()"
+          @click="tb(() => editor!.chain().focus().undo().run())()"
+          title="Annulla (Cmd/Ctrl+Z)">
+          <MaterialIcon name="undo" :size="16" />
+        </button>
+        <button type="button"
+          :disabled="!editor.can().redo()"
+          @click="tb(() => editor!.chain().focus().redo().run())()"
+          title="Ripristina (Cmd/Ctrl+Shift+Z)">
+          <MaterialIcon name="redo" :size="16" />
+        </button>
+        <span class="tb-sep"></span>
         <button type="button" :class="{ 'tb-active': editor.isActive('heading', { level: 1 }) }"
           @click="tb(() => editor!.chain().focus().toggleHeading({ level: 1 }).run())()"
           title="Heading 1"><b>H1</b></button>
@@ -943,8 +956,9 @@ void editorRef
   height: 30px;
   transition: background 100ms ease, color 100ms ease;
 }
-.nd-toolbar button:hover { background: rgba(196, 96, 48, 0.08); color: #C46030; }
+.nd-toolbar button:hover:not(:disabled) { background: rgba(196, 96, 48, 0.08); color: #C46030; }
 .nd-toolbar button.tb-active { background: rgba(196, 96, 48, 0.15); color: #C46030; }
+.nd-toolbar button:disabled { opacity: 0.35; cursor: not-allowed; }
 .nd-toolbar .tb-sep { width: 1px; height: 22px; background: rgba(0,0,0,0.08); margin: 0 4px; }
 
 /* Editor content */
