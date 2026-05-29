@@ -1064,21 +1064,24 @@ function renderText(t: string) {
    degli altri a destra (sempre angolo interno verso il centro della chat). */
 .flag-pin {
   position: absolute;
-  top: -14px;
-  left: -14px;
-  width: 28px;
-  height: 28px;
+  top: -15px;
+  left: -15px;
+  width: 30px;
+  height: 30px;
   display: flex;
   align-items: center;
   justify-content: center;
-  /* Solo glifo solido colorato (question_mark / check / block): nessun
-     cerchio, nessun cutout, nessun halo. */
-  background: none;
+  /* Bg circolare surface (come "prima"): l'icona colorata stacca dalle
+     bolle. Niente halo perché i glifi (question_mark/check/block) sono
+     pieni senza cutout. */
+  background: var(--md-sys-color-surface);
+  border-radius: 50%;
   border: none;
   cursor: pointer;
   transition: transform 0.15s, opacity 0.15s;
   z-index: 2;
   padding: 0;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.10);
 }
 
 .flag-pin--second { left: 18px; }
@@ -1095,7 +1098,7 @@ function renderText(t: string) {
 .flag-pin:disabled { cursor: default; opacity: 0.85; }
 .flag-pin--readonly { cursor: default; }
 
-.flag-pin-icon { font-size: 27px; color: inherit; flex-shrink: 0; line-height: 1; }
+.flag-pin-icon { font-size: 22px; color: inherit; flex-shrink: 0; line-height: 1; }
 
 /* Reply bar */
 .reply-bar {
@@ -1305,7 +1308,10 @@ function renderText(t: string) {
 
 .input-area {
   background: transparent;
-  padding: 10px 14px calc(12px + env(safe-area-inset-bottom));
+  /* padding-bottom maggiorato: la barra non deve toccare il bordo schermo
+     (sotto la safe-area iPhone resta comunque clearance per la home indicator
+     o per il chrome browser su Android). */
+  padding: 10px 14px calc(22px + env(safe-area-inset-bottom));
   display: flex;
   align-items: center;
   gap: 8px;
