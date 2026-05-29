@@ -1071,13 +1071,16 @@ function renderText(t: string) {
   display: flex;
   align-items: center;
   justify-content: center;
-  background: none;
+  /* Bg circolare surface così l'icona stacca dalla bolla (prima trasparente,
+     basata solo su drop-shadow → poco leggibile sulle bolle teal). */
+  background: var(--md-sys-color-surface);
+  border-radius: 50%;
   border: none;
   cursor: pointer;
   transition: transform 0.15s, opacity 0.15s;
   z-index: 2;
   padding: 0;
-  filter: drop-shadow(0 0 1.5px var(--page-bg)) drop-shadow(0 0 1.5px var(--page-bg));
+  box-shadow: 0 1px 3px rgba(0,0,0,0.12);
 }
 
 .flag-pin--second { left: 18px; }
@@ -1094,7 +1097,7 @@ function renderText(t: string) {
 .flag-pin:disabled { cursor: default; opacity: 0.85; }
 .flag-pin--readonly { cursor: default; }
 
-.flag-pin-icon { font-size: 28px; color: inherit; flex-shrink: 0; line-height: 1; }
+.flag-pin-icon { font-size: 18px; color: inherit; flex-shrink: 0; line-height: 1; }
 
 /* Reply bar */
 .reply-bar {
