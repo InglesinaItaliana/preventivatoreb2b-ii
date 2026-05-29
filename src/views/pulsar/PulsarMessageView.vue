@@ -1071,30 +1071,29 @@ function renderText(t: string) {
   display: flex;
   align-items: center;
   justify-content: center;
-  /* Bg circolare surface (come "prima"): l'icona colorata stacca dalle
-     bolle. Niente halo perché i glifi (question_mark/check/block) sono
-     pieni senza cutout. */
+  /* Pallino pieno colorato (variante --q/--t/--done sotto), icona bianca
+     dentro. Niente ombra, niente trasparenza. */
   background: var(--md-sys-color-surface);
+  color: #fff;
   border-radius: 50%;
   border: none;
   cursor: pointer;
   transition: transform 0.15s, opacity 0.15s;
   z-index: 2;
   padding: 0;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.10);
 }
 
 .flag-pin--second { left: 18px; }
 
 /* Messaggi di altri: pin a destra (angolo interno rispetto alla chat) */
-.msg-row:not(.is-mine) .flag-pin { left: auto; right: -14px; }
+.msg-row:not(.is-mine) .flag-pin { left: auto; right: -15px; }
 .msg-row:not(.is-mine) .flag-pin--second { left: auto; right: 18px; }
 
 .flag-pin:hover:not(:disabled):not(.flag-pin--done) { transform: scale(1.15); }
 
-.flag-pin--q    { color: #F59E0B; }
-.flag-pin--t    { color: #10B981; }
-.flag-pin--done { color: #B4B0AA; cursor: default; }
+.flag-pin--q    { background: #F59E0B; }
+.flag-pin--t    { background: #10B981; }
+.flag-pin--done { background: #B4B0AA; cursor: default; }
 .flag-pin:disabled { cursor: default; opacity: 0.85; }
 .flag-pin--readonly { cursor: default; }
 
