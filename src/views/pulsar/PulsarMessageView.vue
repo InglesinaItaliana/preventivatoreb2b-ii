@@ -1201,10 +1201,12 @@ function renderText(t: string) {
   font-size: 11px; font-weight: 700; flex-shrink: 0;
 }
 
-/* Hashtag picker */
+/* Hashtag picker: trasparente come la barra di scrittura. Il campo di
+   ricerca (.tag-search) e i chip (.tag-option/.sel-tag) restano "bolle"
+   con il proprio bg, ma il container è trasparente così i messaggi
+   sono visibili negli spazi attorno. */
 .tag-picker {
-  background: var(--md-sys-color-surface);
-  border-top: 1px solid var(--md-sys-color-outline-variant);
+  background: transparent;
   padding: 12px 16px;
   max-height: 220px;
   overflow-y: auto;
@@ -1293,20 +1295,19 @@ function renderText(t: string) {
   background: transparent;
   padding: 10px 14px calc(12px + env(safe-area-inset-bottom));
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 8px;
 }
 
 .pills { display: flex; gap: 4px; flex-shrink: 0; }
 
-/* Bollini fluttuanti: nessun bg/bordo a riposo, solo l'icona "galleggia"
-   sul page bg. Hit-area circolare per il tap (36px) ma invisibile finché
-   non c'è interazione. Active = icona primary. */
+/* Pillole circolari con bg surface-container: icone identificabili sopra il
+   page bg, ma niente riquadro esterno che le racchiude. Active = primary tint. */
 .pill {
   width: 36px; height: 36px;
   border-radius: var(--md-sys-shape-corner-full);
   border: 0;
-  background: transparent;
+  background: var(--md-sys-color-surface-container);
   cursor: pointer;
   font-size: 14px;
   display: flex; align-items: center; justify-content: center;
@@ -1316,27 +1317,26 @@ function renderText(t: string) {
 }
 
 @media (hover: hover) {
-  .pill:hover { background: color-mix(in srgb, var(--md-sys-color-primary) 10%, transparent); }
+  .pill:hover { background: color-mix(in srgb, var(--md-sys-color-primary) 14%, var(--md-sys-color-surface-container)); }
 }
-.pill:active { background: color-mix(in srgb, var(--md-sys-color-primary) 14%, transparent); }
+.pill:active { background: color-mix(in srgb, var(--md-sys-color-primary) 22%, var(--md-sys-color-surface-container)); }
+.pill.is-active { background: color-mix(in srgb, var(--md-sys-color-primary) 18%, var(--md-sys-color-surface-container)); }
 
-.pill-icon { font-size: 22px; color: var(--md-sys-color-on-surface-variant); flex-shrink: 0; }
+.pill-icon { font-size: 20px; color: var(--md-sys-color-on-surface-variant); flex-shrink: 0; }
 .pill.is-active .pill-icon { color: var(--md-sys-color-primary); }
 
 .input-wrap {
   flex: 1;
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 8px;
   background: var(--md-sys-color-surface-container);
-  border: 1.5px solid var(--md-sys-color-outline-variant);
+  /* No border: il pill-shape è dato dal border-radius + bg. */
+  border: 0;
   border-radius: 20px;
   padding: 6px 6px 6px 14px;
-  transition: border-color 0.15s;
   -webkit-tap-highlight-color: transparent;
 }
-
-.input-wrap:focus-within { border-color: color-mix(in srgb, var(--md-sys-color-primary) 50%, transparent); }
 
 .msg-input {
   flex: 1;
