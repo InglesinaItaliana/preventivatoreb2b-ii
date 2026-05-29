@@ -71,6 +71,7 @@ export class FirestoreYjsProvider {
     db: Firestore,
     docId: string,
     ydoc: Y.Doc,
+    awareness: Awareness,
     user: ProviderUser,
     onStatus?: (s: ProviderStatus) => void,
   ) {
@@ -79,7 +80,9 @@ export class FirestoreYjsProvider {
     this.ydoc = ydoc
     this.user = user
     this.onStatus = onStatus
-    this.awareness = new Awareness(ydoc)
+    // L'Awareness è creato esternamente (useCollabDoc) così l'editor può
+    // montarsi con CollaborationCaret prima che il provider si connetta.
+    this.awareness = awareness
     this.awareness.setLocalStateField('user', {
       name: user.displayName,
       color: user.color,
@@ -225,8 +228,9 @@ export class FirestoreYjsProvider {
     if (typeof window !== 'undefined') window.removeEventListener('beforeunload', this.onUnload)
     this.unsubs.forEach((u) => u())
     this.unsubs = []
+    // L'Awareness è di proprietà di useCollabDoc: rimuoviamo solo il nostro
+    // stato locale (gli altri client ci vedranno sparire), non la distruggiamo.
     removeAwarenessStates(this.awareness, [this.ydoc.clientID], 'local')
-    this.awareness.destroy()
     await deleteDoc(this.awarenessRef).catch(() => {})
   }
 

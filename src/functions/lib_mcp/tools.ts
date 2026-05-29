@@ -42,6 +42,40 @@ function canWrite(acl: NebulaDocAcl, userEmail: string): boolean {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Fase 6 (Yjs/CRDT) — le scritture MCP applicano al Y.Doc, non a `content`.
+// Lazy-require del bundle yjs: tools.ts è caricato al cold-start di TUTTE le
+// functions (import top-level in index.ts), quindi NON importarlo in cima.
+// ─────────────────────────────────────────────────────────────────────────────
+type YdocLib = typeof import('../lib_yjs/ydoc');
+let _mcpYdoc: YdocLib | null = null;
+function mcpYdoc(): YdocLib {
+    return _mcpYdoc ?? (_mcpYdoc = require('../lib_yjs/ydoc') as YdocLib);
+}
+const MCP_SERVER_CLIENT_ID = 0;
+function mcpToU8(v: unknown): Uint8Array {
+    if (v instanceof Uint8Array) return v;
+    const b = v as { toUint8Array?: () => Uint8Array };
+    return typeof b?.toUint8Array === 'function' ? b.toUint8Array() : new Uint8Array(0);
+}
+
+/** Contenuto LIVE dal Y.Doc (state+deltas) per basare le edit MCP su ciò che
+ *  gli utenti stanno scrivendo, non sulla proiezione `content` (può essere
+ *  stale di qualche minuto). Fallback alla proiezione se non inizializzato. */
+async function liveDocJSON(docId: string, curData: { content?: PMNode; ydocInitialized?: boolean; ydocState?: unknown }): Promise<PMNode> {
+    if (curData.ydocInitialized !== true) {
+        return (curData.content as PMNode) ?? { type: 'doc', content: [] };
+    }
+    const { buildYDoc, ydocToJSON } = mcpYdoc();
+    const ref = admin.firestore().collection('nebulaDocs').doc(docId);
+    const updates = await ref.collection('yupdates').orderBy('createdAt', 'asc').get();
+    const ydoc = buildYDoc(
+        curData.ydocState ? mcpToU8(curData.ydocState) : null,
+        updates.docs.map((d) => mcpToU8((d.data() as { data: unknown }).data)),
+    );
+    return ydocToJSON(ydoc) as PMNode;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // SAVE CORE (riusato da createDoc, appendBlock, replaceSection, linkTask, linkProject)
 // Riproduce la logica di saveDoc callable ma diretta lato server (no Bearer auth,
 // userEmail viene da MCP context). Mantiene LWW + history snapshot trigger='mcp'.
@@ -65,18 +99,16 @@ async function saveDocCore(input: SaveCoreInput, userEmail: string): Promise<Sav
     const db = admin.firestore();
     const now = admin.firestore.FieldValue.serverTimestamp();
 
-    // CREATE
+    const { seedYDocFromJSON, buildYDoc, applyJSONToYDoc, ydocToJSON, encodeState, encodeStateVector } = mcpYdoc();
+
+    // CREATE — crea doc + seed del Y.Doc (subito collaborativo).
     if (!input.docId) {
         const newRef = db.collection('nebulaDocs').doc();
         const title = input.title ?? 'Nuovo documento';
         const content = input.content ?? { type: 'doc', content: [] };
         const contentText = extractText(content).slice(0, 10_000);
-        const acl: NebulaDocAcl = {
-            visibility: 'private',
-            readers: [],
-            writers: [],
-            owners: [userEmail],
-        };
+        const seedDoc = seedYDocFromJSON(content as never);
+        const acl: NebulaDocAcl = { visibility: 'private', readers: [], writers: [], owners: [userEmail] };
         await newRef.set({
             title,
             icon: null,
@@ -94,6 +126,11 @@ async function saveDocCore(input: SaveCoreInput, userEmail: string): Promise<Sav
             updatedAt: now,
             updatedBy: userEmail,
             acl,
+            // Fase 6: Y.Doc già inizializzato (niente migrazione lazy alla 1ª apertura).
+            ydocState: Buffer.from(encodeState(seedDoc)),
+            ydocStateVector: Buffer.from(encodeStateVector(seedDoc)),
+            ydocInitialized: true,
+            ydocSeq: 0,
         });
         await newRef.collection('history').add({
             revision: 1, title, content, savedAt: now, savedBy: userEmail, trigger: 'mcp',
@@ -101,34 +138,60 @@ async function saveDocCore(input: SaveCoreInput, userEmail: string): Promise<Sav
         return { docId: newRef.id, revision: 1, title };
     }
 
-    // UPDATE
+    // UPDATE — applica la modifica al Y.Doc (niente più LWW; CRDT converge).
     const ref = db.collection('nebulaDocs').doc(input.docId);
     const snap = await ref.get();
     if (!snap.exists) throw new Error(`Documento ${input.docId} non trovato`);
-    const current = snap.data() as { acl: NebulaDocAcl; revision: number; title: string };
+    const current = snap.data() as {
+        acl: NebulaDocAcl; revision: number; title: string;
+        content?: PMNode; ydocInitialized?: boolean; ydocState?: unknown;
+    };
 
     if (!canWrite(current.acl, userEmail)) {
         throw new Error('Permesso di scrittura negato sul documento');
     }
-    const baseRev = input.baseRevision ?? current.revision;
-    if (baseRev !== current.revision) {
-        throw new Error(`Conflitto revisione (corrente ${current.revision}, ricevuta ${baseRev})`);
+
+    // Costruisci il Y.Doc live (seed se mai inizializzato).
+    let ydoc;
+    if (current.ydocInitialized === true) {
+        const updates = await ref.collection('yupdates').orderBy('createdAt', 'asc').get();
+        ydoc = buildYDoc(
+            current.ydocState ? mcpToU8(current.ydocState) : null,
+            updates.docs.map((d) => mcpToU8((d.data() as { data: unknown }).data)),
+        );
+    } else {
+        ydoc = seedYDocFromJSON((current.content as never) ?? { type: 'doc', content: [] });
     }
 
-    const nextRev = current.revision + 1;
+    // Applica il nuovo contenuto (se fornito) come diff e appendi un delta:
+    // i client connessi lo ricevono live.
+    if (input.content !== undefined) {
+        const diff = applyJSONToYDoc(ydoc, input.content as never);
+        await ref.collection('yupdates').add({
+            data: Buffer.from(diff),
+            seq: 0,
+            author: userEmail,
+            clientId: MCP_SERVER_CLIENT_ID,
+            origin: 'mcp',
+            createdAt: now,
+        });
+    }
+
+    const json = ydocToJSON(ydoc) as PMNode;
+    const nextRev = (current.revision ?? 0) + 1;
+    let nextTitle = current.title;
     const update: Record<string, unknown> = {
         revision: nextRev,
         updatedAt: now,
         updatedBy: userEmail,
+        // Proiezione immediata (search/getDoc/refs freschi) + ydocState rebase.
+        content: json,
+        contentText: extractText(json).slice(0, 10_000),
+        ydocState: Buffer.from(encodeState(ydoc)),
+        ydocStateVector: Buffer.from(encodeStateVector(ydoc)),
+        ydocInitialized: true,
     };
-    let nextTitle = current.title;
-    let nextContent: PMNode | undefined;
     if (input.title !== undefined) { update.title = input.title; nextTitle = input.title; }
-    if (input.content !== undefined) {
-        update.content = input.content;
-        update.contentText = extractText(input.content).slice(0, 10_000);
-        nextContent = input.content;
-    }
     if (input.parentId !== undefined) update.parentId = input.parentId;
 
     await ref.update(update);
@@ -137,7 +200,7 @@ async function saveDocCore(input: SaveCoreInput, userEmail: string): Promise<Sav
     await ref.collection('history').add({
         revision: nextRev,
         title: nextTitle,
-        content: nextContent ?? (snap.data() as { content?: PMNode }).content,
+        content: json,
         savedAt: now,
         savedBy: userEmail,
         trigger: 'mcp',
@@ -333,15 +396,16 @@ export async function appendBlock(args: { docId: string; markdown: string }, ctx
     const db = admin.firestore();
     const snap = await db.collection('nebulaDocs').doc(args.docId).get();
     if (!snap.exists) throw new Error(`Documento ${args.docId} non trovato`);
-    const current = snap.data() as { content: PMNode; revision: number; title: string; acl: NebulaDocAcl };
+    const current = snap.data() as { content?: PMNode; revision: number; title: string; acl: NebulaDocAcl; ydocInitialized?: boolean; ydocState?: unknown };
 
     if (!canWrite(current.acl, ctx.userEmail)) throw new Error('Permesso di scrittura negato');
 
+    const baseJson = await liveDocJSON(args.docId, current);
     const newBlocks = markdownToProseMirror(args.markdown);
     const merged: PMNode = {
         type: 'doc',
         content: [
-            ...(current.content?.content ?? []),
+            ...(baseJson.content ?? []),
             ...(newBlocks.content ?? []),
         ],
     };
@@ -349,7 +413,6 @@ export async function appendBlock(args: { docId: string; markdown: string }, ctx
     const out = await saveDocCore({
         docId: args.docId,
         content: merged,
-        baseRevision: current.revision,
     }, ctx.userEmail);
 
     return { text: `Blocchi aggiunti a **${out.title}** (rev ${out.revision}).` };
@@ -370,12 +433,13 @@ export async function replaceSection(
     const db = admin.firestore();
     const snap = await db.collection('nebulaDocs').doc(args.docId).get();
     if (!snap.exists) throw new Error(`Documento ${args.docId} non trovato`);
-    const current = snap.data() as { content: PMNode; revision: number; title: string; acl: NebulaDocAcl };
+    const current = snap.data() as { content?: PMNode; revision: number; title: string; acl: NebulaDocAcl; ydocInitialized?: boolean; ydocState?: unknown };
 
     if (!canWrite(current.acl, ctx.userEmail)) throw new Error('Permesso di scrittura negato');
 
+    const baseJson = await liveDocJSON(args.docId, current);
     const anchor = args.sectionAnchor.toLowerCase().trim();
-    const blocks = current.content?.content ?? [];
+    const blocks = baseJson.content ?? [];
 
     // Trova heading che match
     let startIdx = -1;
@@ -423,7 +487,6 @@ export async function replaceSection(
     const out = await saveDocCore({
         docId: args.docId,
         content: merged,
-        baseRevision: current.revision,
     }, ctx.userEmail);
 
     return { text: `Sezione "${args.sectionAnchor}" sostituita in **${out.title}** (rev ${out.revision}).` };
@@ -443,10 +506,11 @@ export async function linkTask(
     const db = admin.firestore();
     const snap = await db.collection('nebulaDocs').doc(args.docId).get();
     if (!snap.exists) throw new Error(`Documento ${args.docId} non trovato`);
-    const current = snap.data() as { content: PMNode; revision: number; title: string; acl: NebulaDocAcl };
+    const current = snap.data() as { content?: PMNode; revision: number; title: string; acl: NebulaDocAcl; ydocInitialized?: boolean; ydocState?: unknown };
 
     if (!canWrite(current.acl, ctx.userEmail)) throw new Error('Permesso di scrittura negato');
 
+    const baseJson = await liveDocJSON(args.docId, current);
     const taskParagraph: PMNode = {
         type: 'paragraph',
         content: [
@@ -458,13 +522,13 @@ export async function linkTask(
     const merged: PMNode = {
         type: 'doc',
         content: [
-            ...(current.content?.content ?? []),
+            ...(baseJson.content ?? []),
             taskParagraph,
         ],
     };
 
     const out = await saveDocCore({
-        docId: args.docId, content: merged, baseRevision: current.revision,
+        docId: args.docId, content: merged,
     }, ctx.userEmail);
 
     return { text: `Task \`${args.taskId}\` collegato a **${out.title}** (rev ${out.revision}).` };
@@ -484,10 +548,11 @@ export async function linkProject(
     const db = admin.firestore();
     const snap = await db.collection('nebulaDocs').doc(args.docId).get();
     if (!snap.exists) throw new Error(`Documento ${args.docId} non trovato`);
-    const current = snap.data() as { content: PMNode; revision: number; title: string; acl: NebulaDocAcl };
+    const current = snap.data() as { content?: PMNode; revision: number; title: string; acl: NebulaDocAcl; ydocInitialized?: boolean; ydocState?: unknown };
 
     if (!canWrite(current.acl, ctx.userEmail)) throw new Error('Permesso di scrittura negato');
 
+    const baseJson = await liveDocJSON(args.docId, current);
     const projectParagraph: PMNode = {
         type: 'paragraph',
         content: [
@@ -499,13 +564,13 @@ export async function linkProject(
     const merged: PMNode = {
         type: 'doc',
         content: [
-            ...(current.content?.content ?? []),
+            ...(baseJson.content ?? []),
             projectParagraph,
         ],
     };
 
     const out = await saveDocCore({
-        docId: args.docId, content: merged, baseRevision: current.revision,
+        docId: args.docId, content: merged,
     }, ctx.userEmail);
 
     return { text: `Progetto \`${args.projectId}\` collegato a **${out.title}** (rev ${out.revision}).` };

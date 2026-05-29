@@ -3,7 +3,7 @@
 > Specifica di progetto. Documento "vivo": va aggiornato dopo ogni step completato o decisione esplicita.
 >
 > **Ultima revisione:** 2026-05-29
-> **Stato:** ✅ Fasi 1→5 **LIVE in produzione** (PR #35→#44). 🚧 **Fase 6 (real-time / Yjs) IN CORSO** su branch `feature/nebula-docs-realtime` — backend + provider landed e verificati (vedi §6.bis); resta wiring editor + cutover. Provider Firestore-native (no Cloud Run), cursori live, sostituzione diretta con kill-switch.
+> **Stato:** ✅ Fasi 1→5 **LIVE in produzione** (PR #35→#44). 🚧 **Fase 6 (real-time / Yjs) CODE-COMPLETE** su branch `feature/nebula-docs-realtime` (build + typecheck file-toccati + test verdi). Provider Firestore-native (no Cloud Run), cursori live, sostituzione diretta con kill-switch. **Resta solo: deploy atomico + backfill + verifica two-browser** (azione operativa, non codice).
 > **Owner:** Gionata Pastorin
 > **Documenti correlati:** [POLARIS](POLARIS.md) (roadmap), [ATLAS](ATLAS.md) (architettura suite), [WORKFLOW](WORKFLOW.md)
 
@@ -625,12 +625,16 @@ Scelta architetturale: **provider Firestore-native** (NO Cloud Run/Hocuspocus/We
 - [x] Rules `yupdates` (append-only, create writer) + `awareness`; indici CG; kill-switch `core/nebula.collabEnabled`.
 - [x] Vitest introdotto; `manualChunks` Vite include lo stack Yjs nel chunk lazy.
 
-**Da fare (fase di cutover, insieme così non si rompe l'editor live):**
-- [ ] **6.2** Wiring editor: `useCollabDoc` + Collaboration/CollaborationCaret in `NebulaDocView` (refactor editor keyed-by-docId), lettura kill-switch.
-- [ ] **6.6** Scritture MCP `saveDocCore` → applicano al Y.Doc via `updateYFragment` (NON più a `content`).
-- [ ] **6.7** Rimozione path 409 da `saveDoc`; wiring bottoni snapshot/restore.
-- [ ] **6.8** `useDocPresence` alimentato da Awareness (ritiro heartbeat `presence`).
-- [ ] Backfill su tutti i doc + verifica two-browser + flip kill-switch.
+**Cutover — code-complete (commit successivo, build+typecheck+test verdi):**
+- [x] **6.2** Wiring editor: `NebulaDocView` ora wrapper keyed-by-docId → `NebulaDocPage` con `useCollabDoc` + Collaboration/CollaborationCaret. Editor read-only finché provider 'synced'. Kill-switch → fallback read-only su `content`. Cursori live + status "Live · N attivi".
+- [x] **6.6** Scritture MCP (`saveDocCore` + 4 tool): applicano al Y.Doc via `applyJSONToYDoc`, appendono delta origin 'mcp', proiettano `content`. Base letta dal Y.Doc LIVE (`liveDocJSON`) per non perdere edit concorrenti. createDoc seeda il Y.Doc.
+- [x] **6.7** Rimosso 409/LWW da `saveDoc` (ora solo title/icon scalari). `restoreDoc` callable usato da NebulaDocHistoryView (apply via updateYFragment, no setContent). Cmd+S → `snapshotDoc`.
+- [x] **6.8** Presence da Awareness (`peers` in useCollabDoc); heartbeat `presence` Firestore ritirato (composable dormiente, resta per tipo + `cursorColorFor`).
+
+**Resta (operativo, NON codice — richiede autorizzazione + deploy):**
+- [ ] Deploy ATOMICO `functions,hosting` + rules + indici (l'editor ora richiede le CF: deploy parziale lo romperebbe).
+- [ ] `backfillYDocs` (callable, CORE admin) su tutti i doc esistenti.
+- [ ] Verifica two-browser; opzionale: pre-deploy con `core/nebula.collabEnabled=false`, validare, poi flip ON.
 
 **Note tecniche scoperte in implementazione:**
 - XmlFragment **deve** chiamarsi `'default'` (Collaboration) — `prosemirrorJSONToYDoc` ha default `'prosemirror'`: mismatch = doc vuoto sul client. Centralizzato in `NEBULA_YJS_FIELD`.

@@ -2112,21 +2112,10 @@ exports.saveDoc = functions
             throw new functions.https.HttpsError('permission-denied', 'Permesso di scrittura negato');
         }
 
-        // LWW revision check
-        const baseRev: number = data?.baseRevision ?? -1;
-        if (baseRev !== current.revision) {
-            throw new functions.https.HttpsError(
-                'failed-precondition',
-                `Conflitto revisione (corrente ${current.revision}, ricevuta ${baseRev})`,
-                {
-                    currentRevision: current.revision,
-                    currentTitle:    current.title,
-                    currentContent:  current.content,
-                }
-            );
-        }
-
-        const nextRev = current.revision + 1;
+        // Fase 6: niente più LWW/409. Il contenuto è gestito dal Y.Doc (CRDT,
+        // convergente); saveDoc serve ai campi scalari (title/icon/parentId).
+        // `revision` è solo un contatore monotòno (UI/history), non un token LWW.
+        const nextRev = (current.revision ?? 0) + 1;
         const update: Record<string, unknown> = {
             revision:  nextRev,
             updatedAt: now,
