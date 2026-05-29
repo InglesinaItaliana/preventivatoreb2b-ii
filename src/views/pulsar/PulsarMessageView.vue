@@ -1064,40 +1064,41 @@ function renderText(t: string) {
    degli altri a destra (sempre angolo interno verso il centro della chat). */
 .flag-pin {
   position: absolute;
-  top: -15px;
-  left: -15px;
-  width: 30px;
-  height: 30px;
+  top: -16px;
+  left: -16px;
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
   /* Pallino pieno colorato (variante --q/--t/--done sotto), icona bianca
-     dentro. Niente ombra, niente trasparenza. */
+     dentro. Niente ombra, niente opacità sul disabled (altrimenti il
+     pallino sui propri messaggi appariva traslucido). */
   background: var(--md-sys-color-surface);
   color: #fff;
   border-radius: 50%;
   border: none;
   cursor: pointer;
-  transition: transform 0.15s, opacity 0.15s;
+  transition: transform 0.15s;
   z-index: 2;
   padding: 0;
 }
 
-.flag-pin--second { left: 18px; }
+.flag-pin--second { left: 20px; }
 
 /* Messaggi di altri: pin a destra (angolo interno rispetto alla chat) */
-.msg-row:not(.is-mine) .flag-pin { left: auto; right: -15px; }
-.msg-row:not(.is-mine) .flag-pin--second { left: auto; right: 18px; }
+.msg-row:not(.is-mine) .flag-pin { left: auto; right: -16px; }
+.msg-row:not(.is-mine) .flag-pin--second { left: auto; right: 20px; }
 
 .flag-pin:hover:not(:disabled):not(.flag-pin--done) { transform: scale(1.15); }
 
 .flag-pin--q    { background: #F59E0B; }
 .flag-pin--t    { background: #10B981; }
 .flag-pin--done { background: #B4B0AA; cursor: default; }
-.flag-pin:disabled { cursor: default; opacity: 0.85; }
+.flag-pin:disabled { cursor: default; }
 .flag-pin--readonly { cursor: default; }
 
-.flag-pin-icon { font-size: 22px; color: inherit; flex-shrink: 0; line-height: 1; }
+.flag-pin-icon { font-size: 20px; color: inherit; flex-shrink: 0; line-height: 1; }
 
 /* Reply bar */
 .reply-bar {
