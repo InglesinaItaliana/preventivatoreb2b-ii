@@ -995,7 +995,7 @@ function renderText(t: string) {
 .msg-bubble.is-mine :deep(.msg-hashtag),
 .msg-bubble.is-mine :deep(.msg-mention) { color: rgba(255, 255, 255, 0.95); }
 
-.msg-text { font-size: 17px; line-height: 1.45; color: var(--md-sys-color-on-surface); white-space: pre-wrap; word-break: break-word; margin: 0; }
+.msg-text { font-size: 20px; line-height: 1.4; color: var(--md-sys-color-on-surface); white-space: pre-wrap; word-break: break-word; margin: 0; }
 
 :deep(.msg-hashtag) { color: var(--md-sys-color-primary); font-weight: 600; cursor: pointer; }
 :deep(.msg-mention) { color: #2F6B4A; font-weight: 600; }
