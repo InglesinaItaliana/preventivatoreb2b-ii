@@ -26,6 +26,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   (e: 'update:modelValue', value: IconValue | null): void
+  (e: 'close'): void
 }>()
 
 // ── State ─────────────────────────────────────────────────────────────────
@@ -107,6 +108,16 @@ function isSearching() {
 
 <template>
   <div class="ip-root">
+    <!-- Close (top-right del picker, sempre dentro al box visivo) -->
+    <button
+      type="button"
+      class="ip-close"
+      aria-label="Chiudi selettore icona"
+      @click="emit('close')"
+    >
+      <MaterialIcon name="close" :size="16" />
+    </button>
+
     <!-- Search -->
     <div class="ip-search">
       <MaterialIcon name="search" :size="18" color="#888" />
@@ -228,6 +239,7 @@ function isSearching() {
 
 <style scoped>
 .ip-root {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -239,6 +251,29 @@ function isSearching() {
   box-shadow: var(--md-sys-elevation-level-1, 0 1px 3px rgba(0,0,0,0.08));
   font-family: 'Outfit', system-ui, sans-serif;
 }
+
+/* Close button: top-right del picker stesso, non del wrap esterno —
+   così resta visivamente attaccato al box del componente anche se il
+   parent è più largo. Padding-right sulla search per non sovrapporsi. */
+.ip-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 0;
+  background: rgba(0,0,0,0.05);
+  color: #555;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 120ms ease, color 120ms ease;
+}
+.ip-close:hover { background: rgba(0,0,0,0.10); color: #1a1a1a; }
+.ip-search { padding-right: 44px; }
 
 /* Search */
 .ip-search {

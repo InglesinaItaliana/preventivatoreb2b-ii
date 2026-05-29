@@ -532,10 +532,11 @@ void editorRef
 
       <!-- Icon picker (inline popover) -->
       <div v-if="showIconPicker" class="nd-icon-picker-wrap">
-        <IconPicker :modelValue="currentIcon" @update:modelValue="saveIcon" />
-        <button class="nd-icon-close" type="button" @click="showIconPicker = false">
-          <MaterialIcon name="close" :size="16" />
-        </button>
+        <IconPicker
+          :modelValue="currentIcon"
+          @update:modelValue="saveIcon"
+          @close="showIconPicker = false"
+        />
       </div>
 
       <!-- Toolbar TipTap (solo se canWrite) -->
@@ -904,25 +905,8 @@ void editorRef
 /* Icon picker wrap: l'icona è ora full-width block-aligned, il picker apre
    sotto al titolo senza offset laterale. */
 .nd-icon-picker-wrap {
-  position: relative;
   margin: 0 0 24px 0;
 }
-.nd-icon-close {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  background: rgba(0,0,0,0.05);
-  border: 0;
-  border-radius: 50%;
-  width: 28px;
-  height: 28px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #555;
-}
-.nd-icon-close:hover { background: rgba(0,0,0,0.10); }
 
 /* Toolbar */
 .nd-toolbar {
