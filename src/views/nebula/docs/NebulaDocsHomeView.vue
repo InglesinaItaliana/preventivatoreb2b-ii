@@ -385,17 +385,6 @@ function isActiveTouch(d: DocRow): boolean {
         sticky
         :hidden="headerHidden"
       >
-        <template #tools>
-          <button
-            type="button"
-            class="ndh-integrations-btn"
-            title="Integrazioni · Connetti Claude (MCP)"
-            aria-label="Integrazioni"
-            @click="router.push('/nebula/docs/settings/integrations')"
-          >
-            <MIcon name="vpn_key" :size="18" />
-          </button>
-        </template>
         <template #cta>
           <button
             type="button"
@@ -593,26 +582,6 @@ function isActiveTouch(d: DocRow): boolean {
   color: #8a8a8a;
   font-variation-settings: 'FILL' 0, 'wght' 300;
   display: block;
-}
-
-/* Pulsante Integrazioni (#tools dello sticky header) — compatto, M3-friendly */
-.ndh-integrations-btn {
-  background: transparent;
-  border: 1px solid var(--md-sys-color-outline-variant);
-  color: var(--md-sys-color-on-surface-variant);
-  border-radius: var(--md-sys-shape-corner-full);
-  padding: 6px;
-  font: inherit;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  transition: background var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
-              color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
-  margin-right: 6px;
-}
-.ndh-integrations-btn:hover {
-  background: color-mix(in srgb, var(--md-sys-color-primary) 8%, transparent);
-  color: var(--md-sys-color-primary);
 }
 
 /* Toast */

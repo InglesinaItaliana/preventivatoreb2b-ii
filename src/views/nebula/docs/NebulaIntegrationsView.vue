@@ -7,7 +7,8 @@
  *  - Genera nuova chiave (one-time display + copia + warning)
  *  - Setup snippet per Claude Desktop
  *
- * Route: /nebula/docs/settings/integrations
+ * Route: /sidera/core/integrations
+ * (legacy /nebula/docs/settings/integrations → redirect a CORE)
  */
 import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
@@ -149,8 +150,8 @@ const revokedKeys = computed(() => keys.value.filter(k => k.revoked))
       <button
         type="button"
         class="ni-back"
-        aria-label="Torna a NEBULA-DOCS"
-        @click="router.push('/nebula/docs')"
+        aria-label="Indietro"
+        @click="router.push('/sidera')"
       >
         <MaterialIcon name="arrow_back" :size="20" />
       </button>

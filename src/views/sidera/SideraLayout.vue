@@ -653,6 +653,10 @@ const roleLabel: Record<string, string> = {
                 <MIcon name="settings" :size="18" :filled="isActive('/sidera/core/settings', false)" class="s-nav-icon" :style="activeIconStyle('/sidera/core/settings', false, CORE_ACCENT)" />
                 Impostazioni
               </RouterLink>
+              <RouterLink to="/sidera/core/integrations" class="s-nav-item" :style="{ ...activeStyle('/sidera/core/integrations', false, CORE_ACCENT), '--s-idx': 2 } as any">
+                <MIcon name="vpn_key" :size="18" :filled="isActive('/sidera/core/integrations', false)" class="s-nav-icon" :style="activeIconStyle('/sidera/core/integrations', false, CORE_ACCENT)" />
+                Integrazioni
+              </RouterLink>
             </div>
           </div>
         </template>
