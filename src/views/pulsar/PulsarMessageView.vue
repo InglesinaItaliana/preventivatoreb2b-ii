@@ -826,13 +826,13 @@ function renderText(t: string) {
 
 /* Header chat (nome + sottotitolo) — niente MdPageHeader: la chat ha
    chrome dedicato con avatar+nome+stato del contatto, non sostituibile.
-   Flat: stesso bg della pagina, niente bordo/ombra. */
+   Stesso bg surface delle bolle altrui, per coerenza visiva. */
 .chat-header {
   display: flex;
   align-items: center;
   gap: 12px;
   padding: 12px 18px;
-  background: var(--page-bg);
+  background: var(--md-sys-color-surface);
   flex-shrink: 0;
 }
 .chat-header-avatar {
@@ -1071,16 +1071,15 @@ function renderText(t: string) {
   display: flex;
   align-items: center;
   justify-content: center;
-  /* Bg circolare surface così l'icona stacca dalla bolla (prima trasparente,
-     basata solo su drop-shadow → poco leggibile sulle bolle teal). */
-  background: var(--md-sys-color-surface);
-  border-radius: 50%;
+  /* Solo icona colorata, niente cerchio bianco. drop-shadow morbido come
+     halo per leggibilità sopra le bolle. */
+  background: none;
   border: none;
   cursor: pointer;
   transition: transform 0.15s, opacity 0.15s;
   z-index: 2;
   padding: 0;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+  filter: drop-shadow(0 0 1.5px var(--page-bg)) drop-shadow(0 0 1.5px var(--page-bg));
 }
 
 .flag-pin--second { left: 18px; }
@@ -1097,7 +1096,7 @@ function renderText(t: string) {
 .flag-pin:disabled { cursor: default; opacity: 0.85; }
 .flag-pin--readonly { cursor: default; }
 
-.flag-pin-icon { font-size: 18px; color: inherit; flex-shrink: 0; line-height: 1; }
+.flag-pin-icon { font-size: 27px; color: inherit; flex-shrink: 0; line-height: 1; }
 
 /* Reply bar */
 .reply-bar {
@@ -1232,7 +1231,7 @@ function renderText(t: string) {
   max-width: 100%;
   field-sizing: content;
   box-sizing: border-box;
-  background: var(--md-sys-color-surface-container);
+  background: var(--md-sys-color-surface);
   border: 0;
   border-radius: 20px;
   padding: 6px 14px;
@@ -1315,13 +1314,13 @@ function renderText(t: string) {
 
 .pills { display: flex; gap: 4px; flex-shrink: 0; }
 
-/* Pillole circolari con bg surface-container: icone identificabili sopra il
-   page bg, ma niente riquadro esterno che le racchiude. Active = primary tint. */
+/* Pillole circolari con bg surface (stesso colore delle bolle altrui),
+   coerente con header e textbox. Active = primary tint. */
 .pill {
   width: 36px; height: 36px;
   border-radius: var(--md-sys-shape-corner-full);
   border: 0;
-  background: var(--md-sys-color-surface-container);
+  background: var(--md-sys-color-surface);
   cursor: pointer;
   font-size: 14px;
   display: flex; align-items: center; justify-content: center;
@@ -1331,10 +1330,10 @@ function renderText(t: string) {
 }
 
 @media (hover: hover) {
-  .pill:hover { background: color-mix(in srgb, var(--md-sys-color-primary) 14%, var(--md-sys-color-surface-container)); }
+  .pill:hover { background: color-mix(in srgb, var(--md-sys-color-primary) 14%, var(--md-sys-color-surface)); }
 }
-.pill:active { background: color-mix(in srgb, var(--md-sys-color-primary) 22%, var(--md-sys-color-surface-container)); }
-.pill.is-active { background: color-mix(in srgb, var(--md-sys-color-primary) 18%, var(--md-sys-color-surface-container)); }
+.pill:active { background: color-mix(in srgb, var(--md-sys-color-primary) 22%, var(--md-sys-color-surface)); }
+.pill.is-active { background: color-mix(in srgb, var(--md-sys-color-primary) 18%, var(--md-sys-color-surface)); }
 
 .pill-icon { font-size: 20px; color: var(--md-sys-color-on-surface-variant); flex-shrink: 0; }
 .pill.is-active .pill-icon { color: var(--md-sys-color-primary); }
@@ -1344,7 +1343,7 @@ function renderText(t: string) {
   display: flex;
   align-items: center;
   gap: 8px;
-  background: var(--md-sys-color-surface-container);
+  background: var(--md-sys-color-surface);
   /* No border: il pill-shape è dato dal border-radius + bg. */
   border: 0;
   border-radius: 20px;
