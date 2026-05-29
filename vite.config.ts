@@ -85,9 +85,17 @@ export default defineConfig({
               return 'firebase-core'
             }
             // NEBULA-DOCS editor: TipTap + ProseMirror + tippy.js (popup slash
-            // menu / future mention popovers). ~120 KB gzip. Caricato SOLO
-            // quando si apre /nebula/docs/:docId, mai per POPS o altre PWA.
-            if (id.includes('@tiptap') || id.includes('prosemirror-') || id.includes('tippy.js')) {
+            // menu / mention popovers) + Yjs/CRDT stack (Fase 6 real-time:
+            // yjs, @tiptap/y-tiptap, y-protocols, lib0). Caricato SOLO quando
+            // si apre /nebula/docs/:docId, mai per POPS o altre PWA.
+            if (
+              id.includes('@tiptap') ||
+              id.includes('prosemirror-') ||
+              id.includes('tippy.js') ||
+              id.includes('/yjs/') ||
+              id.includes('y-protocols') ||
+              id.includes('/lib0/')
+            ) {
               return 'nebula-docs-editor'
             }
             return 'vendor'

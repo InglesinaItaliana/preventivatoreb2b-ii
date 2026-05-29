@@ -2459,6 +2459,371 @@ exports.historyPrune = functions
     });
 
 // ============================================================================
+// NEBULA-DOCS — Fase 6: editing collaborativo real-time (Yjs/CRDT)
+//
+// Source of truth = Y.Doc (XmlFragment 'default'). Persistenza Firestore-native:
+//   nebulaDocs/{docId}.ydocState        → snapshot compattato (Buffer/bytes)
+//   nebulaDocs/{docId}.ydocStateVector  → state vector
+//   nebulaDocs/{docId}.ydocInitialized  → latch first-writer-wins migrazione
+//   nebulaDocs/{docId}/yupdates/{id}    → log delta append-only (commutativi)
+//   nebulaDocs/{docId}/awareness/{cid}  → cursori live ephemeral (overwrite)
+// `content` resta come PROIEZIONE derivata (search/MCP/indexDocRefs/history).
+//
+// Gli helper pesanti (@tiptap/y-tiptap, yjs) sono lazy-require nei handler per
+// non gravare sul cold-start delle altre functions. Vedi docs/NEBULA-DOCS.md §6.
+// ============================================================================
+
+// Lazy loader del bundle Yjs server-side (caricato solo quando una CF Yjs gira).
+type NebulaYdocLib = typeof import('./lib_yjs/ydoc');
+let _nebulaYdocLib: NebulaYdocLib | null = null;
+function nebulaYdoc(): NebulaYdocLib {
+    return _nebulaYdocLib ?? (_nebulaYdocLib = require('./lib_yjs/ydoc') as NebulaYdocLib);
+}
+
+// clientId sentinella per gli update applicati dal server (MCP/restore). I
+// client filtrano gli echo confrontando col PROPRIO ydoc.clientID (random
+// positivo): 0 non collide mai. L'idempotenza Yjs copre il caso 1-su-4MLD.
+const NEBULA_SERVER_CLIENT_ID = 0;
+
+// Coerce un valore Firestore bytes a Uint8Array. L'Admin SDK ritorna Buffer
+// (già Uint8Array); il client web salva come Bytes → Admin lo legge Buffer.
+function nebulaToUint8(v: unknown): Uint8Array {
+    if (!v) return new Uint8Array(0);
+    if (v instanceof Uint8Array) return v;
+    const maybe = v as { toUint8Array?: () => Uint8Array };
+    if (typeof maybe.toUint8Array === 'function') return maybe.toUint8Array();
+    return new Uint8Array(0);
+}
+
+// ── initYDoc (callable) — migrazione deterministica first-writer-wins ───────
+// Seed del Y.Doc da `content` esistente, una sola volta per doc (latch
+// transazionale). Idempotente: chiamate concorrenti → primo vince, gli altri
+// no-op. Vedi piano §6.4.
+exports.initYDoc = functions
+    .region('europe-west1')
+    .https.onCall(async (data, context) => {
+        if (!context.auth) {
+            throw new functions.https.HttpsError('unauthenticated', 'Richiesto login');
+        }
+        const userEmail = nebulaNormalizeEmail(context.auth.token.email);
+        const docId: string | undefined = data?.docId;
+        if (!docId) {
+            throw new functions.https.HttpsError('invalid-argument', 'docId mancante');
+        }
+        const { seedStateBuffers } = nebulaYdoc();
+        const db = admin.firestore();
+        const ref = db.collection('nebulaDocs').doc(docId);
+
+        const result = await db.runTransaction(async (tx) => {
+            const snap = await tx.get(ref);
+            if (!snap.exists) {
+                throw new functions.https.HttpsError('not-found', 'Documento non trovato');
+            }
+            const cur = snap.data() as any;
+            const acl = cur.acl as NebulaDocAcl;
+            const isWriter = acl.writers.includes(userEmail) || acl.owners.includes(userEmail);
+            if (!isWriter) {
+                throw new functions.https.HttpsError('permission-denied', 'Permesso di scrittura negato');
+            }
+            if (cur.ydocInitialized === true) {
+                return { initialized: false as const, alreadyInitialized: true as const };
+            }
+            const content = cur.content ?? { type: 'doc', content: [] };
+            const { state, stateVector } = seedStateBuffers(content);
+            tx.update(ref, {
+                ydocState: state,
+                ydocStateVector: stateVector,
+                ydocInitialized: true,
+                ydocSeq: 0,
+            });
+            return { initialized: true as const, alreadyInitialized: false as const };
+        });
+        return { docId, ...result };
+    });
+
+// ── backfillYDocs (callable, solo CORE admin) — migrazione massiva ──────────
+// Seed proattivo di tutti i doc non ancora inizializzati, così il primo utente
+// non attende e si valida l'intero corpus prima del cutover. Vedi piano §6.4.
+exports.backfillYDocs = functions
+    .region('europe-west1')
+    .runWith({ memory: '512MB', timeoutSeconds: 540 })
+    .https.onCall(async (data, context) => {
+        if (!context.auth) {
+            throw new functions.https.HttpsError('unauthenticated', 'Richiesto login');
+        }
+        const userEmail = nebulaNormalizeEmail(context.auth.token.email);
+        const db = admin.firestore();
+        // Verifica CORE admin (allowlist core/admins + superadmin hardcoded).
+        const adminsSnap = await db.doc('core/admins').get();
+        const adminEmails: string[] = (adminsSnap.data()?.emails ?? []) as string[];
+        const isCoreAdmin = userEmail === 'info@inglesinaitaliana.it' || adminEmails.includes(userEmail);
+        if (!isCoreAdmin) {
+            throw new functions.https.HttpsError('permission-denied', 'Solo CORE admin');
+        }
+
+        const { seedStateBuffers } = nebulaYdoc();
+        const limit: number = Math.min(data?.limit ?? 200, 500);
+        // Solo i non inizializzati. Niente filtro server (ydocInitialized assente
+        // sui doc vecchi → leggiamo tutti e filtriamo in memoria, corpus ~decine).
+        const snap = await db.collection('nebulaDocs').limit(limit).get();
+        let migrated = 0;
+        let skipped = 0;
+        for (const d of snap.docs) {
+            const cur = d.data() as any;
+            if (cur.ydocInitialized === true) { skipped++; continue; }
+            if (cur.archived === true) { skipped++; continue; }
+            const content = cur.content ?? { type: 'doc', content: [] };
+            const { state, stateVector } = seedStateBuffers(content);
+            // Transazione per doc: rispetta il latch se un utente ha inizializzato
+            // nel frattempo.
+            await db.runTransaction(async (tx) => {
+                const fresh = await tx.get(d.ref);
+                if ((fresh.data() as any)?.ydocInitialized === true) return;
+                tx.update(d.ref, {
+                    ydocState: state,
+                    ydocStateVector: stateVector,
+                    ydocInitialized: true,
+                    ydocSeq: 0,
+                });
+            });
+            migrated++;
+        }
+        console.log(`[backfillYDocs] migrated=${migrated} skipped=${skipped}`);
+        return { migrated, skipped, scanned: snap.size };
+    });
+
+// ── Compaction + proiezione di un singolo doc ───────────────────────────────
+// Algoritmo no-loss: legge state+deltas, costruisce il Y.Doc, riscrive
+// ydocState e CANCELLA SOLO i delta letti (high-water mark = i doc letti).
+// I delta arrivati durante la run sopravvivono. Vedi piano §6.3.
+async function nebulaCompactOneDoc(docId: string): Promise<boolean> {
+    const { buildYDoc, ydocToJSON, extractText, encodeState, encodeStateVector } = nebulaYdoc();
+    const db = admin.firestore();
+    const ref = db.collection('nebulaDocs').doc(docId);
+    const docSnap = await ref.get();
+    if (!docSnap.exists) return false;
+    const cur = docSnap.data() as any;
+    if (cur.ydocInitialized !== true) return false; // non ancora migrato
+
+    const updatesSnap = await ref.collection('yupdates').orderBy('createdAt', 'asc').get();
+    if (updatesSnap.empty) return false;
+
+    const readDocs = updatesSnap.docs; // high-water mark: cancelleremo solo questi
+    const snapshotBuf = cur.ydocState ? nebulaToUint8(cur.ydocState) : null;
+    const deltas = readDocs.map((d) => nebulaToUint8((d.data() as any).data));
+    const ydoc = buildYDoc(snapshotBuf, deltas);
+
+    const merged = Buffer.from(encodeState(ydoc));
+    const sv = Buffer.from(encodeStateVector(ydoc));
+    const json = ydocToJSON(ydoc);
+    const text = extractText(json);
+
+    const update: Record<string, unknown> = {
+        ydocState: merged,
+        ydocStateVector: sv,
+        content: json,
+        contentText: text,
+        revision: admin.firestore.FieldValue.increment(1),
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    };
+
+    // Snapshot history periodico (~30 min di editing attivo) per non perdere
+    // punti di restore durante sessioni collaborative passive.
+    const SNAPSHOT_INTERVAL_MS = 30 * 60 * 1000;
+    const lastSnapMs = cur.yLastSnapshotAt ? (cur.yLastSnapshotAt as admin.firestore.Timestamp).toMillis() : 0;
+    const doSnapshot = Date.now() - lastSnapMs > SNAPSHOT_INTERVAL_MS;
+
+    const batch = db.batch();
+    if (doSnapshot) {
+        update.yLastSnapshotAt = admin.firestore.FieldValue.serverTimestamp();
+        const histRef = ref.collection('history').doc();
+        batch.set(histRef, {
+            revision: (cur.revision ?? 0) + 1,
+            title: cur.title ?? '(senza titolo)',
+            content: json,
+            savedAt: admin.firestore.FieldValue.serverTimestamp(),
+            savedBy: 'system',
+            trigger: 'autosave',
+        });
+    }
+    batch.update(ref, update);
+    readDocs.forEach((d) => batch.delete(d.ref));
+    await batch.commit();
+    return true;
+}
+
+// ── nebulaYjsMaintenance (scheduled ~2 min) — compaction + proiezione ───────
+// Trova i doc "caldi" (con yupdates recenti) via collectionGroup e li compatta.
+// Niente trigger per-update (eviterebbe storm di invocazioni + indexDocRefs).
+exports.nebulaYjsMaintenance = functions
+    .region('europe-west1')
+    .runWith({ memory: '512MB', timeoutSeconds: 300 })
+    .pubsub.schedule('every 2 minutes')
+    .timeZone('Europe/Rome')
+    .onRun(async () => {
+        const db = admin.firestore();
+        const HOT_MS = 12 * 60 * 1000; // finestra ampia per non perdere doc tra le run
+        const cutoff = admin.firestore.Timestamp.fromMillis(Date.now() - HOT_MS);
+        const recent = await db.collectionGroup('yupdates')
+            .where('createdAt', '>=', cutoff)
+            .get();
+
+        const docIds = new Set<string>();
+        recent.forEach((d) => {
+            const parent = d.ref.parent.parent; // nebulaDocs/{docId}
+            if (parent) docIds.add(parent.id);
+        });
+        if (docIds.size === 0) {
+            console.log('[nebulaYjsMaintenance] no hot docs');
+            return null;
+        }
+        let compacted = 0;
+        for (const docId of docIds) {
+            try {
+                if (await nebulaCompactOneDoc(docId)) compacted++;
+            } catch (e) {
+                console.error(`[nebulaYjsMaintenance] compact ${docId} failed:`, e);
+            }
+        }
+        console.log(`[nebulaYjsMaintenance] hot=${docIds.size} compacted=${compacted}`);
+        return null;
+    });
+
+// ── awarenessCleanup (scheduled ~5 min) — TTL cursori live ──────────────────
+// Elimina record awareness stale (tab chiusa senza unmount). I cursori vivi
+// sono filtrati più aggressivamente sul client; questo è il GC lungo.
+exports.awarenessCleanup = functions
+    .region('europe-west1')
+    .pubsub.schedule('every 5 minutes')
+    .timeZone('Europe/Rome')
+    .onRun(async () => {
+        const db = admin.firestore();
+        const STALE_MS = 90 * 1000; // 90s: l'awareness è molto effimera
+        const cutoff = admin.firestore.Timestamp.fromMillis(Date.now() - STALE_MS);
+        const snap = await db.collectionGroup('awareness')
+            .where('updatedAt', '<', cutoff)
+            .get();
+        if (snap.empty) { console.log('[awarenessCleanup] nothing stale'); return null; }
+        for (let i = 0; i < snap.docs.length; i += 450) {
+            const batch = db.batch();
+            snap.docs.slice(i, i + 450).forEach((d) => batch.delete(d.ref));
+            await batch.commit();
+        }
+        console.log(`[awarenessCleanup] deleted ${snap.size} stale awareness records`);
+        return null;
+    });
+
+// ── snapshotDoc (callable) — history snapshot manuale (Cmd+S) ───────────────
+// Costruisce il Y.Doc LIVE (state+deltas, niente staleness) e snapshotta la
+// proiezione corrente in history (trigger 'manual'). Vedi piano §6.7.
+exports.snapshotDoc = functions
+    .region('europe-west1')
+    .https.onCall(async (data, context) => {
+        if (!context.auth) {
+            throw new functions.https.HttpsError('unauthenticated', 'Richiesto login');
+        }
+        const userEmail = nebulaNormalizeEmail(context.auth.token.email);
+        const docId: string | undefined = data?.docId;
+        if (!docId) throw new functions.https.HttpsError('invalid-argument', 'docId mancante');
+
+        const { buildYDoc, ydocToJSON } = nebulaYdoc();
+        const db = admin.firestore();
+        const ref = db.collection('nebulaDocs').doc(docId);
+        const snap = await ref.get();
+        if (!snap.exists) throw new functions.https.HttpsError('not-found', 'Documento non trovato');
+        const cur = snap.data() as any;
+        const acl = cur.acl as NebulaDocAcl;
+        if (!(acl.writers.includes(userEmail) || acl.owners.includes(userEmail))) {
+            throw new functions.https.HttpsError('permission-denied', 'Permesso di scrittura negato');
+        }
+
+        const snapshotBuf = cur.ydocState ? nebulaToUint8(cur.ydocState) : null;
+        const updatesSnap = await ref.collection('yupdates').orderBy('createdAt', 'asc').get();
+        const deltas = updatesSnap.docs.map((d) => nebulaToUint8((d.data() as any).data));
+        const ydoc = buildYDoc(snapshotBuf, deltas);
+        const json = ydocToJSON(ydoc);
+        const nextRev = (cur.revision ?? 0) + 1;
+        await ref.collection('history').add({
+            revision: nextRev,
+            title: cur.title ?? '(senza titolo)',
+            content: json,
+            savedAt: admin.firestore.FieldValue.serverTimestamp(),
+            savedBy: userEmail,
+            trigger: 'manual',
+        });
+        await ref.update({
+            yLastSnapshotAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        return { docId, revision: nextRev };
+    });
+
+// ── restoreDoc (callable) — ripristina una revision storica ─────────────────
+// NON usa setContent (desincronizzerebbe il Y.Doc): applica il JSON snapshot
+// al Y.Doc via updateYFragment e appende un delta. I client convergono live.
+// Vedi piano §6.7.
+exports.restoreDoc = functions
+    .region('europe-west1')
+    .https.onCall(async (data, context) => {
+        if (!context.auth) {
+            throw new functions.https.HttpsError('unauthenticated', 'Richiesto login');
+        }
+        const userEmail = nebulaNormalizeEmail(context.auth.token.email);
+        const docId: string | undefined = data?.docId;
+        const revId: string | undefined = data?.revId;
+        if (!docId || !revId) throw new functions.https.HttpsError('invalid-argument', 'docId/revId mancanti');
+
+        const { buildYDoc, applyJSONToYDoc, ydocToJSON, extractText, encodeState, encodeStateVector } = nebulaYdoc();
+        const db = admin.firestore();
+        const ref = db.collection('nebulaDocs').doc(docId);
+        const snap = await ref.get();
+        if (!snap.exists) throw new functions.https.HttpsError('not-found', 'Documento non trovato');
+        const cur = snap.data() as any;
+        const acl = cur.acl as NebulaDocAcl;
+        if (!(acl.writers.includes(userEmail) || acl.owners.includes(userEmail))) {
+            throw new functions.https.HttpsError('permission-denied', 'Permesso di scrittura negato');
+        }
+        const histSnap = await ref.collection('history').doc(revId).get();
+        if (!histSnap.exists) throw new functions.https.HttpsError('not-found', 'Revisione non trovata');
+        const targetContent = (histSnap.data() as any).content ?? { type: 'doc', content: [] };
+
+        // Costruisci Y.Doc live, applica il contenuto target come diff.
+        const snapshotBuf = cur.ydocState ? nebulaToUint8(cur.ydocState) : null;
+        const updatesSnap = await ref.collection('yupdates').orderBy('createdAt', 'asc').get();
+        const deltas = updatesSnap.docs.map((d) => nebulaToUint8((d.data() as any).data));
+        const ydoc = buildYDoc(snapshotBuf, deltas);
+        const diff = applyJSONToYDoc(ydoc, targetContent);
+
+        // Appendi il delta come yupdate origin 'restore' (i client lo applicano live).
+        await ref.collection('yupdates').add({
+            data: Buffer.from(diff),
+            seq: 0,
+            author: userEmail,
+            clientId: NEBULA_SERVER_CLIENT_ID,
+            origin: 'restore',
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        // Proietta subito + snapshot del restore.
+        const json = ydocToJSON(ydoc);
+        await ref.update({
+            ydocState: Buffer.from(encodeState(ydoc)),
+            ydocStateVector: Buffer.from(encodeStateVector(ydoc)),
+            content: json,
+            contentText: extractText(json),
+            revision: admin.firestore.FieldValue.increment(1),
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        await ref.collection('history').add({
+            revision: (cur.revision ?? 0) + 1,
+            title: cur.title ?? '(senza titolo)',
+            content: json,
+            savedAt: admin.firestore.FieldValue.serverTimestamp(),
+            savedBy: userEmail,
+            trigger: 'restore',
+        });
+        return { docId, restoredFrom: revId };
+    });
+
+// ============================================================================
 // NEBULA-DOCS — API key management (F4-C2)
 // Schema nebulaApiKeys/{keyHash}:
 //   - userEmail: string (lowercase) — owner della chiave
