@@ -430,6 +430,11 @@ watch(chats, (newChats) => {
     if (current > prev) {
       lastSeenTimes.set(chat.id, current)
       if (!onPulsar) continue
+      // Self-notify: l'utente che ha appena inviato il messaggio NON deve
+      // ricevere notifica del proprio messaggio (es. reply inline da
+      // /pulsar/pending → arrivava notifica a se stesso perché il watcher
+      // fire-ava su qualsiasi nuovo lastMessageAt).
+      if (chat.lastMessageBy === myEmail) continue
       const chatIsOpen = route.path === `/pulsar/chat/${chat.id}`
       if (!chatIsOpen) {
         const chatName = chat.name || chat.members.find((m: string) => m !== myEmail) || 'Chat'

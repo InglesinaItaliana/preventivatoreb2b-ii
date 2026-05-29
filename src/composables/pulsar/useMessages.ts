@@ -87,6 +87,7 @@ export function useMessages(chatId: string) {
     await updateDoc(doc(db, 'chats', chatId), {
       lastMessage:   data.text.slice(0, 120),
       lastMessageAt: serverTimestamp(),
+      lastMessageBy: from,
     })
 
     for (const tag of data.hashtags) {

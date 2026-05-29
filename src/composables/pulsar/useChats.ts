@@ -14,6 +14,8 @@ export interface Chat {
   createdBy: string
   lastMessage: string
   lastMessageAt: Date | null
+  /** Email del mittente dell'ultimo messaggio (per gatare notifiche self). */
+  lastMessageBy: string
 }
 
 function toDate(raw: unknown): Date | null {
@@ -57,6 +59,7 @@ export function useChats() {
         createdBy:     data.createdBy     ?? '',
         lastMessage:   data.lastMessage   ?? '',
         lastMessageAt: toDate(data.lastMessageAt),
+        lastMessageBy: (data.lastMessageBy ?? '').toLowerCase().trim(),
       }
     })
     loading.value = false

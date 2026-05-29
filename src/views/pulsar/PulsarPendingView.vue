@@ -242,6 +242,7 @@ async function submitInlineReply(msg: PendingMsg) {
     await updateDoc(doc(db, 'chats', msg.chatId), {
       lastMessage:   replyText.value.trim().slice(0, 120),
       lastMessageAt: serverTimestamp(),
+      lastMessageBy: from,
     })
     // 3. Marca la domanda come risposta
     await updateDoc(doc(db, 'chats', msg.chatId, 'messages', msg.id), { answeredAt: serverTimestamp() })

@@ -130,12 +130,13 @@ service cloud.firestore {
         allow read: if request.auth != null;
         allow create: if request.auth != null;
         // L'autore può modificare il proprio messaggio. I membri della chat
-        // possono inoltre aggiornare ESCLUSIVAMENTE answeredAt e taskId (per
-        // marcare una domanda risposta o linkare un task creato da un altro).
+        // possono inoltre aggiornare ESCLUSIVAMENTE answeredAt, taskId o
+        // rejectedAt (marcare risposta, linkare task creato altrove, o
+        // rifiutare la proposta di task).
         allow update: if request.auth != null && (
           request.auth.token.email == resource.data.from
           || (
-            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['answeredAt', 'taskId'])
+            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['answeredAt', 'taskId', 'rejectedAt'])
             && request.auth.token.email in get(/databases/$(database)/documents/chats/$(chatId)).data.members
           )
         );
