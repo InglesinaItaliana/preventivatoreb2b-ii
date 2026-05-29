@@ -532,14 +532,28 @@ void editorRef
 
       <!-- Icon picker (inline popover) -->
       <div v-if="showIconPicker" class="nd-icon-picker-wrap">
-        <IconPicker :modelValue="currentIcon" @update:modelValue="saveIcon" />
-        <button class="nd-icon-close" type="button" @click="showIconPicker = false">
-          <MaterialIcon name="close" :size="16" />
-        </button>
+        <IconPicker
+          :modelValue="currentIcon"
+          @update:modelValue="saveIcon"
+          @close="showIconPicker = false"
+        />
       </div>
 
       <!-- Toolbar TipTap (solo se canWrite) -->
       <div v-if="canWrite && editor" class="nd-toolbar">
+        <button type="button"
+          :disabled="!editor.can().undo()"
+          @click="tb(() => editor!.chain().focus().undo().run())()"
+          title="Annulla (Cmd/Ctrl+Z)">
+          <MaterialIcon name="undo" :size="16" />
+        </button>
+        <button type="button"
+          :disabled="!editor.can().redo()"
+          @click="tb(() => editor!.chain().focus().redo().run())()"
+          title="Ripristina (Cmd/Ctrl+Shift+Z)">
+          <MaterialIcon name="redo" :size="16" />
+        </button>
+        <span class="tb-sep"></span>
         <button type="button" :class="{ 'tb-active': editor.isActive('heading', { level: 1 }) }"
           @click="tb(() => editor!.chain().focus().toggleHeading({ level: 1 }).run())()"
           title="Heading 1"><b>H1</b></button>
@@ -904,25 +918,8 @@ void editorRef
 /* Icon picker wrap: l'icona è ora full-width block-aligned, il picker apre
    sotto al titolo senza offset laterale. */
 .nd-icon-picker-wrap {
-  position: relative;
   margin: 0 0 24px 0;
 }
-.nd-icon-close {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  background: rgba(0,0,0,0.05);
-  border: 0;
-  border-radius: 50%;
-  width: 28px;
-  height: 28px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #555;
-}
-.nd-icon-close:hover { background: rgba(0,0,0,0.10); }
 
 /* Toolbar */
 .nd-toolbar {
@@ -938,6 +935,10 @@ void editorRef
   top: 0;
   z-index: 5;
   flex-wrap: wrap;
+  /* Su desktop la toolbar non deve estendersi oltre i pulsanti: senza
+     fit-content la superficie surface continua bianca per cm a destra. */
+  width: fit-content;
+  max-width: 100%;
 }
 .nd-toolbar button {
   background: transparent;
@@ -955,8 +956,9 @@ void editorRef
   height: 30px;
   transition: background 100ms ease, color 100ms ease;
 }
-.nd-toolbar button:hover { background: rgba(196, 96, 48, 0.08); color: #C46030; }
+.nd-toolbar button:hover:not(:disabled) { background: rgba(196, 96, 48, 0.08); color: #C46030; }
 .nd-toolbar button.tb-active { background: rgba(196, 96, 48, 0.15); color: #C46030; }
+.nd-toolbar button:disabled { opacity: 0.35; cursor: not-allowed; }
 .nd-toolbar .tb-sep { width: 1px; height: 22px; background: rgba(0,0,0,0.08); margin: 0 4px; }
 
 /* Editor content */

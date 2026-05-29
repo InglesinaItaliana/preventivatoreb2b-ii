@@ -241,11 +241,23 @@ async function send() {
 }
 
 function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Enter' && !e.shiftKey) {
+  // Enter = newline (passthrough nativo). Cmd/Ctrl+Enter = invio.
+  // L'utente vuole poter andare a capo con Invio durante la scrittura
+  // di messaggi multilinea; per inviare resta il bottone .send-btn o
+  // lo shortcut Cmd+Enter (Mac) / Ctrl+Enter (Win/Linux).
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
     e.preventDefault()
     send()
   }
 }
+
+// Hint shortcut: mostriamo "⌘↵" su Mac, "Ctrl+↵" altrove. Calcolato
+// una volta sola (navigator.platform è stabile in sessione).
+const sendShortcutHint = (() => {
+  if (typeof navigator === 'undefined') return 'Ctrl+Invio per inviare'
+  const isMac = /Mac|iPhone|iPad/.test(navigator.platform)
+  return isMac ? '⌘ + Invio per inviare' : 'Ctrl + Invio per inviare'
+})()
 
 // ── Scroll: bottom oppure messaggio specifico via ?msg=ID ─────────────────
 const highlightedMsgId = ref<string | null>(null)
@@ -445,23 +457,11 @@ function renderText(t: string) {
         class="msg-group"
         :class="{ 'is-mine': group.isMine }"
       >
-        <!-- Avatar mostrato UNA VOLTA per gruppo (solo non-mine), bottom-aligned -->
-        <StarAvatar
-          v-if="!group.isMine"
-          v-bind="starAvatarProps(group.from, members)"
-          :size="32"
-          class="msg-group-avatar"
-        />
-
         <!-- Stack delle bolle del gruppo. È un GRID con grid-template-columns:
              max-content così tutte le bolle del gruppo prendono la larghezza
-             della più ampia (uniformità visiva richiesta). -->
+             della più ampia (uniformità visiva richiesta). Niente avatar a
+             fianco: l'identità del mittente è nella prima bubble (group chat). -->
         <div class="msg-group-stack">
-          <div
-            v-if="!group.isMine && chatDoc?.isGroup"
-            class="msg-sender"
-          >{{ displayName(group.from, members) }}</div>
-
           <div
             v-for="msg in group.messages"
             :key="msg.id"
@@ -525,6 +525,13 @@ function renderText(t: string) {
                 { 'is-mine': group.isMine },
               ]"
             >
+              <!-- Sender name: solo in chat di gruppo, solo per altrui, solo
+                   nella prima bolla del gruppo (first|single) — pattern Slack. -->
+              <div
+                v-if="!group.isMine && chatDoc?.isGroup && (msg.groupPos === 'first' || msg.groupPos === 'single')"
+                class="msg-bubble-sender"
+              >{{ displayName(group.from, members) }}</div>
+
               <!-- Reply quote (stile WhatsApp) -->
               <div
                 v-if="getRepliedMessage(msg.replyToId)"
@@ -655,6 +662,7 @@ function renderText(t: string) {
         <button class="send-btn" :disabled="!text.trim() || sending" @click="send">
           <MIcon name="send" filled :size="20" />
         </button>
+        <span class="send-hint">{{ sendShortcutHint }}</span>
       </div>
     </div>
 
@@ -858,17 +866,15 @@ function renderText(t: string) {
 }
 
 /* Outer wrapper di un gruppo di messaggi consecutivi (stesso mittente, ≤3 min).
-   Un "gruppo" può anche contenere una sola bolla (caso single). */
+   Un "gruppo" può anche contenere una sola bolla (caso single).
+   Niente avatar a fianco: lo stack va flush a sinistra (altrui) o destra (miei). */
 .msg-group {
   display: flex;
   align-items: flex-end;
-  gap: 8px;
   margin-top: 12px;
 }
 .msg-group:first-child { margin-top: 0; }
 .msg-group.is-mine { flex-direction: row-reverse; }
-
-.msg-group-avatar { flex-shrink: 0; }
 
 /* Stack delle bolle del gruppo: GRID con UNA sola colonna max-content.
    Tutte le bolle del gruppo prendono come larghezza il max-content della
@@ -905,14 +911,16 @@ function renderText(t: string) {
   transition: background var(--md-sys-motion-duration-medium2) var(--md-sys-motion-easing-standard);
 }
 
-.msg-sender {
-  font-size: 11px;
-  color: var(--md-sys-color-on-surface-variant);
+/* Sender name dentro la prima bubble di un gruppo (chat di gruppo, altrui).
+   Pattern Slack: identità inline col messaggio invece di header esterno. */
+.msg-bubble-sender {
+  font-size: 11.5px;
   font-weight: 600;
-  padding-left: 2px;
-  justify-self: start;
+  color: var(--md-sys-color-primary);
+  margin-bottom: 3px;
+  line-height: 1.2;
+  letter-spacing: 0.01em;
 }
-.msg-group.is-mine .msg-sender { justify-self: end; padding-left: 0; padding-right: 2px; }
 
 /* Bolla messaggi altrui: surface su page-bg beige.
    Border-radius default = SINGLE (tail BL=4); le varianti gruppo sotto
@@ -1289,6 +1297,21 @@ function renderText(t: string) {
 .send-btn:hover:not(:disabled) { background: var(--md-sys-color-primary-hover); }
 .send-btn:disabled { background: var(--md-sys-color-outline); cursor: not-allowed; }
 .send-btn:active:not(:disabled) { transform: scale(0.92); }
+
+/* Hint shortcut invio: visibile solo su desktop (hover-capable),
+   nascosto su touch dove non c'è tastiera fisica. */
+.send-hint {
+  display: none;
+  font-size: 10.5px;
+  color: var(--md-sys-color-on-surface-variant);
+  white-space: nowrap;
+  padding-right: 6px;
+  user-select: none;
+  pointer-events: none;
+}
+@media (hover: hover) {
+  .send-hint { display: inline; }
+}
 
 /* Task modal */
 .modal-backdrop {

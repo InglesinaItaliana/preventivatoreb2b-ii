@@ -44,7 +44,22 @@ interface DocRow {
   archived?: boolean
   /** Set di chi è owner (lowercase email). Permette UI archive solo per owner. */
   ownersSet: Set<string>
+  /** Visibilità ACL: 'private' | 'team' | 'public'. Default 'team' se assente. */
+  visibility: 'private' | 'team' | 'public'
+  /** Writer non-owner: indica se l'ACL è "estesa" oltre agli owner. */
+  extraWriters: number
+  /** Reader non-owner / non-writer. */
+  extraReaders: number
   source: 'owner' | 'writer' | 'reader' | 'team' | 'mentioned'
+}
+
+type PrivacyBadge = { label: string; tone: 'public' | 'team' | 'partial' | 'private' }
+
+function computeBadge(d: DocRow): PrivacyBadge {
+  if (d.visibility === 'public') return { label: 'Pubblico', tone: 'public' }
+  if (d.visibility === 'team') return { label: 'Squadra', tone: 'team' }
+  if (d.extraWriters > 0 || d.extraReaders > 0) return { label: 'Parziale', tone: 'partial' }
+  return { label: 'Privato', tone: 'private' }
 }
 
 const bySource: Record<string, Map<string, DocRow>> = {
@@ -60,13 +75,23 @@ let unsubscribers: Unsubscribe[] = []
 
 function mapSnapDoc(d: any, source: DocRow['source']): DocRow {
   const data = d.data() as any
+  const ownersArr: string[] = (data.acl?.owners ?? []).map((e: string) => e.toLowerCase().trim())
+  const writersArr: string[] = (data.acl?.writers ?? []).map((e: string) => e.toLowerCase().trim())
+  const readersArr: string[] = (data.acl?.readers ?? []).map((e: string) => e.toLowerCase().trim())
+  const ownersSet = new Set(ownersArr)
+  const writersSet = new Set(writersArr.filter(e => !ownersSet.has(e)))
+  const readersSet = new Set(readersArr.filter(e => !ownersSet.has(e) && !writersSet.has(e)))
+  const visibility = (data.acl?.visibility as DocRow['visibility']) ?? 'team'
   return {
     id: d.id,
     title: data.title ?? '(senza titolo)',
     updatedAt: data.updatedAt,
     iconName: data.icon?.name,
     archived: !!data.archived,
-    ownersSet: new Set((data.acl?.owners ?? []).map((e: string) => e.toLowerCase().trim())),
+    ownersSet,
+    visibility,
+    extraWriters: writersSet.size,
+    extraReaders: readersSet.size,
     source,
   }
 }
@@ -360,17 +385,6 @@ function isActiveTouch(d: DocRow): boolean {
         sticky
         :hidden="headerHidden"
       >
-        <template #tools>
-          <button
-            type="button"
-            class="ndh-integrations-btn"
-            title="Integrazioni · Connetti Claude (MCP)"
-            aria-label="Integrazioni"
-            @click="router.push('/nebula/docs/settings/integrations')"
-          >
-            <MIcon name="vpn_key" :size="18" />
-          </button>
-        </template>
         <template #cta>
           <button
             type="button"
@@ -427,7 +441,13 @@ function isActiveTouch(d: DocRow): boolean {
                 >
                   <span class="material-symbols-outlined ndh-item-icon">{{ d.iconName || 'description' }}</span>
                   <div class="ndh-item-meta">
-                    <div class="ndh-item-title">{{ d.title }}</div>
+                    <div class="ndh-item-title-row">
+                      <span class="ndh-item-title">{{ d.title }}</span>
+                      <span
+                        class="ndh-badge-privacy"
+                        :class="`ndh-badge-${computeBadge(d).tone}`"
+                      >{{ computeBadge(d).label }}</span>
+                    </div>
                     <div class="ndh-item-sub">{{ formatTime(d.updatedAt) }}</div>
                   </div>
                 </button>
@@ -482,7 +502,13 @@ function isActiveTouch(d: DocRow): boolean {
               >
                 <span class="material-symbols-outlined ndh-item-icon ndh-item-icon-mention">{{ d.iconName || 'description' }}</span>
                 <div class="ndh-item-meta">
-                  <div class="ndh-item-title">{{ d.title }}</div>
+                  <div class="ndh-item-title-row">
+                    <span class="ndh-item-title">{{ d.title }}</span>
+                    <span
+                      class="ndh-badge-privacy"
+                      :class="`ndh-badge-${computeBadge(d).tone}`"
+                    >{{ computeBadge(d).label }}</span>
+                  </div>
                   <div class="ndh-item-sub">{{ formatTime(d.updatedAt) }}</div>
                 </div>
               </button>
@@ -556,26 +582,6 @@ function isActiveTouch(d: DocRow): boolean {
   color: #8a8a8a;
   font-variation-settings: 'FILL' 0, 'wght' 300;
   display: block;
-}
-
-/* Pulsante Integrazioni (#tools dello sticky header) — compatto, M3-friendly */
-.ndh-integrations-btn {
-  background: transparent;
-  border: 1px solid var(--md-sys-color-outline-variant);
-  color: var(--md-sys-color-on-surface-variant);
-  border-radius: var(--md-sys-shape-corner-full);
-  padding: 6px;
-  font: inherit;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  transition: background var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
-              color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
-  margin-right: 6px;
-}
-.ndh-integrations-btn:hover {
-  background: color-mix(in srgb, var(--md-sys-color-primary) 8%, transparent);
-  color: var(--md-sys-color-primary);
 }
 
 /* Toast */
@@ -727,6 +733,12 @@ function isActiveTouch(d: DocRow): boolean {
 .ndh-item-icon { font-size: 22px; color: #C46030; flex-shrink: 0; }
 .ndh-item-icon-mention { color: #4A6B8A; }  /* blu admin per coerenza userMention */
 .ndh-item-meta { flex: 1; min-width: 0; overflow: hidden; }
+.ndh-item-title-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
 .ndh-item-title {
   font-weight: 500;
   font-size: 14.5px;
@@ -734,7 +746,23 @@ function isActiveTouch(d: DocRow): boolean {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  min-width: 0;
+  flex: 1;
 }
+.ndh-badge-privacy {
+  flex-shrink: 0;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 1px 8px;
+  border-radius: 999px;
+  border: 1px solid transparent;
+  line-height: 1.5;
+}
+.ndh-badge-public  { background: rgba(46, 125, 50, 0.10);  color: #2E7D32; border-color: rgba(46, 125, 50, 0.25); }
+.ndh-badge-team    { background: rgba(0, 0, 0, 0.05);      color: #555;    border-color: rgba(0, 0, 0, 0.10); }
+.ndh-badge-partial { background: rgba(217, 119, 6, 0.12);  color: #B45309; border-color: rgba(217, 119, 6, 0.30); }
+.ndh-badge-private { background: rgba(176, 0, 32, 0.10);   color: #B0001F; border-color: rgba(176, 0, 32, 0.25); }
 .ndh-item-sub {
   font-size: 11.5px;
   color: #888;

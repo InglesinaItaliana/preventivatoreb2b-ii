@@ -88,6 +88,9 @@ const router = createRouter({
         { path: 'nova/spedizioni', name: 'nova-spedizioni', component: () => import('../views/nova/NovaSpedizioniView.vue') },
         { path: 'admin/maintenance', name: 'sidera-admin-maintenance', component: () => import('../views/sidera/SideraAdminMaintenance.vue') },
         { path: 'core/settings', name: 'sidera-core-settings', component: () => import('../views/sidera/SideraCoreSettings.vue') },
+        // CORE → Integrazioni: API key Claude/MCP (spostate da /nebula/docs/settings/integrations).
+        // Componente invariato, cambia solo dove è montato in sidebar.
+        { path: 'core/integrations', name: 'sidera-core-integrations', component: () => import('../views/nebula/docs/NebulaIntegrationsView.vue') },
       ]
     },
     // ── PULSAR (scope mobile, montato sotto SideraLayout adattivo) ──────────
@@ -148,7 +151,9 @@ const router = createRouter({
         // History view (F3-C3): timeline snapshots + restore.
         { path: 'docs/:docId/history', name: 'nebula-doc-history', component: () => import('../views/nebula/docs/NebulaDocHistoryView.vue') },
         // Integrazioni (F4-C2): API key management per MCP server Claude.
-        { path: 'docs/settings/integrations', name: 'nebula-docs-integrations', component: () => import('../views/nebula/docs/NebulaIntegrationsView.vue') },
+        // Spostate in CORE → /sidera/core/integrations (2026-05-29) ma manteniamo
+        // questa route come redirect per bookmark / link esterni esistenti.
+        { path: 'docs/settings/integrations', name: 'nebula-docs-integrations', redirect: '/sidera/core/integrations' },
         // OAuth 2.0 consent page (F6): claude.ai redirige qui dopo /authorize
         // per chiedere all'utente "Vuoi autorizzare?". Richiede login Firebase
         // (gestito dal guard requiresAuth nel parent route).
