@@ -1227,21 +1227,28 @@ function renderText(t: string) {
 
 .pills { display: flex; gap: 4px; flex-shrink: 0; }
 
+/* Bollini fluttuanti: nessun bg/bordo a riposo, solo l'icona "galleggia"
+   sul page bg. Hit-area circolare per il tap (36px) ma invisibile finché
+   non c'è interazione. Active = icona primary. */
 .pill {
   width: 36px; height: 36px;
   border-radius: var(--md-sys-shape-corner-full);
-  border: 1.5px solid var(--md-sys-color-outline-variant);
-  background: var(--md-sys-color-surface-container);
+  border: 0;
+  background: transparent;
   cursor: pointer;
   font-size: 14px;
   display: flex; align-items: center; justify-content: center;
-  transition: all 0.15s;
+  transition: background 0.15s;
+  -webkit-tap-highlight-color: transparent;
+  padding: 0;
 }
 
-.pill:hover { border-color: color-mix(in srgb, var(--md-sys-color-primary) 50%, transparent); background: color-mix(in srgb, var(--md-sys-color-primary) 6%, transparent); }
-.pill.is-active { background: color-mix(in srgb, var(--md-sys-color-primary) 13%, transparent); border-color: var(--md-sys-color-primary); }
+@media (hover: hover) {
+  .pill:hover { background: color-mix(in srgb, var(--md-sys-color-primary) 10%, transparent); }
+}
+.pill:active { background: color-mix(in srgb, var(--md-sys-color-primary) 14%, transparent); }
 
-.pill-icon { font-size: 18px; color: var(--md-sys-color-on-surface-variant); flex-shrink: 0; }
+.pill-icon { font-size: 22px; color: var(--md-sys-color-on-surface-variant); flex-shrink: 0; }
 .pill.is-active .pill-icon { color: var(--md-sys-color-primary); }
 
 .input-wrap {
