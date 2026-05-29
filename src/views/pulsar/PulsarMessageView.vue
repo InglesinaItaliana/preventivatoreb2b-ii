@@ -1239,11 +1239,11 @@ function renderText(t: string) {
 
 /* Input area */
 .input-area {
-  background: var(--md-sys-color-surface);
-  border-top: 1px solid var(--md-sys-color-outline-variant);
-  /* padding-bottom = 12px standard + safe-area iPhone così l'input arriva
-     al bordo dello schermo senza lasciare zone beige sotto, ma il
-     contenuto interno resta sopra la home indicator. */
+  /* No background / no border-top: l'intera barra di scrittura "galleggia"
+     sul page bg. La textbox (.input-wrap) mantiene il suo proprio container
+     pill-shape per delimitare l'area di input; pillole e barra esterna sono
+     trasparenti. padding-bottom safe-area iPhone preservato. */
+  background: transparent;
   padding: 10px 14px calc(12px + env(safe-area-inset-bottom));
   display: flex;
   align-items: flex-end;
