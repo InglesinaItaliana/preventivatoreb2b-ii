@@ -66,7 +66,10 @@ const chatAvatarBg = computed(() => 'var(--md-sys-color-primary)')
 const chatAvatarInitial = computed(() => (chatTitle.value[0] ?? '?').toUpperCase())
 const otherMember = computed(() => chatDoc.value?.members.find(m => m !== myEmail) ?? '')
 
-onBeforeUnmount(() => chatUnsub())
+onBeforeUnmount(() => {
+  chatUnsub()
+  inputStackRO?.disconnect()
+})
 
 // Lookup messaggio originale per quote di reply
 const messagesById = computed(() => {
@@ -148,8 +151,11 @@ const selectedTags = ref<string[]>([])
 const tagSearch    = ref('')
 const mentionQuery = ref('')
 const showMentions = ref(false)
-const inputRef     = ref<HTMLTextAreaElement | null>(null)
-const listRef      = ref<HTMLDivElement | null>(null)
+const inputRef       = ref<HTMLTextAreaElement | null>(null)
+const listRef        = ref<HTMLDivElement | null>(null)
+const inputAreaRef   = ref<HTMLDivElement | null>(null)
+const inputStackRef  = ref<HTMLDivElement | null>(null)
+const mvRef          = ref<HTMLDivElement | null>(null)
 
 function toggleFlag(flag: string) {
   const idx = flags.value.indexOf(flag)
@@ -187,6 +193,17 @@ function autoResize() {
   const target = Math.min(el.scrollHeight, maxH)
   el.style.height = target + 'px'
   el.style.overflowY = el.scrollHeight > maxH ? 'auto' : 'hidden'
+  syncInputHeight()
+}
+
+// .input-stack è position:absolute sopra .msg-list (i messaggi scorrono
+// sotto le pillole). Il padding-bottom di .msg-list = altezza reale dello
+// stack (tag-picker + reply-bar + input-area), così l'ultimo messaggio
+// resta sempre raggiungibile.
+function syncInputHeight() {
+  const stack = inputStackRef.value
+  const mv = mvRef.value
+  if (stack && mv) mv.style.setProperty('--input-h', stack.offsetHeight + 'px')
 }
 
 function onInput() {
@@ -345,12 +362,19 @@ function maybeApplyQueryFocus() {
   })
 }
 
+let inputStackRO: ResizeObserver | null = null
 onMounted(() => {
   setTimeout(() => {
     if (!route.query.msg) scrollToBottom()
   }, 100)
   // Stato iniziale textarea: 1 riga compatta
   nextTick(autoResize)
+  // Osserva l'altezza dello stack input per aggiornare --input-h quando
+  // tag-picker o reply-bar appaiono/scompaiono (non solo via autoResize).
+  if (typeof ResizeObserver !== 'undefined' && inputStackRef.value) {
+    inputStackRO = new ResizeObserver(() => syncInputHeight())
+    inputStackRO.observe(inputStackRef.value)
+  }
 })
 
 // Modifiche programmatiche di `text` (es. selectMention, reply pre-fill,
@@ -451,7 +475,7 @@ function renderText(t: string) {
 </script>
 
 <template>
-  <div class="mv">
+  <div class="mv" ref="mvRef">
     <!-- Header chat -->
     <header v-if="chatDoc" class="chat-header">
       <button
@@ -604,6 +628,11 @@ function renderText(t: string) {
       </div>
     </div>
 
+    <!-- Stack delle UI ancorate in basso (tag-picker, reply-bar, input-area).
+         Posizionato assoluto sopra .msg-list così i messaggi scorrono visibili
+         attorno alle pillole. ResizeObserver sincronizza --input-h. -->
+    <div class="input-stack" ref="inputStackRef">
+
     <!-- Hashtag picker -->
     <div v-if="hashtagPicker" class="tag-picker">
       <div class="tag-picker-header">
@@ -650,7 +679,7 @@ function renderText(t: string) {
     </div>
 
     <!-- Input area -->
-    <div class="input-area">
+    <div class="input-area" ref="inputAreaRef">
       <!-- Pills -->
       <div class="pills">
         <button
@@ -690,6 +719,8 @@ function renderText(t: string) {
         <span class="send-hint">{{ sendShortcutHint }}</span>
       </div>
     </div>
+
+    </div><!-- /.input-stack -->
 
     <!-- Create task modal -->
     <Teleport to="body">
@@ -857,7 +888,10 @@ function renderText(t: string) {
 .msg-list {
   flex: 1;
   overflow-y: auto;
-  padding: 16px 16px 8px;
+  /* padding-bottom dinamico: lascia spazio sotto l'ultimo messaggio così
+     resta visibile sopra all'input-area assoluta. --input-h aggiornato
+     da autoResize() in JS (default 80px = 1 riga + pad + safe-area). */
+  padding: 16px 16px calc(var(--input-h, 80px) + 8px);
   display: flex;
   flex-direction: column;
   /* min-height: 0 essenziale su iOS: senza, il flex child cresce all'altezza
@@ -1238,11 +1272,24 @@ function renderText(t: string) {
 .tag-cnt { font-size: 10px; font-weight: 400; opacity: 0.6; }
 
 /* Input area */
+/* Wrapper assoluto che raggruppa tag-picker + reply-bar + input-area:
+   sta sopra .msg-list così i messaggi scorrono visibili negli spazi
+   attorno alle pillole (telegram-style). pointer-events:none consente
+   di scrollare la lista toccando lo spazio fra le pillole; i figli
+   ripristinano pointer-events:auto sui propri elementi. */
+.input-stack {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+}
+.input-stack > * { pointer-events: auto; }
+
 .input-area {
-  /* No background / no border-top: l'intera barra di scrittura "galleggia"
-     sul page bg. La textbox (.input-wrap) mantiene il suo proprio container
-     pill-shape per delimitare l'area di input; pillole e barra esterna sono
-     trasparenti. padding-bottom safe-area iPhone preservato. */
   background: transparent;
   padding: 10px 14px calc(12px + env(safe-area-inset-bottom));
   display: flex;
