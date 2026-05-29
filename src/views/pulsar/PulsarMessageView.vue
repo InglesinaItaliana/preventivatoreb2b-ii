@@ -57,8 +57,9 @@ const chatTitle = computed(() => {
 const chatSubtitle = computed(() => {
   if (!chatDoc.value) return ''
   if (chatDoc.value.isGroup) return `${chatDoc.value.members.length} partecipanti`
-  const other = chatDoc.value.members.find(m => m !== myEmail) ?? ''
-  return other
+  // Per le chat 1-to-1 non mostriamo l'email sotto al nome (rumore visivo):
+  // il nome dell'interlocutore è già sopra, l'avatar è a sinistra.
+  return ''
 })
 // Usato solo per i gruppi (le chat 1:1 mostrano lo StarAvatar dell'altro membro).
 const chatAvatarBg = computed(() => 'var(--md-sys-color-primary)')
@@ -464,7 +465,7 @@ function renderText(t: string) {
       </div>
       <div class="chat-header-info">
         <div class="chat-header-name">{{ chatTitle }}</div>
-        <div class="chat-header-sub">{{ chatSubtitle }}</div>
+        <div v-if="chatSubtitle" class="chat-header-sub">{{ chatSubtitle }}</div>
       </div>
     </header>
 
