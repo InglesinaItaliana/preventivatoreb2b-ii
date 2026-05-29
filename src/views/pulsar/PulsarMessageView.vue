@@ -57,8 +57,9 @@ const chatTitle = computed(() => {
 const chatSubtitle = computed(() => {
   if (!chatDoc.value) return ''
   if (chatDoc.value.isGroup) return `${chatDoc.value.members.length} partecipanti`
-  const other = chatDoc.value.members.find(m => m !== myEmail) ?? ''
-  return other
+  // Per le chat 1-to-1 non mostriamo l'email sotto al nome (rumore visivo):
+  // il nome dell'interlocutore è già sopra, l'avatar è a sinistra.
+  return ''
 })
 // Usato solo per i gruppi (le chat 1:1 mostrano lo StarAvatar dell'altro membro).
 const chatAvatarBg = computed(() => 'var(--md-sys-color-primary)')
@@ -172,7 +173,24 @@ const suggestedTags = computed(() => suggestHashtags(tagSearch.value))
 // ── @mention autocomplete ─────────────────────────────────────────────────
 const mentions = ref<string[]>([])
 
+// Auto-grow: la textarea cresce con il contenuto fino a ~10 righe, poi
+// scrolla internamente. Misurato via scrollHeight dopo aver azzerato
+// height (così il browser ricalcola; altrimenti scrollHeight resta al
+// massimo già raggiunto). Cap = 10 righe × line-height del campo.
+function autoResize() {
+  const el = inputRef.value
+  if (!el) return
+  el.style.height = 'auto'
+  // line-height effettivo (px) per riga
+  const lh = parseFloat(getComputedStyle(el).lineHeight) || 24
+  const maxH = lh * 10
+  const target = Math.min(el.scrollHeight, maxH)
+  el.style.height = target + 'px'
+  el.style.overflowY = el.scrollHeight > maxH ? 'auto' : 'hidden'
+}
+
 function onInput() {
+  autoResize()
   const val = text.value
   const lastAt = val.lastIndexOf('@')
   if (lastAt !== -1 && lastAt === val.length - 1) {
@@ -234,6 +252,7 @@ async function send() {
     hashtagPicker.value = false
     showMentions.value = false
     await nextTick()
+    autoResize()       // ricomprime la textarea a 1 riga dopo l'invio
     scrollToBottom()
   } finally {
     sending.value = false
@@ -330,7 +349,13 @@ onMounted(() => {
   setTimeout(() => {
     if (!route.query.msg) scrollToBottom()
   }, 100)
+  // Stato iniziale textarea: 1 riga compatta
+  nextTick(autoResize)
 })
+
+// Modifiche programmatiche di `text` (es. selectMention, reply pre-fill,
+// mention insertion) non passano da onInput → resize manuale.
+watch(text, () => autoResize())
 
 watch(() => messages.value.length, async () => {
   // Se sto arrivando da Pendenze (?msg=...) tento di centrare quel messaggio
@@ -440,7 +465,7 @@ function renderText(t: string) {
       </div>
       <div class="chat-header-info">
         <div class="chat-header-name">{{ chatTitle }}</div>
-        <div class="chat-header-sub">{{ chatSubtitle }}</div>
+        <div v-if="chatSubtitle" class="chat-header-sub">{{ chatSubtitle }}</div>
       </div>
     </header>
 
@@ -1221,33 +1246,40 @@ function renderText(t: string) {
      contenuto interno resta sopra la home indicator. */
   padding: 10px 14px calc(12px + env(safe-area-inset-bottom));
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 8px;
 }
 
 .pills { display: flex; gap: 4px; flex-shrink: 0; }
 
+/* Bollini fluttuanti: nessun bg/bordo a riposo, solo l'icona "galleggia"
+   sul page bg. Hit-area circolare per il tap (36px) ma invisibile finché
+   non c'è interazione. Active = icona primary. */
 .pill {
   width: 36px; height: 36px;
   border-radius: var(--md-sys-shape-corner-full);
-  border: 1.5px solid var(--md-sys-color-outline-variant);
-  background: var(--md-sys-color-surface-container);
+  border: 0;
+  background: transparent;
   cursor: pointer;
   font-size: 14px;
   display: flex; align-items: center; justify-content: center;
-  transition: all 0.15s;
+  transition: background 0.15s;
+  -webkit-tap-highlight-color: transparent;
+  padding: 0;
 }
 
-.pill:hover { border-color: color-mix(in srgb, var(--md-sys-color-primary) 50%, transparent); background: color-mix(in srgb, var(--md-sys-color-primary) 6%, transparent); }
-.pill.is-active { background: color-mix(in srgb, var(--md-sys-color-primary) 13%, transparent); border-color: var(--md-sys-color-primary); }
+@media (hover: hover) {
+  .pill:hover { background: color-mix(in srgb, var(--md-sys-color-primary) 10%, transparent); }
+}
+.pill:active { background: color-mix(in srgb, var(--md-sys-color-primary) 14%, transparent); }
 
-.pill-icon { font-size: 18px; color: var(--md-sys-color-on-surface-variant); flex-shrink: 0; }
+.pill-icon { font-size: 22px; color: var(--md-sys-color-on-surface-variant); flex-shrink: 0; }
 .pill.is-active .pill-icon { color: var(--md-sys-color-primary); }
 
 .input-wrap {
   flex: 1;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 8px;
   background: var(--md-sys-color-surface-container);
   border: 1.5px solid var(--md-sys-color-outline-variant);
@@ -1271,7 +1303,10 @@ function renderText(t: string) {
   caret-color: var(--md-sys-color-primary);
   resize: none;
   line-height: 1.5;
-  max-height: 100px;
+  /* Cap a 10 righe (line-height 1.5 × font 16px = 24px/riga × 10 = 240px).
+     autoResize() in JS aggiorna height/overflowY dinamicamente; il max-height
+     CSS resta come safety net se onInput non scatta. */
+  max-height: 240px;
   padding: 0;
   -webkit-appearance: none;
   appearance: none;
