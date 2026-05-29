@@ -1212,21 +1212,32 @@ function renderText(t: string) {
   overflow-y: auto;
 }
 
-.tag-picker-header { margin-bottom: 10px; }
+.tag-picker-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
 
 .tag-search {
-  width: 100%;
+  /* Pill come .input-wrap: stesso radius/bg, niente bordo. Inizia stretta
+     e cresce con il testo grazie a field-sizing:content (supportato su
+     Chrome 123+, Safari iOS 17.4+). min-width copre il placeholder. */
+  width: auto;
+  min-width: 160px;
+  max-width: 100%;
+  field-sizing: content;
   box-sizing: border-box;
   background: var(--md-sys-color-surface-container);
-  border: 1px solid var(--md-sys-color-outline-variant);
-  border-radius: var(--md-sys-shape-corner-small);
-  padding: 8px 12px;
+  border: 0;
+  border-radius: 20px;
+  padding: 6px 14px;
   /* 16px previene lo zoom automatico di iOS Safari sul focus input. */
   font-size: 16px;
   font-family: 'Outfit', sans-serif;
   color: var(--md-sys-color-on-surface);
   outline: none;
-  margin-bottom: 8px;
 }
 
 .selected-tags { display: flex; gap: 6px; flex-wrap: wrap; }
