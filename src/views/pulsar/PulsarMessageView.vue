@@ -172,7 +172,24 @@ const suggestedTags = computed(() => suggestHashtags(tagSearch.value))
 // ── @mention autocomplete ─────────────────────────────────────────────────
 const mentions = ref<string[]>([])
 
+// Auto-grow: la textarea cresce con il contenuto fino a ~10 righe, poi
+// scrolla internamente. Misurato via scrollHeight dopo aver azzerato
+// height (così il browser ricalcola; altrimenti scrollHeight resta al
+// massimo già raggiunto). Cap = 10 righe × line-height del campo.
+function autoResize() {
+  const el = inputRef.value
+  if (!el) return
+  el.style.height = 'auto'
+  // line-height effettivo (px) per riga
+  const lh = parseFloat(getComputedStyle(el).lineHeight) || 24
+  const maxH = lh * 10
+  const target = Math.min(el.scrollHeight, maxH)
+  el.style.height = target + 'px'
+  el.style.overflowY = el.scrollHeight > maxH ? 'auto' : 'hidden'
+}
+
 function onInput() {
+  autoResize()
   const val = text.value
   const lastAt = val.lastIndexOf('@')
   if (lastAt !== -1 && lastAt === val.length - 1) {
@@ -234,6 +251,7 @@ async function send() {
     hashtagPicker.value = false
     showMentions.value = false
     await nextTick()
+    autoResize()       // ricomprime la textarea a 1 riga dopo l'invio
     scrollToBottom()
   } finally {
     sending.value = false
@@ -330,7 +348,13 @@ onMounted(() => {
   setTimeout(() => {
     if (!route.query.msg) scrollToBottom()
   }, 100)
+  // Stato iniziale textarea: 1 riga compatta
+  nextTick(autoResize)
 })
+
+// Modifiche programmatiche di `text` (es. selectMention, reply pre-fill,
+// mention insertion) non passano da onInput → resize manuale.
+watch(text, () => autoResize())
 
 watch(() => messages.value.length, async () => {
   // Se sto arrivando da Pendenze (?msg=...) tento di centrare quel messaggio
@@ -1221,7 +1245,7 @@ function renderText(t: string) {
      contenuto interno resta sopra la home indicator. */
   padding: 10px 14px calc(12px + env(safe-area-inset-bottom));
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 8px;
 }
 
@@ -1254,7 +1278,7 @@ function renderText(t: string) {
 .input-wrap {
   flex: 1;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   gap: 8px;
   background: var(--md-sys-color-surface-container);
   border: 1.5px solid var(--md-sys-color-outline-variant);
@@ -1278,7 +1302,10 @@ function renderText(t: string) {
   caret-color: var(--md-sys-color-primary);
   resize: none;
   line-height: 1.5;
-  max-height: 100px;
+  /* Cap a 10 righe (line-height 1.5 × font 16px = 24px/riga × 10 = 240px).
+     autoResize() in JS aggiorna height/overflowY dinamicamente; il max-height
+     CSS resta come safety net se onInput non scatta. */
+  max-height: 240px;
   padding: 0;
   -webkit-appearance: none;
   appearance: none;
