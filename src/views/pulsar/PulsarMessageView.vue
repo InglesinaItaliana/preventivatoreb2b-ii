@@ -241,11 +241,23 @@ async function send() {
 }
 
 function onKeydown(e: KeyboardEvent) {
-  if (e.key === 'Enter' && !e.shiftKey) {
+  // Enter = newline (passthrough nativo). Cmd/Ctrl+Enter = invio.
+  // L'utente vuole poter andare a capo con Invio durante la scrittura
+  // di messaggi multilinea; per inviare resta il bottone .send-btn o
+  // lo shortcut Cmd+Enter (Mac) / Ctrl+Enter (Win/Linux).
+  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
     e.preventDefault()
     send()
   }
 }
+
+// Hint shortcut: mostriamo "⌘↵" su Mac, "Ctrl+↵" altrove. Calcolato
+// una volta sola (navigator.platform è stabile in sessione).
+const sendShortcutHint = (() => {
+  if (typeof navigator === 'undefined') return 'Ctrl+Invio per inviare'
+  const isMac = /Mac|iPhone|iPad/.test(navigator.platform)
+  return isMac ? '⌘ + Invio per inviare' : 'Ctrl + Invio per inviare'
+})()
 
 // ── Scroll: bottom oppure messaggio specifico via ?msg=ID ─────────────────
 const highlightedMsgId = ref<string | null>(null)
@@ -655,6 +667,7 @@ function renderText(t: string) {
         <button class="send-btn" :disabled="!text.trim() || sending" @click="send">
           <MIcon name="send" filled :size="20" />
         </button>
+        <span class="send-hint">{{ sendShortcutHint }}</span>
       </div>
     </div>
 
@@ -1289,6 +1302,21 @@ function renderText(t: string) {
 .send-btn:hover:not(:disabled) { background: var(--md-sys-color-primary-hover); }
 .send-btn:disabled { background: var(--md-sys-color-outline); cursor: not-allowed; }
 .send-btn:active:not(:disabled) { transform: scale(0.92); }
+
+/* Hint shortcut invio: visibile solo su desktop (hover-capable),
+   nascosto su touch dove non c'è tastiera fisica. */
+.send-hint {
+  display: none;
+  font-size: 10.5px;
+  color: var(--md-sys-color-on-surface-variant);
+  white-space: nowrap;
+  padding-right: 6px;
+  user-select: none;
+  pointer-events: none;
+}
+@media (hover: hover) {
+  .send-hint { display: inline; }
+}
 
 /* Task modal */
 .modal-backdrop {
