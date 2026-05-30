@@ -40,6 +40,14 @@ function identityFor(path: string): TabIdentity {
 }
 
 function applyTabIdentity(path: string) {
+  // Scroll-lock del documento solo dentro la suite/PWA (rubber-band iOS); POPS
+  // scrolla a livello di documento. Lo script inline di index.html lo applica al
+  // first-paint; qui copriamo le navigazioni SPA POPS↔suite. Vedi src/style.css.
+  document.documentElement.classList.toggle(
+    'suite-locked',
+    SUITE_PREFIXES.some(p => path.startsWith(p)),
+  );
+
   const { title, favicon } = identityFor(path);
 
   if (document.title !== title) document.title = title;

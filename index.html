@@ -24,6 +24,12 @@
       (function () {
         try {
           var path = window.location.pathname || '';
+          // Lock scroll del documento SOLO sulle rotte suite/PWA (rubber-band iOS).
+          // POPS resta scrollabile a livello di documento. Applicato al first-paint
+          // per evitare flash. Vedi src/style.css (.suite-locked) e App.vue.
+          if (/^\/(sidera|pulsar|cepheid|nebula|nova|magnetar|quasar)(\/|$)/.test(path)) {
+            document.documentElement.classList.add('suite-locked');
+          }
           var head = document.head;
           var titleMeta = head.querySelector('meta[name="apple-mobile-web-app-title"]');
 
