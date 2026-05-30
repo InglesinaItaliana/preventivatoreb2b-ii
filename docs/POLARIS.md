@@ -3,8 +3,8 @@
 > Roadmap strategica per l'evoluzione strutturale della suite-of-webapps.
 > Documento "vivo": va aggiornato dopo ogni step completato o decisione esplicita.
 
-**Ultima revisione:** 2026-05-22
-**Stato globale:** azioni 1, 2, 3, 4, 5 deployate in produzione (5/7 completate). Resta azione 6 (in lavorazione: pianificata insieme alla promozione NEBULA a 4ª PWA) e azione 7 (differita 6-12 mesi). POPS = 3ª PWA installabile, login con Schlegel + vertice attivo live, Firebase chunk splittato granulare con risparmio reale ~16 KB su POPS. **NEBULA promossa a 4ª PWA installabile** (branch `feature/nebula-pwa`) — sblocca il trigger di azione 6 ("da 4+ PWA in poi").
+**Ultima revisione:** 2026-05-30
+**Stato globale:** azioni 1-5 deployate in produzione. Restano azione 6 (`meta.scope` unificato) e azione 7 (differita). Azioni 8-9 pianificate. **Aggiunte Azioni 10-15** (piano di maturazione e integrazione dall'audit `docs/ANALISI-MATURITA.md`, 2026-05-30): la suite è coerente (~85%) ma a maturità media ~70%, sotto la soglia 80% per la consegna 1.0. I tre bloccanti trasversali sono Az.10 (`useToast` condiviso), Az.11 (hardening rules) e Az.12 (push uniformi). NEBULA è 4ª PWA installabile.
 
 ---
 
@@ -61,8 +61,16 @@ POLARIS è la roadmap che governa l'evoluzione architetturale di `preventivatore
 | 7 | ⚪ Differita | **Separazione deploy POPS vs interno** | Tra 6–12 mesi, se POPS cresce o legal richiede dominio separato | Altissimo | ⏸ |
 | 8 | 🟢 Bassa | **Hub Schlegel landing interattiva** (sidebar collassabile + click vertice → sezione) | Quando tutte e 6 le PWA sono attive | Medio (SideraLayout condiviso) | ☐ |
 | 9 | 🟠 Media-alta | **Ruoli e permessi granulari** (chi accede a quali moduli/azioni) + robustezza login su cache-miss | Quando si dovranno aprire moduli SIDERA a ruoli operativi | Medio-alto (tocca guard + LoginView POPS) | ☐ |
+| 10 | 🔴 Alta | **`useToast` condiviso** (feedback errore/successo visibile in tutti i moduli) | Subito — sblocca la maturità percepita di tutta la suite | Basso | ☐ |
+| 11 | 🔴 Alta | **Hardening Firestore rules** (`tasks`/`obiettivi` update troppo permissivi) | Prima della consegna 1.0 | Medio (test ruoli) | ☐ |
+| 12 | 🟠 Media-alta | **Push uniformi cross-modulo** (completa VAPID + assegnazione task/scadenze/mention) | Quando serve notificare oltre PULSAR | Basso (POPS non usa FCM) | ☐ |
+| 13 | 🟠 Media-alta | **`@mention` unificato cross-modulo** (PULSAR + CEPHEID, generalizza `UniversalMention` NEBULA) | Dopo Azione 10 | Basso | ☐ |
+| 14 | 🟡 Media | **Ricerca globale / Cmd-K** (doc + task + chat cross-modulo) | Quando la suite è percepita come "tante app" | Medio | ☐ |
+| 15 | 🟡 Media | **Stream attività consolidato** (vista "All Activity" da `activityLog` già scritto) | Quando serve audit unificato | Basso | ☐ |
 
 **Legenda stato:** ☐ da fare · 🔄 in corso · ☑ fatto · ⏸ rimandato esplicitamente · ❌ scartato
+
+> **Azioni 10-15** nascono dall'audit `docs/ANALISI-MATURITA.md` (2026-05-30). Sono il "piano di maturazione e integrazione" per portare la suite dalla consegna 1.0. Azioni 10-12 = i tre bloccanti trasversali (sotto l'80% di maturità senza). Azione 11 ha forte overlap con Azione 9.
 
 ---
 
@@ -346,6 +354,99 @@ POLARIS è la roadmap che governa l'evoluzione architetturale di `preventivatore
 
 ---
 
+### Azione 10 — `useToast` condiviso 🔴
+
+**Problema.** In tutti e 4 i moduli i fallimenti async finiscono solo in `console.error`: invio messaggio (PULSAR), create/update/delete (CEPHEID), date scheduling (QUASAR), save/share doc (NEBULA). **L'utente non riceve mai feedback visibile** se un'operazione fallisce per rete o permessi. È il singolo intervento con più impatto: eleva la maturità percepita di tutta la suite in un colpo solo.
+
+**Soluzione strutturale.**
+- Nuovo `src/composables/shared/useToast.ts` (singleton reattivo: coda toast `{ id, type: 'error'|'success'|'info', text, timeout }`).
+- Renderer montato una volta nella shell (`SideraLayout.vue`) → visibile in tutti gli scope, rispetta safe-area iOS.
+- Microcopy via LYRA (vedi `docs/LYRA.md`). Default error → "Qualcosa è andato storto. Riprova."
+- Sostituire i `console.error` UX-relevant con `toast.error(...)` (mantenere il log per debug).
+
+**File toccati.** `src/composables/shared/useToast.ts` (nuovo), `SideraLayout.vue` (renderer), poi capillarmente nei catch delle view dei 4 moduli.
+
+**Rischio POPS.** Basso (POPS non monta SideraLayout; eventuale riuso opzionale).
+
+**Test.** ☐ Errore di rete simulato in ogni modulo → toast visibile · ☐ Toast non copre la bottom-nav mobile · ☐ Auto-dismiss + dismiss manuale.
+
+---
+
+### Azione 11 — Hardening Firestore rules 🔴
+
+**Problema.** Verificato in audit (`docs/ANALISI-MATURITA.md` §3):
+- `tasks/{tid}` root (`firestore.rules:115`): `allow update: if request.auth != null` → **qualunque utente loggato può modificare/completare/riassegnare task di chiunque**.
+- `obiettivi/{oid}` (`firestore.rules:161`): stesso problema sugli obiettivi.
+- `preventivi/{id}` create (`firestore.rules:57`): nessuna validazione di stato.
+
+Rischio reale **basso** (team interno fidato) ma inaccettabile per una consegna 1.0.
+
+**Soluzione strutturale.** Vincolare `update` a `createdBy` / `assignee(s)` / `isAdmin()`; validare lo stato iniziale dei preventivi. Forte overlap con **Azione 9** (ruoli granulari): valutare di farle insieme.
+
+**File toccati.** `firestore.rules`. Possibili `firestore.indexes.json` se servono query nuove.
+
+**Rischio POPS.** Medio — `preventivi` è collection POPS. Test ruoli obbligatori (Admin/Prod/Logistica/Cliente/Owner) prima del deploy.
+
+**Test.** ☐ Utente A non può completare task di utente B · ☐ Owner/admin sì · ☐ Preventivo non creabile con stato ≠ DRAFT · ☐ Regressione POPS (ciclo preventivo completo).
+
+---
+
+### Azione 12 — Push uniformi cross-modulo 🟠
+
+**Problema.** Oggi solo PULSAR notifica (chat). `VAPID_KEY` è hardcoded in `useNotifications.ts:31` e le push per moduli ≠ PULSAR non sono mai state completate (vedi memoria "SIDERA edit + FCM"). Mancano: assegnazione task (CEPHEID), scadenze imminenti, mention (NEBULA `notifyOnMention` esiste ma isolata).
+
+**Soluzione strutturale.** Completare la configurazione VAPID; estendere il pattern FCM scope-gated (Azione 1) a CEPHEID/NEBULA: Cloud Function trigger su `tasks` assegnati + scadenze + mention. Un solo servizio notifiche per tutta la suite.
+
+**File toccati.** `src/composables/shared/useNotifications.ts`, `src/functions/index.ts` (nuovi trigger), `scopeConfig.ts` (notificationScope già predisposto).
+
+**Rischio POPS.** Basso (POPS non usa FCM).
+
+**Test.** ☐ Assegnazione task → push al solo assegnatario, scope corretto · ☐ Mention NEBULA → push · ☐ No push duplicate su utente con più PWA installate.
+
+---
+
+### Azione 13 — `@mention` unificato cross-modulo 🟠
+
+**Problema.** Il sistema di menzione + notifica esiste solo in NEBULA-DOCS (`UniversalMention` / `notifyOnMention`). PULSAR ha un `@mention` separato (autocomplete locale, nessuna notifica strutturata); CEPHEID non ne ha.
+
+**Soluzione strutturale.** Generalizzare `UniversalMention` di NEBULA in infrastruttura condivisa (persona/task/progetto/documento) e adottarla in PULSAR chat e nei commenti/descrizioni CEPHEID → un'unica logica di menzione e notifica per tutta la suite. Dipende da Azione 12 (canale notifiche).
+
+**File toccati.** Estrazione del nodo/parser mention da `src/views/nebula/docs/` a shared; adozione in PULSAR + CEPHEID.
+
+**Rischio POPS.** Basso.
+
+**Test.** ☐ `@persona` in chat PULSAR → notifica · ☐ Mention render coerente nei 3 moduli · ☐ Click mention → naviga all'entità.
+
+---
+
+### Azione 14 — Ricerca globale / Cmd-K 🟡
+
+**Problema.** Nessuna ricerca trasversale: per trovare un doc, un task o una chat bisogna sapere in quale modulo cercare. È ciò che fa percepire la suite come "tante app" invece di un prodotto unico.
+
+**Soluzione strutturale.** Command palette (Cmd-K / FAB mobile) che cerca su `nebulaDocs` + `tasks`/`projects`/`obiettivi` + `chats`/`messages`. Indice lato client per i dati già caricati; valutare un indice server (Cloud Function) se i volumi crescono.
+
+**File toccati.** Nuovo componente shared palette montato in `SideraLayout.vue`; query per-collection con rispetto delle ACL.
+
+**Rischio POPS.** Medio (montato nella shell condivisa; gating scope).
+
+**Test.** ☐ Ricerca trova entità nei 3 moduli · ☐ Risultati rispettano permessi (no doc privati altrui) · ☐ Navigazione da risultato.
+
+---
+
+### Azione 15 — Stream attività consolidato 🟡
+
+**Problema.** `activityLog` è già denormalizzato dalle Cloud Functions (create/update task/progetto/preventivo) e QUASAR ne mostra un widget, ma manca una vista "tutto ciò che è successo nella suite" cross-modulo.
+
+**Soluzione strutturale.** Vista "All Activity" che legge `activityLog` con filtri per modulo/attore/tipo. Sfrutta dati già scritti → sforzo prevalentemente UI. Naturale collocazione: QUASAR (tetto analitico) o sezione CORE.
+
+**File toccati.** Nuova view (probabile QUASAR), riuso `useActivityLog`. Eventuale estensione dei trigger per coprire eventi NEBULA/PULSAR non ancora loggati.
+
+**Rischio POPS.** Basso.
+
+**Test.** ☐ Eventi dei 4 moduli compaiono · ☐ Filtri funzionano · ☐ Fallback attore = "Inglesina Italiana" coerente con widget esistente.
+
+---
+
 ## 4. Decisioni esplicite
 
 > Quando si sceglie di NON fare un'azione POLARIS, o di farla in un modo diverso da quello pianificato, annotare qui con data e motivo. Aiuta a non rivisitare le stesse domande tra mesi.
@@ -424,4 +525,5 @@ Quando si decide di lavorare su un'azione POLARIS:
 - **2026-05-19** — Feature extra (fuori-azioni POLARIS): **CEPHEID Asana-flavored** (PR #8, branch `feature/cepheid-asana`). Introdotta gerarchia Obiettivi → Progetti → (task | milestone | deliverable) con schema retrocompatibile. Nuova collection `obiettivi/` (regole Firestore deployate). Discriminator `tasks/{id}.type` aggiunto alla collection condivisa con SIDERA: filtri lato view in SIDERA TasksView/ProjectBoard per non mostrare milestone/deliverable come task. ProjectBoard SIDERA esteso con 2 view tab Milestone+Deliverable. File POPS toccati: zero. **Mergiata (PR #8) e deployata in produzione** (Hosting + Rules).
 - **2026-05-20** — **NEBULA promossa a 4ª PWA installabile** (branch `feature/nebula-pwa`, feature extra ATLAS — ricetta sez. 3). Manifest statico `/public/nebula.webmanifest` (scope `/nebula/`, name "NEBULA — Team Inglesina"). Icone single-vertex generate da `scripts/nebula-icon.svg` (palette `#C46030`, 4 raggi verso QUASAR/NOVA/MAGNETAR/CEPHEID coerenti col Schlegel) → `public/icons/nebula-{180,192,512}.png` via sharp-cli. Ramo `/nebula` aggiunto allo script inline `index.html`. `scopeConfig.ts` aggiornato: `SCOPE_CONFIGS.nebula` ora popolato (mobileNav: Team, `notificationScope: 'nebula'`, `isTopLevelPath`); type `notificationScope` esteso con `'nebula'` (anche in `useNotifications.ts`). Router: nuova rotta `/nebula/login` (ScopedLogin, primary `#B85425`) + `/nebula` (SideraLayout child → NebulaTeamView, name `nebula-team` preservato), `meta: { nebulaScope: true }`. Rotta legacy `/sidera/nebula` **rimossa** (no redirect: bookmark da rigenerare). Guard `beforeEach` esteso con `isNebulaScope` per redirect login fallback. `SideraLayout` desktop sidebar ora legge `SCOPE_CONFIGS.nebula.mobileNav` come single source of truth (parità con pattern CEPHEID). Cloud Function FCM: **non aggiunta** (NEBULA non ha eventi di notifica per ora). File POPS toccati: `index.html` + `src/router/index.ts` (rischio basso — solo aggiunte/rami isolati per `/nebula`). **Sblocca azione 6**: ora siamo a 4 PWA e il refactor `meta.scope` ha trigger reale. Deploy + test PWA reali (iOS/Android Add-to-Home) pendenti.
 - **2026-05-21** — Aggiunta **Azione 8 — Hub Schlegel landing interattiva** alla roadmap (🟢 bassa priorità). Idea utente: entrare su `/sidera` collassa la sidebar lasciando lo Schlegel interattivo a tutto schermo; click su un vertice riapre la sidebar sulla sezione del modulo (prima voce del menu). Gate esplicito: **non implementare prima che tutte e 6 le PWA siano attive** (oggi solo 3 vertici hanno config completa). Nessun codice scritto — solo pianificazione.
+- **2026-05-30** — Aggiunte **Azioni 10-15** (piano di maturazione e integrazione) dall'audit `docs/ANALISI-MATURITA.md`. Coerenza suite ~85%, maturità media ~70% (sotto la soglia 80% per la consegna 1.0). Az.10 `useToast` condiviso 🔴, Az.11 hardening rules 🔴 (verificato: `tasks:115`/`obiettivi:161` update troppo permissivi — overlap con Az.9), Az.12 push uniformi 🟠 (completa VAPID), Az.13 @mention unificato 🟠, Az.14 ricerca globale/Cmd-K 🟡, Az.15 stream attività consolidato 🟡. Az.10-12 = i tre bloccanti trasversali. Nessun codice scritto — solo pianificazione + audit.
 - **2026-05-22** — Aggiunta **Azione 9 — Ruoli e permessi granulari** alla roadmap (🟠 media-alta). Nasce dall'indagine su un presunto blocco login di Daniel (`pastorindaniel@gmail.com`, ruolo `PRODUZIONE`): **allarme rientrato** — in produzione (`b2b.inglesinaitaliana.it` e `preventivatoreb2b-ii.web.app`, stesso progetto/bundle) il login funziona; il fallimento *"Utenza non configurata"* era solo su **localhost**, artefatto di `getDoc(team)` che su cache-miss ritorna `exists()===false`. Emersi due temi da gestire (non ora): (1) permessi granulari per ruolo/modulo — oggi `PRODUZIONE` non accede ai moduli SIDERA, gating coarse via allowlist di path nel guard; (2) robustezza `LoginView.vue` sul cache-miss. Forte overlap con Azione 6 (valutare accorpamento). Nessun codice scritto — solo pianificazione.
