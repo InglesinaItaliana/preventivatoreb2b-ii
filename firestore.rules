@@ -192,6 +192,12 @@ service cloud.firestore {
             && request.auth.token.email in d.refs.users;
       }
 
+      // Writer o owner: può appendere update Yjs (Fase 6) e cursori.
+      function writerOk(acl) {
+        return request.auth.token.email in acl.writers
+            || request.auth.token.email in acl.owners;
+      }
+
       // CORE admin bypass: Fase 1 di NEBULA-DOCS è gated CORE → diamo loro
       // read totale su nebulaDocs così le QUERY (es. LinkedDocsPanel con
       // where('refs.tasks', 'array-contains', id)) passano la pre-validazione
@@ -225,6 +231,37 @@ service cloud.firestore {
           get(/databases/$(database)/documents/nebulaDocs/$(docId)).data.acl
         );
         allow write: if false;   // SOLO snapshot da saveDoc
+      }
+
+      // ── Fase 6 (Yjs/CRDT): log delta append-only ─────────────────────────
+      // Read: chi può leggere il doc (per convergere). Create: solo writer/owner,
+      // con author = se stesso e origin 'client' (server usa Admin → bypassa).
+      // Niente update/delete dal client: il log è append-only, la compaction
+      // (delete + rebase ydocState) avviene solo via Cloud Function (Admin).
+      // get() sul parent = 1 read fatturata per ogni append: costo accettato.
+      match /yupdates/{updateId} {
+        allow read: if request.auth != null && readerOk(
+          get(/databases/$(database)/documents/nebulaDocs/$(docId)).data.acl
+        );
+        allow create: if request.auth != null
+          && writerOk(get(/databases/$(database)/documents/nebulaDocs/$(docId)).data.acl)
+          && request.resource.data.author == request.auth.token.email
+          && request.resource.data.origin == 'client'
+          && request.resource.data.keys().hasOnly(['data', 'seq', 'author', 'clientId', 'origin', 'createdAt']);
+        allow update, delete: if false;
+      }
+
+      // ── Fase 6: cursori live (Awareness) ephemeral ───────────────────────
+      // Un doc per client (overwrite). Read: chi legge il doc. Write: chi legge
+      // il doc e solo il proprio record (author = se stesso). Delete consentito
+      // (cleanup su unmount). TTL via CF awarenessCleanup.
+      match /awareness/{clientId} {
+        allow read: if request.auth != null && readerOk(
+          get(/databases/$(database)/documents/nebulaDocs/$(docId)).data.acl
+        );
+        allow write: if request.auth != null
+          && readerOk(get(/databases/$(database)/documents/nebulaDocs/$(docId)).data.acl)
+          && (request.method == 'delete' || request.resource.data.author == request.auth.token.email);
       }
     }
 

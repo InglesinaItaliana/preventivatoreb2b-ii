@@ -52,10 +52,10 @@ const CURSOR_PALETTE = [
   '#7A5CA8', // viola
   '#5B7F2E', // verde scuro
 ]
-function cursorColorFor(email: string): string {
+export function cursorColorFor(email: string): string {
   let h = 0
   for (let i = 0; i < email.length; i++) h = (h * 31 + email.charCodeAt(i)) | 0
-  return CURSOR_PALETTE[Math.abs(h) % CURSOR_PALETTE.length]
+  return CURSOR_PALETTE[Math.abs(h) % CURSOR_PALETTE.length] ?? '#C46030'
 }
 
 export function useDocPresence(

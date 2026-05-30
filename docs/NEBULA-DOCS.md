@@ -2,8 +2,8 @@
 
 > Specifica di progetto. Documento "vivo": va aggiornato dopo ogni step completato o decisione esplicita.
 >
-> **Ultima revisione:** 2026-05-25
-> **Stato:** DRAFT — decisioni §12 chiuse. Pronto per aprire il branch `feature/nebula-docs-foundation` e iniziare Fase 1.
+> **Ultima revisione:** 2026-05-29
+> **Stato:** ✅ Fasi 1→5 **LIVE in produzione** (PR #35→#44). 🚧 **Fase 6 (real-time / Yjs) CODE-COMPLETE** su branch `feature/nebula-docs-realtime` (build + typecheck file-toccati + test verdi). Provider Firestore-native (no Cloud Run), cursori live, sostituzione diretta con kill-switch. **Resta solo: deploy atomico + backfill + verifica two-browser** (azione operativa, non codice).
 > **Owner:** Gionata Pastorin
 > **Documenti correlati:** [POLARIS](POLARIS.md) (roadmap), [ATLAS](ATLAS.md) (architettura suite), [WORKFLOW](WORKFLOW.md)
 
@@ -574,43 +574,74 @@ match /nebulaDocs/{docId} {
 
 ## 11. Rollout — fasi
 
-### Fase 1 — Foundation (1 settimana stimata)
-- [ ] `IconPicker` + `MaterialIcon` wrapper + `iconCatalog.ts` (~250 icone) — tutto sotto `src/views/nebula/docs/`
-- [ ] Schema Firestore + security rules + `saveDoc` callable
-- [ ] Vista lista `NebulaDocsHomeView` (no editor)
-- [ ] Vista editor `NebulaDocView` con TipTap base (no mention)
-- **Deploy:** ramo `feature/nebula-docs-foundation`, dietro feature flag `enableNebulaDocs` per soli admin
+### Fase 1 — Foundation ✅ COMPLETATA (in prod)
+- [x] `IconPicker` + `MaterialIcon` wrapper + `iconCatalog.ts` (~250 icone) — tutto sotto `src/views/nebula/docs/`
+- [x] Schema Firestore + security rules + `saveDoc` callable
+- [x] Vista lista `NebulaDocsHomeView` (no editor)
+- [x] Vista editor `NebulaDocView` con TipTap base (no mention)
+- **Deploy:** ✅ mergiata in `main`
 
-### Fase 2 — CEPHEID integration (3-5 giorni)
-- [ ] Nodo `task-mention` + suggester `/task`
-- [ ] Nodo `project-mention` + suggester `/progetto`
-- [ ] Nodo `task-embed` + panel filtri
-- [ ] Function `indexDocRefs` + pannello "📄 Doc collegati" in CEPHEID task detail
-- **Deploy:** abilita flag per tutto il team interno
+### Fase 2 — CEPHEID integration ✅ COMPLETATA (in prod)
+- [x] Nodo `task-mention` + suggester `/task`
+- [x] Nodo `project-mention` + suggester `/progetto`
+- [x] Nodo `task-embed` + panel filtri
+- [x] Function `indexDocRefs` + pannello "Doc collegati" in CEPHEID task detail
+- **Deploy:** ✅ mergiata in `main`
 
-### Fase 3 — Presence & history (3-4 giorni)
-- [ ] `useDocPresence` composable
-- [ ] UI avatar stack + lock paragrafo
-- [ ] LWW conflict resolution + dialog
-- [ ] Vista history + restore
-- **Deploy:** generale
+### Fase 3 — Presence & history ✅ COMPLETATA (in prod)
+- [x] `useDocPresence` composable (`src/composables/nebula/useDocPresence.ts`)
+- [x] UI avatar stack + lock paragrafo
+- [x] LWW conflict resolution + dialog (`useSaveDoc.ts`, check `baseRevision` / 409)
+- [x] Vista history + restore (`NebulaDocHistoryView.vue`, `useDocHistory.ts`)
+- **Deploy:** ✅ mergiata in `main`
+- **Nota:** questa fase copre la collaborazione **non-real-time** (presence visuale + LWW). La collaborazione simultanea vera (CRDT) è la Fase 6, gated — vedi sotto.
 
-### Fase 4 — Claude MCP (1 settimana)
-- [ ] MCP server Cloud Run (Node 22)
-- [ ] 8 tool MCP
-- [ ] Vista `integrations` con generazione API key
-- [ ] Doc utente in NEBULA stesso ("Come connettere Claude")
-- **Deploy:** opt-in, doc setup interna
+### Fase 4 — Claude MCP ✅ COMPLETATA (in prod)
+- [x] MCP server (Cloud Functions HTTP `mcpNebula`, region `europe-west1`) — **dual auth** (Claude Desktop via `mcp-remote` stdio + claude.ai Streamable HTTP)
+- [x] 8 tool MCP (`nebula.search`/`getDoc`/`listDocs`/`createDoc`/`appendBlock`/`replaceSection`/`linkTask`/`linkProject`)
+- [x] Vista integrazioni con generazione API key (`useApiKeys.ts`, `useOAuthConsent.ts`)
+- [x] Doc utente per la connessione
+- **Deploy:** ✅ mergiata in `main`. Endpoint: `europe-west1-preventivatoreb2b-ii.cloudfunctions.net/mcpNebula`
+- **Nota:** chiavi/integrazioni Claude/MCP successivamente spostate da NEBULA a **CORE → Integrazioni** (refactor `847a147`).
 
-### Fase 5 — Polish (rolling)
-- [ ] `user-mention` + `notifyOnMention`
-- [ ] Templates ("Verbale riunione", "Spec progetto", "Onboarding nuovo collega")
-- [ ] Ricerca full-text (Algolia o Firestore extension)
-- [ ] Export markdown / PDF
-- [ ] (Eventuale) upload immagini + cover — solo se emerge richiesta concreta dall'uso reale
+### Fase 5 — Polish ✅ COMPLETATA (in prod, rolling)
+- [x] `user-mention` + `notifyOnMention`
+- [x] Share dialog (`useShareDoc.ts`) + badge privacy su card (Pubblico/Squadra/Parziale/Privato)
+- [x] Archiviazione/GC doc (`useArchiveDoc.ts`)
+- [x] TaskList con checkbox; Undo/Redo in toolbar; restyle stile CEPHEID-Progetti; rinomina "Doc → Documenti", "Team → Squadra"; fix loop banner Service Worker
+- [ ] Templates ("Verbale riunione", "Spec progetto", "Onboarding") — *non ancora fatto, candidato futuro*
+- [ ] Ricerca full-text dedicata (Algolia / Firestore extension) — *oggi ricerca su `contentText`*
+- [ ] Export markdown / PDF — *non ancora fatto*
+- [ ] Upload immagini + cover — *escluso da v1 (§12), valutato solo su richiesta reale*
 
-### Fase 6 — Se serve, real-time (Yjs)
-Solo se metriche d'uso lo giustificano. Vedi §5.3.
+### Fase 6 — Real-time (Yjs/CRDT) 🚧 IN CORSO (branch `feature/nebula-docs-realtime`)
+Scelta architetturale: **provider Firestore-native** (NO Cloud Run/Hocuspocus/WebSocket), **cursori live** (Awareness), **sostituzione diretta** di LWW con **kill-switch** globale.
+
+**Fatto e verificato (checkpoint additivo, non-breaking — `saveDoc`/editor live intatti):**
+- [x] Deps: `yjs` + `@tiptap/y-tiptap` + `extension-collaboration(+caret)@3.23.6` (client) e stack tiptap/prosemirror (functions). `yjs` deduplicato a 1 copia.
+- [x] **Schema headless condiviso** `src/functions/lib_yjs/pmSchema.ts` (linchpin anti-drift) + helper `ydoc.ts`. Round-trip semantico verificato su tutti i nodi (test vitest 9/9).
+- [x] **FirestoreYjsProvider** `src/composables/nebula/FirestoreYjsProvider.ts` (echo-suppression 2 livelli, batching 350ms, awareness 300ms, re-baseline post-compaction).
+- [x] CF: `initYDoc` + `backfillYDocs` (migrazione first-writer-wins), `nebulaYjsMaintenance` (compaction no-loss + proiezione `content`), `snapshotDoc`/`restoreDoc` (history via `updateYFragment`), `awarenessCleanup`.
+- [x] Rules `yupdates` (append-only, create writer) + `awareness`; indici CG; kill-switch `core/nebula.collabEnabled`.
+- [x] Vitest introdotto; `manualChunks` Vite include lo stack Yjs nel chunk lazy.
+
+**Cutover — code-complete (commit successivo, build+typecheck+test verdi):**
+- [x] **6.2** Wiring editor: `NebulaDocView` ora wrapper keyed-by-docId → `NebulaDocPage` con `useCollabDoc` + Collaboration/CollaborationCaret. Editor read-only finché provider 'synced'. Kill-switch → fallback read-only su `content`. Cursori live + status "Live · N attivi".
+- [x] **6.6** Scritture MCP (`saveDocCore` + 4 tool): applicano al Y.Doc via `applyJSONToYDoc`, appendono delta origin 'mcp', proiettano `content`. Base letta dal Y.Doc LIVE (`liveDocJSON`) per non perdere edit concorrenti. createDoc seeda il Y.Doc.
+- [x] **6.7** Rimosso 409/LWW da `saveDoc` (ora solo title/icon scalari). `restoreDoc` callable usato da NebulaDocHistoryView (apply via updateYFragment, no setContent). Cmd+S → `snapshotDoc`.
+- [x] **6.8** Presence da Awareness (`peers` in useCollabDoc); heartbeat `presence` Firestore ritirato (composable dormiente, resta per tipo + `cursorColorFor`).
+
+**Resta (operativo, NON codice — richiede autorizzazione + deploy):**
+- [ ] Deploy ATOMICO `functions,hosting` + rules + indici (l'editor ora richiede le CF: deploy parziale lo romperebbe).
+- [ ] `backfillYDocs` (callable, CORE admin) su tutti i doc esistenti.
+- [ ] Verifica two-browser; opzionale: pre-deploy con `core/nebula.collabEnabled=false`, validare, poi flip ON.
+
+**Note tecniche scoperte in implementazione:**
+- XmlFragment **deve** chiamarsi `'default'` (Collaboration) — `prosemirrorJSONToYDoc` ha default `'prosemirror'`: mismatch = doc vuoto sul client. Centralizzato in `NEBULA_YJS_FIELD`.
+- `@tiptap/y-tiptap@3.0.4` ri-esporta `updateYFragment`/`prosemirrorJSONToYDoc`/`yDocToProsemirrorJSON` → **stessa libreria client+server** (drift minimo). `updateYFragment` vuole meta `{mapping, isOMark}` (createEmptyMeta non esportato) e produce diff incrementali puliti (~58 byte) → niente fallback rebuild.
+- Server: bytes Yjs come `Buffer` nativo Admin SDK (`admin.firestore.Bytes` non esiste); client web come `Bytes.fromUint8Array`.
+
+Gate originale (§5.3) superato: la feature è stata richiesta esplicitamente. Resta documentato che la latenza Firestore è ~0.3–1s (non sub-100ms) e c'è write-amplification mitigata da batching/compaction.
 
 ---
 

@@ -66,22 +66,44 @@ function canRead(acl, userEmail) {
 function canWrite(acl, userEmail) {
     return acl.writers.includes(userEmail) || acl.owners.includes(userEmail);
 }
+let _mcpYdoc = null;
+function mcpYdoc() {
+    return _mcpYdoc !== null && _mcpYdoc !== void 0 ? _mcpYdoc : (_mcpYdoc = require('../lib_yjs/ydoc'));
+}
+const MCP_SERVER_CLIENT_ID = 0;
+function mcpToU8(v) {
+    if (v instanceof Uint8Array)
+        return v;
+    const b = v;
+    return typeof (b === null || b === void 0 ? void 0 : b.toUint8Array) === 'function' ? b.toUint8Array() : new Uint8Array(0);
+}
+/** Contenuto LIVE dal Y.Doc (state+deltas) per basare le edit MCP su ciò che
+ *  gli utenti stanno scrivendo, non sulla proiezione `content` (può essere
+ *  stale di qualche minuto). Fallback alla proiezione se non inizializzato. */
+async function liveDocJSON(docId, curData) {
+    var _a;
+    if (curData.ydocInitialized !== true) {
+        return (_a = curData.content) !== null && _a !== void 0 ? _a : { type: 'doc', content: [] };
+    }
+    const { buildYDoc, ydocToJSON } = mcpYdoc();
+    const ref = admin.firestore().collection('nebulaDocs').doc(docId);
+    const updates = await ref.collection('yupdates').orderBy('createdAt', 'asc').get();
+    const ydoc = buildYDoc(curData.ydocState ? mcpToU8(curData.ydocState) : null, updates.docs.map((d) => mcpToU8(d.data().data)));
+    return ydocToJSON(ydoc);
+}
 async function saveDocCore(input, userEmail) {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e;
     const db = admin.firestore();
     const now = admin.firestore.FieldValue.serverTimestamp();
-    // CREATE
+    const { seedYDocFromJSON, buildYDoc, applyJSONToYDoc, ydocToJSON, encodeState, encodeStateVector } = mcpYdoc();
+    // CREATE — crea doc + seed del Y.Doc (subito collaborativo).
     if (!input.docId) {
         const newRef = db.collection('nebulaDocs').doc();
         const title = (_a = input.title) !== null && _a !== void 0 ? _a : 'Nuovo documento';
         const content = (_b = input.content) !== null && _b !== void 0 ? _b : { type: 'doc', content: [] };
         const contentText = (0, markdown_1.extractText)(content).slice(0, 10000);
-        const acl = {
-            visibility: 'private',
-            readers: [],
-            writers: [],
-            owners: [userEmail],
-        };
+        const seedDoc = seedYDocFromJSON(content);
+        const acl = { visibility: 'private', readers: [], writers: [], owners: [userEmail] };
         await newRef.set({
             title,
             icon: null,
@@ -99,13 +121,18 @@ async function saveDocCore(input, userEmail) {
             updatedAt: now,
             updatedBy: userEmail,
             acl,
+            // Fase 6: Y.Doc già inizializzato (niente migrazione lazy alla 1ª apertura).
+            ydocState: Buffer.from(encodeState(seedDoc)),
+            ydocStateVector: Buffer.from(encodeStateVector(seedDoc)),
+            ydocInitialized: true,
+            ydocSeq: 0,
         });
         await newRef.collection('history').add({
             revision: 1, title, content, savedAt: now, savedBy: userEmail, trigger: 'mcp',
         });
         return { docId: newRef.id, revision: 1, title };
     }
-    // UPDATE
+    // UPDATE — applica la modifica al Y.Doc (niente più LWW; CRDT converge).
     const ref = db.collection('nebulaDocs').doc(input.docId);
     const snap = await ref.get();
     if (!snap.exists)
@@ -114,26 +141,45 @@ async function saveDocCore(input, userEmail) {
     if (!canWrite(current.acl, userEmail)) {
         throw new Error('Permesso di scrittura negato sul documento');
     }
-    const baseRev = (_d = input.baseRevision) !== null && _d !== void 0 ? _d : current.revision;
-    if (baseRev !== current.revision) {
-        throw new Error(`Conflitto revisione (corrente ${current.revision}, ricevuta ${baseRev})`);
+    // Costruisci il Y.Doc live (seed se mai inizializzato).
+    let ydoc;
+    if (current.ydocInitialized === true) {
+        const updates = await ref.collection('yupdates').orderBy('createdAt', 'asc').get();
+        ydoc = buildYDoc(current.ydocState ? mcpToU8(current.ydocState) : null, updates.docs.map((d) => mcpToU8(d.data().data)));
     }
-    const nextRev = current.revision + 1;
+    else {
+        ydoc = seedYDocFromJSON((_d = current.content) !== null && _d !== void 0 ? _d : { type: 'doc', content: [] });
+    }
+    // Applica il nuovo contenuto (se fornito) come diff e appendi un delta:
+    // i client connessi lo ricevono live.
+    if (input.content !== undefined) {
+        const diff = applyJSONToYDoc(ydoc, input.content);
+        await ref.collection('yupdates').add({
+            data: Buffer.from(diff),
+            seq: 0,
+            author: userEmail,
+            clientId: MCP_SERVER_CLIENT_ID,
+            origin: 'mcp',
+            createdAt: now,
+        });
+    }
+    const json = ydocToJSON(ydoc);
+    const nextRev = ((_e = current.revision) !== null && _e !== void 0 ? _e : 0) + 1;
+    let nextTitle = current.title;
     const update = {
         revision: nextRev,
         updatedAt: now,
         updatedBy: userEmail,
+        // Proiezione immediata (search/getDoc/refs freschi) + ydocState rebase.
+        content: json,
+        contentText: (0, markdown_1.extractText)(json).slice(0, 10000),
+        ydocState: Buffer.from(encodeState(ydoc)),
+        ydocStateVector: Buffer.from(encodeStateVector(ydoc)),
+        ydocInitialized: true,
     };
-    let nextTitle = current.title;
-    let nextContent;
     if (input.title !== undefined) {
         update.title = input.title;
         nextTitle = input.title;
-    }
-    if (input.content !== undefined) {
-        update.content = input.content;
-        update.contentText = (0, markdown_1.extractText)(input.content).slice(0, 10000);
-        nextContent = input.content;
     }
     if (input.parentId !== undefined)
         update.parentId = input.parentId;
@@ -142,7 +188,7 @@ async function saveDocCore(input, userEmail) {
     await ref.collection('history').add({
         revision: nextRev,
         title: nextTitle,
-        content: nextContent !== null && nextContent !== void 0 ? nextContent : snap.data().content,
+        content: json,
         savedAt: now,
         savedBy: userEmail,
         trigger: 'mcp',
@@ -313,7 +359,7 @@ async function createDoc(args, ctx) {
 // TOOL: appendBlock
 // ─────────────────────────────────────────────────────────────────────────────
 async function appendBlock(args, ctx) {
-    var _a, _b, _c;
+    var _a, _b;
     if (!args.docId)
         throw new Error('docId richiesto');
     if (!args.markdown)
@@ -325,18 +371,18 @@ async function appendBlock(args, ctx) {
     const current = snap.data();
     if (!canWrite(current.acl, ctx.userEmail))
         throw new Error('Permesso di scrittura negato');
+    const baseJson = await liveDocJSON(args.docId, current);
     const newBlocks = (0, markdown_1.markdownToProseMirror)(args.markdown);
     const merged = {
         type: 'doc',
         content: [
-            ...((_b = (_a = current.content) === null || _a === void 0 ? void 0 : _a.content) !== null && _b !== void 0 ? _b : []),
-            ...((_c = newBlocks.content) !== null && _c !== void 0 ? _c : []),
+            ...((_a = baseJson.content) !== null && _a !== void 0 ? _a : []),
+            ...((_b = newBlocks.content) !== null && _b !== void 0 ? _b : []),
         ],
     };
     const out = await saveDocCore({
         docId: args.docId,
         content: merged,
-        baseRevision: current.revision,
     }, ctx.userEmail);
     return { text: `Blocchi aggiunti a **${out.title}** (rev ${out.revision}).` };
 }
@@ -344,7 +390,7 @@ async function appendBlock(args, ctx) {
 // TOOL: replaceSection
 // ─────────────────────────────────────────────────────────────────────────────
 async function replaceSection(args, ctx) {
-    var _a, _b, _c, _d, _e, _f, _g;
+    var _a, _b, _c, _d, _e, _f;
     if (!args.docId)
         throw new Error('docId richiesto');
     if (!args.sectionAnchor)
@@ -358,8 +404,9 @@ async function replaceSection(args, ctx) {
     const current = snap.data();
     if (!canWrite(current.acl, ctx.userEmail))
         throw new Error('Permesso di scrittura negato');
+    const baseJson = await liveDocJSON(args.docId, current);
     const anchor = args.sectionAnchor.toLowerCase().trim();
-    const blocks = (_b = (_a = current.content) === null || _a === void 0 ? void 0 : _a.content) !== null && _b !== void 0 ? _b : [];
+    const blocks = (_a = baseJson.content) !== null && _a !== void 0 ? _a : [];
     // Trova heading che match
     let startIdx = -1;
     let level = 0;
@@ -369,7 +416,7 @@ async function replaceSection(args, ctx) {
             const headingText = (0, markdown_1.extractText)({ type: 'doc', content: [b] }).toLowerCase().trim();
             if (headingText === anchor || headingText.includes(anchor)) {
                 startIdx = i;
-                level = Number((_d = (_c = b.attrs) === null || _c === void 0 ? void 0 : _c.level) !== null && _d !== void 0 ? _d : 1);
+                level = Number((_c = (_b = b.attrs) === null || _b === void 0 ? void 0 : _b.level) !== null && _c !== void 0 ? _c : 1);
                 break;
             }
         }
@@ -385,7 +432,7 @@ async function replaceSection(args, ctx) {
     let endIdx = blocks.length;
     for (let i = startIdx + 1; i < blocks.length; i++) {
         const b = blocks[i];
-        if (b.type === 'heading' && Number((_f = (_e = b.attrs) === null || _e === void 0 ? void 0 : _e.level) !== null && _f !== void 0 ? _f : 1) <= level) {
+        if (b.type === 'heading' && Number((_e = (_d = b.attrs) === null || _d === void 0 ? void 0 : _d.level) !== null && _e !== void 0 ? _e : 1) <= level) {
             endIdx = i;
             break;
         }
@@ -395,14 +442,13 @@ async function replaceSection(args, ctx) {
         type: 'doc',
         content: [
             ...blocks.slice(0, startIdx),
-            ...((_g = newSection.content) !== null && _g !== void 0 ? _g : []),
+            ...((_f = newSection.content) !== null && _f !== void 0 ? _f : []),
             ...blocks.slice(endIdx),
         ],
     };
     const out = await saveDocCore({
         docId: args.docId,
         content: merged,
-        baseRevision: current.revision,
     }, ctx.userEmail);
     return { text: `Sezione "${args.sectionAnchor}" sostituita in **${out.title}** (rev ${out.revision}).` };
 }
@@ -410,7 +456,7 @@ async function replaceSection(args, ctx) {
 // TOOL: linkTask
 // ─────────────────────────────────────────────────────────────────────────────
 async function linkTask(args, ctx) {
-    var _a, _b, _c;
+    var _a, _b;
     if (!args.docId)
         throw new Error('docId richiesto');
     if (!args.taskId)
@@ -422,6 +468,7 @@ async function linkTask(args, ctx) {
     const current = snap.data();
     if (!canWrite(current.acl, ctx.userEmail))
         throw new Error('Permesso di scrittura negato');
+    const baseJson = await liveDocJSON(args.docId, current);
     const taskParagraph = {
         type: 'paragraph',
         content: [
@@ -432,12 +479,12 @@ async function linkTask(args, ctx) {
     const merged = {
         type: 'doc',
         content: [
-            ...((_c = (_b = current.content) === null || _b === void 0 ? void 0 : _b.content) !== null && _c !== void 0 ? _c : []),
+            ...((_b = baseJson.content) !== null && _b !== void 0 ? _b : []),
             taskParagraph,
         ],
     };
     const out = await saveDocCore({
-        docId: args.docId, content: merged, baseRevision: current.revision,
+        docId: args.docId, content: merged,
     }, ctx.userEmail);
     return { text: `Task \`${args.taskId}\` collegato a **${out.title}** (rev ${out.revision}).` };
 }
@@ -445,7 +492,7 @@ async function linkTask(args, ctx) {
 // TOOL: linkProject
 // ─────────────────────────────────────────────────────────────────────────────
 async function linkProject(args, ctx) {
-    var _a, _b;
+    var _a;
     if (!args.docId)
         throw new Error('docId richiesto');
     if (!args.projectId)
@@ -457,6 +504,7 @@ async function linkProject(args, ctx) {
     const current = snap.data();
     if (!canWrite(current.acl, ctx.userEmail))
         throw new Error('Permesso di scrittura negato');
+    const baseJson = await liveDocJSON(args.docId, current);
     const projectParagraph = {
         type: 'paragraph',
         content: [
@@ -467,12 +515,12 @@ async function linkProject(args, ctx) {
     const merged = {
         type: 'doc',
         content: [
-            ...((_b = (_a = current.content) === null || _a === void 0 ? void 0 : _a.content) !== null && _b !== void 0 ? _b : []),
+            ...((_a = baseJson.content) !== null && _a !== void 0 ? _a : []),
             projectParagraph,
         ],
     };
     const out = await saveDocCore({
-        docId: args.docId, content: merged, baseRevision: current.revision,
+        docId: args.docId, content: merged,
     }, ctx.userEmail);
     return { text: `Progetto \`${args.projectId}\` collegato a **${out.title}** (rev ${out.revision}).` };
 }

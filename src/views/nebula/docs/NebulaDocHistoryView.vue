@@ -8,13 +8,14 @@
  *
  * Route: /nebula/docs/:docId/history
  */
-import { ref, computed, watch, onBeforeUnmount, shallowRef } from 'vue'
+import { ref, computed, onBeforeUnmount, shallowRef } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useEditor, EditorContent } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
 import { useDoc } from '../../../composables/nebula/useDoc'
 import { useDocHistory, type HistorySnapshot } from '../../../composables/nebula/useDocHistory'
-import { saveDoc } from '../../../composables/nebula/useSaveDoc'
+import { httpsCallable } from 'firebase/functions'
+import { functions } from '../../../firebase'
 import { useCurrentUser } from '../../../composables/sidera/useCurrentUser'
 import { useTeamMembers, displayName, starAvatarProps } from '../../../composables/sidera/useTeamMembers'
 import { useAllTasks } from '../../../composables/sidera/useAllTasks'
@@ -34,6 +35,10 @@ const { members } = useTeamMembers()
 const docId = computed(() => String(route.params.docId))
 const { data: doc, loading: docLoading } = useDoc(docId.value)
 const { snapshots, loading: histLoading } = useDocHistory(docId)
+
+const restoreDocCallable = httpsCallable<{ docId: string; revId: string }, { docId: string; restoredFrom: string }>(
+  functions, 'restoreDoc',
+)
 
 const expandedId = ref<string | null>(null)
 const restoringId = ref<string | null>(null)
@@ -93,7 +98,7 @@ function toggleExpand(snap: HistorySnapshot) {
   const rawContent = snap.content
     ? JSON.parse(JSON.stringify(snap.content))
     : { type: 'doc', content: [] }
-  previewEditor.value?.commands.setContent(rawContent, false)
+  previewEditor.value?.commands.setContent(rawContent)
   expandedIsEmpty.value = isContentEmpty(rawContent)
 }
 
@@ -110,15 +115,11 @@ async function restoreSnapshot(snap: HistorySnapshot) {
   lastError.value = ''
   lastMessage.value = ''
   try {
-    const rawContent = JSON.parse(JSON.stringify(snap.content))
-    const out = await saveDoc({
-      docId: doc.value.id,
-      title: snap.title,
-      content: rawContent,
-      baseRevision: doc.value.revision,
-      trigger: 'manual',   // snapshot in history del restore
-    })
-    lastMessage.value = `Ripristinato a rev ${snap.revision} (nuova rev ${out.revision}). Torno all'editor…`
+    // Fase 6: il restore NON sovrascrive `content` (lo desincronizzerebbe dal
+    // Y.Doc): la CF restoreDoc applica lo snapshot al Y.Doc via updateYFragment
+    // e appende un delta → i client connessi convergono live.
+    await restoreDocCallable({ docId: doc.value.id, revId: snap.id })
+    lastMessage.value = `Ripristinato a rev ${snap.revision}. Torno all'editor…`
     setTimeout(() => router.push(`/nebula/docs/${doc.value!.id}`), 1200)
   } catch (e: any) {
     lastError.value = e?.message ?? String(e)
