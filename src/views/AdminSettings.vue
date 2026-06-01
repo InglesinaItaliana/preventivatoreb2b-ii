@@ -2,6 +2,7 @@
   import { ref, onMounted, reactive, computed } from 'vue';
   import { collection, getDocs, updateDoc, doc, serverTimestamp, query, orderBy, setDoc, getDoc } from 'firebase/firestore';  import { httpsCallable } from 'firebase/functions';
   import { db, functions } from '../firebase';
+  import { dedupeTeamDocs } from '../composables/sidera/useTeamMembers';
   import Papa from 'papaparse';
   import { useCatalogStore } from '../Data/catalog'; // <--- AGGIUNGI QUESTO
   import { 
@@ -205,21 +206,19 @@ const saveSettings = async () => {
   const fetchData = async () => {
     loading.value = true;
     try {
-      // 1. Carica Team
+      // 1. Carica Team — dedup di coesistenza re-key (docs/STELLA-GRAFO.md):
+      // un'entry per persona, `id` = chiave reale del doc esistente (per le update).
       const teamSnap = await getDocs(collection(db, 'team'));
-      members.value = teamSnap.docs.map(d => {
-        const data = d.data();
-        return { 
-          id: d.id, 
-          firstName: data.firstName || '',
-          lastName: data.lastName || '',
-          email: data.email || '',
-          role: data.role || 'PRODUZIONE',
-          phone: data.phone || '',
-          active: data.active ?? true,
-          color: data.color || 'bg-gray-400'
-        } as TeamMember;
-      });
+      members.value = dedupeTeamDocs(teamSnap.docs).map(e => ({
+        id: e.id,
+        firstName: e.data.firstName || '',
+        lastName: e.data.lastName || '',
+        email: e.data.email || e.email,
+        role: e.data.role || 'PRODUZIONE',
+        phone: e.data.phone || '',
+        active: e.data.active ?? true,
+        color: e.data.color || 'bg-gray-400'
+      } as TeamMember));
       
       // 2. Carica Clienti
       const qClients = query(collection(db, 'users'), orderBy('ragioneSociale', 'asc'));
