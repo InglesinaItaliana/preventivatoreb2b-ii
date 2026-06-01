@@ -841,6 +841,61 @@ export const createTeamMember = functions
     }
   });
 
+// --- CAMBIO EMAIL AGENTE (preserva l'UID) — docs/STELLA-GRAFO.md ---
+// Ora che /team è uid-keyed, cambiare l'email è banale: updateUser({email})
+// preserva l'UID (l'identità canonica) e si aggiorna solo il CAMPO email del doc.
+// v1 minimale: NON riscrive i riferimenti storici per-email (assignees, ACL,
+// chat) — i cambi-email sono rari e il display degrada via fallback.
+// Gate: solo ADMIN (token.role) o super-admin info@.
+export const changeTeamMemberEmail = functions
+  .region('europe-west1')
+  .https.onCall(async (data, context) => {
+    const callerEmail = (context.auth?.token?.email || '').toLowerCase().trim();
+    const callerRole = context.auth?.token?.role;
+    const isAdminCaller = callerRole === 'ADMIN' || callerEmail === 'info@inglesinaitaliana.it';
+    if (!context.auth || !isAdminCaller) {
+      throw new functions.https.HttpsError('permission-denied', 'Riservato agli amministratori.');
+    }
+
+    const uid: string | undefined = data?.uid;
+    const newEmailRaw: string | undefined = data?.newEmail;
+    if (!uid || !newEmailRaw) {
+      throw new functions.https.HttpsError('invalid-argument', 'uid e newEmail obbligatori.');
+    }
+    const newEmail = newEmailRaw.toLowerCase().trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
+      throw new functions.https.HttpsError('invalid-argument', 'Email non valida.');
+    }
+
+    try {
+      // 1. Il doc /team deve essere uid-keyed (post re-key).
+      const teamRef = admin.firestore().collection('team').doc(uid);
+      const teamSnap = await teamRef.get();
+      if (!teamSnap.exists) {
+        throw new functions.https.HttpsError('not-found', 'Agente non trovato (doc /team uid-keyed assente).');
+      }
+
+      // 2. Cambia l'email su Auth PRESERVANDO l'UID.
+      await admin.auth().updateUser(uid, { email: newEmail });
+
+      // 3. Aggiorna il campo email del doc (la chiave uid resta invariata).
+      //    Il trigger syncTeamRoleToAuth ri-applica il claim ruolo (idempotente).
+      await teamRef.update({ email: newEmail, emailUpdatedAt: admin.firestore.FieldValue.serverTimestamp() });
+
+      return { success: true, uid, newEmail };
+    } catch (error: any) {
+      if (error instanceof functions.https.HttpsError) throw error;
+      if (error.code === 'auth/email-already-exists') {
+        throw new functions.https.HttpsError('already-exists', "L'email è già in uso.");
+      }
+      if (error.code === 'auth/user-not-found') {
+        throw new functions.https.HttpsError('not-found', 'Utente Auth non trovato per questo UID.');
+      }
+      console.error('[changeTeamMemberEmail]', error);
+      throw new functions.https.HttpsError('internal', 'Cambio email fallito: ' + error.message);
+    }
+  });
+
 // --- FUNZIONE RINNOVO TOKEN (ACCESS TOKEN MANAGER) ---
 async function getValidFicToken(): Promise<string> {
     const db = admin.firestore();
