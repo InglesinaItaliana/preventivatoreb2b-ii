@@ -25,7 +25,7 @@ onAuthStateChanged(auth, async user => {
   let category: string | undefined
   let hueIndex: number | undefined
   try {
-    const snap = await getTeamDoc(user.uid, emailKey)
+    const snap = await getTeamDoc(user.uid)
     if (snap?.exists()) {
       const d = snap.data()
       role = d.role ?? ''

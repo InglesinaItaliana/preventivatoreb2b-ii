@@ -64,8 +64,8 @@ const handleLogin = async () => {
       // Verifichiamo se l'utente esiste nella collezione 'team'
       const emailKey = user.email?.toLowerCase().trim();
       if (emailKey) {
-        // Tollerante al re-key /team su UID (docs/STELLA-GRAFO.md): uid poi email.
-        const teamDoc = await getTeamDoc(user.uid, emailKey);
+        // /team è uid-keyed (docs/STELLA-GRAFO.md): lettura per UID.
+        const teamDoc = await getTeamDoc(user.uid);
 
         if (teamDoc?.exists()) {
           const role = teamDoc.data().role; // 'ADMIN', 'PRODUZIONE', 'LOGISTICA'

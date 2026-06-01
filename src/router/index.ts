@@ -299,8 +299,8 @@ router.beforeEach(async (to, from, next) => {
   const emailKey = currentUser.email?.toLowerCase().trim();
   if (emailKey) {
     try {
-      // Tollerante al re-key /team su UID (docs/STELLA-GRAFO.md): uid poi email.
-      const teamSnap = await getTeamDoc(currentUser.uid, emailKey);
+      // /team è uid-keyed (docs/STELLA-GRAFO.md): lettura per UID.
+      const teamSnap = await getTeamDoc(currentUser.uid);
 
       if (teamSnap?.exists()) {
         const role = teamSnap.data().role; // 'ADMIN', 'PRODUZIONE', 'LOGISTICA'

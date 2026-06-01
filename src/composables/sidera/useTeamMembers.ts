@@ -47,24 +47,15 @@ export function dedupeTeamDocs(docs: Array<{ id: string; data(): DocumentData }>
 const DEFAULT_CATEGORY = 'amministrazione'
 
 /**
- * Legge il doc `/team` in modo tollerante al re-key (docs/STELLA-GRAFO.md):
- * prova prima la chiave uid, poi quella email. Ritorna lo snapshot esistente o null.
- * Corretto in tutti gli stati: solo-email (pre-backfill), coesistenza, solo-uid.
+ * Legge il doc `/team` per UID (identità canonica, docs/STELLA-GRAFO.md).
+ * Post re-key `/team` è interamente uid-keyed: nessun fallback necessario.
  */
 export async function getTeamDoc(
   uid: string | null | undefined,
-  email: string | null | undefined,
 ): Promise<DocumentSnapshot<DocumentData> | null> {
-  if (uid) {
-    const byUid = await getDoc(doc(db, 'team', uid))
-    if (byUid.exists()) return byUid
-  }
-  const e = (email ?? '').toLowerCase().trim()
-  if (e) {
-    const byEmail = await getDoc(doc(db, 'team', e))
-    if (byEmail.exists()) return byEmail
-  }
-  return null
+  if (!uid) return null
+  const snap = await getDoc(doc(db, 'team', uid))
+  return snap.exists() ? snap : null
 }
 
 /**
