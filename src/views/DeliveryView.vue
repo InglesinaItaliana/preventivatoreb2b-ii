@@ -5,6 +5,7 @@
   addDoc, updateDoc, doc, serverTimestamp, writeBatch 
 } from 'firebase/firestore';
   import { db, auth, storage } from '../firebase';
+  import { dedupeTeamDocs } from '../composables/sidera/useTeamMembers';
   import DeliveryModal from '../components/DeliveryModal.vue';
   import { 
     TruckIcon, MapPinIcon, 
@@ -146,9 +147,12 @@ const fetchClientAddresses = async () => {
   };
   
   const loadDrivers = async () => {
-    const q = query(collection(db, 'team'), orderBy('lastName', 'asc')); 
-    const snap = await getDocs(q);
-    drivers.value = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const snap = await getDocs(collection(db, 'team'));
+    // Dedup di coesistenza re-key (docs/STELLA-GRAFO.md): un autista per persona,
+    // `id` = chiave reale del doc. Ordino client-side per lastName.
+    drivers.value = dedupeTeamDocs(snap.docs)
+      .map(e => ({ id: e.id, ...e.data, email: e.email, uid: e.uid }))
+      .sort((a: any, b: any) => String(a.lastName ?? '').localeCompare(String(b.lastName ?? '')));
   };
   
   // --- LOGICA DISPATCHER (PIANIFICAZIONE) ---

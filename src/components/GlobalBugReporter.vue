@@ -1,8 +1,9 @@
 <script setup lang="ts">
   import { ref, reactive, computed, onMounted } from 'vue';
   import { useRoute, useRouter } from 'vue-router';
-  import { auth, functions, db } from '../firebase'; 
+  import { auth, functions, db } from '../firebase';
   import { doc, getDoc } from 'firebase/firestore';  // <--- AGGIUNGI QUESTA RIGA
+  import { getTeamDoc } from '../composables/sidera/useTeamMembers';
   import { httpsCallable } from 'firebase/functions';
   import { onAuthStateChanged } from 'firebase/auth';
   import { 
@@ -49,11 +50,11 @@
         return; // Interrompi qui, non serve cercare nel DB
       }
 
-      // 2. Altrimenti cerca nel DB Team
+      // 2. Altrimenti cerca nel DB Team (tollerante al re-key su UID: uid poi email)
       try {
         const emailKey = user.email.toLowerCase().trim();
-        const teamSnap = await getDoc(doc(db, 'team', emailKey));
-        if (teamSnap.exists()) {
+        const teamSnap = await getTeamDoc(user.uid, emailKey);
+        if (teamSnap?.exists()) {
           role.value = teamSnap.data().role;
         }
       } catch (e) {

@@ -1,7 +1,7 @@
 import { ref, onUnmounted } from 'vue'
 import { collection, doc, onSnapshot, updateDoc } from 'firebase/firestore'
 import { db } from '../../firebase'
-import { isHiddenTeamEmail } from '../sidera/useTeamMembers'
+import { isHiddenTeamEmail, dedupeTeamDocs } from '../sidera/useTeamMembers'
 
 export interface NebulaMember {
   email:      string
@@ -15,6 +15,7 @@ export interface NebulaMember {
   uid?:       string
   category?:  string
   hueIndex?:  number
+  docId?:     string   // chiave reale del doc /team — per le scritture (re-key safe)
 }
 
 // Categorie avatar (forma della stella). Allineate a CATEGORIES in src/lib/starAvatar.js.
@@ -49,22 +50,22 @@ export function useNebulaTeam() {
   const loading = ref(true)
 
   const unsubscribe = onSnapshot(collection(db, 'team'), (snap) => {
-    members.value = snap.docs.filter(d => !isHiddenTeamEmail(d.id)).map(d => {
-      const data = d.data()
-      return {
-        email:     d.id,
-        firstName: data.firstName ?? '',
-        lastName:  data.lastName  ?? '',
-        role:      data.role      ?? '',
-        phone:     data.phone     ?? '',
-        active:    data.active    ?? true,
-        color:     data.color     ?? '#2F6B4A',
-        position:  data.position  ?? undefined,
-        uid:       data.uid       ?? undefined,
-        category:  data.category  ?? undefined,
-        hueIndex:  typeof data.hueIndex === 'number' ? data.hueIndex : undefined,
-      }
-    })
+    members.value = dedupeTeamDocs(snap.docs)
+      .filter(e => !isHiddenTeamEmail(e.email))
+      .map(e => ({
+        email:     e.email,
+        firstName: e.data.firstName ?? '',
+        lastName:  e.data.lastName  ?? '',
+        role:      e.data.role      ?? '',
+        phone:     e.data.phone     ?? '',
+        active:    e.data.active    ?? true,
+        color:     e.data.color     ?? '#2F6B4A',
+        position:  e.data.position  ?? undefined,
+        uid:       e.uid,
+        category:  e.data.category  ?? undefined,
+        hueIndex:  typeof e.data.hueIndex === 'number' ? e.data.hueIndex : undefined,
+        docId:     e.id,
+      }))
     loading.value = false
   }, (err) => {
     console.error('[useNebulaTeam]', err)
@@ -73,12 +74,18 @@ export function useNebulaTeam() {
 
   onUnmounted(unsubscribe)
 
+  // Scrive sul doc che ESISTE (uid-keyed in coesistenza, altrimenti email-keyed):
+  // risolve la chiave reale dalla lista già deduplicata. Re-key safe.
+  function docIdFor(email: string): string {
+    return members.value.find(m => m.email === email)?.docId || email
+  }
+
   async function updatePosition(email: string, position: string) {
-    await updateDoc(doc(db, 'team', email), { position: position || null })
+    await updateDoc(doc(db, 'team', docIdFor(email)), { position: position || null })
   }
 
   async function updateCategory(email: string, category: string) {
-    await updateDoc(doc(db, 'team', email), { category })
+    await updateDoc(doc(db, 'team', docIdFor(email)), { category })
   }
 
   return { members, loading, updatePosition, updateCategory }

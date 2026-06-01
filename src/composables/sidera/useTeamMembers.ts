@@ -1,5 +1,5 @@
 import { ref, onUnmounted } from 'vue'
-import { collection, onSnapshot } from 'firebase/firestore'
+import { collection, doc, getDoc, onSnapshot, type DocumentData, type DocumentSnapshot } from 'firebase/firestore'
 import { db } from '../../firebase'
 
 export interface TeamMember {
@@ -11,9 +11,60 @@ export interface TeamMember {
   uid?: string          // seed per StarAvatar
   category?: string     // forma della stella
   hueIndex?: number     // colore stabile dal registro
+  docId?: string        // chiave reale del doc /team (email-keyed o uid-keyed) — per le scritture
+}
+
+/**
+ * Entry normalizzata di un doc /team dopo la dedup di coesistenza.
+ * `id` è la chiave reale del documento esistente (email-keyed o uid-keyed).
+ */
+export interface NormTeamDoc { id: string; email: string; uid?: string; isUidKeyed: boolean; data: DocumentData }
+
+/**
+ * Riduce i doc `/team` a UNO per persona (chiave = email lowercase), preferendo
+ * il doc uid-keyed quando coesiste con quello email-keyed. Tollerante alla
+ * finestra di coesistenza del re-key (vedi docs/STELLA-GRAFO.md): corretto in
+ * tutti gli stati — solo-email (pre-backfill), coesistenza, solo-uid (post-cleanup).
+ * `id` è la chiave del doc che ESISTE → usala per le scritture.
+ */
+export function dedupeTeamDocs(docs: Array<{ id: string; data(): DocumentData }>): NormTeamDoc[] {
+  const byEmail = new Map<string, NormTeamDoc>()
+  for (const d of docs) {
+    const data = d.data()
+    const isUidKeyed = !d.id.includes('@')
+    const email = String(data.email ?? d.id).toLowerCase().trim()
+    const uid = data.uid ?? (isUidKeyed ? d.id : undefined)
+    const existing = byEmail.get(email)
+    // Preferisci uid-keyed; a parità, mantieni il primo incontrato.
+    if (!existing || (isUidKeyed && !existing.isUidKeyed)) {
+      byEmail.set(email, { id: d.id, email, uid, isUidKeyed, data })
+    }
+  }
+  return [...byEmail.values()]
 }
 
 const DEFAULT_CATEGORY = 'amministrazione'
+
+/**
+ * Legge il doc `/team` in modo tollerante al re-key (docs/STELLA-GRAFO.md):
+ * prova prima la chiave uid, poi quella email. Ritorna lo snapshot esistente o null.
+ * Corretto in tutti gli stati: solo-email (pre-backfill), coesistenza, solo-uid.
+ */
+export async function getTeamDoc(
+  uid: string | null | undefined,
+  email: string | null | undefined,
+): Promise<DocumentSnapshot<DocumentData> | null> {
+  if (uid) {
+    const byUid = await getDoc(doc(db, 'team', uid))
+    if (byUid.exists()) return byUid
+  }
+  const e = (email ?? '').toLowerCase().trim()
+  if (e) {
+    const byEmail = await getDoc(doc(db, 'team', e))
+    if (byEmail.exists()) return byEmail
+  }
+  return null
+}
 
 /**
  * Account di sistema/tecnici da NON mostrare come persone selezionabili:
@@ -88,19 +139,19 @@ export function useTeamMembers() {
   const loading = ref(true)
 
   const unsubscribe = onSnapshot(collection(db, 'team'), (snap) => {
-    members.value = snap.docs.filter(d => !isHiddenTeamEmail(d.id)).map(d => {
-      const data = d.data()
-      return {
-        email:     d.id,
-        role:      data.role      ?? '',
-        name:      data.name      ?? undefined,
-        firstName: data.firstName ?? undefined,
-        lastName:  data.lastName  ?? undefined,
-        uid:       data.uid       ?? undefined,
-        category:  data.category  ?? undefined,
-        hueIndex:  typeof data.hueIndex === 'number' ? data.hueIndex : undefined,
-      }
-    })
+    members.value = dedupeTeamDocs(snap.docs)
+      .filter(e => !isHiddenTeamEmail(e.email))
+      .map(e => ({
+        email:     e.email,
+        role:      e.data.role      ?? '',
+        name:      e.data.name      ?? undefined,
+        firstName: e.data.firstName ?? undefined,
+        lastName:  e.data.lastName  ?? undefined,
+        uid:       e.uid,
+        category:  e.data.category  ?? undefined,
+        hueIndex:  typeof e.data.hueIndex === 'number' ? e.data.hueIndex : undefined,
+        docId:     e.id,
+      }))
     loading.value = false
   }, (err) => {
     console.error('[useTeamMembers]', err)

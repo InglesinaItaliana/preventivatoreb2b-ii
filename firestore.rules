@@ -36,10 +36,14 @@ service cloud.firestore {
       // Scrittura SOLO Admin
       allow write: if isAdmin();
       // Eccezione: ogni membro può aggiornare SOLO il proprio campo fcmTokens
-      // (necessario per registrare il token FCM dal browser/PWA)
+      // (necessario per registrare il token FCM dal browser/PWA).
+      // Tollerante al re-key /team su UID (docs/STELLA-GRAFO.md): memberId può
+      // essere l'email (legacy) o l'uid (post re-key) del chiamante.
       allow update: if request.auth != null
-        && request.auth.token.email != null
-        && request.auth.token.email.lower() == memberId
+        && (
+          (request.auth.token.email != null && request.auth.token.email.lower() == memberId)
+          || request.auth.uid == memberId
+        )
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['fcmTokens']);
     }
 

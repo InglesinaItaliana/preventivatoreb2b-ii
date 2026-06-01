@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { auth, db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
+import { getTeamDoc } from '../composables/sidera/useTeamMembers';
 import { ENABLE_NEBULA_DOCS } from '../views/sidera/scopeConfig';
 
 const router = createRouter({
@@ -296,9 +297,10 @@ router.beforeEach(async (to, from, next) => {
   const emailKey = currentUser.email?.toLowerCase().trim();
   if (emailKey) {
     try {
-      const teamSnap = await getDoc(doc(db, 'team', emailKey));
-      
-      if (teamSnap.exists()) {
+      // Tollerante al re-key /team su UID (docs/STELLA-GRAFO.md): uid poi email.
+      const teamSnap = await getTeamDoc(currentUser.uid, emailKey);
+
+      if (teamSnap?.exists()) {
         const role = teamSnap.data().role; // 'ADMIN', 'PRODUZIONE', 'LOGISTICA'
         
         // Reindirizzamenti forzati per ruoli operativi.

@@ -1,6 +1,7 @@
-import { doc, setDoc, getDoc, serverTimestamp, deleteField, Timestamp } from 'firebase/firestore'
+import { setDoc, serverTimestamp, deleteField, Timestamp } from 'firebase/firestore'
 import type { Messaging } from 'firebase/messaging'
-import { db, auth, app } from '../../firebase'
+import { auth, app } from '../../firebase'
+import { getTeamDoc } from '../sidera/useTeamMembers'
 
 // Lazy-load del modulo firebase/messaging per non includerlo nel chunk preloaded di POPS.
 // Caricato solo quando setupForegroundMessages() o requestPermission() vengono invocati
@@ -84,18 +85,20 @@ export function useNotifications(scope: NotificationScope) {
           serviceWorkerRegistration: swReg,
         })
 
-        if (token && auth.currentUser?.email) {
-          const email = auth.currentUser.email.toLowerCase().trim()
-          const teamRef = doc(db, 'team', email)
+        if (token && auth.currentUser) {
+          const email = auth.currentUser.email?.toLowerCase().trim()
+          // Doc /team tollerante al re-key (docs/STELLA-GRAFO.md): scrive sul doc
+          // che ESISTE (uid-keyed in coesistenza, altrimenti email-keyed).
+          const teamSnap = await getTeamDoc(auth.currentUser.uid, email)
+          if (teamSnap) {
+            const teamRef = teamSnap.ref
 
-          const ua = typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 120) : undefined
-          const tokenUpdate: Record<string, unknown> = {
-            [token]: { ts: serverTimestamp(), scope, ...(ua ? { ua } : {}) },
-          }
+            const ua = typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 120) : undefined
+            const tokenUpdate: Record<string, unknown> = {
+              [token]: { ts: serverTimestamp(), scope, ...(ua ? { ua } : {}) },
+            }
 
-          try {
-            const snap = await getDoc(teamRef)
-            const existing = (snap.data()?.fcmTokens ?? {}) as Record<string, TokenEntry>
+            const existing = (teamSnap.data()?.fcmTokens ?? {}) as Record<string, TokenEntry>
             const now = Date.now()
             for (const [tk, val] of Object.entries(existing)) {
               if (tk === token) continue
@@ -105,11 +108,9 @@ export function useNotifications(scope: NotificationScope) {
                 tokenUpdate[tk] = deleteField()
               }
             }
-          } catch {
-            // Se non riesco a leggere, registro solo il nuovo token: niente prune ma niente regressione
-          }
 
-          await setDoc(teamRef, { fcmTokens: tokenUpdate }, { merge: true })
+            await setDoc(teamRef, { fcmTokens: tokenUpdate }, { merge: true })
+          }
         }
       } catch (e) {
         console.warn('[useNotifications] FCM token error', e)
