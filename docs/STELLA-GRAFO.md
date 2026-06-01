@@ -109,4 +109,10 @@ Callable gated `REKEY_ADMINS` (`info@`, `proton.me`) in `src/functions/index.ts`
 
 ## 6. Cronologia
 
-- **2026-06-01** — Creazione documento. Decisione identità (UID canonico). Branch `feature/team-uid-rekey`. Fasi 0-1-2 implementate, deployate e collaudate; rollback provato → checkpoint pulito in prod. Scoperto il vincolo "lettori dedup-tolleranti prima del backfill" (doppioni visibili su POPS in coesistenza). Prossimo: Fase 2a + 3.
+- **2026-06-01** — Creazione documento. Decisione identità (UID canonico). Branch `feature/team-uid-rekey`. Fasi 0-1-2 implementate, deployate e collaudate; rollback provato → checkpoint pulito in prod. Scoperto il vincolo "lettori dedup-tolleranti prima del backfill" (doppioni visibili su POPS in coesistenza).
+- **2026-06-01** — **RE-KEY COMPLETATO.** Fase 2a (lettori dedup-tolleranti) + Fase 3 (switch single-doc/scritture/functions/rules su uid, migration-tolerant) deployate (functions + rules + hosting). Backfill → verifica POPS (login staff + ruoli su uid-keyed, nessun doppione) → **Fase 5 cleanup**: 9 email-keyed rimossi, kill-switch spento, `fullyDone: true`. `/team` è ora interamente **uid-keyed**. Audit finale: 9 già uid-keyed, 0 problemi.
+
+### Stato finale / strascichi (non urgenti)
+- Il codice migration-tolerant (`getTeamDoc` uid→email fallback, `dedupeTeamDocs`) è ora end-state: il ramo email è dead-path innocuo. Si può semplificare in futuro.
+- Le callable/bottoni di migrazione (`auditTeamUids`, `backfillTeamToUid`, `rollbackTeamBackfill`, `cleanupTeamEmailKeyed` + UI in `SideraCoreSettings`) sono dormienti e admin-gated: rimovibili in un cleanup successivo.
+- TODO collegato: cambio-email via `admin.auth().updateUser` (preserva UID) — vedi memoria client-email-change.
