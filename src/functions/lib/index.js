@@ -117,38 +117,65 @@ exports.cancelOrder = functions
         throw new functions.https.HttpsError('internal', e.message);
     }
 });
-// --- NUOVA FUNZIONE: SYNC RUOLI (Database -> Auth Claims) ---
-// Ogni volta che si scrive nella collezione 'team', aggiorna i Custom Claims dell'utente
+// --- SYNC RUOLI (Database -> Auth Claims) — key-agnostic + migration-safe ---
+// Trigger su team/{docId}. La doc-id puo' essere EMAIL (legacy) o UID (post
+// re-key Strada B, vedi docs/STELLA-GRAFO.md). L'identita' Auth si risolve
+// SEMPRE dal campo `uid` del documento, non dalla chiave -> il trigger funziona
+// durante la coesistenza dei due schemi (Fasi 2-4 della migrazione).
+//
+// CANCELLAZIONE — doppia salvaguardia anti-lockout dello staff POPS:
+//   (a) se esiste ancora un ALTRO doc team con lo stesso uid (es. il doc
+//       uid-keyed convive col mail-keyed che stai cancellando) -> NON azzerare;
+//   (b) kill-switch esplicito core/migration.teamRekey == true -> NON azzerare.
+// Solo una rimozione "vera" (nessun doc residuo per quell'uid, flag spento)
+// azzera i custom claims.
 exports.syncTeamRoleToAuth = functions
     .region('europe-west1')
     .firestore
-    .document('team/{email}') // L'ID del documento è l'email
+    .document('team/{docId}')
     .onWrite(async (change, context) => {
-    const email = context.params.email;
-    const newData = change.after.exists ? change.after.data() : null;
+    var _a, _b;
+    const docId = context.params.docId;
+    const after = change.after.exists ? change.after.data() : null;
+    const before = change.before.exists ? change.before.data() : null;
+    const data = after !== null && after !== void 0 ? after : before;
+    // Identita' Auth = campo `uid` del doc (robusto alla chiave). Fallback:
+    // risolvi via email (doc legacy senza uid), o usa la chiave se e' gia' un uid.
+    let uid = data === null || data === void 0 ? void 0 : data.uid;
     try {
-        // 1. Trova l'utente Auth tramite email
-        // Nota: Usiamo l'email perché nel tuo sistema l'ID del doc team è l'email
-        const userRecord = await admin.auth().getUserByEmail(email);
-        if (!newData) {
-            // CASO CANCELLAZIONE: Se il doc viene cancellato, rimuovi i claims
-            await admin.auth().setCustomUserClaims(userRecord.uid, null);
-            console.log(`[ROLE SYNC] Rimossi ruoli per ${email}`);
+        if (!uid) {
+            const lookupEmail = ((_a = data === null || data === void 0 ? void 0 : data.email) !== null && _a !== void 0 ? _a : docId);
+            uid = (lookupEmail && lookupEmail.includes('@'))
+                ? (await admin.auth().getUserByEmail(lookupEmail)).uid
+                : docId;
+        }
+        if (!after) {
+            // CASO CANCELLAZIONE — applica le due salvaguardie prima del wipe.
+            const dup = await admin.firestore()
+                .collection('team').where('uid', '==', uid).limit(1).get();
+            if (!dup.empty) {
+                console.log(`[ROLE SYNC] Esiste ancora un doc team per uid=${uid}: skip wipe (${docId}).`);
+                return;
+            }
+            const mig = await admin.firestore().doc('core/migration').get();
+            if (mig.exists && ((_b = mig.data()) === null || _b === void 0 ? void 0 : _b.teamRekey) === true) {
+                console.log(`[ROLE SYNC] Migrazione attiva (teamRekey): skip wipe per ${docId}.`);
+                return;
+            }
+            await admin.auth().setCustomUserClaims(uid, null);
+            console.log(`[ROLE SYNC] Rimossi ruoli per ${docId} (uid=${uid})`);
             return;
         }
-        const role = newData.role; // 'ADMIN', 'PRODUZIONE', 'LOGISTICA'
-        // 2. Imposta il Custom Claim
-        // Salviamo 'role' dentro il token
-        await admin.auth().setCustomUserClaims(userRecord.uid, { role: role });
-        console.log(`[ROLE SYNC] Assegnato ruolo '${role}' a ${email}`);
-        // Opzionale: Forza il refresh del token lato client (non fattibile da qui, ma utile saperlo)
+        // Imposta/aggiorna il custom claim del ruolo (idempotente).
+        await admin.auth().setCustomUserClaims(uid, { role: after.role });
+        console.log(`[ROLE SYNC] Assegnato ruolo '${after.role}' a uid=${uid} (doc ${docId})`);
     }
     catch (e) {
         if (e.code === 'auth/user-not-found') {
-            console.warn(`[ROLE SYNC] Utente Auth non trovato per ${email}. Il documento team esiste ma l'utente no.`);
+            console.warn(`[ROLE SYNC] Utente Auth non trovato per doc ${docId}. Il documento team esiste ma l'utente no.`);
         }
         else {
-            console.error(`[ROLE SYNC] Errore sincronizzazione ${email}:`, e);
+            console.error(`[ROLE SYNC] Errore sincronizzazione ${docId}:`, e);
         }
     }
     // --- AVATAR STELLARI: assegna hueIndex + category di default se mancanti ---
@@ -156,12 +183,12 @@ exports.syncTeamRoleToAuth = functions
     // sequenziale entro ogni famiglia (produzione: 0,1,2,...). Combinato col
     // tone-cycle nell'engine, i primi 6 workers di una categoria avranno hue
     // tutti diversi (palette 6) e dal 7 in poi stesso hue ma intensita' diversa.
-    if (newData) {
-        const needsHue = typeof newData.hueIndex !== 'number';
-        const needsCategory = !newData.category;
+    if (after) {
+        const needsHue = typeof after.hueIndex !== 'number';
+        const needsCategory = !after.category;
         if (needsHue || needsCategory) {
             const db = admin.firestore();
-            const teamRef = db.collection('team').doc(email);
+            const teamRef = change.after.ref; // key-agnostic (email o uid)
             try {
                 await db.runTransaction(async (tx) => {
                     var _a, _b;
@@ -188,10 +215,10 @@ exports.syncTeamRoleToAuth = functions
                         tx.update(teamRef, patch);
                     }
                 });
-                console.log(`[AVATAR SYNC] ${email}: hue/category assegnati (needsHue=${needsHue}, needsCategory=${needsCategory})`);
+                console.log(`[AVATAR SYNC] ${docId}: hue/category assegnati (needsHue=${needsHue}, needsCategory=${needsCategory})`);
             }
             catch (e) {
-                console.error(`[AVATAR SYNC] Errore assegnazione avatar ${email}:`, e);
+                console.error(`[AVATAR SYNC] Errore assegnazione avatar ${docId}:`, e);
             }
         }
     }
@@ -224,6 +251,180 @@ exports.migrateAllTeamClaims = functions
         }
     }
     return { success: true, updated: count };
+});
+// --- AUDIT PRE RE-KEY /team SU UID (Fase 0, docs/STELLA-GRAFO.md) ---
+// READ-ONLY: non scrive nulla. Per ogni doc /team verifica che il campo `uid`
+// esista e combaci con l'utente Auth risolto via email (la doc-id legacy).
+// Gate per il re-key Strada B: se `problems` non e' vuoto, NON procedere col
+// backfill finche' non sono risolti (un uid mancante/errato corrompe l'identita').
+const REKEY_ADMINS = new Set(['info@inglesinaitaliana.it', 'gionata.pastorin@proton.me']);
+exports.auditTeamUids = functions
+    .region('europe-west1')
+    .https.onCall(async (_data, context) => {
+    var _a, _b, _c, _d, _e;
+    const caller = (((_b = (_a = context.auth) === null || _a === void 0 ? void 0 : _a.token) === null || _b === void 0 ? void 0 : _b.email) || '').toLowerCase().trim();
+    if (!context.auth || !REKEY_ADMINS.has(caller)) {
+        throw new functions.https.HttpsError('permission-denied', 'Riservato agli admin del re-key.');
+    }
+    const db = admin.firestore();
+    const teamSnap = await db.collection('team').get();
+    const problems = [];
+    let okCount = 0;
+    let alreadyUidKeyed = 0;
+    for (const doc of teamSnap.docs) {
+        const id = doc.id;
+        const d = doc.data();
+        const fieldUid = d.uid;
+        const isEmailKeyed = id.includes('@');
+        // 1) Doc gia' uid-keyed (post-migrazione o anomalia): segnala, non bloccare.
+        if (!isEmailKeyed) {
+            alreadyUidKeyed++;
+            if (!fieldUid)
+                problems.push({ docId: id, issue: 'uid-keyed-senza-campo-uid' });
+            else if (fieldUid !== id)
+                problems.push({ docId: id, issue: 'uid-keyed-disallineato', field: fieldUid });
+            continue;
+        }
+        // 2) Doc email-keyed: il campo uid deve esistere e combaciare con l'Auth.
+        let authUid;
+        try {
+            authUid = (await admin.auth().getUserByEmail(id)).uid;
+        }
+        catch (e) {
+            problems.push({ docId: id, issue: (e === null || e === void 0 ? void 0 : e.code) === 'auth/user-not-found' ? 'auth-inesistente' : 'auth-errore' });
+            continue;
+        }
+        if (!fieldUid)
+            problems.push({ docId: id, issue: 'campo-uid-mancante', auth: authUid });
+        else if (fieldUid !== authUid)
+            problems.push({ docId: id, issue: 'campo-uid-disallineato', field: fieldUid, auth: authUid });
+        else
+            okCount++;
+    }
+    // Verifica mirata dell'identita' canonica del re-key.
+    const CANONICAL = { email: 'gionata.pastorin@proton.me', uid: 'xs8Zb5Dur4YbyzUNV7OR1m9qJBI3' };
+    const canonicalDoc = teamSnap.docs.find(x => x.id === CANONICAL.email || x.data().uid === CANONICAL.uid);
+    const canonical = {
+        docPresente: !!canonicalDoc,
+        docId: (_c = canonicalDoc === null || canonicalDoc === void 0 ? void 0 : canonicalDoc.id) !== null && _c !== void 0 ? _c : null,
+        uidField: (_d = canonicalDoc === null || canonicalDoc === void 0 ? void 0 : canonicalDoc.data().uid) !== null && _d !== void 0 ? _d : null,
+        uidAtteso: CANONICAL.uid,
+        uidOk: (canonicalDoc === null || canonicalDoc === void 0 ? void 0 : canonicalDoc.data().uid) === CANONICAL.uid,
+        role: (_e = canonicalDoc === null || canonicalDoc === void 0 ? void 0 : canonicalDoc.data().role) !== null && _e !== void 0 ? _e : null,
+    };
+    return {
+        total: teamSnap.size,
+        ok: okCount,
+        alreadyUidKeyed,
+        problemCount: problems.length,
+        readyForBackfill: problems.length === 0,
+        problems,
+        canonical,
+    };
+});
+// --- FASE 2: BACKFILL /team su UID (docs/STELLA-GRAFO.md) ---
+// Crea i doc team/{uid} come COPIA dei doc email-keyed, SENZA cancellare gli
+// originali (dual-write non distruttivo, reversibile cancellando gli uid-keyed).
+// Attiva core/migration.teamRekey=true cosi' il trigger non azzera i claim sui
+// delete durante la coesistenza dei due schemi. Idempotente (re-run = merge).
+// Self-healing: se manca il campo `uid` lo risolve via getUserByEmail.
+exports.backfillTeamToUid = functions
+    .region('europe-west1')
+    .https.onCall(async (_data, context) => {
+    var _a, _b;
+    const caller = (((_b = (_a = context.auth) === null || _a === void 0 ? void 0 : _a.token) === null || _b === void 0 ? void 0 : _b.email) || '').toLowerCase().trim();
+    if (!context.auth || !REKEY_ADMINS.has(caller)) {
+        throw new functions.https.HttpsError('permission-denied', 'Riservato agli admin del re-key.');
+    }
+    const db = admin.firestore();
+    // 1. Kill-switch ON: durante il re-key il trigger non azzera claim sui delete.
+    await db.doc('core/migration').set({
+        teamRekey: true,
+        startedBy: caller,
+        startedAt: admin.firestore.FieldValue.serverTimestamp(),
+    }, { merge: true });
+    // 2. Dual-write: copia ogni doc email-keyed in team/{uid}.
+    const teamSnap = await db.collection('team').get();
+    const created = [];
+    const skipped = [];
+    const errors = [];
+    for (const doc of teamSnap.docs) {
+        const id = doc.id;
+        const d = doc.data();
+        // Gia' uid-keyed (non contiene '@'): niente da fare.
+        if (!id.includes('@')) {
+            skipped.push(id);
+            continue;
+        }
+        // Risolvi uid: campo, poi fallback Auth-by-email (self-healing).
+        let uid = d.uid;
+        try {
+            if (!uid)
+                uid = (await admin.auth().getUserByEmail(id)).uid;
+        }
+        catch (e) {
+            errors.push({ docId: id, error: (e === null || e === void 0 ? void 0 : e.code) || (e === null || e === void 0 ? void 0 : e.message) || 'auth-error' });
+            continue;
+        }
+        if (!uid) {
+            errors.push({ docId: id, error: 'uid-non-risolto' });
+            continue;
+        }
+        try {
+            await db.collection('team').doc(uid).set(Object.assign(Object.assign({}, d), { uid, email: (d.email || id).toLowerCase().trim() }), { merge: true });
+            created.push(`${id} → ${uid}`);
+        }
+        catch (e) {
+            errors.push({ docId: id, error: (e === null || e === void 0 ? void 0 : e.message) || 'write-error' });
+        }
+    }
+    return {
+        teamRekeyFlag: true,
+        total: teamSnap.size,
+        created: created.length,
+        skippedAlreadyUid: skipped.length,
+        errorCount: errors.length,
+        createdDocs: created,
+        errors,
+    };
+});
+// --- ROLLBACK FASE 2: annulla il backfill (docs/STELLA-GRAFO.md) ---
+// Cancella i doc uid-keyed (id senza '@') creati dal backfill e spegne il
+// kill-switch. NON tocca i doc email-keyed. Il trigger sui delete non azzera i
+// claim: (a) esiste ancora il doc email-keyed con lo stesso uid (dup-check),
+// (b) teamRekey resta true durante le cancellazioni. Idempotente.
+exports.rollbackTeamBackfill = functions
+    .region('europe-west1')
+    .https.onCall(async (_data, context) => {
+    var _a, _b;
+    const caller = (((_b = (_a = context.auth) === null || _a === void 0 ? void 0 : _a.token) === null || _b === void 0 ? void 0 : _b.email) || '').toLowerCase().trim();
+    if (!context.auth || !REKEY_ADMINS.has(caller)) {
+        throw new functions.https.HttpsError('permission-denied', 'Riservato agli admin del re-key.');
+    }
+    const db = admin.firestore();
+    const teamSnap = await db.collection('team').get();
+    const deleted = [];
+    const errors = [];
+    for (const doc of teamSnap.docs) {
+        if (doc.id.includes('@'))
+            continue; // email-keyed: NON toccare
+        try {
+            await doc.ref.delete();
+            deleted.push(doc.id);
+        }
+        catch (e) {
+            errors.push({ docId: doc.id, error: (e === null || e === void 0 ? void 0 : e.message) || 'delete-error' });
+        }
+    }
+    // Spegni il kill-switch SOLO dopo le cancellazioni (delete restano protetti).
+    await db.doc('core/migration').set({ teamRekey: false }, { merge: true });
+    return {
+        deleted: deleted.length,
+        deletedDocs: deleted,
+        errorCount: errors.length,
+        errors,
+        teamRekeyFlag: false,
+    };
 });
 // --- BACKFILL AVATAR STELLARI (RE-MIGRAZIONE per-categoria) ---
 // Assegna direttamente hueIndex sequenziale entro ogni categoria, ordinando

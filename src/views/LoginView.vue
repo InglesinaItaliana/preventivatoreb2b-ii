@@ -3,6 +3,7 @@
   import { useRouter } from 'vue-router';
   import { doc, getDoc } from 'firebase/firestore';
   import { auth, db } from '../firebase';
+  import { getTeamDoc } from '../composables/sidera/useTeamMembers';
   import { signInWithEmailAndPassword, signOut, sendPasswordResetEmail } from 'firebase/auth';
 
   const router = useRouter();
@@ -63,10 +64,10 @@ const handleLogin = async () => {
       // Verifichiamo se l'utente esiste nella collezione 'team'
       const emailKey = user.email?.toLowerCase().trim();
       if (emailKey) {
-        const teamDocRef = doc(db, 'team', emailKey);
-        const teamDoc = await getDoc(teamDocRef);
+        // Tollerante al re-key /team su UID (docs/STELLA-GRAFO.md): uid poi email.
+        const teamDoc = await getTeamDoc(user.uid, emailKey);
 
-        if (teamDoc.exists()) {
+        if (teamDoc?.exists()) {
           const role = teamDoc.data().role; // 'ADMIN', 'PRODUZIONE', 'LOGISTICA'
           
           // Reindirizzamento in base al ruolo

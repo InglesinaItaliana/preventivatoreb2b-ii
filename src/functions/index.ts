@@ -759,8 +759,9 @@ export const createTeamMember = functions
         disabled: false,
       });
   
-      // 3. Crea il documento nel Database 'team' (usando l'email come ID per coerenza con le tue regole)
-      await admin.firestore().collection("team").doc(email.toLowerCase().trim()).set({
+      // 3. Crea il documento nel Database 'team' UID-KEYED (re-key Strada B,
+      //    docs/STELLA-GRAFO.md). L'email resta come campo (mutabile via updateUser).
+      await admin.firestore().collection("team").doc(userRecord.uid).set({
         uid: userRecord.uid,
         email: email.toLowerCase().trim(),
         firstName,
@@ -1742,7 +1743,11 @@ exports.onNewPulsarMessage = functions
             // Schema entry: nuovo = { ts, scope, ua? } | legacy = Timestamp nudo (= scope 'pulsar' default).
             // Filtra scope 'pulsar' (PWA) e 'sidera' (desktop wildcard).
             const rawTokens: string[] = [];
-            const teamSnaps = await Promise.all(targets.map((email) => db.collection('team').doc(email).get()));
+            // Re-key tollerante (docs/STELLA-GRAFO.md): risolvi i team doc per CAMPO
+            // email (funziona email-keyed e uid-keyed; in coesistenza prende entrambi).
+            const teamSnaps = (await Promise.all(
+                targets.map((email) => db.collection('team').where('email', '==', email).get())
+            )).flatMap(s => s.docs);
             for (const ts of teamSnaps) {
                 if (!ts.exists) continue;
                 const tokensMap = ts.data()?.fcmTokens || {};
@@ -1813,7 +1818,11 @@ exports.onNewPulsarMessage = functions
                     const updates: Record<string, any> = {};
                     invalidTokens.forEach((tk) => { updates[`fcmTokens.${tk}`] = admin.firestore.FieldValue.delete(); });
                     if (Object.keys(updates).length) {
-                        try { await db.collection('team').doc(email).update(updates); } catch (_) { /* ignore */ }
+                        // Re-key tollerante: aggiorna TUTTI i doc che matchano l'email.
+                        try {
+                            const qs = await db.collection('team').where('email', '==', email).get();
+                            await Promise.all(qs.docs.map(d => d.ref.update(updates)));
+                        } catch (_) { /* ignore */ }
                     }
                 }));
             }
@@ -3285,7 +3294,10 @@ exports.notifyOnMention = functions
         const docTitle = after.title || 'Senza titolo';
 
         // Carica fcmTokens dai team docs dei target
-        const teamSnaps = await Promise.all(targets.map(email => db.collection('team').doc(email).get()));
+        // Re-key tollerante (docs/STELLA-GRAFO.md): risolvi per CAMPO email.
+        const teamSnaps = (await Promise.all(
+            targets.map(email => db.collection('team').where('email', '==', email).get())
+        )).flatMap(s => s.docs);
         const rawTokens: string[] = [];
         for (const ts of teamSnaps) {
             if (!ts.exists) continue;
@@ -3341,7 +3353,11 @@ exports.notifyOnMention = functions
                 const updates: Record<string, unknown> = {};
                 invalidTokens.forEach(tk => { updates[`fcmTokens.${tk}`] = admin.firestore.FieldValue.delete(); });
                 if (Object.keys(updates).length) {
-                    try { await db.collection('team').doc(email).update(updates); } catch { /* ignore */ }
+                    // Re-key tollerante: aggiorna TUTTI i doc che matchano l'email.
+                    try {
+                        const qs = await db.collection('team').where('email', '==', email).get();
+                        await Promise.all(qs.docs.map(d => d.ref.update(updates)));
+                    } catch { /* ignore */ }
                 }
             }));
         }

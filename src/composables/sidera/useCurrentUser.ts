@@ -1,7 +1,7 @@
 import { ref } from 'vue'
 import { onAuthStateChanged } from 'firebase/auth'
-import { doc, getDoc } from 'firebase/firestore'
-import { auth, db } from '../../firebase'
+import { auth } from '../../firebase'
+import { getTeamDoc } from './useTeamMembers'
 
 export interface CurrentUser {
   uid: string
@@ -25,8 +25,8 @@ onAuthStateChanged(auth, async user => {
   let category: string | undefined
   let hueIndex: number | undefined
   try {
-    const snap = await getDoc(doc(db, 'team', emailKey))
-    if (snap.exists()) {
+    const snap = await getTeamDoc(user.uid, emailKey)
+    if (snap?.exists()) {
       const d = snap.data()
       role = d.role ?? ''
       name = d.name
