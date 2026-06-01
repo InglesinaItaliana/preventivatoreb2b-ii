@@ -104,6 +104,42 @@ async function runAudit() {
     auditing.value = false
   }
 }
+
+// --- FASE 2: backfill /team su UID (non distruttivo) ---
+interface BackfillResult {
+  teamRekeyFlag: boolean
+  total: number
+  created: number
+  skippedAlreadyUid: number
+  errorCount: number
+  createdDocs: string[]
+  errors: Array<{ docId: string; error: string }>
+}
+const backfilling = ref(false)
+const backfillError = ref('')
+const backfillResult = ref<BackfillResult | null>(null)
+
+async function runBackfill() {
+  if (!confirm(
+    'Backfill /team su UID.\n\n'
+    + 'Crea i documenti uid-keyed come COPIA di quelli email-keyed (gli originali NON '
+    + 'vengono cancellati) e attiva il kill-switch core/migration.teamRekey.\n\n'
+    + 'Operazione reversibile e idempotente. Procedere?'
+  )) return
+  backfilling.value = true
+  backfillError.value = ''
+  backfillResult.value = null
+  try {
+    const fn = httpsCallable<unknown, BackfillResult>(functions, 'backfillTeamToUid')
+    const res = await fn({})
+    backfillResult.value = res.data
+  } catch (err: any) {
+    console.error('[CoreSettings] backfillTeamToUid', err)
+    backfillError.value = err?.message || 'Errore durante il backfill. Verifica i permessi.'
+  } finally {
+    backfilling.value = false
+  }
+}
 </script>
 
 <template>
@@ -219,6 +255,44 @@ async function runAudit() {
             <span v-if="p.auth"> (auth: {{ p.auth }})</span>
           </li>
         </ul>
+
+        <!-- FASE 2: backfill (solo quando l'audit è verde) -->
+        <div v-if="auditResult.readyForBackfill" class="m-audit-backfill">
+          <p class="m-task-desc" style="margin: 0 0 10px;">
+            <strong>Fase 2 · Backfill su UID</strong> — crea i doc <code>team/{uid}</code> come copia
+            (non distruttiva) di quelli email-keyed e attiva il kill-switch. Reversibile, idempotente.
+          </p>
+          <button class="m-btn m-btn--danger" type="button" :disabled="backfilling" @click="runBackfill">
+            <MIcon name="key" :size="16" /> {{ backfilling ? 'Backfill in corso…' : 'Esegui backfill su UID' }}
+          </button>
+
+          <div v-if="backfillError" class="m-error" style="margin-top: 12px;">{{ backfillError }}</div>
+
+          <div v-if="backfillResult" class="m-audit" style="margin-top: 12px;">
+            <div class="m-audit-banner" :class="backfillResult.errorCount === 0 ? 'm-audit-banner--ok' : 'm-audit-banner--warn'">
+              <MIcon :name="backfillResult.errorCount === 0 ? 'check_circle' : 'warning'" :size="18" />
+              <span>
+                {{ backfillResult.errorCount === 0
+                  ? `Backfill completato — ${backfillResult.created} doc uid-keyed creati. Kill-switch attivo.`
+                  : `${backfillResult.errorCount} errore/i durante il backfill.` }}
+              </span>
+            </div>
+            <ul class="m-audit-stats">
+              <li><strong>{{ backfillResult.created }}</strong> creati</li>
+              <li><strong>{{ backfillResult.skippedAlreadyUid }}</strong> già uid-keyed</li>
+              <li><strong>{{ backfillResult.errorCount }}</strong> errori</li>
+              <li>kill-switch: <strong>{{ backfillResult.teamRekeyFlag ? 'ON' : 'off' }}</strong></li>
+            </ul>
+            <ul v-if="backfillResult.createdDocs.length" class="m-audit-problems">
+              <li v-for="line in backfillResult.createdDocs" :key="line"><code>{{ line }}</code></li>
+            </ul>
+            <ul v-if="backfillResult.errors.length" class="m-audit-problems">
+              <li v-for="e in backfillResult.errors" :key="e.docId">
+                <code>{{ e.docId }}</code> → <strong>{{ e.error }}</strong>
+              </li>
+            </ul>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -355,4 +429,11 @@ async function runAudit() {
   font-size: 13px; padding: 8px 12px; border-radius: 8px;
   background: var(--md-sys-color-surface-container, #F5EDDF);
 }
+
+.m-audit-backfill {
+  margin-top: 8px; padding-top: 16px;
+  border-top: 1px solid var(--md-sys-color-outline-variant, #CEC6B4);
+}
+.m-btn--danger { background: #B3261E; }
+.m-btn--danger:hover:not(:disabled) { background: #8C1D18; }
 </style>

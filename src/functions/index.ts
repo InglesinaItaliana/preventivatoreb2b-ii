@@ -306,6 +306,74 @@ exports.auditTeamUids = functions
         };
     });
 
+// --- FASE 2: BACKFILL /team su UID (docs/STELLA-GRAFO.md) ---
+// Crea i doc team/{uid} come COPIA dei doc email-keyed, SENZA cancellare gli
+// originali (dual-write non distruttivo, reversibile cancellando gli uid-keyed).
+// Attiva core/migration.teamRekey=true cosi' il trigger non azzera i claim sui
+// delete durante la coesistenza dei due schemi. Idempotente (re-run = merge).
+// Self-healing: se manca il campo `uid` lo risolve via getUserByEmail.
+exports.backfillTeamToUid = functions
+    .region('europe-west1')
+    .https.onCall(async (_data, context) => {
+        const caller = (context.auth?.token?.email || '').toLowerCase().trim();
+        if (!context.auth || !REKEY_ADMINS.has(caller)) {
+            throw new functions.https.HttpsError('permission-denied', 'Riservato agli admin del re-key.');
+        }
+
+        const db = admin.firestore();
+
+        // 1. Kill-switch ON: durante il re-key il trigger non azzera claim sui delete.
+        await db.doc('core/migration').set({
+            teamRekey: true,
+            startedBy: caller,
+            startedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, { merge: true });
+
+        // 2. Dual-write: copia ogni doc email-keyed in team/{uid}.
+        const teamSnap = await db.collection('team').get();
+        const created: string[] = [];
+        const skipped: string[] = [];
+        const errors: Array<{ docId: string; error: string }> = [];
+
+        for (const doc of teamSnap.docs) {
+            const id = doc.id;
+            const d = doc.data();
+
+            // Gia' uid-keyed (non contiene '@'): niente da fare.
+            if (!id.includes('@')) { skipped.push(id); continue; }
+
+            // Risolvi uid: campo, poi fallback Auth-by-email (self-healing).
+            let uid: string | undefined = d.uid;
+            try {
+                if (!uid) uid = (await admin.auth().getUserByEmail(id)).uid;
+            } catch (e: any) {
+                errors.push({ docId: id, error: e?.code || e?.message || 'auth-error' });
+                continue;
+            }
+            if (!uid) { errors.push({ docId: id, error: 'uid-non-risolto' }); continue; }
+
+            try {
+                await db.collection('team').doc(uid).set(
+                    { ...d, uid, email: (d.email || id).toLowerCase().trim() },
+                    { merge: true },
+                );
+                created.push(`${id} → ${uid}`);
+            } catch (e: any) {
+                errors.push({ docId: id, error: e?.message || 'write-error' });
+            }
+        }
+
+        return {
+            teamRekeyFlag: true,
+            total: teamSnap.size,
+            created: created.length,
+            skippedAlreadyUid: skipped.length,
+            errorCount: errors.length,
+            createdDocs: created,
+            errors,
+        };
+    });
+
 // --- BACKFILL AVATAR STELLARI (RE-MIGRAZIONE per-categoria) ---
 // Assegna direttamente hueIndex sequenziale entro ogni categoria, ordinando
 // per email (stabile). Allinea i counter teamHue_${category} a docs.length
