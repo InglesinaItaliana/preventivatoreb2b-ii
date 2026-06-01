@@ -5,6 +5,8 @@
  */
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { httpsCallable } from 'firebase/functions'
+import { functions } from '../../firebase'
 import MIcon from '../../components/shared/MIcon.vue'
 import StarAvatar from '../../components/shared/StarAvatar.vue'
 import { useCoreAdmins } from '../../composables/sidera/useCoreAdmins'
@@ -68,6 +70,40 @@ async function onRemove(email: string) {
     errorMsg.value = err?.message || 'Errore nella rimozione.'
   }
 }
+
+// --- AUDIT pre re-key /team su UID (Fase 0, docs/STELLA-GRAFO.md) ---
+// Invoca la callable READ-ONLY auditTeamUids e mostra il report. Niente scritture.
+interface AuditResult {
+  total: number
+  ok: number
+  alreadyUidKeyed: number
+  problemCount: number
+  readyForBackfill: boolean
+  problems: Array<{ docId: string; issue: string; field?: string; auth?: string }>
+  canonical: {
+    docPresente: boolean; docId: string | null; uidField: string | null
+    uidAtteso: string; uidOk: boolean; role: string | null
+  }
+}
+const auditing = ref(false)
+const auditError = ref('')
+const auditResult = ref<AuditResult | null>(null)
+
+async function runAudit() {
+  auditing.value = true
+  auditError.value = ''
+  auditResult.value = null
+  try {
+    const fn = httpsCallable<unknown, AuditResult>(functions, 'auditTeamUids')
+    const res = await fn({})
+    auditResult.value = res.data
+  } catch (err: any) {
+    console.error('[CoreSettings] auditTeamUids', err)
+    auditError.value = err?.message || 'Errore durante l\'audit. Verifica i permessi.'
+  } finally {
+    auditing.value = false
+  }
+}
 </script>
 
 <template>
@@ -128,6 +164,62 @@ async function onRemove(email: string) {
           <span v-else class="m-remove-spacer" />
         </li>
       </ul>
+    </div>
+
+    <!-- AUDIT pre re-key /team su UID (Fase 0) -->
+    <div v-if="canAccessCore" class="m-task m-task--audit">
+      <h3 class="m-task-title">Manutenzione · Audit identità team</h3>
+      <p class="m-task-desc">
+        Verifica <strong>read-only</strong> che ogni documento <code>/team</code> abbia un
+        <code>uid</code> presente e allineato all'account Auth. È il controllo preliminare
+        (Fase 0) al re-key della collezione su UID. Non scrive nulla.
+      </p>
+
+      <button class="m-btn" type="button" :disabled="auditing" @click="runAudit">
+        <MIcon name="search" :size="16" /> {{ auditing ? 'Verifica in corso…' : 'Esegui audit' }}
+      </button>
+
+      <div v-if="auditError" class="m-error" style="margin-top: 12px;">{{ auditError }}</div>
+
+      <div v-if="auditResult" class="m-audit">
+        <div
+          class="m-audit-banner"
+          :class="auditResult.readyForBackfill ? 'm-audit-banner--ok' : 'm-audit-banner--warn'"
+        >
+          <MIcon :name="auditResult.readyForBackfill ? 'check_circle' : 'warning'" :size="18" />
+          <span>
+            {{ auditResult.readyForBackfill
+              ? 'Pronto per il backfill — nessun problema rilevato.'
+              : `${auditResult.problemCount} problema/i da risolvere prima del backfill.` }}
+          </span>
+        </div>
+
+        <ul class="m-audit-stats">
+          <li><strong>{{ auditResult.total }}</strong> doc totali</li>
+          <li><strong>{{ auditResult.ok }}</strong> ok (uid allineato)</li>
+          <li><strong>{{ auditResult.alreadyUidKeyed }}</strong> già uid-keyed</li>
+          <li><strong>{{ auditResult.problemCount }}</strong> problemi</li>
+        </ul>
+
+        <div class="m-audit-canonical" :class="{ 'is-bad': !auditResult.canonical.uidOk }">
+          Identità canonica <code>gionata.pastorin@proton.me</code>:
+          <template v-if="auditResult.canonical.docPresente">
+            doc <code>{{ auditResult.canonical.docId }}</code>,
+            uid <code>{{ auditResult.canonical.uidField }}</code>
+            — {{ auditResult.canonical.uidOk ? '✓ corretto' : '✗ NON corrisponde a ' + auditResult.canonical.uidAtteso }}
+            (ruolo {{ auditResult.canonical.role ?? '—' }})
+          </template>
+          <template v-else>✗ documento /team non trovato.</template>
+        </div>
+
+        <ul v-if="auditResult.problems.length" class="m-audit-problems">
+          <li v-for="p in auditResult.problems" :key="p.docId">
+            <code>{{ p.docId }}</code> → <strong>{{ p.issue }}</strong>
+            <span v-if="p.field"> (campo: {{ p.field }})</span>
+            <span v-if="p.auth"> (auth: {{ p.auth }})</span>
+          </li>
+        </ul>
+      </div>
     </div>
   </div>
 </template>
@@ -219,5 +311,48 @@ async function onRemove(email: string) {
   background: var(--md-sys-color-error-container, #FFDAD6);
   color: var(--md-sys-color-on-error-container, #93000A);
   border-radius: 10px; font-size: 13px;
+}
+
+/* --- Audit pre re-key --- */
+.m-task--audit { margin-top: 16px; }
+.m-audit { margin-top: 16px; display: flex; flex-direction: column; gap: 12px; }
+.m-audit-banner {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px; border-radius: 10px; font-size: 13px; font-weight: 600;
+}
+.m-audit-banner--ok { background: color-mix(in srgb, #2F6B4A 14%, transparent); color: #2F6B4A; }
+.m-audit-banner--warn {
+  background: var(--md-sys-color-error-container, #FFDAD6);
+  color: var(--md-sys-color-on-error-container, #93000A);
+}
+.m-audit-stats {
+  list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px;
+}
+.m-audit-stats li {
+  background: var(--md-sys-color-surface-container, #F5EDDF);
+  padding: 6px 12px; border-radius: var(--md-sys-shape-corner-full); font-size: 13px;
+  color: var(--md-sys-color-on-surface-variant, #6A6560);
+}
+.m-audit-stats strong { color: var(--md-sys-color-on-surface, #1A1917); }
+.m-audit-canonical {
+  font-size: 13px; line-height: 1.5; padding: 10px 14px; border-radius: 10px;
+  background: var(--md-sys-color-surface-container, #F5EDDF);
+  color: var(--md-sys-color-on-surface-variant, #6A6560);
+}
+.m-audit-canonical.is-bad {
+  background: var(--md-sys-color-error-container, #FFDAD6);
+  color: var(--md-sys-color-on-error-container, #93000A);
+}
+.m-audit-canonical code, .m-audit-problems code {
+  font-family: 'JetBrains Mono', 'SF Mono', monospace; font-size: 12px;
+  background: var(--md-sys-color-surface-container-high, #EFE7DA);
+  padding: 1px 6px; border-radius: var(--md-sys-shape-corner-extra-small);
+}
+.m-audit-problems {
+  list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px;
+}
+.m-audit-problems li {
+  font-size: 13px; padding: 8px 12px; border-radius: 8px;
+  background: var(--md-sys-color-surface-container, #F5EDDF);
 }
 </style>
