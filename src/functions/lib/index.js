@@ -590,7 +590,7 @@ exports.createTeamMember = functions
 exports.changeTeamMemberEmail = functions
     .region('europe-west1')
     .https.onCall(async (data, context) => {
-    var _a, _b, _c, _d;
+    var _a, _b, _c, _d, _e, _f, _g;
     const callerEmail = (((_b = (_a = context.auth) === null || _a === void 0 ? void 0 : _a.token) === null || _b === void 0 ? void 0 : _b.email) || '').toLowerCase().trim();
     const callerRole = (_d = (_c = context.auth) === null || _c === void 0 ? void 0 : _c.token) === null || _d === void 0 ? void 0 : _d.role;
     const isAdminCaller = callerRole === 'ADMIN' || callerEmail === 'info@inglesinaitaliana.it';
@@ -613,11 +613,22 @@ exports.changeTeamMemberEmail = functions
         if (!teamSnap.exists) {
             throw new functions.https.HttpsError('not-found', 'Agente non trovato (doc /team uid-keyed assente).');
         }
+        const oldEmail = (((_e = teamSnap.data()) === null || _e === void 0 ? void 0 : _e.email) || '').toLowerCase().trim();
         // 2. Cambia l'email su Auth PRESERVANDO l'UID.
         await admin.auth().updateUser(uid, { email: newEmail });
         // 3. Aggiorna il campo email del doc (la chiave uid resta invariata).
         //    Il trigger syncTeamRoleToAuth ri-applica il claim ruolo (idempotente).
         await teamRef.update({ email: newEmail, emailUpdatedAt: admin.firestore.FieldValue.serverTimestamp() });
+        // 4. Sincronizza l'allowlist core/admins (email-keyed): se il vecchio
+        //    indirizzo era Admin CORE, sostituiscilo col nuovo (evita entry stale).
+        if (oldEmail && oldEmail !== newEmail) {
+            const adminsRef = admin.firestore().doc('core/admins');
+            const adminsSnap = await adminsRef.get();
+            const list = adminsSnap.exists ? ((_g = (_f = adminsSnap.data()) === null || _f === void 0 ? void 0 : _f.emails) !== null && _g !== void 0 ? _g : []) : [];
+            if (list.includes(oldEmail)) {
+                await adminsRef.update({ emails: [...list.filter((e) => e !== oldEmail), newEmail] });
+            }
+        }
         return { success: true, uid, newEmail };
     }
     catch (error) {

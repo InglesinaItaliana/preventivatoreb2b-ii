@@ -18,11 +18,14 @@ import { useNebulaTeam } from '../../composables/nebula/useNebulaTeam'
 import { displayName, starAvatarProps, type TeamMember } from '../../composables/sidera/useTeamMembers'
 
 const router = useRouter()
-const { isCoreAdmin } = useCoreAdmins()
+const { isCoreAdmin, addAdmin, removeAdmin, initialized, SUPER_ADMIN } = useCoreAdmins()
 const { currentUser } = useCurrentUser()
 const { members, loading } = useNebulaTeam()   // carica TUTTI (no filtro active)
 
-const canAccessCore = computed(() => isCoreAdmin(currentUser.value?.email))
+const canAccessCore = computed(() =>
+  isCoreAdmin(currentUser.value?.email) ||
+  (!initialized.value && currentUser.value?.role === 'ADMIN'),   // bootstrap
+)
 
 const ROLES = ['ADMIN', 'PRODUZIONE', 'LOGISTICA', 'COMMERCIALE'] as const
 const roleLabel: Record<string, string> = {
@@ -77,6 +80,23 @@ async function toggleActive(m: typeof members.value[number]) {
   } catch (e: any) {
     console.error('[CoreTeam] toggleActive', e)
     errorMsg.value = e?.message || 'Errore nel cambio stato.'
+  } finally {
+    busy.value = ''
+  }
+}
+
+// --- Toggle Admin CORE (allowlist core/admins, accesso sezione CORE) ---
+async function toggleCoreAdmin(m: typeof members.value[number]) {
+  if (!m.email || m.email === SUPER_ADMIN) return
+  busy.value = m.docId || m.email; errorMsg.value = ''
+  const wasAdmin = isCoreAdmin(m.email)
+  try {
+    if (wasAdmin) await removeAdmin(m.email)
+    else await addAdmin(m.email)
+    flash(wasAdmin ? 'Rimosso dagli Admin CORE.' : 'Aggiunto agli Admin CORE.')
+  } catch (e: any) {
+    console.error('[CoreTeam] toggleCoreAdmin', e)
+    errorMsg.value = e?.message || 'Errore Admin CORE.'
   } finally {
     busy.value = ''
   }
@@ -142,7 +162,7 @@ async function createMember() {
       <div class="m-task-head">
         <div>
           <h3 class="m-task-title">Agenti</h3>
-          <p class="m-task-desc">SIDERA possiede l'identità (uid). Crea, cambia ruolo, disabilita (soft) o cambia email.</p>
+          <p class="m-task-desc">SIDERA possiede l'identità (uid). Crea, cambia ruolo, concedi accesso <strong>Admin CORE</strong> (scudo), disabilita (soft) o cambia email.</p>
         </div>
         <button class="m-btn" type="button" @click="showCreate = !showCreate">
           <MIcon name="add" :size="16" /> Nuovo agente
@@ -176,6 +196,7 @@ async function createMember() {
           <div class="m-row-text">
             <div class="m-row-name">
               {{ displayName(m.email, teamLike) }}
+              <span v-if="isCoreAdmin(m.email)" class="m-badge m-badge--admin">admin CORE</span>
               <span v-if="m.active === false" class="m-badge m-badge--off">disabilitato</span>
             </div>
             <div class="m-row-email">{{ m.email }}</div>
@@ -187,6 +208,14 @@ async function createMember() {
           >
             <option v-for="r in ROLES" :key="r" :value="r">{{ roleLabel[r] }}</option>
           </select>
+
+          <button
+            class="m-icon-btn" :class="{ 'is-admin': isCoreAdmin(m.email) }"
+            :title="isCoreAdmin(m.email) ? 'Togli accesso Admin CORE' : 'Rendi Admin CORE'"
+            :disabled="busy === (m.docId || m.email)" @click="toggleCoreAdmin(m)"
+          >
+            <MIcon :name="isCoreAdmin(m.email) ? 'shield_person' : 'shield'" :size="18" />
+          </button>
 
           <button class="m-icon-btn" title="Cambia email" :disabled="busy === m.docId" @click="changeEmail(m)">
             <MIcon name="alternate_email" :size="18" />
@@ -277,6 +306,8 @@ async function createMember() {
   padding: 2px 7px; border-radius: var(--md-sys-shape-corner-full);
 }
 .m-badge--off { background: var(--md-sys-color-error-container, #FFDAD6); color: var(--md-sys-color-on-error-container, #93000A); }
+.m-badge--admin { background: color-mix(in srgb, var(--md-sys-color-primary, #C4941C) 18%, transparent); color: var(--md-sys-color-primary, #C4941C); }
+.m-icon-btn.is-admin { color: var(--md-sys-color-primary, #C4941C); }
 
 .m-error {
   margin: 12px 0 0; padding: 10px 14px; border-radius: 10px; font-size: 13px;

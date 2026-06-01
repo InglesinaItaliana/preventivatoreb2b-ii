@@ -88,8 +88,8 @@ const router = createRouter({
         { path: 'chat',       name: 'sidera-chat',    component: () => import('../views/sidera/ChatView.vue') },
         { path: 'nova/spedizioni', name: 'nova-spedizioni', component: () => import('../views/nova/NovaSpedizioniView.vue') },
         { path: 'admin/maintenance', name: 'sidera-admin-maintenance', component: () => import('../views/sidera/SideraAdminMaintenance.vue') },
-        { path: 'core/settings', name: 'sidera-core-settings', component: () => import('../views/sidera/SideraCoreSettings.vue') },
-        // CORE → Gestione team (accesso-e-gestione §1): identità agenti, gated isCoreAdmin.
+        // CORE → Gestione team (accesso-e-gestione §1): identità agenti + accesso
+        // Admin CORE unificati qui (ex pagina Impostazioni assorbita). Gated isCoreAdmin.
         { path: 'core/team', name: 'sidera-core-team', component: () => import('../views/sidera/CoreTeamView.vue') },
         // CORE → Integrazioni: API key Claude/MCP (spostate da /nebula/docs/settings/integrations).
         // Componente invariato, cambia solo dove è montato in sidebar.

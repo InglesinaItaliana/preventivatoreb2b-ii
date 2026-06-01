@@ -637,6 +637,7 @@ export const changeTeamMemberEmail = functions
       if (!teamSnap.exists) {
         throw new functions.https.HttpsError('not-found', 'Agente non trovato (doc /team uid-keyed assente).');
       }
+      const oldEmail = (teamSnap.data()?.email || '').toLowerCase().trim();
 
       // 2. Cambia l'email su Auth PRESERVANDO l'UID.
       await admin.auth().updateUser(uid, { email: newEmail });
@@ -644,6 +645,17 @@ export const changeTeamMemberEmail = functions
       // 3. Aggiorna il campo email del doc (la chiave uid resta invariata).
       //    Il trigger syncTeamRoleToAuth ri-applica il claim ruolo (idempotente).
       await teamRef.update({ email: newEmail, emailUpdatedAt: admin.firestore.FieldValue.serverTimestamp() });
+
+      // 4. Sincronizza l'allowlist core/admins (email-keyed): se il vecchio
+      //    indirizzo era Admin CORE, sostituiscilo col nuovo (evita entry stale).
+      if (oldEmail && oldEmail !== newEmail) {
+        const adminsRef = admin.firestore().doc('core/admins');
+        const adminsSnap = await adminsRef.get();
+        const list: string[] = adminsSnap.exists ? (adminsSnap.data()?.emails ?? []) : [];
+        if (list.includes(oldEmail)) {
+          await adminsRef.update({ emails: [...list.filter((e: string) => e !== oldEmail), newEmail] });
+        }
+      }
 
       return { success: true, uid, newEmail };
     } catch (error: any) {
