@@ -426,6 +426,61 @@ exports.rollbackTeamBackfill = functions
         teamRekeyFlag: false,
     };
 });
+// --- FASE 5: CLEANUP /team (docs/STELLA-GRAFO.md) — IRREVERSIBILE ---
+// Cancella i doc email-keyed dopo la verifica su uid-keyed. Due salvaguardie:
+//  (1) cancella un email-keyed SOLO se esiste la copia uid-keyed (no orfani);
+//  (2) spegne core/migration.teamRekey SOLO se non resta nulla in sospeso
+//      (0 skip, 0 errori) — altrimenti lascia il flag ON e segnala.
+// I delete sui email-keyed non azzerano i claim: il dup-check del trigger trova
+// la copia uid-keyed. Idempotente.
+exports.cleanupTeamEmailKeyed = functions
+    .region('europe-west1')
+    .https.onCall(async (_data, context) => {
+    var _a, _b;
+    const caller = (((_b = (_a = context.auth) === null || _a === void 0 ? void 0 : _a.token) === null || _b === void 0 ? void 0 : _b.email) || '').toLowerCase().trim();
+    if (!context.auth || !REKEY_ADMINS.has(caller)) {
+        throw new functions.https.HttpsError('permission-denied', 'Riservato agli admin del re-key.');
+    }
+    const db = admin.firestore();
+    const teamSnap = await db.collection('team').get();
+    // Indice degli uid-keyed presenti (id senza '@').
+    const uidKeyed = new Set(teamSnap.docs.filter(d => !d.id.includes('@')).map(d => d.id));
+    const deleted = [];
+    const skipped = [];
+    const errors = [];
+    for (const doc of teamSnap.docs) {
+        if (!doc.id.includes('@'))
+            continue; // uid-keyed: si tiene
+        const uid = doc.data().uid;
+        // Salvaguardia (1): cancella solo se esiste la copia uid-keyed.
+        if (!uid || !uidKeyed.has(uid)) {
+            skipped.push({ docId: doc.id, reason: 'manca-copia-uid' });
+            continue;
+        }
+        try {
+            await doc.ref.delete();
+            deleted.push(doc.id);
+        }
+        catch (e) {
+            errors.push({ docId: doc.id, error: (e === null || e === void 0 ? void 0 : e.message) || 'delete-error' });
+        }
+    }
+    // Salvaguardia (2): spegni il flag SOLO se tutto è pulito.
+    const fullyDone = skipped.length === 0 && errors.length === 0;
+    if (fullyDone) {
+        await db.doc('core/migration').set({ teamRekey: false, completedBy: caller, completedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    }
+    return {
+        deleted: deleted.length,
+        deletedDocs: deleted,
+        skippedCount: skipped.length,
+        skipped,
+        errorCount: errors.length,
+        errors,
+        teamRekeyFlag: fullyDone ? false : true,
+        fullyDone,
+    };
+});
 // --- BACKFILL AVATAR STELLARI (RE-MIGRAZIONE per-categoria) ---
 // Assegna direttamente hueIndex sequenziale entro ogni categoria, ordinando
 // per email (stabile). Allinea i counter teamHue_${category} a docs.length
@@ -731,8 +786,9 @@ exports.createTeamMember = functions
             displayName: `${firstName} ${lastName}`,
             disabled: false,
         });
-        // 3. Crea il documento nel Database 'team' (usando l'email come ID per coerenza con le tue regole)
-        await admin.firestore().collection("team").doc(email.toLowerCase().trim()).set({
+        // 3. Crea il documento nel Database 'team' UID-KEYED (re-key Strada B,
+        //    docs/STELLA-GRAFO.md). L'email resta come campo (mutabile via updateUser).
+        await admin.firestore().collection("team").doc(userRecord.uid).set({
             uid: userRecord.uid,
             email: email.toLowerCase().trim(),
             firstName,
@@ -1588,7 +1644,9 @@ exports.onNewPulsarMessage = functions
         // Schema entry: nuovo = { ts, scope, ua? } | legacy = Timestamp nudo (= scope 'pulsar' default).
         // Filtra scope 'pulsar' (PWA) e 'sidera' (desktop wildcard).
         const rawTokens = [];
-        const teamSnaps = await Promise.all(targets.map((email) => db.collection('team').doc(email).get()));
+        // Re-key tollerante (docs/STELLA-GRAFO.md): risolvi i team doc per CAMPO
+        // email (funziona email-keyed e uid-keyed; in coesistenza prende entrambi).
+        const teamSnaps = (await Promise.all(targets.map((email) => db.collection('team').where('email', '==', email).get()))).flatMap(s => s.docs);
         for (const ts of teamSnaps) {
             if (!ts.exists)
                 continue;
@@ -1654,8 +1712,10 @@ exports.onNewPulsarMessage = functions
                 const updates = {};
                 invalidTokens.forEach((tk) => { updates[`fcmTokens.${tk}`] = admin.firestore.FieldValue.delete(); });
                 if (Object.keys(updates).length) {
+                    // Re-key tollerante: aggiorna TUTTI i doc che matchano l'email.
                     try {
-                        await db.collection('team').doc(email).update(updates);
+                        const qs = await db.collection('team').where('email', '==', email).get();
+                        await Promise.all(qs.docs.map(d => d.ref.update(updates)));
                     }
                     catch (_) { /* ignore */ }
                 }
@@ -2971,7 +3031,8 @@ exports.notifyOnMention = functions
     const docId = context.params.docId;
     const docTitle = after.title || 'Senza titolo';
     // Carica fcmTokens dai team docs dei target
-    const teamSnaps = await Promise.all(targets.map(email => db.collection('team').doc(email).get()));
+    // Re-key tollerante (docs/STELLA-GRAFO.md): risolvi per CAMPO email.
+    const teamSnaps = (await Promise.all(targets.map(email => db.collection('team').where('email', '==', email).get()))).flatMap(s => s.docs);
     const rawTokens = [];
     for (const ts of teamSnaps) {
         if (!ts.exists)
@@ -3024,8 +3085,10 @@ exports.notifyOnMention = functions
             const updates = {};
             invalidTokens.forEach(tk => { updates[`fcmTokens.${tk}`] = admin.firestore.FieldValue.delete(); });
             if (Object.keys(updates).length) {
+                // Re-key tollerante: aggiorna TUTTI i doc che matchano l'email.
                 try {
-                    await db.collection('team').doc(email).update(updates);
+                    const qs = await db.collection('team').where('email', '==', email).get();
+                    await Promise.all(qs.docs.map(d => d.ref.update(updates)));
                 }
                 catch ( /* ignore */_a) { /* ignore */ }
             }
