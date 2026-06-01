@@ -1,26 +1,53 @@
 <script setup lang="ts">
 /**
- * CORE · Gestione team — la "porta d'ingresso" all'identità degli agenti
- * (accesso-e-gestione §1). SIDERA possiede l'identità; i moduli proiettano.
- * Gated isCoreAdmin. Crea / cambia ruolo / disabilita (soft) / cambia email.
- * Dati: /team uid-keyed (docs/STELLA-GRAFO.md). Tutti i membri, anche disabilitati.
+ * CORE · Gestione team — la "porta d'ingresso" all'identità degli agenti.
+ * SIDERA possiede l'identità; i moduli proiettano. Gated isCoreAdmin.
+ * Crea / ruolo / Admin CORE / disabilita (soft) / cambia email.
+ * Dati: /team uid-keyed (docs/STELLA-GRAFO.md). Agenti + Account di sistema separati.
  */
-import { ref, reactive, computed } from 'vue'
+import { ref, reactive, computed, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { httpsCallable } from 'firebase/functions'
-import { doc, updateDoc } from 'firebase/firestore'
+import { doc, updateDoc, collection, onSnapshot } from 'firebase/firestore'
 import { db, auth, functions } from '../../firebase'
 import MIcon from '../../components/shared/MIcon.vue'
 import StarAvatar from '../../components/shared/StarAvatar.vue'
 import { useCoreAdmins } from '../../composables/sidera/useCoreAdmins'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
-import { useNebulaTeam } from '../../composables/nebula/useNebulaTeam'
-import { displayName, starAvatarProps, type TeamMember } from '../../composables/sidera/useTeamMembers'
+import { displayName, starAvatarProps, isHiddenTeamEmail, dedupeTeamDocs, type TeamMember } from '../../composables/sidera/useTeamMembers'
 
 const router = useRouter()
 const { isCoreAdmin, addAdmin, removeAdmin, initialized, SUPER_ADMIN } = useCoreAdmins()
 const { currentUser } = useCurrentUser()
-const { members, loading } = useNebulaTeam()   // carica TUTTI (no filtro active)
+
+interface Member {
+  email: string; firstName: string; lastName: string; role: string
+  active: boolean; uid?: string; category?: string; hueIndex?: number; docId: string
+}
+
+// Carica TUTTI i doc /team (anche disabilitati e di sistema), deduplicati per uid.
+const allMembers = ref<Member[]>([])
+const loading = ref(true)
+const unsub = onSnapshot(collection(db, 'team'), (snap) => {
+  allMembers.value = dedupeTeamDocs(snap.docs).map(e => ({
+    email:     e.email,
+    firstName: e.data.firstName ?? '',
+    lastName:  e.data.lastName  ?? '',
+    role:      e.data.role      ?? '',
+    active:    e.data.active !== false,
+    uid:       e.uid,
+    category:  e.data.category  ?? undefined,
+    hueIndex:  typeof e.data.hueIndex === 'number' ? e.data.hueIndex : undefined,
+    docId:     e.id,
+  }))
+  loading.value = false
+}, (err) => { console.error('[CoreTeam]', err); loading.value = false })
+onUnmounted(unsub)
+
+// Agenti = persone reali. Account di sistema = HIDDEN_TEAM_EMAILS (info@, lavorazioni@):
+// mostrati a parte, fuori dal concetto di "agente", sola lettura.
+const agents = computed(() => allMembers.value.filter(m => !isHiddenTeamEmail(m.email)))
+const systemAccounts = computed(() => allMembers.value.filter(m => isHiddenTeamEmail(m.email)))
 
 const canAccessCore = computed(() =>
   isCoreAdmin(currentUser.value?.email) ||
@@ -32,13 +59,19 @@ const roleLabel: Record<string, string> = {
   ADMIN: 'Admin', PRODUZIONE: 'Produzione', LOGISTICA: 'Logistica', COMMERCIALE: 'Commerciale',
 }
 
-// I membri come TeamMember-like per StarAvatar/displayName (richiede email + uid + category).
+// Per StarAvatar/displayName: tutti i membri (agenti + sistema).
 const teamLike = computed<TeamMember[]>(() =>
-  members.value.map(m => ({
+  allMembers.value.map(m => ({
     email: m.email, role: m.role, firstName: m.firstName, lastName: m.lastName,
     uid: m.uid, category: m.category, hueIndex: m.hueIndex, docId: m.docId, active: m.active,
   })),
 )
+
+// Etichetta descrittiva per gli account di sistema.
+function systemLabel(email: string): string {
+  if (email === SUPER_ADMIN) return 'super-admin · intoccabile'
+  return 'uso interno'
+}
 
 const busy = ref('')          // docId in lavorazione (disabilita pulsanti riga)
 const errorMsg = ref('')
@@ -47,7 +80,7 @@ const okMsg = ref('')
 function flash(msg: string) { okMsg.value = msg; setTimeout(() => { if (okMsg.value === msg) okMsg.value = '' }, 3000) }
 
 // --- Cambio ruolo (+ refresh token §4) ---
-async function changeRole(m: typeof members.value[number], role: string) {
+async function changeRole(m: Member, role: string) {
   if (!m.docId || m.role === role) return
   busy.value = m.docId; errorMsg.value = ''
   try {
@@ -69,7 +102,7 @@ async function changeRole(m: typeof members.value[number], role: string) {
 }
 
 // --- Soft-disable / enable ---
-async function toggleActive(m: typeof members.value[number]) {
+async function toggleActive(m: Member) {
   if (!m.docId) return
   const next = !(m.active !== false)
   if (!next && !confirm(`Disabilitare ${displayName(m.email, teamLike.value)}? Sparirà dalle liste, lo storico resta.`)) return
@@ -86,7 +119,7 @@ async function toggleActive(m: typeof members.value[number]) {
 }
 
 // --- Toggle Admin CORE (allowlist core/admins, accesso sezione CORE) ---
-async function toggleCoreAdmin(m: typeof members.value[number]) {
+async function toggleCoreAdmin(m: Member) {
   if (!m.email || m.email === SUPER_ADMIN) return
   busy.value = m.docId || m.email; errorMsg.value = ''
   const wasAdmin = isCoreAdmin(m.email)
@@ -103,7 +136,7 @@ async function toggleCoreAdmin(m: typeof members.value[number]) {
 }
 
 // --- Cambio email (CF: preserva UID) ---
-async function changeEmail(m: typeof members.value[number]) {
+async function changeEmail(m: Member) {
   if (!m.uid) { errorMsg.value = 'Manca uid: doc non uid-keyed.'; return }
   const newEmail = prompt(`Nuova email per ${displayName(m.email, teamLike.value)} (attuale: ${m.email}):`, m.email)?.trim().toLowerCase()
   if (!newEmail || newEmail === m.email) return
@@ -191,7 +224,7 @@ async function createMember() {
       <div v-if="loading" class="m-task-desc">Caricamento…</div>
 
       <ul v-else class="m-list">
-        <li v-for="m in members" :key="m.docId || m.uid || m.email" class="m-row" :class="{ 'is-off': m.active === false }">
+        <li v-for="m in agents" :key="m.docId || m.uid || m.email" class="m-row" :class="{ 'is-off': m.active === false }">
           <StarAvatar v-bind="starAvatarProps(m.email, teamLike)" :size="36" class="m-avatar" />
           <div class="m-row-text">
             <div class="m-row-name">
@@ -228,6 +261,27 @@ async function createMember() {
           </button>
         </li>
       </ul>
+
+      <!-- Account di sistema: NON agenti (info@ super-admin, lavorazioni@ uso interno). Sola lettura. -->
+      <div v-if="!loading && systemAccounts.length" class="m-sys">
+        <h3 class="m-task-title m-sys-title">
+          <MIcon name="settings_account_box" :size="16" /> Account di sistema
+        </h3>
+        <p class="m-task-desc">Non sono agenti: esclusi dalle liste selezionabili e dalla gestione. Mostrati per trasparenza.</p>
+        <ul class="m-list">
+          <li v-for="s in systemAccounts" :key="s.docId || s.email" class="m-row m-row--sys">
+            <StarAvatar v-bind="starAvatarProps(s.email, teamLike)" :size="36" class="m-avatar" />
+            <div class="m-row-text">
+              <div class="m-row-name">
+                {{ displayName(s.email, teamLike) }}
+                <span class="m-badge" :class="s.email === SUPER_ADMIN ? 'm-badge--super' : 'm-badge--sys'">{{ systemLabel(s.email) }}</span>
+              </div>
+              <div class="m-row-email">{{ s.email }}</div>
+            </div>
+            <MIcon :name="s.email === SUPER_ADMIN ? 'lock' : 'smart_toy'" :size="18" class="m-sys-lock" />
+          </li>
+        </ul>
+      </div>
     </div>
   </div>
 </template>
@@ -308,6 +362,13 @@ async function createMember() {
 .m-badge--off { background: var(--md-sys-color-error-container, #FFDAD6); color: var(--md-sys-color-on-error-container, #93000A); }
 .m-badge--admin { background: color-mix(in srgb, var(--md-sys-color-primary, #C4941C) 18%, transparent); color: var(--md-sys-color-primary, #C4941C); }
 .m-icon-btn.is-admin { color: var(--md-sys-color-primary, #C4941C); }
+
+.m-sys { margin-top: 20px; padding-top: 16px; border-top: 1px dashed var(--md-sys-color-outline-variant, #CEC6B4); }
+.m-sys-title { display: flex; align-items: center; gap: 6px; }
+.m-row--sys { opacity: 0.85; }
+.m-sys-lock { flex: 0 0 auto; color: var(--md-sys-color-on-surface-variant, #6A6560); }
+.m-badge--super { background: color-mix(in srgb, var(--md-sys-color-primary, #C4941C) 18%, transparent); color: var(--md-sys-color-primary, #C4941C); }
+.m-badge--sys { background: var(--md-sys-color-surface-container-high, #EFE7DA); color: var(--md-sys-color-on-surface-variant, #6A6560); }
 
 .m-error {
   margin: 12px 0 0; padding: 10px 14px; border-radius: 10px; font-size: 13px;
