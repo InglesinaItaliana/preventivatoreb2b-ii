@@ -12,6 +12,7 @@ export interface TeamMember {
   category?: string     // forma della stella
   hueIndex?: number     // colore stabile dal registro
   docId?: string        // chiave reale del doc /team (email-keyed o uid-keyed) — per le scritture
+  active?: boolean      // soft-disable (accesso-e-gestione §2)
 }
 
 /**
@@ -141,6 +142,7 @@ export function useTeamMembers() {
   const unsubscribe = onSnapshot(collection(db, 'team'), (snap) => {
     members.value = dedupeTeamDocs(snap.docs)
       .filter(e => !isHiddenTeamEmail(e.email))
+      .filter(e => e.data.active !== false)   // soft-disable: i disabilitati spariscono dalle liste (accesso-e-gestione §2)
       .map(e => ({
         email:     e.email,
         role:      e.data.role      ?? '',
@@ -151,6 +153,7 @@ export function useTeamMembers() {
         category:  e.data.category  ?? undefined,
         hueIndex:  typeof e.data.hueIndex === 'number' ? e.data.hueIndex : undefined,
         docId:     e.id,
+        active:    e.data.active !== false,
       }))
     loading.value = false
   }, (err) => {

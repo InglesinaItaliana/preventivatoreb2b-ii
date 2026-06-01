@@ -89,6 +89,8 @@ const router = createRouter({
         { path: 'nova/spedizioni', name: 'nova-spedizioni', component: () => import('../views/nova/NovaSpedizioniView.vue') },
         { path: 'admin/maintenance', name: 'sidera-admin-maintenance', component: () => import('../views/sidera/SideraAdminMaintenance.vue') },
         { path: 'core/settings', name: 'sidera-core-settings', component: () => import('../views/sidera/SideraCoreSettings.vue') },
+        // CORE → Gestione team (accesso-e-gestione §1): identità agenti, gated isCoreAdmin.
+        { path: 'core/team', name: 'sidera-core-team', component: () => import('../views/sidera/CoreTeamView.vue') },
         // CORE → Integrazioni: API key Claude/MCP (spostate da /nebula/docs/settings/integrations).
         // Componente invariato, cambia solo dove è montato in sidebar.
         { path: 'core/integrations', name: 'sidera-core-integrations', component: () => import('../views/nebula/docs/NebulaIntegrationsView.vue') },
