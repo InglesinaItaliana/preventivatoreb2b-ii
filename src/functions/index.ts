@@ -374,6 +374,46 @@ exports.backfillTeamToUid = functions
         };
     });
 
+// --- ROLLBACK FASE 2: annulla il backfill (docs/STELLA-GRAFO.md) ---
+// Cancella i doc uid-keyed (id senza '@') creati dal backfill e spegne il
+// kill-switch. NON tocca i doc email-keyed. Il trigger sui delete non azzera i
+// claim: (a) esiste ancora il doc email-keyed con lo stesso uid (dup-check),
+// (b) teamRekey resta true durante le cancellazioni. Idempotente.
+exports.rollbackTeamBackfill = functions
+    .region('europe-west1')
+    .https.onCall(async (_data, context) => {
+        const caller = (context.auth?.token?.email || '').toLowerCase().trim();
+        if (!context.auth || !REKEY_ADMINS.has(caller)) {
+            throw new functions.https.HttpsError('permission-denied', 'Riservato agli admin del re-key.');
+        }
+
+        const db = admin.firestore();
+        const teamSnap = await db.collection('team').get();
+        const deleted: string[] = [];
+        const errors: Array<{ docId: string; error: string }> = [];
+
+        for (const doc of teamSnap.docs) {
+            if (doc.id.includes('@')) continue;   // email-keyed: NON toccare
+            try {
+                await doc.ref.delete();
+                deleted.push(doc.id);
+            } catch (e: any) {
+                errors.push({ docId: doc.id, error: e?.message || 'delete-error' });
+            }
+        }
+
+        // Spegni il kill-switch SOLO dopo le cancellazioni (delete restano protetti).
+        await db.doc('core/migration').set({ teamRekey: false }, { merge: true });
+
+        return {
+            deleted: deleted.length,
+            deletedDocs: deleted,
+            errorCount: errors.length,
+            errors,
+            teamRekeyFlag: false,
+        };
+    });
+
 // --- BACKFILL AVATAR STELLARI (RE-MIGRAZIONE per-categoria) ---
 // Assegna direttamente hueIndex sequenziale entro ogni categoria, ordinando
 // per email (stabile). Allinea i counter teamHue_${category} a docs.length

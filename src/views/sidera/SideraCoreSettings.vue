@@ -140,6 +140,39 @@ async function runBackfill() {
     backfilling.value = false
   }
 }
+
+// --- ROLLBACK Fase 2: annulla il backfill (cancella i doc uid-keyed) ---
+interface RollbackResult {
+  deleted: number
+  deletedDocs: string[]
+  errorCount: number
+  errors: Array<{ docId: string; error: string }>
+  teamRekeyFlag: boolean
+}
+const rollingBack = ref(false)
+const rollbackError = ref('')
+const rollbackResult = ref<RollbackResult | null>(null)
+
+async function runRollback() {
+  if (!confirm(
+    'Rollback backfill /team.\n\n'
+    + 'Cancella i documenti uid-keyed creati dal backfill (gli email-keyed restano '
+    + 'intatti) e spegne il kill-switch. POPS torna allo stato pulito.\n\nProcedere?'
+  )) return
+  rollingBack.value = true
+  rollbackError.value = ''
+  rollbackResult.value = null
+  try {
+    const fn = httpsCallable<unknown, RollbackResult>(functions, 'rollbackTeamBackfill')
+    const res = await fn({})
+    rollbackResult.value = res.data
+  } catch (err: any) {
+    console.error('[CoreSettings] rollbackTeamBackfill', err)
+    rollbackError.value = err?.message || 'Errore durante il rollback. Verifica i permessi.'
+  } finally {
+    rollingBack.value = false
+  }
+}
 </script>
 
 <template>
@@ -292,6 +325,24 @@ async function runBackfill() {
               </li>
             </ul>
           </div>
+
+          <!-- Rollback: annulla il backfill, ripulisce POPS -->
+          <div class="m-rollback">
+            <button class="m-btn m-btn--ghost" type="button" :disabled="rollingBack" @click="runRollback">
+              <MIcon name="undo" :size="16" /> {{ rollingBack ? 'Rollback in corso…' : 'Annulla backfill (rollback)' }}
+            </button>
+            <div v-if="rollbackError" class="m-error" style="margin-top: 12px;">{{ rollbackError }}</div>
+            <div v-if="rollbackResult" class="m-audit" style="margin-top: 12px;">
+              <div class="m-audit-banner" :class="rollbackResult.errorCount === 0 ? 'm-audit-banner--ok' : 'm-audit-banner--warn'">
+                <MIcon :name="rollbackResult.errorCount === 0 ? 'check_circle' : 'warning'" :size="18" />
+                <span>
+                  {{ rollbackResult.errorCount === 0
+                    ? `Rollback completato — ${rollbackResult.deleted} doc uid-keyed rimossi. Kill-switch spento.`
+                    : `${rollbackResult.errorCount} errore/i durante il rollback.` }}
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -436,4 +487,10 @@ async function runBackfill() {
 }
 .m-btn--danger { background: #B3261E; }
 .m-btn--danger:hover:not(:disabled) { background: #8C1D18; }
+.m-rollback { margin-top: 14px; }
+.m-btn--ghost {
+  background: transparent; color: var(--md-sys-color-on-surface-variant, #6A6560);
+  border: 1px solid var(--md-sys-color-outline-variant, #CEC6B4);
+}
+.m-btn--ghost:hover:not(:disabled) { background: var(--md-sys-color-surface-container, #F5EDDF); }
 </style>
