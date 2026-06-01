@@ -173,6 +173,44 @@ async function runRollback() {
     rollingBack.value = false
   }
 }
+
+// --- FASE 5: cleanup email-keyed (IRREVERSIBILE) ---
+interface CleanupResult {
+  deleted: number
+  deletedDocs: string[]
+  skippedCount: number
+  skipped: Array<{ docId: string; reason: string }>
+  errorCount: number
+  errors: Array<{ docId: string; error: string }>
+  teamRekeyFlag: boolean
+  fullyDone: boolean
+}
+const cleaning = ref(false)
+const cleanupError = ref('')
+const cleanupResult = ref<CleanupResult | null>(null)
+
+async function runCleanup() {
+  if (!confirm(
+    'CLEANUP IRREVERSIBILE — Fase 5.\n\n'
+    + 'Cancella i documenti email-keyed di /team (resta solo lo schema uid-keyed) '
+    + 'e spegne il kill-switch. Cancella solo i doc che hanno già la copia uid-keyed.\n\n'
+    + 'Esegui SOLO dopo aver verificato che login/ruoli funzionano su uid-keyed.\n\nProcedere?'
+  )) return
+  if (!confirm('Confermi DEFINITIVAMENTE? Questa operazione non è reversibile.')) return
+  cleaning.value = true
+  cleanupError.value = ''
+  cleanupResult.value = null
+  try {
+    const fn = httpsCallable<unknown, CleanupResult>(functions, 'cleanupTeamEmailKeyed')
+    const res = await fn({})
+    cleanupResult.value = res.data
+  } catch (err: any) {
+    console.error('[CoreSettings] cleanupTeamEmailKeyed', err)
+    cleanupError.value = err?.message || 'Errore durante il cleanup. Verifica i permessi.'
+  } finally {
+    cleaning.value = false
+  }
+}
 </script>
 
 <template>
@@ -341,6 +379,33 @@ async function runRollback() {
                     : `${rollbackResult.errorCount} errore/i durante il rollback.` }}
                 </span>
               </div>
+            </div>
+          </div>
+
+          <!-- Fase 5: cleanup IRREVERSIBILE -->
+          <div class="m-rollback">
+            <p class="m-task-desc" style="margin: 0 0 8px;">
+              <strong>Fase 5 · Cleanup (irreversibile)</strong> — cancella gli email-keyed,
+              resta solo lo schema uid-keyed. Solo dopo verifica login/ruoli su uid.
+            </p>
+            <button class="m-btn m-btn--danger" type="button" :disabled="cleaning" @click="runCleanup">
+              <MIcon name="delete_forever" :size="16" /> {{ cleaning ? 'Cleanup in corso…' : 'Cleanup email-keyed (Fase 5)' }}
+            </button>
+            <div v-if="cleanupError" class="m-error" style="margin-top: 12px;">{{ cleanupError }}</div>
+            <div v-if="cleanupResult" class="m-audit" style="margin-top: 12px;">
+              <div class="m-audit-banner" :class="cleanupResult.fullyDone ? 'm-audit-banner--ok' : 'm-audit-banner--warn'">
+                <MIcon :name="cleanupResult.fullyDone ? 'check_circle' : 'warning'" :size="18" />
+                <span>
+                  {{ cleanupResult.fullyDone
+                    ? `Re-key COMPLETATO — ${cleanupResult.deleted} email-keyed rimossi. Kill-switch spento.`
+                    : `${cleanupResult.deleted} rimossi, ${cleanupResult.skippedCount} saltati, ${cleanupResult.errorCount} errori. Flag ancora ON.` }}
+                </span>
+              </div>
+              <ul v-if="cleanupResult.skipped.length" class="m-audit-problems">
+                <li v-for="s in cleanupResult.skipped" :key="s.docId">
+                  <code>{{ s.docId }}</code> → <strong>{{ s.reason }}</strong>
+                </li>
+              </ul>
             </div>
           </div>
         </div>
