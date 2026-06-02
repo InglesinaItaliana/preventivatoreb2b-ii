@@ -672,7 +672,11 @@ const roleLabel: Record<string, string> = {
                 <MIcon name="group" :size="18" :filled="isActive('/sidera/core/team', false)" class="s-nav-icon" :style="activeIconStyle('/sidera/core/team', false, CORE_ACCENT)" />
                 Gestione team
               </RouterLink>
-              <RouterLink to="/sidera/core/integrations" class="s-nav-item" :style="{ ...activeStyle('/sidera/core/integrations', false, CORE_ACCENT), '--s-idx': 2 } as any">
+              <RouterLink to="/sidera/core/funzioni" class="s-nav-item" :style="{ ...activeStyle('/sidera/core/funzioni', false, CORE_ACCENT), '--s-idx': 2 } as any">
+                <MIcon name="badge" :size="18" :filled="isActive('/sidera/core/funzioni', false)" class="s-nav-icon" :style="activeIconStyle('/sidera/core/funzioni', false, CORE_ACCENT)" />
+                Funzioni
+              </RouterLink>
+              <RouterLink to="/sidera/core/integrations" class="s-nav-item" :style="{ ...activeStyle('/sidera/core/integrations', false, CORE_ACCENT), '--s-idx': 3 } as any">
                 <MIcon name="vpn_key" :size="18" :filled="isActive('/sidera/core/integrations', false)" class="s-nav-icon" :style="activeIconStyle('/sidera/core/integrations', false, CORE_ACCENT)" />
                 Integrazioni
               </RouterLink>

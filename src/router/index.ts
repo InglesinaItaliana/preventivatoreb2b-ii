@@ -92,6 +92,8 @@ const router = createRouter({
         // CORE → Gestione team (docs/STELLA-GRAFO.md): identità agenti + accesso
         // Admin CORE unificati qui (ex pagina Impostazioni assorbita). Gated isCoreAdmin.
         { path: 'core/team', name: 'sidera-core-team', component: () => import('../views/sidera/CoreTeamView.vue') },
+        // CORE → Funzioni: etichette mansione → categoria + ruolo-permessi (docs/STELLA-GRAFO.md).
+        { path: 'core/funzioni', name: 'sidera-core-funzioni', component: () => import('../views/sidera/CoreFunzioniView.vue') },
         // CORE → Integrazioni: API key Claude/MCP (spostate da /nebula/docs/settings/integrations).
         // Componente invariato, cambia solo dove è montato in sidebar.
         { path: 'core/integrations', name: 'sidera-core-integrations', component: () => import('../views/nebula/docs/NebulaIntegrationsView.vue') },
