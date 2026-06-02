@@ -14,6 +14,7 @@ import MIcon from '../../components/shared/MIcon.vue'
 import StarAvatar from '../../components/shared/StarAvatar.vue'
 import { useCoreAdmins } from '../../composables/sidera/useCoreAdmins'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
+import { FUNZIONI } from '../../composables/nebula/useNebulaTeam'
 import { displayName, starAvatarProps, isHiddenTeamEmail, dedupeTeamDocs, type TeamMember } from '../../composables/sidera/useTeamMembers'
 
 const router = useRouter()
@@ -157,8 +158,15 @@ async function changeEmail(m: Member) {
 // --- Creazione membro ---
 const showCreate = ref(false)
 const creating = ref(false)
-const form = reactive({ firstName: '', lastName: '', email: '', password: '', role: 'PRODUZIONE', phone: '' })
-function resetForm() { Object.assign(form, { firstName: '', lastName: '', email: '', password: '', role: 'PRODUZIONE', phone: '' }) }
+const form = reactive({ firstName: '', lastName: '', email: '', password: '', role: 'PRODUZIONE', phone: '', position: '', category: '' })
+function resetForm() { Object.assign(form, { firstName: '', lastName: '', email: '', password: '', role: 'PRODUZIONE', phone: '', position: '', category: '' }) }
+
+// Funzione-first: scelta la funzione (= position), deriva role + category-avatar.
+// Il role resta visibile e overridabile sotto.
+function onFunzione() {
+  const f = FUNZIONI.find(x => x.position === form.position)
+  if (f) { form.role = f.role; form.category = f.category }
+}
 
 async function createMember() {
   errorMsg.value = ''
@@ -203,16 +211,21 @@ async function createMember() {
       </div>
 
       <form v-if="showCreate" class="m-create" @submit.prevent="createMember">
+        <select v-model="form.position" @change="onFunzione" class="m-input m-input--full">
+          <option value="">Funzione… (deriva ruolo e avatar)</option>
+          <option v-for="f in FUNZIONI" :key="f.position" :value="f.position">{{ f.position }}</option>
+        </select>
         <div class="m-create-grid">
           <input v-model="form.firstName" class="m-input" placeholder="Nome" />
           <input v-model="form.lastName" class="m-input" placeholder="Cognome" />
           <input v-model="form.email" type="email" class="m-input" placeholder="email@dominio.it" autocomplete="off" />
           <input v-model="form.password" type="password" class="m-input" placeholder="Password (min 6)" autocomplete="new-password" />
           <input v-model="form.phone" class="m-input" placeholder="Telefono (opz.)" />
-          <select v-model="form.role" class="m-input">
+          <select v-model="form.role" class="m-input" title="Ruolo-permessi (derivato dalla funzione, modificabile)">
             <option v-for="r in ROLES" :key="r" :value="r">{{ roleLabel[r] }}</option>
           </select>
         </div>
+        <p class="m-create-hint">Il <strong>ruolo</strong> (permessi) è derivato dalla funzione ma resta modificabile. L'accesso <strong>Admin CORE</strong> si concede dopo, dalla lista (scudo).</p>
         <button class="m-btn" type="submit" :disabled="creating">
           <MIcon name="person_add" :size="16" /> {{ creating ? 'Creazione…' : 'Crea agente' }}
         </button>
@@ -324,6 +337,8 @@ async function createMember() {
 
 .m-create { background: var(--md-sys-color-surface-container, #F5EDDF); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
 .m-create-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+.m-input--full { width: 100%; margin-bottom: 8px; }
+.m-create-hint { font-size: 12px; line-height: 1.5; color: var(--md-sys-color-on-surface-variant, #6A6560); margin: 0 0 12px; }
 .m-input {
   min-width: 0; background: var(--md-sys-color-surface-container-lowest, #FFFFFF);
   border: 1px solid var(--md-sys-color-outline-variant, #CEC6B4);
