@@ -145,13 +145,13 @@ const redirectHost = computed(() => {
         <MaterialIcon name="error" :size="28" color="#a82020" />
         <p>{{ error }}</p>
         <button type="button" class="oc-btn oc-btn-secondary" @click="router.push('/nebula/docs')">
-          Torna a NEBULA-DOCS
+          Torna a SIDERA
         </button>
       </div>
 
       <template v-else-if="info">
         <p class="oc-lead">
-          <strong>{{ safeClientName }}</strong> vuole connettersi a <strong>NEBULA-DOCS</strong>
+          <strong>{{ safeClientName }}</strong> vuole connettersi a <strong>SIDERA</strong>
           per conto tuo (<code>{{ safeUserEmail || '…' }}</code>).
         </p>
 
@@ -210,16 +210,15 @@ const redirectHost = computed(() => {
         <div class="oc-permissions">
           <h3>Cosa potrà fare</h3>
           <ul>
-            <li><MaterialIcon name="search" :size="16" />  Cercare nei tuoi documenti</li>
-            <li><MaterialIcon name="description" :size="16" />  Leggere il contenuto</li>
-            <li><MaterialIcon name="add" :size="16" />  Creare nuovi documenti</li>
-            <li><MaterialIcon name="edit" :size="16" />  Aggiungere blocchi / modificare sezioni</li>
-            <li><MaterialIcon name="link" :size="16" />  Collegare task e progetti CEPHEID</li>
+            <li><MaterialIcon name="search" :size="16" />  Cercare e leggere i tuoi documenti <strong>NEBULA</strong></li>
+            <li><MaterialIcon name="edit" :size="16" />  Creare e modificare documenti (blocchi, sezioni)</li>
+            <li><MaterialIcon name="rocket_launch" :size="16" />  Creare progetti, task, milestone e deliverable in <strong>CEPHEID</strong></li>
+            <li><MaterialIcon name="link" :size="16" />  Collegare task e progetti ai documenti</li>
           </ul>
           <p class="oc-permissions-note">
             Con i <strong>tuoi stessi permessi</strong>: i doc privati restano tuoi,
-            i doc del team team-visibili. Le scritture vengono tracciate nella
-            storia del documento con tag "Claude (MCP)".
+            i doc del team team-visibili; la creazione in CEPHEID richiede privilegi
+            admin. Le scritture vengono tracciate nella storia con tag "Claude (MCP)".
           </p>
         </div>
 
@@ -251,7 +250,7 @@ const redirectHost = computed(() => {
 
         <footer class="oc-footer">
           Puoi revocare l'accesso in qualsiasi momento da
-          <strong>NEBULA → Integrazioni</strong>.
+          <strong>CORE → Integrazioni</strong>.
         </footer>
       </template>
     </div>

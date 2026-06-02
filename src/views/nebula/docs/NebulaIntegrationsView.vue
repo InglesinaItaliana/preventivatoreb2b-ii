@@ -33,7 +33,7 @@ const copied = ref(false)
 
 // URL del MCP server — derivato da Firebase project + region
 const MCP_URL = computed(() =>
-  'https://europe-west1-preventivatoreb2b-ii.cloudfunctions.net/mcpNebula'
+  'https://europe-west1-preventivatoreb2b-ii.cloudfunctions.net/mcpSidera'
 )
 
 // Config Claude Desktop via bridge `mcp-remote` (Claude Desktop attualmente
@@ -41,7 +41,7 @@ const MCP_URL = computed(() =>
 const claudeDesktopConfig = computed(() => {
   return JSON.stringify({
     mcpServers: {
-      nebula: {
+      sidera: {
         command: 'npx',
         args: [
           '-y',
@@ -164,10 +164,11 @@ const revokedKeys = computed(() => keys.value.filter(k => k.revoked))
     <section class="ni-section">
       <h3>Come funziona</h3>
       <p>
-        Genera una <strong>chiave API</strong> da incollare nella configurazione di
-        <strong>Claude Desktop</strong> (vedi setup sotto). Claude potrà cercare,
-        creare e modificare i tuoi documenti NEBULA via protocollo MCP — con i
-        tuoi stessi permessi (doc privati restano tuoi, doc team team-visibili).
+        Collega <strong>Claude</strong> alla suite <strong>SIDERA</strong> via protocollo MCP.
+        Potrà gestire i tuoi documenti <strong>NEBULA</strong> (cercare, creare, modificare) e
+        creare progetti, task, milestone e deliverable in <strong>CEPHEID</strong> — con i
+        tuoi stessi permessi (doc privati restano tuoi, doc team team-visibili; la
+        creazione in CEPHEID richiede privilegi admin).
       </p>
       <div class="ni-callout">
         <MaterialIcon name="info" :size="16" />
@@ -260,12 +261,12 @@ const revokedKeys = computed(() => keys.value.filter(k => k.revoked))
       <pre class="ni-code">{{ MCP_URL }}</pre>
       <ol class="ni-steps" start="4">
         <li>Click <strong>Connect</strong></li>
-        <li>Si aprirà una pagina di NEBULA-DOCS con "Autorizza" → conferma</li>
+        <li>Si aprirà una pagina di SIDERA con "Autorizza" → conferma</li>
         <li>Torni su claude.ai con il connettore attivo. Pronto.</li>
       </ol>
       <p class="ni-note">
         Niente API key da gestire — l'autorizzazione è legata al tuo login
-        Firebase su NEBULA. Per revocare, da claude.ai disconnetti il
+        Firebase su SIDERA. Per revocare, da claude.ai disconnetti il
         connettore (oppure scadenza automatica dopo 90 giorni).
       </p>
     </section>
