@@ -140,11 +140,7 @@ const roleAccent: Record<string, string> = {
                 <div v-for="m in byCategory(cat)" :key="m.email" class="nb-card">
                   <StarAvatar v-bind="memberStar(m)" :size="42" />
                   <div class="nb-card-name">{{ fullName(m) }}</div>
-                  <button v-if="isAdmin" class="nb-pos-trigger" @click="openEdit(m)">
-                    {{ m.position || 'Imposta ruolo' }}
-                    <PencilSquareIcon class="nb-pen-icon" />
-                  </button>
-                  <span v-else class="nb-pos-label">{{ m.position || '—' }}</span>
+                  <span class="nb-pos-label">{{ m.position || '—' }}</span>
                 </div>
               </div>
             </section>
@@ -174,9 +170,6 @@ const roleAccent: Record<string, string> = {
         <span class="nb-role-badge" :style="{ color: roleAccent[m.role] ?? '#9B9590', borderColor: (roleAccent[m.role] ?? '#9B9590') + '40' }">
           {{ m.role }}
         </span>
-        <button v-if="isAdmin && m.active" class="nb-list-edit" @click="openEdit(m)">
-          <PencilSquareIcon style="width:14px;height:14px" />
-        </button>
       </div>
       <div v-if="!all.length" class="nb-empty">Nessun membro nel team.</div>
     </div>

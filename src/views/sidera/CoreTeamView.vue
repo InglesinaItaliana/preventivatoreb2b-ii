@@ -23,7 +23,7 @@ const { isCoreAdmin, addAdmin, removeAdmin, initialized, SUPER_ADMIN } = useCore
 const { currentUser } = useCurrentUser()
 
 interface Member {
-  email: string; firstName: string; lastName: string; role: string
+  email: string; firstName: string; lastName: string; role: string; position?: string
   active: boolean; uid?: string; category?: string; hueIndex?: number; docId: string
 }
 
@@ -36,6 +36,7 @@ const unsub = onSnapshot(collection(db, 'team'), (snap) => {
     firstName: e.data.firstName ?? '',
     lastName:  e.data.lastName  ?? '',
     role:      e.data.role      ?? '',
+    position:  e.data.position  ?? undefined,
     active:    e.data.active !== false,
     uid:       e.uid,
     category:  e.data.category  ?? undefined,
@@ -71,7 +72,6 @@ const canAccessCore = computed(() =>
   (!initialized.value && currentUser.value?.role === 'ADMIN'),   // bootstrap
 )
 
-const ROLES = ['ADMIN', 'PRODUZIONE', 'LOGISTICA', 'COMMERCIALE'] as const
 const roleLabel: Record<string, string> = {
   ADMIN: 'Admin', PRODUZIONE: 'Produzione', LOGISTICA: 'Logistica', COMMERCIALE: 'Commerciale',
 }
@@ -103,38 +103,37 @@ const okMsg = ref('')
 
 function flash(msg: string) { okMsg.value = msg; setTimeout(() => { if (okMsg.value === msg) okMsg.value = '' }, 3000) }
 
-// --- Cambio ruolo (+ refresh token §4) ---
-// Handler del select riga: conferma il cambio e ripristina la selezione se annulli.
-async function onRoleChange(m: Member, e: Event) {
+// --- Cambio funzione dell'agente (deriva categoria-avatar + ruolo-permessi) ---
+// Handler del select riga: conferma e ripristina la selezione se annulli.
+async function onFunzioneChange(m: Member, e: Event) {
   const sel = e.target as HTMLSelectElement
-  const newRole = sel.value
-  if (newRole === m.role) return
+  const newLabel = sel.value
+  if (newLabel === (m.position ?? '')) return
+  const f = funzioniOptions.value.find(x => x.label === newLabel)
+  if (!f) { sel.value = m.position ?? ''; return }
   if (!confirm(
-    `Cambiare il ruolo di ${displayName(m.email, teamLike.value)} `
-    + `da "${roleLabel[m.role] ?? m.role}" a "${roleLabel[newRole] ?? newRole}"?`
+    `Cambiare la funzione di ${displayName(m.email, teamLike.value)} in "${newLabel}"?\n\n`
+    + `Ruolo-permessi: ${roleLabel[f.role] ?? f.role}. Categoria/avatar: ${f.category}.`
   )) {
-    sel.value = m.role   // ripristina la selezione precedente
+    sel.value = m.position ?? ''   // ripristina
     return
   }
-  await changeRole(m, newRole)
-}
-
-async function changeRole(m: Member, role: string) {
-  if (!m.docId || m.role === role) return
+  if (!m.docId) return
   busy.value = m.docId; errorMsg.value = ''
   try {
-    await updateDoc(doc(db, 'team', m.docId), { role })
-    // §4: se cambio il MIO ruolo, forzo il refresh del token; altrimenti l'utente
-    // vedrà i nuovi permessi al suo prossimo login/refresh (non forzabile da qui).
+    // Funzione → position + categoria-avatar + ruolo-permessi (derivato).
+    await updateDoc(doc(db, 'team', m.docId), { position: newLabel, category: f.category, role: f.role })
+    // §4: se cambio la MIA funzione, forzo il refresh del token; altrimenti l'utente
+    // vedrà i nuovi permessi al prossimo login (non forzabile da qui).
     if (m.uid && m.uid === currentUser.value?.uid) {
       await auth.currentUser?.getIdToken(true)
-      flash('Ruolo aggiornato. Token rinfrescato (il tuo).')
+      flash('Funzione aggiornata. Token rinfrescato (il tuo).')
     } else {
-      flash(`Ruolo aggiornato. ${displayName(m.email, teamLike.value)} vedrà i nuovi permessi al prossimo login.`)
+      flash(`Funzione aggiornata. ${displayName(m.email, teamLike.value)} vedrà i nuovi permessi al prossimo login.`)
     }
-  } catch (e: any) {
-    console.error('[CoreTeam] changeRole', e)
-    errorMsg.value = e?.message || 'Errore nel cambio ruolo.'
+  } catch (err: any) {
+    console.error('[CoreTeam] changeFunzione', err)
+    errorMsg.value = err?.message || 'Errore nel cambio funzione.'
   } finally {
     busy.value = ''
   }
@@ -315,12 +314,15 @@ async function createMember() {
           </div>
 
           <select
-            class="m-role" :value="m.role" :disabled="busy === m.docId"
-            :title="roleDescriptions[m.role]"
-            @change="onRoleChange(m, $event)"
+            class="m-funz" :value="m.position ?? ''" :disabled="busy === m.docId"
+            title="Funzione (determina avatar e ruolo-permessi)"
+            @change="onFunzioneChange(m, $event)"
           >
-            <option v-for="r in ROLES" :key="r" :value="r">{{ roleLabel[r] }}</option>
+            <option value="" disabled>— funzione —</option>
+            <option v-if="m.position && !funzioniOptions.some(f => f.label === m.position)" :value="m.position">{{ m.position }} (fuori lista)</option>
+            <option v-for="f in funzioniOptions" :key="f.label" :value="f.label">{{ f.label }}</option>
           </select>
+          <span class="m-role-chip" :title="roleDescriptions[m.role]">{{ roleLabel[m.role] || m.role || '—' }}</span>
 
           <button
             class="m-icon-btn" :class="{ 'is-admin': isCoreAdmin(m.email) }"
@@ -436,11 +438,17 @@ async function createMember() {
 .m-row-name { font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 8px; }
 .m-row-email { font-size: 11px; color: var(--md-sys-color-on-surface-variant, #6A6560); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.m-role {
+.m-funz {
   flex: 0 0 auto; background: var(--md-sys-color-surface-container-lowest, #FFFFFF);
   border: 1px solid var(--md-sys-color-outline-variant, #CEC6B4); border-radius: 8px;
   padding: 6px 8px; font-size: 12px; font-family: inherit; color: inherit; cursor: pointer;
-  text-align: center; text-align-last: center; min-width: 104px;
+  text-align-last: center; min-width: 150px; max-width: 180px;
+}
+.m-role-chip {
+  flex: 0 0 auto; font-size: 10px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase;
+  padding: 3px 8px; border-radius: var(--md-sys-shape-corner-full); min-width: 78px; text-align: center;
+  background: color-mix(in srgb, var(--md-sys-color-primary, #C4941C) 14%, transparent);
+  color: var(--md-sys-color-primary, #C4941C);
 }
 .m-icon-btn {
   flex: 0 0 auto; background: none; border: none; cursor: pointer; padding: 6px; border-radius: var(--md-sys-shape-corner-full);
