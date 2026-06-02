@@ -2,7 +2,7 @@
 import { ref, computed } from 'vue'
 import { PencilSquareIcon } from '@heroicons/vue/24/outline'
 import { useNebulaTeam, POSITION_OPTIONS, CATEGORY_OPTIONS, type NebulaMember } from '../../composables/nebula/useNebulaTeam'
-import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
+import { useCan } from '../../composables/sidera/useCan'
 import StarAvatar from '../../components/shared/StarAvatar.vue'
 import MdPageHeader from '../../components/shared/MdPageHeader.vue'
 import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
@@ -19,13 +19,13 @@ const viewTabs: { id: 'org' | 'list'; label: string; icon: string }[] = [
 ]
 
 const { members, loading, updatePosition, updateCategory } = useNebulaTeam()
-const { currentUser } = useCurrentUser()
+const { can } = useCan()
 
 const view          = ref<'org' | 'list'>('org')
 const editingMember = ref<NebulaMember | null>(null)
 const saving        = ref(false)
 
-const isAdmin = computed(() => currentUser.value?.role === 'ADMIN')
+const isAdmin = computed(() => can('canManageTeamMeta'))
 
 const active = computed(() => members.value.filter(m => m.active !== false))
 const all    = computed(() => members.value)

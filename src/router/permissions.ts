@@ -50,3 +50,28 @@ export function postLoginRoute(role: Role): string {
   if (role === 'LOGISTICA') return '/delivery'
   return '/admin' // ADMIN, COMMERCIALE, altri
 }
+
+/**
+ * Capability dichiarative per ruolo (POLARIS Az.9) — gating UI lato client.
+ * NON è il confine di sicurezza (quello sono le Firestore rules); serve a
+ * centralizzare i vari `isAdmin` sparsi nei componenti. CORE-admin resta
+ * ortogonale (allowlist core/admins, vedi useCoreAdmins), NON entra qui.
+ */
+export interface Capabilities {
+  canEditProjects: boolean    // CepheidProjectsView: crea/edit/elimina progetti
+  canManageTeamMeta: boolean  // NebulaTeamView: edit posizione/categoria organigramma
+}
+
+const EMPTY_CAPS: Capabilities = { canEditProjects: false, canManageTeamMeta: false }
+
+export const ROLE_CAPABILITIES: Record<Role, Capabilities> = {
+  ADMIN:       { canEditProjects: true,  canManageTeamMeta: true },
+  PRODUZIONE:  { ...EMPTY_CAPS },
+  COMMERCIALE: { ...EMPTY_CAPS },
+  LOGISTICA:   { ...EMPTY_CAPS },
+  '':          { ...EMPTY_CAPS },
+}
+
+export function capabilitiesFor(role: Role): Capabilities {
+  return ROLE_CAPABILITIES[role] ?? EMPTY_CAPS
+}
