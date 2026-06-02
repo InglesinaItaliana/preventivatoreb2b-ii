@@ -121,12 +121,29 @@ Callable gated `REKEY_ADMINS` (`info@`, `proton.me`) in `src/functions/index.ts`
 
 ---
 
-## 6. Cronologia
+## 6. Modello permessi, ruoli e funzioni (POLARIS Az.6/9)
+
+- **Scope unificato**: il guard rileva lo scope con `detectScope()` (riusa `scopeConfig`); login scoped da `getScopeConfig().loginPath`.
+- **Routing centralizzato**: `src/router/permissions.ts` (**puro TS**, no Vue/Firebase) — `allowedPathsByRole`, `roleFallbackPath`, `forbiddenClientPaths`, `isPathAllowedForRole`, `postLoginRoute` (NB: PRODUZIONE→`/production`). Consumato da guard **e** LoginView (prima duplicati/disallineati).
+- **Capabilities dichiarative**: `Capabilities` + `ROLE_CAPABILITIES` + `capabilitiesFor` in permissions.ts; composable `useCan()` (super-admin info@ + `isCoreAdmin` **ortogonale**). Le Firestore rules restano il confine di sicurezza; questo è gating UX.
+- **UNA sola tassonomia gestita a mano: la categoria** (5: direzione, amministrazione, produzione, logistica, commerciale — `tecnico` rimosso). Il **ruolo-permessi (4)** si **DERIVA** via `CATEGORY_TO_ROLE`/`roleForCategory`. `direzione`+`amministrazione` → ADMIN, distinte per avatar + **scudo CORE** (toggle separato, mai derivato dalla categoria).
+- **Funzioni gestibili**: collezione Firestore `funzioni/{id}` = `{ label, category, order }` (ruolo derivato). Composable `useFunzioni` (CRUD + `seedDefaults` + fallback ai default `FUNZIONI` in `useNebulaTeam`). UI: `/sidera/core/funzioni` (`CoreFunzioniView`, gated isCoreAdmin). Rule `funzioni` (read auth, write admin).
+- **Agente funzione-first**: in CORE → Gestione team si sceglie la **FUNZIONE** (creazione + select per-riga, con conferma) → setta `position`+`category`+`role`. NEBULA → Squadra è **sola visualizzazione**.
+- **Permessi granulari CEPHEID** (capabilities, CEPHEID non in uso reale): ADMIN tutto; COMMERCIALE ampio + crea progetti (no Obiettivi/team); PRODUZIONE crea task + solo le proprie (no Obiettivi/smistamento); LOGISTICA sola lettura+completa delle proprie (PULSAR completo). `canManageGoals`=solo ADMIN (Obiettivi); `canTriage`=ADMIN+COMMERCIALE (Smistamento). Agganci: `allowedPathsByRole`, NavItem `requiresCapability`, FAB `showFab`, view-guard (`CepheidGoalsView`/`CepheidInboxView` redirect), task-level `isOwnTask`/`canEditTask`/`canCompleteTask` in `CepheidActionsView`.
+- **Fix login**: `getTeamDoc` riconferma da server su cache-miss (`getDocFromServer`) → niente più staff bloccato con "Utenza non configurata".
+
+⚠️ **Trappola build**: `vue-tsc` passa ma `vite build` intercetta errori di sintassi nelle espressioni del template (es. `a ?? b || c` senza parentesi). **Verificare sempre l'esito di `npm run build`, non solo il type-check, prima del deploy.**
+
+---
+
+## 7. Cronologia
 
 - **2026-06-01** — Creazione documento. Decisione identità (UID canonico). Branch `feature/team-uid-rekey`. Fasi 0-1-2 implementate, deployate e collaudate; rollback provato → checkpoint pulito in prod. Scoperto il vincolo "lettori dedup-tolleranti prima del backfill" (doppioni visibili su POPS in coesistenza).
 - **2026-06-01** — **RE-KEY COMPLETATO.** Fase 2a (lettori dedup-tolleranti) + Fase 3 (switch single-doc/scritture/functions/rules su uid, migration-tolerant) deployate (functions + rules + hosting). Backfill → verifica POPS (login staff + ruoli su uid-keyed, nessun doppione) → **Fase 5 cleanup**: 9 email-keyed rimossi, kill-switch spento, `fullyDone: true`. `/team` è ora interamente **uid-keyed**. Audit finale: 9 già uid-keyed, 0 problemi.
 
 - **2026-06-01** — **Gestione team in CORE + cleanup tooling.** Implementato accesso-e-gestione §1 (UI gestione team in SIDERA CORE, route `/sidera/core/team`), §2 (`active` soft-disable + filtro liste), §4 (refresh token post-ruolo); §3 (convenzione campi) assorbita qui sopra. CF `changeTeamMemberEmail` (cambio email preservando UID + sync `core/admins`). **Admin CORE unificato** nella gestione team (toggle scudo); pagina Impostazioni separata rimossa (assorbita). Rimosso il tooling di migrazione (4 callable + bottoni) e semplificato `getTeamDoc` (solo uid). `docs/accesso-e-gestione.md` → superato da questo doc.
+
+- **2026-06-02** — **POLARIS Az.6 + Az.9 (funzione-first + permessi granulari).** Branch `feature/polaris-roles-funzione-first`. Scope unificato (`detectScope`), `permissions.ts` (routing + capabilities), `useCan`, fix cache-miss login. Creazione/gestione agente **funzione-first**; categoria→ruolo derivato (`tecnico` rimosso); collezione `funzioni` editabile (`/sidera/core/funzioni`). Permessi granulari CEPHEID (LOGISTICA/PRODUZIONE solo le proprie, COMMERCIALE crea progetti, Obiettivi solo-ADMIN, Smistamento ADMIN+COMMERCIALE). NEBULA Squadra sola lettura. Reset password agente. Tutto deployato a fasi con verifica POPS (login cliente/staff OK, PRODUZIONE→/production).
 
 ### Stato finale / strascichi (non urgenti)
 - Il codice migration-tolerant (`getTeamDoc` uid→email fallback, `dedupeTeamDocs`) è ora end-state: il ramo email è dead-path innocuo. Si può semplificare in futuro.
