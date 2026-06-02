@@ -16,6 +16,7 @@ export interface NebulaMember {
   category?:  string
   hueIndex?:  number
   docId?:     string   // chiave reale del doc /team — per le scritture (re-key safe)
+  managerUid?: string  // STELLA-GRAFO: da chi dipende (organigramma)
 }
 
 // Categorie avatar (forma della stella). Allineate a CATEGORIES in src/lib/starAvatar.js.
@@ -86,9 +87,10 @@ export function useNebulaTeam() {
         color:     e.data.color     ?? '#2F6B4A',
         position:  e.data.position  ?? undefined,
         uid:       e.uid,
-        category:  e.data.category  ?? undefined,
-        hueIndex:  typeof e.data.hueIndex === 'number' ? e.data.hueIndex : undefined,
-        docId:     e.id,
+        category:   e.data.category  ?? undefined,
+        hueIndex:   typeof e.data.hueIndex === 'number' ? e.data.hueIndex : undefined,
+        docId:      e.id,
+        managerUid: e.data.managerUid ?? undefined,
       }))
     loading.value = false
   }, (err) => {

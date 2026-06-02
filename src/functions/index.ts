@@ -563,7 +563,8 @@ export const createTeamMember = functions
       );
     }
   
-    const { email, password, firstName, lastName, role, phone, category, position } = data;
+    const { email, password, firstName, lastName, role, phone, category, position, managerUid } = data;
+    const cleanManagerUid = typeof managerUid === 'string' && managerUid.trim() ? managerUid.trim() : undefined;
 
     if (!email || !password || !role) {
       throw new functions.https.HttpsError("invalid-argument", "Dati mancanti.");
@@ -597,6 +598,7 @@ export const createTeamMember = functions
         active: true,
         ...(cleanCategory ? { category: cleanCategory } : {}),
         ...(cleanPosition ? { position: cleanPosition } : {}),
+        ...(cleanManagerUid ? { managerUid: cleanManagerUid } : {}),
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
         createdBy: context.auth.uid
       });

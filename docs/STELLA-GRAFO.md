@@ -131,6 +131,8 @@ Callable gated `REKEY_ADMINS` (`info@`, `proton.me`) in `src/functions/index.ts`
 - **Agente funzione-first**: in CORE → Gestione team si sceglie la **FUNZIONE** (creazione + select per-riga, con conferma) → setta `position`+`category`+`role`. NEBULA → Squadra è **sola visualizzazione**.
 - **Permessi granulari CEPHEID** (capabilities, CEPHEID non in uso reale): ADMIN tutto; COMMERCIALE ampio + crea progetti (no Obiettivi/team); PRODUZIONE crea task + solo le proprie (no Obiettivi/smistamento); LOGISTICA sola lettura+completa delle proprie (PULSAR completo). `canManageGoals`=solo ADMIN (Obiettivi); `canTriage`=ADMIN+COMMERCIALE (Smistamento). Agganci: `allowedPathsByRole`, NavItem `requiresCapability`, FAB `showFab`, view-guard (`CepheidGoalsView`/`CepheidInboxView` redirect), task-level `isOwnTask`/`canEditTask`/`canCompleteTask` in `CepheidActionsView`.
 - **Fix login**: `getTeamDoc` riconferma da server su cache-miss (`getDocFromServer`) → niente più staff bloccato con "Utenza non configurata".
+- **Hardening rules (S1/S2, Az.11)**: `tasks` (root + `projects/*/tasks`) e `obiettivi` — `update` non più "qualunque loggato" ma **own-or-admin** (assegnatario per email / creatore per uid; fix `assignee`→`assignees`). Confine grezzo nelle rules; granularità fine per-ruolo resta lato client. **S3 (preventivi/POPS) NON toccato** (più rischioso, separato).
+- **STELLA-GRAFO vero (`managerUid`)**: campo `managerUid` su `/team` (da chi dipende). Si assegna in CORE → Gestione team (select "Responsabile" per agente + opz. in creazione, `createTeamMember`). Visualizzato in **NEBULA → Squadra → tab "Gerarchia"**: albero indentato da `managerUid` (radici = senza responsabile, anti-ciclo). NEBULA Squadra resta sola lettura (l'editing identità vive in CORE).
 
 ⚠️ **Trappola build**: `vue-tsc` passa ma `vite build` intercetta errori di sintassi nelle espressioni del template (es. `a ?? b || c` senza parentesi). **Verificare sempre l'esito di `npm run build`, non solo il type-check, prima del deploy.**
 
@@ -145,7 +147,12 @@ Callable gated `REKEY_ADMINS` (`info@`, `proton.me`) in `src/functions/index.ts`
 
 - **2026-06-02** — **POLARIS Az.6 + Az.9 (funzione-first + permessi granulari).** Branch `feature/polaris-roles-funzione-first`. Scope unificato (`detectScope`), `permissions.ts` (routing + capabilities), `useCan`, fix cache-miss login. Creazione/gestione agente **funzione-first**; categoria→ruolo derivato (`tecnico` rimosso); collezione `funzioni` editabile (`/sidera/core/funzioni`). Permessi granulari CEPHEID (LOGISTICA/PRODUZIONE solo le proprie, COMMERCIALE crea progetti, Obiettivi solo-ADMIN, Smistamento ADMIN+COMMERCIALE). NEBULA Squadra sola lettura. Reset password agente. Tutto deployato a fasi con verifica POPS (login cliente/staff OK, PRODUZIONE→/production).
 
+- **2026-06-02** — **Hardening rules + organigramma (`managerUid`).** Branch `feature/permessi-hardening-organigramma`. Rules `tasks`/`obiettivi` ristrette a own-or-admin (S1/S2 chiusi; S3 lasciato). `managerUid` + select Responsabile in CORE; tab "Gerarchia" (albero) in NEBULA Squadra. Pulizie: rimossa popover morta NebulaTeamView; bottone "Ripristina predefiniti" funzioni (pulisce `role` residuo). NEBULA Squadra sola lettura confermata.
+
 ### Stato finale / strascichi (non urgenti)
+- **S3** (preventivi/POPS, create senza validazione stato) ancora aperto — hardening separato, più rischioso (POPS live).
+- CSS morto residuo in `NebulaTeamView` (`.nb-pos-trigger`, `.nb-list-edit`, stili popover) — micro-cleanup.
+- Organigramma "Gerarchia" è albero indentato v1; eventuale org-chart centrato con rami orizzontali = evoluzione UI futura.
 - Il codice migration-tolerant (`getTeamDoc` uid→email fallback, `dedupeTeamDocs`) è ora end-state: il ramo email è dead-path innocuo. Si può semplificare in futuro.
 - Le callable/bottoni di migrazione (`auditTeamUids`, `backfillTeamToUid`, `rollbackTeamBackfill`, `cleanupTeamEmailKeyed` + UI in `SideraCoreSettings`) sono dormienti e admin-gated: rimovibili in un cleanup successivo.
 - TODO collegato: cambio-email via `admin.auth().updateUser` (preserva UID) — vedi memoria client-email-change.

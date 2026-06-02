@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { PencilSquareIcon } from '@heroicons/vue/24/outline'
-import { useNebulaTeam, POSITION_OPTIONS, CATEGORY_OPTIONS, type NebulaMember } from '../../composables/nebula/useNebulaTeam'
-import { useCan } from '../../composables/sidera/useCan'
+import { useNebulaTeam, CATEGORY_OPTIONS, type NebulaMember } from '../../composables/nebula/useNebulaTeam'
 import StarAvatar from '../../components/shared/StarAvatar.vue'
 import MdPageHeader from '../../components/shared/MdPageHeader.vue'
 import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
@@ -13,22 +11,51 @@ import CepheidViewSwitcher from '../../components/cepheid/CepheidViewSwitcher.vu
 const scrollEl = ref<HTMLElement | null>(null)
 const { hidden: headerHidden } = useAutoHideHeader(scrollEl)
 
-const viewTabs: { id: 'org' | 'list'; label: string; icon: string }[] = [
-  { id: 'org',  label: 'Organigramma', icon: 'account_tree' },
-  { id: 'list', label: 'Lista',        icon: 'list' },
+type ViewId = 'org' | 'gerarchia' | 'list'
+const viewTabs: { id: ViewId; label: string; icon: string }[] = [
+  { id: 'org',       label: 'Organigramma', icon: 'account_tree' },
+  { id: 'gerarchia', label: 'Gerarchia',    icon: 'schema' },
+  { id: 'list',      label: 'Lista',        icon: 'list' },
 ]
 
-const { members, loading, updatePosition, updateCategory } = useNebulaTeam()
-const { can } = useCan()
+const { members, loading } = useNebulaTeam()
 
-const view          = ref<'org' | 'list'>('org')
-const editingMember = ref<NebulaMember | null>(null)
-const saving        = ref(false)
-
-const isAdmin = computed(() => can('canManageTeamMeta'))
+const view = ref<ViewId>('org')
 
 const active = computed(() => members.value.filter(m => m.active !== false))
 const all    = computed(() => members.value)
+
+// ── Gerarchia: albero da managerUid (STELLA-GRAFO). Flatten in pre-order con
+//    profondità, per un render a lista indentata. Guard anti-ciclo + radici =
+//    chi non ha responsabile (o il cui responsabile non è nel team attivo).
+interface OrgNode { m: NebulaMember; depth: number; last: boolean }
+const hierarchy = computed<OrgNode[]>(() => {
+  const list = active.value
+  const byUid = new Map(list.filter(m => m.uid).map(m => [m.uid as string, m]))
+  const childrenOf = new Map<string, NebulaMember[]>()
+  const roots: NebulaMember[] = []
+  for (const m of list) {
+    const mgr = m.managerUid
+    if (mgr && mgr !== m.uid && byUid.has(mgr)) {
+      const arr = childrenOf.get(mgr) ?? []
+      arr.push(m); childrenOf.set(mgr, arr)
+    } else {
+      roots.push(m)
+    }
+  }
+  const byName = (a: NebulaMember, b: NebulaMember) => fullName(a).localeCompare(fullName(b), 'it')
+  const out: OrgNode[] = []
+  const seen = new Set<string>()
+  function walk(m: NebulaMember, depth: number, last: boolean) {
+    if (m.uid && seen.has(m.uid)) return   // anti-ciclo
+    if (m.uid) seen.add(m.uid)
+    out.push({ m, depth, last })
+    const kids = [...(m.uid ? childrenOf.get(m.uid) ?? [] : [])].sort(byName)
+    kids.forEach((k, i) => walk(k, depth + 1, i === kids.length - 1))
+  }
+  roots.sort(byName).forEach((r, i) => walk(r, 0, i === roots.length - 1))
+  return out
+})
 
 // Organigramma raggruppato per CATEGORIA (6 reparti), piramide a 3 livelli.
 const LEVELS: string[][] = [
@@ -69,27 +96,6 @@ function memberStar(m: NebulaMember) {
     category: m.category || 'amministrazione',
     hueIndex: m.hueIndex,
   }
-}
-
-function openEdit(m: NebulaMember) {
-  if (!isAdmin.value) return
-  editingMember.value = { ...m }
-}
-
-async function confirmPosition(pos: string) {
-  if (!editingMember.value) return
-  saving.value = true
-  await updatePosition(editingMember.value.email, pos)
-  saving.value = false
-  editingMember.value = null
-}
-
-async function confirmCategory(cat: string) {
-  if (!editingMember.value) return
-  saving.value = true
-  await updateCategory(editingMember.value.email, cat)
-  editingMember.value.category = cat   // riflette la selezione nel popover
-  saving.value = false
 }
 
 // Role accents mappati su tonal palettes M3 dei moduli con dominio semantico
@@ -152,6 +158,20 @@ const roleAccent: Record<string, string> = {
       <div v-if="!active.length" class="nb-empty">Nessun membro attivo nel team.</div>
     </div>
 
+    <!-- ── GERARCHIA (albero da managerUid) ── -->
+    <div v-else-if="view === 'gerarchia'" class="nb-tree">
+      <div v-for="node in hierarchy" :key="node.m.email" class="nb-tree-row" :style="{ '--d': node.depth }">
+        <span v-if="node.depth > 0" class="nb-tree-elbow" aria-hidden="true">└</span>
+        <StarAvatar v-bind="memberStar(node.m)" :size="30" class="nb-tree-avatar" />
+        <div class="nb-tree-info">
+          <span class="nb-tree-name">{{ fullName(node.m) }}</span>
+          <span class="nb-tree-pos">{{ node.m.position || '—' }}</span>
+        </div>
+        <span class="nb-tree-role" :style="{ color: roleAccent[node.m.role] ?? '#9B9590' }">{{ node.m.role }}</span>
+      </div>
+      <div v-if="!hierarchy.length" class="nb-empty">Nessun membro attivo nel team.</div>
+    </div>
+
     <!-- ── LIST VIEW ── -->
     <div v-else class="nb-list">
       <div v-for="m in all" :key="m.email" class="nb-list-card" :class="{ inactive: !m.active }">
@@ -175,43 +195,6 @@ const roleAccent: Record<string, string> = {
     </div>
 
     <!-- ── Position editor overlay ── -->
-    <Teleport to="body">
-      <div v-if="editingMember" class="nb-overlay" @click.self="editingMember = null">
-        <div class="nb-popover">
-          <p class="nb-popover-title">Avatar di <strong>{{ editingMember.firstName }}</strong></p>
-          <div class="nb-cat-preview">
-            <StarAvatar v-bind="memberStar(editingMember)" :size="56" />
-            <span class="nb-cat-hint">La forma della stella dipende dalla categoria; il colore è stabile per persona.</span>
-          </div>
-          <div class="nb-pos-grid">
-            <button
-              v-for="c in CATEGORY_OPTIONS"
-              :key="c.key"
-              class="nb-pos-opt"
-              :class="{ selected: editingMember.category === c.key }"
-              :disabled="saving"
-              @click="confirmCategory(c.key)"
-            >{{ c.label }}</button>
-          </div>
-
-          <p class="nb-popover-title" style="margin-top: 20px;">Ruolo aziendale</p>
-          <div class="nb-pos-grid">
-            <button
-              v-for="p in POSITION_OPTIONS"
-              :key="p"
-              class="nb-pos-opt"
-              :class="{ selected: editingMember.position === p }"
-              :disabled="saving"
-              @click="confirmPosition(p)"
-            >{{ p }}</button>
-          </div>
-          <button class="nb-pos-clear" :disabled="saving" @click="confirmPosition('')">
-            Rimuovi ruolo
-          </button>
-        </div>
-      </div>
-    </Teleport>
-
   </div>
 </template>
 
@@ -523,6 +506,21 @@ const roleAccent: Record<string, string> = {
   border-radius: var(--md-sys-shape-corner-small);
   flex-shrink: 0;
 }
+
+/* ── Gerarchia (albero da managerUid) ── */
+.nb-tree { display: flex; flex-direction: column; gap: 2px; padding-bottom: 24px; }
+.nb-tree-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 7px 10px; border-radius: 10px;
+  margin-left: calc(var(--d, 0) * 28px);
+  background: var(--md-sys-color-surface-container-low, #F5EDDF);
+}
+.nb-tree-elbow { color: var(--md-sys-color-outline, #9B9590); font-size: 14px; margin-right: -4px; flex: 0 0 auto; }
+.nb-tree-avatar { flex: 0 0 auto; border-radius: 50%; }
+.nb-tree-info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.nb-tree-name { font-size: 14px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nb-tree-pos { font-size: 11px; color: var(--md-sys-color-on-surface-variant, #6A6560); }
+.nb-tree-role { flex: 0 0 auto; font-size: 10px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; }
 
 .nb-list-edit {
   background: none;

@@ -25,6 +25,7 @@ const { currentUser } = useCurrentUser()
 interface Member {
   email: string; firstName: string; lastName: string; role: string; position?: string
   active: boolean; uid?: string; category?: string; hueIndex?: number; docId: string
+  managerUid?: string   // STELLA-GRAFO: da chi dipende (uid del responsabile)
 }
 
 // Carica TUTTI i doc /team (anche disabilitati e di sistema), deduplicati per uid.
@@ -39,9 +40,10 @@ const unsub = onSnapshot(collection(db, 'team'), (snap) => {
     position:  e.data.position  ?? undefined,
     active:    e.data.active !== false,
     uid:       e.uid,
-    category:  e.data.category  ?? undefined,
-    hueIndex:  typeof e.data.hueIndex === 'number' ? e.data.hueIndex : undefined,
-    docId:     e.id,
+    category:   e.data.category  ?? undefined,
+    hueIndex:   typeof e.data.hueIndex === 'number' ? e.data.hueIndex : undefined,
+    docId:      e.id,
+    managerUid: e.data.managerUid ?? undefined,
   }))
   loading.value = false
 }, (err) => { console.error('[CoreTeam]', err); loading.value = false })
@@ -139,6 +141,30 @@ async function onFunzioneChange(m: Member, e: Event) {
   }
 }
 
+// --- Responsabile (STELLA-GRAFO: managerUid) ---
+// Opzioni = altri agenti con uid (escluso sé stesso, niente auto-riferimento).
+function managerOptions(m: Member): Member[] {
+  return agents.value.filter(a => a.uid && a.uid !== m.uid)
+}
+async function onManagerChange(m: Member, e: Event) {
+  const sel = e.target as HTMLSelectElement
+  const newMgr = sel.value || ''
+  if (newMgr === (m.managerUid ?? '')) return
+  if (newMgr && newMgr === m.uid) { sel.value = m.managerUid ?? ''; return }   // mai sé stesso
+  if (!m.docId) return
+  busy.value = m.docId; errorMsg.value = ''
+  try {
+    await updateDoc(doc(db, 'team', m.docId), { managerUid: newMgr || null })
+    flash('Responsabile aggiornato.')
+  } catch (err: any) {
+    console.error('[CoreTeam] managerChange', err)
+    errorMsg.value = err?.message || 'Errore nel cambio responsabile.'
+    sel.value = m.managerUid ?? ''
+  } finally {
+    busy.value = ''
+  }
+}
+
 // --- Soft-disable / enable ---
 async function toggleActive(m: Member) {
   if (!m.docId) return
@@ -218,8 +244,11 @@ async function changeEmail(m: Member) {
 // --- Creazione membro ---
 const showCreate = ref(false)
 const creating = ref(false)
-const form = reactive({ firstName: '', lastName: '', email: '', password: '', role: '', phone: '', position: '', category: '' })
-function resetForm() { Object.assign(form, { firstName: '', lastName: '', email: '', password: '', role: '', phone: '', position: '', category: '' }) }
+const form = reactive({ firstName: '', lastName: '', email: '', password: '', role: '', phone: '', position: '', category: '', managerUid: '' })
+function resetForm() { Object.assign(form, { firstName: '', lastName: '', email: '', password: '', role: '', phone: '', position: '', category: '', managerUid: '' }) }
+
+// Possibili responsabili = tutti gli agenti con uid (per il form di creazione).
+const allManagers = computed(() => agents.value.filter(a => a.uid))
 
 // Elenco funzioni gestibili (collezione Firestore, fallback ai default).
 const { effective: funzioniOptions } = useFunzioni()
@@ -287,6 +316,10 @@ async function createMember() {
           <input v-model="form.password" type="password" class="m-input" placeholder="Password (min 6)" autocomplete="new-password" />
           <input v-model="form.phone" class="m-input m-input--full" placeholder="Telefono (opz.)" />
         </div>
+        <select v-model="form.managerUid" class="m-input m-input--full">
+          <option value="">Responsabile… (opzionale)</option>
+          <option v-for="a in allManagers" :key="a.uid" :value="a.uid">{{ displayName(a.email, teamLike) }}</option>
+        </select>
         <p v-if="form.role" class="m-role-desc">
           <strong>Ruolo: {{ roleLabel[form.role] }}</strong> — {{ roleDescriptions[form.role] }}
         </p>
@@ -311,6 +344,13 @@ async function createMember() {
               <span v-if="m.active === false" class="m-badge m-badge--off">disabilitato</span>
             </div>
             <div class="m-row-email">{{ m.email }}</div>
+            <div class="m-row-mgr">
+              <MIcon name="account_tree" :size="13" class="m-row-mgr-icon" />
+              <select class="m-mgr" :value="m.managerUid ?? ''" :disabled="busy === m.docId" title="Responsabile (da chi dipende)" @change="onManagerChange(m, $event)">
+                <option value="">— nessun responsabile (vertice) —</option>
+                <option v-for="a in managerOptions(m)" :key="a.uid" :value="a.uid">{{ displayName(a.email, teamLike) }}</option>
+              </select>
+            </div>
           </div>
 
           <select
@@ -437,6 +477,14 @@ async function createMember() {
 .m-row-text { flex: 1; min-width: 0; }
 .m-row-name { font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 8px; }
 .m-row-email { font-size: 11px; color: var(--md-sys-color-on-surface-variant, #6A6560); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.m-row-mgr { display: flex; align-items: center; gap: 4px; margin-top: 3px; }
+.m-row-mgr-icon { color: var(--md-sys-color-on-surface-variant, #6A6560); flex: 0 0 auto; }
+.m-mgr {
+  max-width: 100%; background: transparent; border: none; cursor: pointer;
+  font-size: 11px; font-family: inherit; color: var(--md-sys-color-on-surface-variant, #6A6560);
+  padding: 1px 2px; border-radius: 4px; outline: none;
+}
+.m-mgr:hover:not(:disabled) { background: var(--md-sys-color-surface-container-high, #EFE7DA); }
 
 .m-funz {
   flex: 0 0 auto; background: var(--md-sys-color-surface-container-lowest, #FFFFFF);
