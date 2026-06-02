@@ -654,9 +654,9 @@ const roleLabel: Record<string, string> = {
                 <MIcon name="build" :size="18" :filled="isActive('/sidera/admin/maintenance', false)" class="s-nav-icon" :style="activeIconStyle('/sidera/admin/maintenance', false, CORE_ACCENT)" />
                 Manutenzione
               </RouterLink>
-              <RouterLink to="/sidera/core/settings" class="s-nav-item" :style="{ ...activeStyle('/sidera/core/settings', false, CORE_ACCENT), '--s-idx': 1 } as any">
-                <MIcon name="settings" :size="18" :filled="isActive('/sidera/core/settings', false)" class="s-nav-icon" :style="activeIconStyle('/sidera/core/settings', false, CORE_ACCENT)" />
-                Impostazioni
+              <RouterLink to="/sidera/core/team" class="s-nav-item" :style="{ ...activeStyle('/sidera/core/team', false, CORE_ACCENT), '--s-idx': 1 } as any">
+                <MIcon name="group" :size="18" :filled="isActive('/sidera/core/team', false)" class="s-nav-icon" :style="activeIconStyle('/sidera/core/team', false, CORE_ACCENT)" />
+                Gestione team
               </RouterLink>
               <RouterLink to="/sidera/core/integrations" class="s-nav-item" :style="{ ...activeStyle('/sidera/core/integrations', false, CORE_ACCENT), '--s-idx': 2 } as any">
                 <MIcon name="vpn_key" :size="18" :filled="isActive('/sidera/core/integrations', false)" class="s-nav-icon" :style="activeIconStyle('/sidera/core/integrations', false, CORE_ACCENT)" />

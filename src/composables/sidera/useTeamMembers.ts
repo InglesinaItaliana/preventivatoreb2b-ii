@@ -12,6 +12,7 @@ export interface TeamMember {
   category?: string     // forma della stella
   hueIndex?: number     // colore stabile dal registro
   docId?: string        // chiave reale del doc /team (email-keyed o uid-keyed) — per le scritture
+  active?: boolean      // soft-disable (docs/STELLA-GRAFO.md)
 }
 
 /**
@@ -46,24 +47,15 @@ export function dedupeTeamDocs(docs: Array<{ id: string; data(): DocumentData }>
 const DEFAULT_CATEGORY = 'amministrazione'
 
 /**
- * Legge il doc `/team` in modo tollerante al re-key (docs/STELLA-GRAFO.md):
- * prova prima la chiave uid, poi quella email. Ritorna lo snapshot esistente o null.
- * Corretto in tutti gli stati: solo-email (pre-backfill), coesistenza, solo-uid.
+ * Legge il doc `/team` per UID (identità canonica, docs/STELLA-GRAFO.md).
+ * Post re-key `/team` è interamente uid-keyed: nessun fallback necessario.
  */
 export async function getTeamDoc(
   uid: string | null | undefined,
-  email: string | null | undefined,
 ): Promise<DocumentSnapshot<DocumentData> | null> {
-  if (uid) {
-    const byUid = await getDoc(doc(db, 'team', uid))
-    if (byUid.exists()) return byUid
-  }
-  const e = (email ?? '').toLowerCase().trim()
-  if (e) {
-    const byEmail = await getDoc(doc(db, 'team', e))
-    if (byEmail.exists()) return byEmail
-  }
-  return null
+  if (!uid) return null
+  const snap = await getDoc(doc(db, 'team', uid))
+  return snap.exists() ? snap : null
 }
 
 /**
@@ -141,6 +133,7 @@ export function useTeamMembers() {
   const unsubscribe = onSnapshot(collection(db, 'team'), (snap) => {
     members.value = dedupeTeamDocs(snap.docs)
       .filter(e => !isHiddenTeamEmail(e.email))
+      .filter(e => e.data.active !== false)   // soft-disable: i disabilitati spariscono dalle liste (docs/STELLA-GRAFO.md)
       .map(e => ({
         email:     e.email,
         role:      e.data.role      ?? '',
@@ -151,6 +144,7 @@ export function useTeamMembers() {
         category:  e.data.category  ?? undefined,
         hueIndex:  typeof e.data.hueIndex === 'number' ? e.data.hueIndex : undefined,
         docId:     e.id,
+        active:    e.data.active !== false,
       }))
     loading.value = false
   }, (err) => {

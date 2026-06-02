@@ -42,6 +42,20 @@
 
 `STELLA-GRAFO` = la *proiezione* visuale del team come grafo (nodi `StarAvatar`, archi via campo `managerEmail`/`managerUid` — futuro). Oggi la "Squadra" è una lista; diventa grafo con l'aggiunta degli archi.
 
+### Convenzione campi core vs estensioni di modulo (ex accesso-e-gestione §3)
+Campi **core** (identità) vivono in `/team/{uid}`: `uid`, `email`, `firstName`,
+`lastName`, `role`, `active`. Le **estensioni di modulo** restano lì finché poche
+(`position`/`category` NEBULA, `hueIndex` avatar, `fcmTokens` PULSAR). Se un modulo
+avrà config sua sul collaboratore (listino, provvigioni, sede), **non** entra in
+`/team` → doc separato chiave-uid (es. `/team/{uid}/modules/pops` o `/popsTeamConfig/{uid}`).
+
+### Due livelli di "admin" (distinti, gestiti insieme)
+- **Ruolo** (`/team/{uid}.role`) = permessi operativi (rules `isAdmin()`, routing).
+- **Admin CORE** (`core/admins.emails`, email-keyed) = accesso alla sezione CORE
+  (Manutenzione/Integrazioni/Gestione team). Ortogonale al ruolo. `info@` è
+  super-admin hardcoded (break-glass). Il cambio-email sincronizza `core/admins`.
+Entrambi si gestiscono dall'unica pagina **`/sidera/core/team`** (CoreTeamView).
+
 ---
 
 ## 3. Migrazione `/team` email-keyed → uid-keyed (Strada B)
@@ -111,6 +125,8 @@ Callable gated `REKEY_ADMINS` (`info@`, `proton.me`) in `src/functions/index.ts`
 
 - **2026-06-01** — Creazione documento. Decisione identità (UID canonico). Branch `feature/team-uid-rekey`. Fasi 0-1-2 implementate, deployate e collaudate; rollback provato → checkpoint pulito in prod. Scoperto il vincolo "lettori dedup-tolleranti prima del backfill" (doppioni visibili su POPS in coesistenza).
 - **2026-06-01** — **RE-KEY COMPLETATO.** Fase 2a (lettori dedup-tolleranti) + Fase 3 (switch single-doc/scritture/functions/rules su uid, migration-tolerant) deployate (functions + rules + hosting). Backfill → verifica POPS (login staff + ruoli su uid-keyed, nessun doppione) → **Fase 5 cleanup**: 9 email-keyed rimossi, kill-switch spento, `fullyDone: true`. `/team` è ora interamente **uid-keyed**. Audit finale: 9 già uid-keyed, 0 problemi.
+
+- **2026-06-01** — **Gestione team in CORE + cleanup tooling.** Implementato accesso-e-gestione §1 (UI gestione team in SIDERA CORE, route `/sidera/core/team`), §2 (`active` soft-disable + filtro liste), §4 (refresh token post-ruolo); §3 (convenzione campi) assorbita qui sopra. CF `changeTeamMemberEmail` (cambio email preservando UID + sync `core/admins`). **Admin CORE unificato** nella gestione team (toggle scudo); pagina Impostazioni separata rimossa (assorbita). Rimosso il tooling di migrazione (4 callable + bottoni) e semplificato `getTeamDoc` (solo uid). `docs/accesso-e-gestione.md` → superato da questo doc.
 
 ### Stato finale / strascichi (non urgenti)
 - Il codice migration-tolerant (`getTeamDoc` uid→email fallback, `dedupeTeamDocs`) è ora end-state: il ramo email è dead-path innocuo. Si può semplificare in futuro.

@@ -86,10 +86,8 @@ export function useNotifications(scope: NotificationScope) {
         })
 
         if (token && auth.currentUser) {
-          const email = auth.currentUser.email?.toLowerCase().trim()
-          // Doc /team tollerante al re-key (docs/STELLA-GRAFO.md): scrive sul doc
-          // che ESISTE (uid-keyed in coesistenza, altrimenti email-keyed).
-          const teamSnap = await getTeamDoc(auth.currentUser.uid, email)
+          // Doc /team uid-keyed (docs/STELLA-GRAFO.md): scrive sul doc per UID.
+          const teamSnap = await getTeamDoc(auth.currentUser.uid)
           if (teamSnap) {
             const teamRef = teamSnap.ref
 

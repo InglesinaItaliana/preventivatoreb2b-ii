@@ -233,243 +233,6 @@ exports.migrateAllTeamClaims = functions
         return { success: true, updated: count };
     });
 
-// --- AUDIT PRE RE-KEY /team SU UID (Fase 0, docs/STELLA-GRAFO.md) ---
-// READ-ONLY: non scrive nulla. Per ogni doc /team verifica che il campo `uid`
-// esista e combaci con l'utente Auth risolto via email (la doc-id legacy).
-// Gate per il re-key Strada B: se `problems` non e' vuoto, NON procedere col
-// backfill finche' non sono risolti (un uid mancante/errato corrompe l'identita').
-const REKEY_ADMINS = new Set(['info@inglesinaitaliana.it', 'gionata.pastorin@proton.me']);
-
-exports.auditTeamUids = functions
-    .region('europe-west1')
-    .https.onCall(async (_data, context) => {
-        const caller = (context.auth?.token?.email || '').toLowerCase().trim();
-        if (!context.auth || !REKEY_ADMINS.has(caller)) {
-            throw new functions.https.HttpsError('permission-denied', 'Riservato agli admin del re-key.');
-        }
-
-        const db = admin.firestore();
-        const teamSnap = await db.collection('team').get();
-
-        const problems: Array<{ docId: string; issue: string; field?: string; auth?: string }> = [];
-        let okCount = 0;
-        let alreadyUidKeyed = 0;
-
-        for (const doc of teamSnap.docs) {
-            const id = doc.id;
-            const d = doc.data();
-            const fieldUid: string | undefined = d.uid;
-            const isEmailKeyed = id.includes('@');
-
-            // 1) Doc gia' uid-keyed (post-migrazione o anomalia): segnala, non bloccare.
-            if (!isEmailKeyed) {
-                alreadyUidKeyed++;
-                if (!fieldUid) problems.push({ docId: id, issue: 'uid-keyed-senza-campo-uid' });
-                else if (fieldUid !== id) problems.push({ docId: id, issue: 'uid-keyed-disallineato', field: fieldUid });
-                continue;
-            }
-
-            // 2) Doc email-keyed: il campo uid deve esistere e combaciare con l'Auth.
-            let authUid: string | undefined;
-            try {
-                authUid = (await admin.auth().getUserByEmail(id)).uid;
-            } catch (e: any) {
-                problems.push({ docId: id, issue: e?.code === 'auth/user-not-found' ? 'auth-inesistente' : 'auth-errore' });
-                continue;
-            }
-
-            if (!fieldUid)              problems.push({ docId: id, issue: 'campo-uid-mancante', auth: authUid });
-            else if (fieldUid !== authUid) problems.push({ docId: id, issue: 'campo-uid-disallineato', field: fieldUid, auth: authUid });
-            else okCount++;
-        }
-
-        // Verifica mirata dell'identita' canonica del re-key.
-        const CANONICAL = { email: 'gionata.pastorin@proton.me', uid: 'xs8Zb5Dur4YbyzUNV7OR1m9qJBI3' };
-        const canonicalDoc = teamSnap.docs.find(x => x.id === CANONICAL.email || x.data().uid === CANONICAL.uid);
-        const canonical = {
-            docPresente: !!canonicalDoc,
-            docId: canonicalDoc?.id ?? null,
-            uidField: canonicalDoc?.data().uid ?? null,
-            uidAtteso: CANONICAL.uid,
-            uidOk: canonicalDoc?.data().uid === CANONICAL.uid,
-            role: canonicalDoc?.data().role ?? null,
-        };
-
-        return {
-            total: teamSnap.size,
-            ok: okCount,
-            alreadyUidKeyed,
-            problemCount: problems.length,
-            readyForBackfill: problems.length === 0,
-            problems,
-            canonical,
-        };
-    });
-
-// --- FASE 2: BACKFILL /team su UID (docs/STELLA-GRAFO.md) ---
-// Crea i doc team/{uid} come COPIA dei doc email-keyed, SENZA cancellare gli
-// originali (dual-write non distruttivo, reversibile cancellando gli uid-keyed).
-// Attiva core/migration.teamRekey=true cosi' il trigger non azzera i claim sui
-// delete durante la coesistenza dei due schemi. Idempotente (re-run = merge).
-// Self-healing: se manca il campo `uid` lo risolve via getUserByEmail.
-exports.backfillTeamToUid = functions
-    .region('europe-west1')
-    .https.onCall(async (_data, context) => {
-        const caller = (context.auth?.token?.email || '').toLowerCase().trim();
-        if (!context.auth || !REKEY_ADMINS.has(caller)) {
-            throw new functions.https.HttpsError('permission-denied', 'Riservato agli admin del re-key.');
-        }
-
-        const db = admin.firestore();
-
-        // 1. Kill-switch ON: durante il re-key il trigger non azzera claim sui delete.
-        await db.doc('core/migration').set({
-            teamRekey: true,
-            startedBy: caller,
-            startedAt: admin.firestore.FieldValue.serverTimestamp(),
-        }, { merge: true });
-
-        // 2. Dual-write: copia ogni doc email-keyed in team/{uid}.
-        const teamSnap = await db.collection('team').get();
-        const created: string[] = [];
-        const skipped: string[] = [];
-        const errors: Array<{ docId: string; error: string }> = [];
-
-        for (const doc of teamSnap.docs) {
-            const id = doc.id;
-            const d = doc.data();
-
-            // Gia' uid-keyed (non contiene '@'): niente da fare.
-            if (!id.includes('@')) { skipped.push(id); continue; }
-
-            // Risolvi uid: campo, poi fallback Auth-by-email (self-healing).
-            let uid: string | undefined = d.uid;
-            try {
-                if (!uid) uid = (await admin.auth().getUserByEmail(id)).uid;
-            } catch (e: any) {
-                errors.push({ docId: id, error: e?.code || e?.message || 'auth-error' });
-                continue;
-            }
-            if (!uid) { errors.push({ docId: id, error: 'uid-non-risolto' }); continue; }
-
-            try {
-                await db.collection('team').doc(uid).set(
-                    { ...d, uid, email: (d.email || id).toLowerCase().trim() },
-                    { merge: true },
-                );
-                created.push(`${id} → ${uid}`);
-            } catch (e: any) {
-                errors.push({ docId: id, error: e?.message || 'write-error' });
-            }
-        }
-
-        return {
-            teamRekeyFlag: true,
-            total: teamSnap.size,
-            created: created.length,
-            skippedAlreadyUid: skipped.length,
-            errorCount: errors.length,
-            createdDocs: created,
-            errors,
-        };
-    });
-
-// --- ROLLBACK FASE 2: annulla il backfill (docs/STELLA-GRAFO.md) ---
-// Cancella i doc uid-keyed (id senza '@') creati dal backfill e spegne il
-// kill-switch. NON tocca i doc email-keyed. Il trigger sui delete non azzera i
-// claim: (a) esiste ancora il doc email-keyed con lo stesso uid (dup-check),
-// (b) teamRekey resta true durante le cancellazioni. Idempotente.
-exports.rollbackTeamBackfill = functions
-    .region('europe-west1')
-    .https.onCall(async (_data, context) => {
-        const caller = (context.auth?.token?.email || '').toLowerCase().trim();
-        if (!context.auth || !REKEY_ADMINS.has(caller)) {
-            throw new functions.https.HttpsError('permission-denied', 'Riservato agli admin del re-key.');
-        }
-
-        const db = admin.firestore();
-        const teamSnap = await db.collection('team').get();
-        const deleted: string[] = [];
-        const errors: Array<{ docId: string; error: string }> = [];
-
-        for (const doc of teamSnap.docs) {
-            if (doc.id.includes('@')) continue;   // email-keyed: NON toccare
-            try {
-                await doc.ref.delete();
-                deleted.push(doc.id);
-            } catch (e: any) {
-                errors.push({ docId: doc.id, error: e?.message || 'delete-error' });
-            }
-        }
-
-        // Spegni il kill-switch SOLO dopo le cancellazioni (delete restano protetti).
-        await db.doc('core/migration').set({ teamRekey: false }, { merge: true });
-
-        return {
-            deleted: deleted.length,
-            deletedDocs: deleted,
-            errorCount: errors.length,
-            errors,
-            teamRekeyFlag: false,
-        };
-    });
-
-// --- FASE 5: CLEANUP /team (docs/STELLA-GRAFO.md) — IRREVERSIBILE ---
-// Cancella i doc email-keyed dopo la verifica su uid-keyed. Due salvaguardie:
-//  (1) cancella un email-keyed SOLO se esiste la copia uid-keyed (no orfani);
-//  (2) spegne core/migration.teamRekey SOLO se non resta nulla in sospeso
-//      (0 skip, 0 errori) — altrimenti lascia il flag ON e segnala.
-// I delete sui email-keyed non azzerano i claim: il dup-check del trigger trova
-// la copia uid-keyed. Idempotente.
-exports.cleanupTeamEmailKeyed = functions
-    .region('europe-west1')
-    .https.onCall(async (_data, context) => {
-        const caller = (context.auth?.token?.email || '').toLowerCase().trim();
-        if (!context.auth || !REKEY_ADMINS.has(caller)) {
-            throw new functions.https.HttpsError('permission-denied', 'Riservato agli admin del re-key.');
-        }
-
-        const db = admin.firestore();
-        const teamSnap = await db.collection('team').get();
-
-        // Indice degli uid-keyed presenti (id senza '@').
-        const uidKeyed = new Set(teamSnap.docs.filter(d => !d.id.includes('@')).map(d => d.id));
-
-        const deleted: string[] = [];
-        const skipped: Array<{ docId: string; reason: string }> = [];
-        const errors: Array<{ docId: string; error: string }> = [];
-
-        for (const doc of teamSnap.docs) {
-            if (!doc.id.includes('@')) continue;   // uid-keyed: si tiene
-            const uid = doc.data().uid;
-            // Salvaguardia (1): cancella solo se esiste la copia uid-keyed.
-            if (!uid || !uidKeyed.has(uid)) { skipped.push({ docId: doc.id, reason: 'manca-copia-uid' }); continue; }
-            try {
-                await doc.ref.delete();
-                deleted.push(doc.id);
-            } catch (e: any) {
-                errors.push({ docId: doc.id, error: e?.message || 'delete-error' });
-            }
-        }
-
-        // Salvaguardia (2): spegni il flag SOLO se tutto è pulito.
-        const fullyDone = skipped.length === 0 && errors.length === 0;
-        if (fullyDone) {
-            await db.doc('core/migration').set({ teamRekey: false, completedBy: caller, completedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
-        }
-
-        return {
-            deleted: deleted.length,
-            deletedDocs: deleted,
-            skippedCount: skipped.length,
-            skipped,
-            errorCount: errors.length,
-            errors,
-            teamRekeyFlag: fullyDone ? false : true,
-            fullyDone,
-        };
-    });
-
 // --- BACKFILL AVATAR STELLARI (RE-MIGRAZIONE per-categoria) ---
 // Assegna direttamente hueIndex sequenziale entro ogni categoria, ordinando
 // per email (stabile). Allinea i counter teamHue_${category} a docs.length
@@ -838,6 +601,73 @@ export const createTeamMember = functions
          throw new functions.https.HttpsError("already-exists", "L'email è già in uso.");
       }
       throw new functions.https.HttpsError("internal", "Impossibile creare l'utente: " + error.message);
+    }
+  });
+
+// --- CAMBIO EMAIL AGENTE (preserva l'UID) — docs/STELLA-GRAFO.md ---
+// Ora che /team è uid-keyed, cambiare l'email è banale: updateUser({email})
+// preserva l'UID (l'identità canonica) e si aggiorna solo il CAMPO email del doc.
+// v1 minimale: NON riscrive i riferimenti storici per-email (assignees, ACL,
+// chat) — i cambi-email sono rari e il display degrada via fallback.
+// Gate: solo ADMIN (token.role) o super-admin info@.
+export const changeTeamMemberEmail = functions
+  .region('europe-west1')
+  .https.onCall(async (data, context) => {
+    const callerEmail = (context.auth?.token?.email || '').toLowerCase().trim();
+    const callerRole = context.auth?.token?.role;
+    const isAdminCaller = callerRole === 'ADMIN' || callerEmail === 'info@inglesinaitaliana.it';
+    if (!context.auth || !isAdminCaller) {
+      throw new functions.https.HttpsError('permission-denied', 'Riservato agli amministratori.');
+    }
+
+    const uid: string | undefined = data?.uid;
+    const newEmailRaw: string | undefined = data?.newEmail;
+    if (!uid || !newEmailRaw) {
+      throw new functions.https.HttpsError('invalid-argument', 'uid e newEmail obbligatori.');
+    }
+    const newEmail = newEmailRaw.toLowerCase().trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
+      throw new functions.https.HttpsError('invalid-argument', 'Email non valida.');
+    }
+
+    try {
+      // 1. Il doc /team deve essere uid-keyed (post re-key).
+      const teamRef = admin.firestore().collection('team').doc(uid);
+      const teamSnap = await teamRef.get();
+      if (!teamSnap.exists) {
+        throw new functions.https.HttpsError('not-found', 'Agente non trovato (doc /team uid-keyed assente).');
+      }
+      const oldEmail = (teamSnap.data()?.email || '').toLowerCase().trim();
+
+      // 2. Cambia l'email su Auth PRESERVANDO l'UID.
+      await admin.auth().updateUser(uid, { email: newEmail });
+
+      // 3. Aggiorna il campo email del doc (la chiave uid resta invariata).
+      //    Il trigger syncTeamRoleToAuth ri-applica il claim ruolo (idempotente).
+      await teamRef.update({ email: newEmail, emailUpdatedAt: admin.firestore.FieldValue.serverTimestamp() });
+
+      // 4. Sincronizza l'allowlist core/admins (email-keyed): se il vecchio
+      //    indirizzo era Admin CORE, sostituiscilo col nuovo (evita entry stale).
+      if (oldEmail && oldEmail !== newEmail) {
+        const adminsRef = admin.firestore().doc('core/admins');
+        const adminsSnap = await adminsRef.get();
+        const list: string[] = adminsSnap.exists ? (adminsSnap.data()?.emails ?? []) : [];
+        if (list.includes(oldEmail)) {
+          await adminsRef.update({ emails: [...list.filter((e: string) => e !== oldEmail), newEmail] });
+        }
+      }
+
+      return { success: true, uid, newEmail };
+    } catch (error: any) {
+      if (error instanceof functions.https.HttpsError) throw error;
+      if (error.code === 'auth/email-already-exists') {
+        throw new functions.https.HttpsError('already-exists', "L'email è già in uso.");
+      }
+      if (error.code === 'auth/user-not-found') {
+        throw new functions.https.HttpsError('not-found', 'Utente Auth non trovato per questo UID.');
+      }
+      console.error('[changeTeamMemberEmail]', error);
+      throw new functions.https.HttpsError('internal', 'Cambio email fallito: ' + error.message);
     }
   });
 

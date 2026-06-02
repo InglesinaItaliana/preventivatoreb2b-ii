@@ -88,7 +88,9 @@ const router = createRouter({
         { path: 'chat',       name: 'sidera-chat',    component: () => import('../views/sidera/ChatView.vue') },
         { path: 'nova/spedizioni', name: 'nova-spedizioni', component: () => import('../views/nova/NovaSpedizioniView.vue') },
         { path: 'admin/maintenance', name: 'sidera-admin-maintenance', component: () => import('../views/sidera/SideraAdminMaintenance.vue') },
-        { path: 'core/settings', name: 'sidera-core-settings', component: () => import('../views/sidera/SideraCoreSettings.vue') },
+        // CORE → Gestione team (docs/STELLA-GRAFO.md): identità agenti + accesso
+        // Admin CORE unificati qui (ex pagina Impostazioni assorbita). Gated isCoreAdmin.
+        { path: 'core/team', name: 'sidera-core-team', component: () => import('../views/sidera/CoreTeamView.vue') },
         // CORE → Integrazioni: API key Claude/MCP (spostate da /nebula/docs/settings/integrations).
         // Componente invariato, cambia solo dove è montato in sidebar.
         { path: 'core/integrations', name: 'sidera-core-integrations', component: () => import('../views/nebula/docs/NebulaIntegrationsView.vue') },
@@ -297,8 +299,8 @@ router.beforeEach(async (to, from, next) => {
   const emailKey = currentUser.email?.toLowerCase().trim();
   if (emailKey) {
     try {
-      // Tollerante al re-key /team su UID (docs/STELLA-GRAFO.md): uid poi email.
-      const teamSnap = await getTeamDoc(currentUser.uid, emailKey);
+      // /team è uid-keyed (docs/STELLA-GRAFO.md): lettura per UID.
+      const teamSnap = await getTeamDoc(currentUser.uid);
 
       if (teamSnap?.exists()) {
         const role = teamSnap.data().role; // 'ADMIN', 'PRODUZIONE', 'LOGISTICA'

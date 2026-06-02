@@ -50,10 +50,9 @@
         return; // Interrompi qui, non serve cercare nel DB
       }
 
-      // 2. Altrimenti cerca nel DB Team (tollerante al re-key su UID: uid poi email)
+      // 2. Altrimenti cerca nel DB Team (/team è uid-keyed: lettura per UID)
       try {
-        const emailKey = user.email.toLowerCase().trim();
-        const teamSnap = await getTeamDoc(user.uid, emailKey);
+        const teamSnap = await getTeamDoc(user.uid);
         if (teamSnap?.exists()) {
           role.value = teamSnap.data().role;
         }
