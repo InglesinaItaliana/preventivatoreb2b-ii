@@ -2,13 +2,18 @@ import { ref, computed, onUnmounted } from 'vue'
 import { collection, query, orderBy, onSnapshot, addDoc, updateDoc, deleteDoc, doc, serverTimestamp } from 'firebase/firestore'
 import { db, auth } from '../../firebase'
 
+export type PeriodKind = 'year' | 'quarters'
+
 export interface Obiettivo {
   id: string
   titolo: string
   descrizione: string
-  metrica: string
-  valoreTarget: number | null
-  valoreCorrente: number | null
+  /** Tipo di periodo: anno intero o intervallo di trimestri contigui. */
+  periodKind: PeriodKind
+  /** Span del periodo (usato dalla barra del tempo). Sempre valorizzato dopo il mapper. */
+  startDate: Date | null
+  endDate: Date | null
+  /** Legacy: anno solare. Mantenuto per ordinamento/retro-compatibilità. */
   anno: number
   stato: 'attivo' | 'raggiunto' | 'archiviato'
   colore: string
@@ -35,14 +40,21 @@ export function useObiettivi() {
   const unsubscribe = onSnapshot(q, (snap) => {
     obiettivi.value = snap.docs.map((d) => {
       const data = d.data()
+      const anno = data.anno ?? new Date().getFullYear()
+      // Periodo: usa start/end espliciti; fallback legacy = anno solare intero.
+      let startDate = toDate(data.startDate)
+      let endDate   = toDate(data.endDate)
+      const periodKind: PeriodKind = data.periodKind === 'quarters' ? 'quarters' : 'year'
+      if (!startDate) startDate = new Date(anno, 0, 1)
+      if (!endDate)   endDate   = new Date(anno, 11, 31)
       return {
         id:             d.id,
         titolo:         data.titolo         ?? '',
         descrizione:    data.descrizione    ?? '',
-        metrica:        data.metrica        ?? '',
-        valoreTarget:   typeof data.valoreTarget   === 'number' ? data.valoreTarget   : null,
-        valoreCorrente: typeof data.valoreCorrente === 'number' ? data.valoreCorrente : null,
-        anno:           data.anno           ?? new Date().getFullYear(),
+        periodKind,
+        startDate,
+        endDate,
+        anno,
         stato:          data.stato          ?? 'attivo',
         colore:         data.colore         ?? '#D4A020',
         createdBy:      data.createdBy      ?? '',
@@ -60,19 +72,18 @@ export function useObiettivi() {
   async function createObiettivo(data: {
     titolo: string
     descrizione: string
-    metrica: string
-    valoreTarget: number | null
-    valoreCorrente: number | null
-    anno: number
+    periodKind: PeriodKind
+    startDate: Date
+    endDate: Date
     colore: string
   }): Promise<string> {
     const ref = await addDoc(collection(db, 'obiettivi'), {
       titolo:         data.titolo,
       descrizione:    data.descrizione,
-      metrica:        data.metrica,
-      valoreTarget:   data.valoreTarget,
-      valoreCorrente: data.valoreCorrente,
-      anno:           data.anno,
+      periodKind:     data.periodKind,
+      startDate:      data.startDate,
+      endDate:        data.endDate,
+      anno:           data.startDate.getFullYear(),  // legacy: ordinamento/retro-compat
       stato:          'attivo',
       colore:         data.colore,
       createdBy:      auth.currentUser?.uid ?? '',
@@ -86,15 +97,17 @@ export function useObiettivi() {
     data: Partial<{
       titolo: string
       descrizione: string
-      metrica: string
-      valoreTarget: number | null
-      valoreCorrente: number | null
-      anno: number
+      periodKind: PeriodKind
+      startDate: Date
+      endDate: Date
       colore: string
       stato: 'attivo' | 'raggiunto' | 'archiviato'
     }>,
   ) {
-    await updateDoc(doc(db, 'obiettivi', id), data)
+    // Allinea l'anno legacy quando cambia lo start del periodo.
+    const payload: Record<string, unknown> = { ...data }
+    if (data.startDate) payload.anno = data.startDate.getFullYear()
+    await updateDoc(doc(db, 'obiettivi', id), payload)
   }
 
   async function archiveObiettivo(id: string) {
