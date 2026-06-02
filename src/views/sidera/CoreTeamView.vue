@@ -8,6 +8,7 @@
 import { ref, reactive, computed, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { httpsCallable } from 'firebase/functions'
+import { sendPasswordResetEmail } from 'firebase/auth'
 import { doc, updateDoc, collection, onSnapshot } from 'firebase/firestore'
 import { db, auth, functions } from '../../firebase'
 import MIcon from '../../components/shared/MIcon.vue'
@@ -122,8 +123,14 @@ async function toggleActive(m: Member) {
 // --- Toggle Admin CORE (allowlist core/admins, accesso sezione CORE) ---
 async function toggleCoreAdmin(m: Member) {
   if (!m.email || m.email === SUPER_ADMIN) return
-  busy.value = m.docId || m.email; errorMsg.value = ''
   const wasAdmin = isCoreAdmin(m.email)
+  // Conferma esplicita quando si CONCEDE (azione sensibile: accesso a manutenzione,
+  // gestione team, integrazioni).
+  if (!wasAdmin && !confirm(
+    `Concedere a ${displayName(m.email, teamLike.value)} l'accesso Admin CORE?\n\n`
+    + 'Potrà entrare in Manutenzione, Gestione team e Integrazioni.'
+  )) return
+  busy.value = m.docId || m.email; errorMsg.value = ''
   try {
     if (wasAdmin) await removeAdmin(m.email)
     else await addAdmin(m.email)
@@ -131,6 +138,23 @@ async function toggleCoreAdmin(m: Member) {
   } catch (e: any) {
     console.error('[CoreTeam] toggleCoreAdmin', e)
     errorMsg.value = e?.message || 'Errore Admin CORE.'
+  } finally {
+    busy.value = ''
+  }
+}
+
+// --- Reset password: invia all'agente l'email per reimpostarla ---
+// (Firebase gestisce il link sicuro; l'agente può anche usare "Password
+// dimenticata?" dalla schermata di login.)
+async function resetPassword(m: Member) {
+  if (!confirm(`Inviare a ${m.email} un'email per reimpostare la password?`)) return
+  busy.value = m.docId || m.email; errorMsg.value = ''
+  try {
+    await sendPasswordResetEmail(auth, m.email)
+    flash(`Email di reset password inviata a ${m.email}.`)
+  } catch (e: any) {
+    console.error('[CoreTeam] resetPassword', e)
+    errorMsg.value = e?.message || 'Errore invio reset password.'
   } finally {
     busy.value = ''
   }
@@ -203,7 +227,7 @@ async function createMember() {
       <div class="m-task-head">
         <div>
           <h3 class="m-task-title">Agenti</h3>
-          <p class="m-task-desc">SIDERA possiede l'identità (uid). Crea, cambia ruolo, concedi accesso <strong>Admin CORE</strong> (scudo), disabilita (soft) o cambia email.</p>
+          <p class="m-task-desc">Crea, cambia ruolo, concedi accesso <strong>Admin CORE</strong>, disabilita agente o cambia email.</p>
         </div>
         <button class="m-btn" type="button" @click="showCreate = !showCreate">
           <MIcon name="add" :size="16" /> Nuovo agente
@@ -266,6 +290,9 @@ async function createMember() {
           <button class="m-icon-btn" title="Cambia email" :disabled="busy === m.docId" @click="changeEmail(m)">
             <MIcon name="alternate_email" :size="18" />
           </button>
+          <button class="m-icon-btn" title="Invia reset password" :disabled="busy === (m.docId || m.email)" @click="resetPassword(m)">
+            <MIcon name="lock_reset" :size="18" />
+          </button>
           <button
             class="m-icon-btn" :title="m.active === false ? 'Riattiva' : 'Disabilita'"
             :disabled="busy === m.docId" @click="toggleActive(m)"
@@ -304,7 +331,10 @@ async function createMember() {
   font-family: 'Outfit', sans-serif;
   background: var(--md-sys-color-surface, #FFF8F0);
   color: var(--md-sys-color-on-surface, #1A1917);
-  min-height: 100vh; padding: 24px 32px;
+  /* La shell SIDERA (.s-main) ha overflow:hidden → lo scroll vive sul root della view */
+  height: 100%; min-height: 0; overflow-y: auto;
+  padding: 24px 32px; padding-bottom: calc(24px + env(safe-area-inset-bottom));
+  box-sizing: border-box;
 }
 .m-header { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
 .m-back {
