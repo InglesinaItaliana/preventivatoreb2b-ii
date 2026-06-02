@@ -15,7 +15,7 @@ import MIcon from '../../components/shared/MIcon.vue'
 import StarAvatar from '../../components/shared/StarAvatar.vue'
 import { useCoreAdmins } from '../../composables/sidera/useCoreAdmins'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
-import { FUNZIONI } from '../../composables/nebula/useNebulaTeam'
+import { useFunzioni } from '../../composables/sidera/useFunzioni'
 import { displayName, starAvatarProps, isHiddenTeamEmail, dedupeTeamDocs, type TeamMember } from '../../composables/sidera/useTeamMembers'
 
 const router = useRouter()
@@ -48,7 +48,22 @@ onUnmounted(unsub)
 
 // Agenti = persone reali. Account di sistema = HIDDEN_TEAM_EMAILS (info@, lavorazioni@):
 // mostrati a parte, fuori dal concetto di "agente", sola lettura.
-const agents = computed(() => allMembers.value.filter(m => !isHiddenTeamEmail(m.email)))
+// Ordine dei gruppi-funzione (le 6 categorie avatar) per l'elenco agenti.
+const CATEGORY_ORDER = ['direzione', 'amministrazione', 'produzione', 'tecnico', 'logistica', 'commerciale']
+function catRank(c?: string): number {
+  const i = CATEGORY_ORDER.indexOf(c ?? '')
+  return i === -1 ? CATEGORY_ORDER.length : i
+}
+// Agenti ordinati per gruppo-funzione (categoria) poi alfabetico per nome.
+const agents = computed(() =>
+  allMembers.value
+    .filter(m => !isHiddenTeamEmail(m.email))
+    .slice()
+    .sort((a, b) =>
+      catRank(a.category) - catRank(b.category) ||
+      displayName(a.email, teamLike.value).localeCompare(displayName(b.email, teamLike.value), 'it'),
+    ),
+)
 const systemAccounts = computed(() => allMembers.value.filter(m => isHiddenTeamEmail(m.email)))
 
 const canAccessCore = computed(() =>
@@ -89,6 +104,21 @@ const okMsg = ref('')
 function flash(msg: string) { okMsg.value = msg; setTimeout(() => { if (okMsg.value === msg) okMsg.value = '' }, 3000) }
 
 // --- Cambio ruolo (+ refresh token §4) ---
+// Handler del select riga: conferma il cambio e ripristina la selezione se annulli.
+async function onRoleChange(m: Member, e: Event) {
+  const sel = e.target as HTMLSelectElement
+  const newRole = sel.value
+  if (newRole === m.role) return
+  if (!confirm(
+    `Cambiare il ruolo di ${displayName(m.email, teamLike.value)} `
+    + `da "${roleLabel[m.role] ?? m.role}" a "${roleLabel[newRole] ?? newRole}"?`
+  )) {
+    sel.value = m.role   // ripristina la selezione precedente
+    return
+  }
+  await changeRole(m, newRole)
+}
+
 async function changeRole(m: Member, role: string) {
   if (!m.docId || m.role === role) return
   busy.value = m.docId; errorMsg.value = ''
@@ -192,10 +222,13 @@ const creating = ref(false)
 const form = reactive({ firstName: '', lastName: '', email: '', password: '', role: '', phone: '', position: '', category: '' })
 function resetForm() { Object.assign(form, { firstName: '', lastName: '', email: '', password: '', role: '', phone: '', position: '', category: '' }) }
 
-// Funzione-first: la funzione (= position) determina role + category-avatar.
+// Elenco funzioni gestibili (collezione Firestore, fallback ai default).
+const { effective: funzioniOptions } = useFunzioni()
+
+// Funzione-first: la funzione (= label) determina role + category-avatar.
 // Il ruolo-permessi è in sola lettura qui; si aggiusta semmai dopo, dalla lista.
 function onFunzione() {
-  const f = FUNZIONI.find(x => x.position === form.position)
+  const f = funzioniOptions.value.find(x => x.label === form.position)
   if (f) { form.role = f.role; form.category = f.category }
   else { form.role = ''; form.category = '' }
 }
@@ -246,7 +279,7 @@ async function createMember() {
       <form v-if="showCreate" class="m-create" @submit.prevent="createMember">
         <select v-model="form.position" @change="onFunzione" class="m-input m-input--full">
           <option value="">Funzione… (determina ruolo e avatar)</option>
-          <option v-for="f in FUNZIONI" :key="f.position" :value="f.position">{{ f.position }}</option>
+          <option v-for="f in funzioniOptions" :key="f.label" :value="f.label">{{ f.label }}</option>
         </select>
         <div class="m-create-grid">
           <input v-model="form.firstName" class="m-input" placeholder="Nome" />
@@ -284,7 +317,7 @@ async function createMember() {
           <select
             class="m-role" :value="m.role" :disabled="busy === m.docId"
             :title="roleDescriptions[m.role]"
-            @change="changeRole(m, ($event.target as HTMLSelectElement).value)"
+            @change="onRoleChange(m, $event)"
           >
             <option v-for="r in ROLES" :key="r" :value="r">{{ roleLabel[r] }}</option>
           </select>
@@ -407,6 +440,7 @@ async function createMember() {
   flex: 0 0 auto; background: var(--md-sys-color-surface-container-lowest, #FFFFFF);
   border: 1px solid var(--md-sys-color-outline-variant, #CEC6B4); border-radius: 8px;
   padding: 6px 8px; font-size: 12px; font-family: inherit; color: inherit; cursor: pointer;
+  text-align: center; text-align-last: center; min-width: 104px;
 }
 .m-icon-btn {
   flex: 0 0 auto; background: none; border: none; cursor: pointer; padding: 6px; border-radius: var(--md-sys-shape-corner-full);
