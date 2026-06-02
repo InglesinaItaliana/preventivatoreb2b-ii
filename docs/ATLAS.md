@@ -1270,7 +1270,58 @@ Quando trovi codice non-M3-compliant durante un fix: migra solo se è nello scop
 
 ---
 
-## 15. Cronologia revisioni ATLAS
+## 15. Collaborazione real-time (Yjs/CRDT) — NEBULA
+
+> Riferimento canonico completo: `docs/NEBULA-DOCS.md` §6 (Fase 6). Qui il riassunto architetturale per chi tocca lo stack o vuole replicarlo.
+
+NEBULA-DOCS è l'unico modulo della suite con **editing simultaneo** (più cursori live sullo stesso documento). In prod dal **2026-05-29** (`be1e76a` foundation, `d6b43cf` cutover, PR #55).
+
+### Scelta architetturale
+- **Provider Firestore-native**, NO Cloud Run/Hocuspocus/WebSocket: gli update Yjs (`Y.encodeStateAsUpdate`) sono append-only in una subcollection (`nebulaDocs/{id}/yupdates`), il client li osserva con `onSnapshot`. Zero infra aggiuntiva oltre Firebase.
+- **CRDT (Yjs)** sostituisce la vecchia concorrenza LWW (`baseRevision`/409), con **kill-switch globale** d'emergenza `core/nebula.collabEnabled=false` → fallback read-only sul campo `content` proiettato.
+- **Cursori live** via Awareness (subcollection `awareness`, cleanup periodico).
+
+### Il linchpin: schema condiviso headless
+Il rischio #1 è il **drift di schema**: client (TipTap) e Cloud Functions (migrazione, scritture MCP, compaction) **devono** costruire/leggere il Y.Doc con lo **stesso** schema ProseMirror, altrimenti il doc si corrompe.
+- `src/functions/lib_yjs/pmSchema.ts` — `nebulaSchema = getSchema(SCHEMA_EXTENSIONS)`, con le **estensioni stock identiche** a quelle dell'editor (`NebulaDocPage.vue`) + "gemelli headless" dei 5 nodi custom (taskMention/projectMention/taskEmbed/userMention/docMention): stessa identità di schema, senza Vue/suggester.
+- Campo XmlFragment **sempre** `'default'` (`NEBULA_YJS_FIELD`) — deve combaciare con l'estensione Collaboration, altrimenti il client vede un doc vuoto.
+- Guardia anti-drift: test vitest (`lib_yjs/__tests__/yjs.test.ts`) confronta i nodi/mark dello schema e fa round-trip JSON⇄Y.Doc su ogni tipo.
+
+### Pezzi principali
+- `src/composables/nebula/FirestoreYjsProvider.ts` — provider client (echo-suppression 2 livelli, batching ~350ms, awareness ~300ms, re-baseline post-compaction).
+- CF (`src/functions/index.ts`): `initYDoc`/`backfillYDocs` (migrazione first-writer-wins, **lazy** alla 1ª apertura), `nebulaYjsMaintenance` (compaction no-loss + proiezione `content`), `snapshotDoc`/`restoreDoc` (history via `updateYFragment`), `awarenessCleanup`.
+- Converter MCP markdown⇄ProseMirror `src/functions/lib_md/markdown.ts` (link, tabelle, checkbox, mention, embed): l'output **deve** essere accettato da `nebulaSchema.nodeFromJSON`, altrimenti `applyJSONToYDoc` lancia in scrittura.
+
+### Se aggiungi un nodo/mark all'editor NEBULA
+1. Aggiungilo **sia** in `NebulaDocPage.vue` **sia** in `pmSchema.ts` `SCHEMA_EXTENSIONS` (stesse opzioni schema-rilevanti).
+2. Se è un nodo custom Vue, crea il **gemello headless** in `pmSchema.ts`.
+3. Aggiorna il test anti-drift e, se serve, il converter markdown (+ il suo test).
+
+---
+
+## 16. Modello permessi, ruoli e funzioni (capabilities)
+
+> Riferimento canonico completo: `docs/STELLA-GRAFO.md` §6. Qui l'architettura in pillole per chi tocca il guard o aggiunge un modulo/ruolo.
+
+In prod dal **2026-06-02** (POLARIS Az.6+9, merge `d1e65ab`). Sostituisce il gating coarse precedente (`if (role === 'PRODUZIONE')` hardcoded nel guard).
+
+### Due strati distinti
+1. **Routing per ruolo** — `src/router/permissions.ts` (**puro TS, no Vue/Firebase**): `allowedPathsByRole`, `roleFallbackPath`, `forbiddenClientPaths`, `isPathAllowedForRole`, `postLoginRoute`. È la **fonte unica** consumata sia dal router guard sia da `LoginView` (prima logiche duplicate e disallineate). Scope login ricavato via `detectScope`.
+2. **Capabilities (gating UX)** — `Capabilities` + `ROLE_CAPABILITIES` + `capabilitiesFor` in `permissions.ts`, esposte al componente via `src/composables/sidera/useCan.ts`. Super-admin (info@) e `isCoreAdmin` sono **ortogonali** al ruolo. Agganci tipici: `NavItem.requiresCapability`, `showFab`, view-guard con redirect, e check task-level (`isOwnTask`/`canEditTask`/`canCompleteTask`).
+
+> ⚠️ Le capabilities sono **solo gating UX**: il confine di sicurezza vero restano le **Firestore rules** (vedi POLARIS Az.11). Non fidarti mai del solo `useCan()` per proteggere dati.
+
+### Identità funzione-first
+In CORE → Gestione team si sceglie la **FUNZIONE** (mansione), che deriva `position` + `category` + `role` (categoria→ruolo; `tecnico` rimosso). La collezione `funzioni` è editabile (`/sidera/core/funzioni`). NEBULA → Squadra è **sola lettura** (l'editing identità vive in CORE). Organigramma via campo `managerUid` su `/team`, visualizzato in NEBULA → Squadra → tab "Gerarchia".
+
+### Se aggiungi un modulo/scope o un ruolo
+1. Aggiorna `allowedPathsByRole` / `postLoginRoute` in `permissions.ts` (non più nel guard a mano).
+2. Se serve granularità sotto-modulo, aggiungi una capability a `Capabilities` + `ROLE_CAPABILITIES` e consumala con `useCan()`.
+3. **Rifletti il permesso anche nelle Firestore rules** — UX e sicurezza vanno tenute allineate ma sono livelli separati.
+
+---
+
+## 17. Cronologia revisioni ATLAS
 
 - **2026-05-19** — Creazione documento. Estrazione pattern emersi durante POLARIS azioni 1-5 (deployate). Coverage: filosofia, naming, ricetta nuova PWA, FCM, Schlegel logo, code splitting, mobile, doppia identità, preview channel workflow.
 - **2026-05-19** — Aggiunta sez. 10 "PWA update banner — best practice". Pattern: `registerType: 'prompt'` + banner tematizzato globale per evitare reload distruttivi durante data entry. Sezioni 11-14 rinumerate.
@@ -1285,3 +1336,5 @@ Quando trovi codice non-M3-compliant durante un fix: migra solo se è nello scop
 - **2026-05-20** — **M3 component primitives** (branch `polaris/m3-elevation-button-modal`): aggiunte utility class globali in `src/style.css`: `.md-btn` con varianti `--filled`, `--filled-tonal`, `--outlined`, `--text`, `--danger` (+ modifiers `--sm`/`--lg`/`--square`/`--rounded`); `.md-modal-backdrop` + `.md-modal-dialog` (centered desktop) + `.md-modal-bottom-sheet` (slide-up mobile) + helpers header/body/footer/title/close; `.md-text-field` + `.md-text-field-label` + `.md-text-field-input` (Outlined M3). 3 keyframes M3-spec: fade-in backdrop, pop-in dialog, slide-up bottom-sheet. Aggiornato ATLAS sez. 14 "Pattern UI standardizzati" con esempi `<button class="md-btn md-btn--filled">` concreti. **Migrazione box-shadow ai token elevation**: 28 occorrenze in 13 file viste sostituite via regex batch. `--s-shadow` / `--s-shadow-hover` ora alias di `var(--md-sys-elevation-level-1)` / `level-2`. Cambio visivo lieve (shadow leggermente piu' marcate, M3-coerenti).
 - **2026-05-20** — **M3 layers 1-5 implementati** (branch `polaris/m3-layers-typography-shape-elevation-state-motion`): completati gli ultimi 5 strati dei design tokens M3. **Typography**: 15 stili `--md-sys-typescale-*` (display/headline/title/body/label × large/medium/small) + utility class `.md-typescale-*`, font mapping: Cormorant Garamond per display+headline, Outfit per title+body+label. **Shape**: 7 token `--md-sys-shape-corner-{none,extra-small,small,medium,large,extra-large,full}`. **Elevation**: 6 token `--md-sys-elevation-level-{0..5}` (box-shadow M3). **State layers**: 4 token opacità (`--md-sys-state-{hover,focus,pressed,dragged}-state-layer-opacity`). **Motion**: 16 duration + 8 easing token `--md-sys-motion-*`. Sez. 14 estesa con sotto-sezioni dettagliate per ogni layer + **pattern guide UI** (Bottoni Filled/Filled Tonal/Outlined/Text/Elevated, Card Elevated/Filled/Outlined, Dialog vs Bottom Sheet, Input Text Field) che diventano la base per lo sviluppo futuro. I componenti esistenti NON sono migrati ai nuovi token tipografici/shape/elevation — l'adozione è incrementale: ogni nuovo componente o refactor li userà.
 - **2026-05-20** — **Unificazione header + card hover** (branch `feat/m3-unify-headers-cards`): chiusura del debito di migrazione M3 lasciato in sospeso dalle viste pre-ATLAS. **Token primary-state-layer** (`src/style.css`): aggiunti `--md-sys-color-primary-state-{hover,focus,pressed}` (color-mix 8%/10%/10% di primary su surface), scope-aware. Da usare come `background` per le superfici non-primary (card-hover, list-row-hover), mentre `--md-sys-color-primary-hover` (più scuro 20%) resta per le superfici già primary (es. `.md-btn--filled:hover`). **Utility `.md-card-*`**: tre varianti M3 ufficiali — `.md-card-outlined` (surface + outline-variant + level-0), `.md-card-elevated` (surface-container-low + level-1), `.md-card-filled` (surface-container-highest). Variante `.is-interactive` applica il pattern hover POPS standard: `border-color: primary` + `background: primary-state-hover` + `elevation-level-2` + `translateY(-1px)`. Aggiunto modifier `.md-card--dense` (padding 12×14 invece di 16). **Componente `<MdPageHeader>`** in `src/components/shared/MdPageHeader.vue`: primitive shared per l'in-content page header con props `title` / `subtitle` / `borderless` + slot `#cta`. Sostituisce i pattern duplicati `.av-header` / `.pv-header` / `.dv-header` (4 occorrenze byte-identiche in CepheidActions/Projects/Due). NON sostituisce `<ContextualMobileHeader>` (top app bar mobile, montato dal layout). **Migrazione viste**: 4 viste portate ai token e al nuovo componente — `CepheidActionsView`, `CepheidProjectsView`, `CepheidDueView`, `HomeView` (Cruscotto QUASAR). Eliminate ~120 righe di CSS duplicato per gli header. Rimosso `#B8870E` hardcoded (6 occorrenze) sostituito con `var(--md-sys-color-primary-hover)`. Field input nei modal portati da `background: #F4F2EE; border: #E8E5DF; radius: 10px` → token (`surface-container`, `outline-variant`, `corner-extra-small`). Bottom-sheet radius da `20px 20px 0 0` → `corner-large` (16px) come prescrive ATLAS sez. 14. **Pattern hover card unificato sul "Projects-style"**: tutte le card interattive ora usano `border-color: primary` + `background: primary-state-hover` (non più border-outline come Actions/Due pre-fix). Le card di HomeView (Cruscotto) — `.azione-row`, `.proj-mini`, `.kpi-card`, `.urgenza-card` — adottano lo stesso pattern. `SideraHubView` (splash Schlegel `/sidera/hub`) escluso intenzionalmente — è marketing UI, non app UI. Le PWA non-CEPHEID restano da migrare (PULSAR views in `src/views/pulsar/*` hanno ancora `.p-page-title` / `.p-page-sub` duplicati, target del prossimo branch).
+- **2026-06-02** — Aggiunta **sez. 15 "Collaborazione real-time (Yjs/CRDT)"** — riassunto architetturale dello stack NEBULA Fase 6 (in prod 2026-05-29): provider Firestore-native, schema headless condiviso `pmSchema.ts` come linchpin anti-drift, kill-switch, pezzi principali (provider client, CF maintenance/snapshot, converter MCP) + ricetta "se aggiungi un nodo/mark". Riferimento canonico: `docs/NEBULA-DOCS.md` §6. *(Debito documentale recuperato: l'architettura era live da fine maggio ma non in ATLAS.)*
+- **2026-06-02** — Aggiunta **sez. 16 "Modello permessi, ruoli e funzioni (capabilities)"** — riassunto del modello POLARIS Az.6+9 (in prod 2026-06-02): due strati (routing per ruolo in `permissions.ts` puro TS, fonte unica guard+LoginView; capabilities dichiarative + `useCan` per gating UX), identità funzione-first, avvertenza "le rules restano il confine di sicurezza" + ricetta "se aggiungi un modulo/ruolo". Riferimento canonico: `docs/STELLA-GRAFO.md` §6. Cronologia rinumerata da 15 a **17**.

@@ -4,7 +4,7 @@
 > Documento "vivo": va aggiornato dopo ogni step completato o decisione esplicita.
 
 **Ultima revisione:** 2026-05-30
-**Stato globale:** azioni 1-5 deployate in produzione. Restano azione 6 (`meta.scope` unificato) e azione 7 (differita). Azioni 8-9 pianificate. **Aggiunte Azioni 10-15** (piano di maturazione e integrazione dall'audit `docs/ANALISI-MATURITA.md`, 2026-05-30): la suite è coerente (~85%) ma a maturità media ~70%, sotto la soglia 80% per la consegna 1.0. I tre bloccanti trasversali sono Az.10 (`useToast` condiviso), Az.11 (hardening rules) e Az.12 (push uniformi). NEBULA è 4ª PWA installabile.
+**Stato globale (agg. 2026-06-02):** azioni 1-6 e 9 deployate in produzione. Az.7 differita, Az.8 gated (serve che tutte le 6 PWA siano attive). Az.11 in corso (S1/S2 chiusi via hardening rules own-or-admin; resta la validazione stato iniziale `preventivi`). Restano aperte Az.10 (`useToast` condiviso — prossimo ad alto impatto), Az.12-15. **Azioni 10-15** (piano di maturazione e integrazione dall'audit `docs/ANALISI-MATURITA.md`, 2026-05-30): la suite è coerente (~85%) ma a maturità media ~70%, sotto la soglia 80% per la consegna 1.0. I tre bloccanti trasversali erano Az.10 (`useToast` condiviso), Az.11 (hardening rules — ora parziale) e Az.12 (push uniformi). NEBULA è 4ª PWA installabile, con collaborazione real-time Yjs/CRDT in prod (Fase 6, 2026-05-29). Il modello permessi/ruoli/funzioni (Az.6/9) è documentato in dettaglio in `docs/STELLA-GRAFO.md` §6.
 
 ---
 
@@ -57,12 +57,12 @@ POLARIS è la roadmap che governa l'evoluzione architetturale di `preventivatore
 | 3 | 🟠 Media-alta | **ScopedLogin componente unificato** | Prima di aggiungere PWA #3 (NEBULA o NOVA) | Nessuno | ☑ |
 | 4 | 🟡 Media | **Code splitting raffinato** (firebase modular, visualizer) | Quando si percepiscono rallentamenti mobile | Basso | ☑ |
 | 5 | 🟢 Bassa | **`name` manifest più parlanti** | Quando si lavora su uno scope per altri motivi | Nessuno | ☑ (piggyback su azione 2) |
-| 6 | 🟢 Bassa | **`meta.scope` unificato nel router guard** | Da 4+ PWA in poi | Medio (test ruoli POPS obbligatori) | ☐ |
+| 6 | 🟢 Bassa | **`meta.scope` unificato nel router guard** | Da 4+ PWA in poi | Medio (test ruoli POPS obbligatori) | ☑ (2026-06-02) |
 | 7 | ⚪ Differita | **Separazione deploy POPS vs interno** | Tra 6–12 mesi, se POPS cresce o legal richiede dominio separato | Altissimo | ⏸ |
 | 8 | 🟢 Bassa | **Hub Schlegel landing interattiva** (sidebar collassabile + click vertice → sezione) | Quando tutte e 6 le PWA sono attive | Medio (SideraLayout condiviso) | ☐ |
-| 9 | 🟠 Media-alta | **Ruoli e permessi granulari** (chi accede a quali moduli/azioni) + robustezza login su cache-miss | Quando si dovranno aprire moduli SIDERA a ruoli operativi | Medio-alto (tocca guard + LoginView POPS) | ☐ |
+| 9 | 🟠 Media-alta | **Ruoli e permessi granulari** (chi accede a quali moduli/azioni) + robustezza login su cache-miss | Quando si dovranno aprire moduli SIDERA a ruoli operativi | Medio-alto (tocca guard + LoginView POPS) | ☑ (2026-06-02) |
 | 10 | 🔴 Alta | **`useToast` condiviso** (feedback errore/successo visibile in tutti i moduli) | Subito — sblocca la maturità percepita di tutta la suite | Basso | ☐ |
-| 11 | 🔴 Alta | **Hardening Firestore rules** (`tasks`/`obiettivi` update troppo permissivi) | Prima della consegna 1.0 | Medio (test ruoli) | ☐ |
+| 11 | 🔴 Alta | **Hardening Firestore rules** (`tasks`/`obiettivi` update troppo permissivi) | Prima della consegna 1.0 | Medio (test ruoli) | 🔄 parziale (S1/S2 fatti; resta validazione stato `preventivi`) |
 | 12 | 🟠 Media-alta | **Push uniformi cross-modulo** (completa VAPID + assegnazione task/scadenze/mention) | Quando serve notificare oltre PULSAR | Basso (POPS non usa FCM) | ☐ |
 | 13 | 🟠 Media-alta | **`@mention` unificato cross-modulo** (PULSAR + CEPHEID, generalizza `UniversalMention` NEBULA) | Dopo Azione 10 | Basso | ☐ |
 | 14 | 🟡 Media | **Ricerca globale / Cmd-K** (doc + task + chat cross-modulo) | Quando la suite è percepita come "tante app" | Medio | ☐ |
@@ -252,7 +252,9 @@ POLARIS è la roadmap che governa l'evoluzione architetturale di `preventivatore
 
 ---
 
-### Azione 6 — `meta.scope` unificato 🟢
+### Azione 6 — `meta.scope` unificato 🟢 ✅ COMPLETATA (2026-06-02)
+
+> **Fatto** (FASE A+B, branch `feature/polaris-roles-funzione-first`, merge `d1e65ab`): scope login unificato via `detectScope` (`5e0c975`); routing centralizzato in `src/router/permissions.ts` — **puro TS, no Vue/Firebase** — con `allowedPathsByRole`/`roleFallbackPath`/`isPathAllowedForRole`/`postLoginRoute`, consumato sia dal guard sia da `LoginView` (prima duplicati e disallineati) (`876d5ea`). Test login POPS verificati (cliente/staff/PRODUZIONE→`/production`). Dettaglio canonico: `docs/STELLA-GRAFO.md` §6.
 
 **Problema.** Il router guard cresce con un `isXScope` per ogni nuovo modulo (riga `router/index.ts:140-143`). A 4+ PWA diventa rumoroso. Anche `allowedPaths` per ruolo PRODUZIONE (`router/index.ts:167`) va aggiornato per ogni nuovo scope.
 
@@ -326,9 +328,11 @@ POLARIS è la roadmap che governa l'evoluzione architetturale di `preventivatore
 
 ---
 
-### Azione 9 — Ruoli e permessi granulari 🟠
+### Azione 9 — Ruoli e permessi granulari 🟠 ✅ COMPLETATA (2026-06-02)
 
-**Status: da fare (non ora — richiesta utente 2026-05-22 di pianificare, non eseguire).**
+> **Fatto** (FASE C/D/E, branch `feature/polaris-roles-funzione-first`, merge `d1e65ab`): **capabilities dichiarative** (`Capabilities` + `ROLE_CAPABILITIES` + `capabilitiesFor` in `permissions.ts`) + composable `src/composables/sidera/useCan.ts` (super-admin info@ + `isCoreAdmin` ortogonale) — `c90c2c1`; **creazione agente funzione-first** (si sceglie la FUNZIONE → deriva `position`+`category`+`role`; categoria→ruolo, `tecnico` rimosso) — `8108742`, `38d5d78`; **permessi granulari CEPHEID** per ruolo (ADMIN tutto; COMMERCIALE crea progetti; PRODUZIONE solo le proprie; LOGISTICA sola lettura+completa; Obiettivi solo-ADMIN; Smistamento ADMIN+COMMERCIALE) — `ab49028`; **fix login cache-miss** `getTeamDoc` robusto (`metadata.fromCache` ≠ not-found) — `24379a7`. NEBULA → Squadra è sola lettura. Le Firestore rules restano il confine di sicurezza; questo è gating UX. Dettaglio canonico: `docs/STELLA-GRAFO.md` §6.
+
+**Status originale (storico): da fare (non ora — richiesta utente 2026-05-22 di pianificare, non eseguire).**
 
 **Problema.** Il modello attuale di accesso è grossolano e basato su un solo campo `team/{email}.role` (`ADMIN` | `PRODUZIONE` | `LOGISTICA` | ...) con gating per **allowlist di path** nel router guard (`router/index.ts:244-251`). Conseguenze osservate:
 - Un utente `PRODUZIONE` (es. Daniel) **non può accedere ai moduli SIDERA**: `/sidera` lo rimanda a `/delivery`, `/production/sidera` mostra solo lo sfondo col logo (rotta non valida per quel ruolo → layout senza contenuto). Non c'è un modo dichiarativo per dire "questo ruolo vede QUASAR e CEPHEID ma non NOVA".
@@ -372,7 +376,9 @@ POLARIS è la roadmap che governa l'evoluzione architetturale di `preventivatore
 
 ---
 
-### Azione 11 — Hardening Firestore rules 🔴
+### Azione 11 — Hardening Firestore rules 🔴 🔄 PARZIALE (2026-06-02)
+
+> **Fatto (S1/S2)** — `c1bece5`, branch `feature/permessi-hardening-organigramma`: `tasks/{tid}` e `obiettivi/{oid}` `update` ristretti a **own-or-admin** (`createdBy`/`assignee(s)`/`isAdmin()`), chiudendo il "qualunque loggato modifica task di chiunque". **Resta (S3):** validazione dello stato iniziale dei `preventivi` create (`firestore.rules:57`). Dettaglio in `docs/STELLA-GRAFO.md` §7 (changelog hardening).
 
 **Problema.** Verificato in audit (`docs/ANALISI-MATURITA.md` §3):
 - `tasks/{tid}` root (`firestore.rules:115`): `allow update: if request.auth != null` → **qualunque utente loggato può modificare/completare/riassegnare task di chiunque**.
@@ -527,3 +533,5 @@ Quando si decide di lavorare su un'azione POLARIS:
 - **2026-05-21** — Aggiunta **Azione 8 — Hub Schlegel landing interattiva** alla roadmap (🟢 bassa priorità). Idea utente: entrare su `/sidera` collassa la sidebar lasciando lo Schlegel interattivo a tutto schermo; click su un vertice riapre la sidebar sulla sezione del modulo (prima voce del menu). Gate esplicito: **non implementare prima che tutte e 6 le PWA siano attive** (oggi solo 3 vertici hanno config completa). Nessun codice scritto — solo pianificazione.
 - **2026-05-30** — Aggiunte **Azioni 10-15** (piano di maturazione e integrazione) dall'audit `docs/ANALISI-MATURITA.md`. Coerenza suite ~85%, maturità media ~70% (sotto la soglia 80% per la consegna 1.0). Az.10 `useToast` condiviso 🔴, Az.11 hardening rules 🔴 (verificato: `tasks:115`/`obiettivi:161` update troppo permissivi — overlap con Az.9), Az.12 push uniformi 🟠 (completa VAPID), Az.13 @mention unificato 🟠, Az.14 ricerca globale/Cmd-K 🟡, Az.15 stream attività consolidato 🟡. Az.10-12 = i tre bloccanti trasversali. Nessun codice scritto — solo pianificazione + audit.
 - **2026-05-22** — Aggiunta **Azione 9 — Ruoli e permessi granulari** alla roadmap (🟠 media-alta). Nasce dall'indagine su un presunto blocco login di Daniel (`pastorindaniel@gmail.com`, ruolo `PRODUZIONE`): **allarme rientrato** — in produzione (`b2b.inglesinaitaliana.it` e `preventivatoreb2b-ii.web.app`, stesso progetto/bundle) il login funziona; il fallimento *"Utenza non configurata"* era solo su **localhost**, artefatto di `getDoc(team)` che su cache-miss ritorna `exists()===false`. Emersi due temi da gestire (non ora): (1) permessi granulari per ruolo/modulo — oggi `PRODUZIONE` non accede ai moduli SIDERA, gating coarse via allowlist di path nel guard; (2) robustezza `LoginView.vue` sul cache-miss. Forte overlap con Azione 6 (valutare accorpamento). Nessun codice scritto — solo pianificazione.
+- **2026-06-02** — **Azione 6 + Azione 9 implementate e deployate** (branch `feature/polaris-roles-funzione-first`, merge `d1e65ab`; accorpate come anticipato dall'overlap). FASE A — scope login unificato via `detectScope` (`5e0c975`). FASE B — routing centralizzato in `src/router/permissions.ts` (puro TS: `allowedPathsByRole`/`roleFallbackPath`/`isPathAllowedForRole`/`postLoginRoute`), consumato da guard **e** LoginView (`876d5ea`) → **Az.6 ☑**. FASE C — capabilities dichiarative (`Capabilities`/`ROLE_CAPABILITIES`/`capabilitiesFor`) + composable `useCan` (`c90c2c1`). FASE D — creazione agente **funzione-first** (FUNZIONE → `position`+`category`+`role`; categoria→ruolo, `tecnico` rimosso; collezione `funzioni` editabile) (`8108742`, `38d5d78`). FASE E — fix login cache-miss `getTeamDoc` (`metadata.fromCache` ≠ not-found) (`24379a7`). Permessi granulari CEPHEID per ruolo (`ab49028`); NEBULA → Squadra sola lettura → **Az.9 ☑**. Deploy a fasi con verifica POPS (login cliente/staff OK, PRODUZIONE→`/production`). Modello canonico in `docs/STELLA-GRAFO.md` §6.
+- **2026-06-02** — **Azione 11 parziale** (`c1bece5`, branch `feature/permessi-hardening-organigramma`). Hardening Firestore rules: `tasks/{tid}` e `obiettivi/{oid}` `update` ristretti a **own-or-admin** (`createdBy`/`assignee(s)`/`isAdmin()`) — chiusi S1/S2 dell'audit. **Resta S3**: validazione dello stato iniziale dei `preventivi` create. Cambio rules deployato; regressione POPS verificata (ciclo preventivo). → **Az.11 🔄 parziale**. Cfr. `docs/STELLA-GRAFO.md` §7.
