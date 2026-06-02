@@ -8,25 +8,46 @@
  */
 import { authenticateMcpRequest, McpAuthError } from './auth';
 import * as Tools from './tools';
+import * as Cepheid from './tools_cepheid';
 import {
     handleAsMetadata, handleResourceMetadata, handleRegister,
     handleAuthorize, handleToken,
 } from './oauth';
 
-const SERVER_NAME = 'nebula';
+const SERVER_NAME = 'sidera';
 const SERVER_VERSION = '1.0.0';
 const PROTOCOL_VERSION = '2024-11-05';
 
-// URL base del MCP server (per costruire resource_metadata in WWW-Authenticate)
-const MCP_BASE_URL = 'https://europe-west1-preventivatoreb2b-ii.cloudfunctions.net/mcpNebula';
-const RESOURCE_METADATA_URL = `${MCP_BASE_URL}/.well-known/oauth-protected-resource`;
+// Host della Cloud Function. Il base URL (discovery, issuer OAuth,
+// resource_metadata) deve combaciare con l'URL usato dal client: /mcpSidera
+// (canonico) o /mcpNebula (alias legacy).
+//
+// ATTENZIONE: in GCF 1ª gen la piattaforma STRIPPA il nome della function dal
+// path prima di passarlo al codice (es. /mcpNebula/.well-known/X arriva come
+// /.well-known/X). Quindi il prefisso nel path NON è affidabile. La fonte
+// deterministica è l'identità della function in esecuzione: ogni deploy
+// (mcpSidera / mcpNebula) ha il proprio FUNCTION_TARGET/K_SERVICE.
+const FN_HOST = 'https://europe-west1-preventivatoreb2b-ii.cloudfunctions.net';
+const KNOWN_FNS = ['mcpSidera', 'mcpNebula'];
+function resolveBaseUrl(rawPath: string): string {
+    // 1) prefisso esplicito nel path (alcuni env/hosting-rewrite lo conservano)
+    const m = rawPath.match(/^\/(mcpSidera|mcpNebula)\b/);
+    if (m) return `${FN_HOST}/${m[1]}`;
+    // 2) nome della function in esecuzione (sorgente affidabile in GCF)
+    const fn = process.env.FUNCTION_TARGET || process.env.K_SERVICE || process.env.FUNCTION_NAME || '';
+    if (KNOWN_FNS.includes(fn)) return `${FN_HOST}/${fn}`;
+    // 3) fallback canonico
+    return `${FN_HOST}/mcpSidera`;
+}
 
 /**
- * Header WWW-Authenticate per 401 risposte. Include resource_metadata URL
- * per indicare ai client (claude.ai) dove trovare la AS discovery (RFC 9728 /
- * MCP Authorization spec).
+ * Header WWW-Authenticate per 401/405. Include resource_metadata URL (derivato
+ * dal base URL della request) per indicare ai client (claude.ai) dove trovare
+ * la AS discovery (RFC 9728 / MCP Authorization spec).
  */
-const WWW_AUTH_HEADER = `Bearer realm="nebula-mcp", resource_metadata="${RESOURCE_METADATA_URL}"`;
+function wwwAuthHeader(baseUrl: string): string {
+    return `Bearer realm="sidera-mcp", resource_metadata="${baseUrl}/.well-known/oauth-protected-resource"`;
+}
 
 interface JsonRpcReq {
     jsonrpc: '2.0';
@@ -169,6 +190,80 @@ const TOOLS = [
         },
         handler: Tools.linkProject,
     },
+
+    // ── CEPHEID — creazione/lettura Progetti/Task/Milestone/Deliverable ──────
+    {
+        name: 'cepheid_listProjects',
+        description: 'Lista progetti CEPHEID (id, nome, avanzamento task, scadenza). Usalo per ottenere un projectId valido prima di creare task/fasi. Default esclude archiviati/inattivi.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                includeArchived: { type: 'boolean', description: 'Includi progetti archiviati/inattivi (default false)' },
+                limit: { type: 'number', description: 'Max risultati (default 50, max 200)' },
+            },
+        },
+        handler: Cepheid.listProjects,
+    },
+    {
+        name: 'cepheid_listTeam',
+        description: 'Lista membri del team (email, nome, ruolo). Usalo per ottenere le email valide da passare come assignees ai task.',
+        inputSchema: { type: 'object', properties: {} },
+        handler: Cepheid.listTeam,
+    },
+    {
+        name: 'cepheid_createProject',
+        description: 'Crea un nuovo progetto CEPHEID. Solo CORE admin. Stati di default (todo/wip/review/done) impostati automaticamente.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                name: { type: 'string', description: 'Nome del progetto' },
+                description: { type: 'string', description: 'Descrizione (opzionale)' },
+                color: { type: 'string', description: 'Colore esadecimale (default #2F6B4A)' },
+                dueDate: { type: 'string', description: 'Scadenza ISO YYYY-MM-DD (opzionale)' },
+                obiettivoId: { type: ['string', 'null'], description: 'ID obiettivo collegato (opzionale)' },
+            },
+            required: ['name'],
+        },
+        handler: Cepheid.createProject,
+    },
+    {
+        name: 'cepheid_createTask',
+        description: 'Crea un task (o milestone/deliverable singolo) in un progetto. Solo CORE admin. Gli assignees vanno indicati per email o nome (risolti via /team). I task nuovi entrano nell\'inbox di smistamento (triaged=false).',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                projectId: { type: 'string', description: 'ID progetto (da cepheid_listProjects)' },
+                title: { type: 'string', description: 'Titolo del task' },
+                status: { type: 'string', description: 'Stato (default todo). Stati tipici: todo/wip/review/done' },
+                priority: { type: 'string', enum: ['alta', 'media', 'bassa'], description: 'Priorità (default media)' },
+                startDate: { type: 'string', description: 'Inizio ISO YYYY-MM-DD (opzionale)' },
+                dueDate: { type: 'string', description: 'Scadenza ISO YYYY-MM-DD (opzionale)' },
+                assignees: { type: 'array', items: { type: 'string' }, description: 'Email o nomi (risolti via /team)' },
+                type: { type: 'string', enum: ['task', 'milestone', 'deliverable'], description: 'Tipo (default task)' },
+            },
+            required: ['projectId', 'title'],
+        },
+        handler: Cepheid.createTask,
+    },
+    {
+        name: 'cepheid_createPhase',
+        description: 'Crea una "fase" atomica in un progetto: milestone (nuova o esistente) + deliverable + N task collegati al deliverable. Solo CORE admin. Fornire esattamente uno tra milestoneExistingId e milestoneTitle.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                projectId: { type: 'string', description: 'ID progetto' },
+                milestoneExistingId: { type: 'string', description: 'ID di una milestone esistente (alternativa a milestoneTitle)' },
+                milestoneTitle: { type: 'string', description: 'Titolo nuova milestone (alternativa a milestoneExistingId)' },
+                milestoneDueDate: { type: 'string', description: 'Scadenza milestone ISO YYYY-MM-DD (solo se nuova)' },
+                deliverableTitle: { type: 'string', description: 'Titolo del deliverable' },
+                deliverableDueDate: { type: 'string', description: 'Scadenza deliverable ISO YYYY-MM-DD (opzionale)' },
+                deliverableAssignees: { type: 'array', items: { type: 'string' }, description: 'Email/nomi assegnatari del deliverable' },
+                taskTitles: { type: 'array', items: { type: 'string' }, description: 'Titoli dei task da creare e collegare al deliverable' },
+            },
+            required: ['projectId', 'deliverableTitle', 'taskTitles'],
+        },
+        handler: Cepheid.createPhase,
+    },
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -283,10 +378,12 @@ export async function handleMcpRequest(req: McpRequestLike): Promise<McpResponse
     }
 
     // ─── F6 OAuth sub-paths (no Bearer auth richiesto su questi) ──────────
-    // Cloud Function HTTP path arriva con prefix `/mcpNebula/...` o solo `...`
-    // a seconda dell'env. Normalizziamo.
+    // Cloud Function HTTP path arriva con prefix `/mcpSidera/...`,
+    // `/mcpNebula/...` (alias legacy) o solo `...` a seconda dell'env.
+    // Normalizziamo accettando entrambi i prefissi.
     const rawPath = req.path ?? '';
-    const path = rawPath.replace(/^\/mcpNebula\/?/, '/').replace(/^\/+/, '/');
+    const baseUrl = resolveBaseUrl(rawPath);
+    const path = rawPath.replace(/^\/(mcpSidera|mcpNebula)\/?/, '/').replace(/^\/+/, '/');
 
     if (req.method === 'GET' && (
         path === '/.well-known/oauth-authorization-server' ||
@@ -296,10 +393,10 @@ export async function handleMcpRequest(req: McpRequestLike): Promise<McpResponse
         // come OIDC Discovery anziché RFC 8414. Ritorniamo lo stesso JSON di
         // metadata OAuth 2.0 — claude.ai estrae solo authorization_endpoint /
         // token_endpoint / registration_endpoint, non valida campi OIDC.
-        return handleAsMetadata();
+        return handleAsMetadata(baseUrl);
     }
     if (req.method === 'GET' && path === '/.well-known/oauth-protected-resource') {
-        return handleResourceMetadata();
+        return handleResourceMetadata(baseUrl);
     }
     if (req.method === 'POST' && (path === '/register' || path === '/oauth/register')) {
         return handleRegister(req.body);
@@ -329,7 +426,7 @@ export async function handleMcpRequest(req: McpRequestLike): Promise<McpResponse
             headers: {
                 'Access-Control-Allow-Origin': '*',
                 'Access-Control-Expose-Headers': 'WWW-Authenticate',
-                'WWW-Authenticate': WWW_AUTH_HEADER,
+                'WWW-Authenticate': wwwAuthHeader(baseUrl),
                 'Allow': 'POST, OPTIONS',
                 'Content-Type': 'application/json',
             },
@@ -370,7 +467,7 @@ export async function handleMcpRequest(req: McpRequestLike): Promise<McpResponse
                 headers: {
                     'Access-Control-Allow-Origin': '*',
                     'Access-Control-Expose-Headers': 'WWW-Authenticate',
-                    'WWW-Authenticate': WWW_AUTH_HEADER,
+                    'WWW-Authenticate': wwwAuthHeader(baseUrl),
                 },
             };
         }

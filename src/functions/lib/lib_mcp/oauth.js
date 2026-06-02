@@ -108,12 +108,15 @@ function parseFormBody(raw) {
 // ─────────────────────────────────────────────────────────────────────────────
 // DISCOVERY
 // ─────────────────────────────────────────────────────────────────────────────
-function handleAsMetadata() {
+// baseUrl è derivato dal prefisso effettivo della request (/mcpSidera o
+// /mcpNebula): così ogni client riceve issuer/endpoint coerenti col proprio
+// URL e l'OAuth non si rompe per i client legacy ancora connessi a mcpNebula.
+function handleAsMetadata(baseUrl = MCP_BASE_URL) {
     return jsonResponse(200, {
-        issuer: MCP_BASE_URL,
-        authorization_endpoint: `${MCP_BASE_URL}/authorize`,
-        token_endpoint: `${MCP_BASE_URL}/token`,
-        registration_endpoint: `${MCP_BASE_URL}/register`,
+        issuer: baseUrl,
+        authorization_endpoint: `${baseUrl}/authorize`,
+        token_endpoint: `${baseUrl}/token`,
+        registration_endpoint: `${baseUrl}/register`,
         response_types_supported: ['code'],
         grant_types_supported: ['authorization_code'],
         token_endpoint_auth_methods_supported: ['none'], // public client (PKCE)
@@ -121,10 +124,10 @@ function handleAsMetadata() {
         scopes_supported: ['mcp'],
     });
 }
-function handleResourceMetadata() {
+function handleResourceMetadata(baseUrl = MCP_BASE_URL) {
     return jsonResponse(200, {
-        resource: MCP_BASE_URL,
-        authorization_servers: [MCP_BASE_URL],
+        resource: baseUrl,
+        authorization_servers: [baseUrl],
         bearer_methods_supported: ['header'],
         scopes_supported: ['mcp'],
     });

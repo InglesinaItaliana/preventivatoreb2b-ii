@@ -3049,13 +3049,19 @@ exports.listNebulaApiKeys = functions
 // replaceSection, linkTask, linkProject. Implementazioni in lib_mcp/tools.ts.
 // JSON-RPC dispatcher + auth in lib_mcp/server.ts.
 //
-// URL: https://europe-west1-preventivatoreb2b-ii.cloudfunctions.net/mcpNebula
+// URL: https://europe-west1-preventivatoreb2b-ii.cloudfunctions.net/mcpSidera
+//      (alias legacy: .../mcpNebula)
 // ============================================================================
 
 import { handleMcpRequest } from './lib_mcp/server';
 import { issueAuthCodeForConsent, cleanupOAuthStale } from './lib_mcp/oauth';
 
-exports.mcpNebula = functions
+// Handler HTTP condiviso. Esposto come due function:
+//   mcpSidera — endpoint canonico (serve l'intera suite: NEBULA-docs + CEPHEID)
+//   mcpNebula — alias di compatibilità per i client già connessi all'URL legacy.
+// Il base URL OAuth è derivato dal prefisso effettivo della request (vedi
+// lib_mcp/server.ts: baseUrlFromPath), quindi entrambi gli URL funzionano.
+const mcpHttpHandler = functions
     .region('europe-west1')
     .runWith({ memory: '256MB', timeoutSeconds: 60 })
     .https.onRequest(async (req, res) => {
@@ -3074,6 +3080,9 @@ exports.mcpNebula = functions
         }
         res.status(result.status).send(result.body);
     });
+
+exports.mcpSidera = mcpHttpHandler;   // canonico
+exports.mcpNebula = mcpHttpHandler;   // alias legacy (non rimuovere finché i client non sono migrati)
 
 // ============================================================================
 // NEBULA-DOCS — consentOAuthRequest callable (F6)
