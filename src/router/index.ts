@@ -3,6 +3,7 @@ import { auth, db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { getTeamDoc } from '../composables/sidera/useTeamMembers';
 import { ENABLE_NEBULA_DOCS, detectScope, getScopeConfig } from '../views/sidera/scopeConfig';
+import { roleFallbackPath, isPathAllowedForRole, isForbiddenClientPath, type Role } from './permissions';
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -296,26 +297,18 @@ router.beforeEach(async (to, from, next) => {
       const teamSnap = await getTeamDoc(currentUser.uid);
 
       if (teamSnap?.exists()) {
-        const role = teamSnap.data().role; // 'ADMIN', 'PRODUZIONE', 'LOGISTICA'
-        
-        // Reindirizzamenti forzati per ruoli operativi.
-        // /nebula incluso post F3-C2.7: tutto il team accede a Documentale + Team.
-        if (role === 'PRODUZIONE') {
-          const allowedPaths = ['/production', '/delivery', '/pulsar', '/cepheid', '/nebula'];
-          if (!allowedPaths.some(p => to.path === p || to.path.startsWith(p + '/'))) {
-             next('/production');
-             return;
-          }
-       }
-        if (role === 'LOGISTICA') {
-          const allowedPaths = ['/delivery', '/nebula'];
-          if (!allowedPaths.some(p => to.path === p || to.path.startsWith(p + '/'))) {
-            next('/delivery');
-            return;
-          }
+        const role = (teamSnap.data().role ?? '') as Role;
+
+        // Reindirizzamenti forzati per ruoli operativi (PRODUZIONE/LOGISTICA),
+        // centralizzati in router/permissions.ts (POLARIS Az.6). Logica identica
+        // al guard storico: solo i ruoli con fallback sono ristretti.
+        const fallback = roleFallbackPath[role];
+        if (fallback && !isPathAllowedForRole(role, to.path)) {
+          next(fallback);
+          return;
         }
-        
-        // Se è un ADMIN del team o altro ruolo, passa
+
+        // ADMIN/COMMERCIALE/altri: passa
         next();
         return;
       }
@@ -331,9 +324,8 @@ router.beforeEach(async (to, from, next) => {
     return;
   }
 
-  // 2. Blocca le pagine amministrative
-  const forbiddenPaths = ['/admin', '/production', '/delivery', '/stack', '/calcoli'];
-  if (forbiddenPaths.some(p => to.path.startsWith(p))) {
+  // 2. Blocca le pagine amministrative (lista centralizzata in permissions.ts)
+  if (isForbiddenClientPath(to.path)) {
     next('/dashboard');
     return;
   }
