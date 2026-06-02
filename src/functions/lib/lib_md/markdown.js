@@ -16,12 +16,12 @@ exports.extractText = extractText;
  * Nodi PM supportati:
  *  Block: doc, paragraph, heading (1-3), bulletList, orderedList, listItem,
  *         taskList, taskItem (GFM `- [ ]` / `- [x]`),
- *         blockquote, codeBlock, horizontalRule, taskEmbed
+ *         blockquote, codeBlock, horizontalRule, taskEmbed,
+ *         table/tableRow/tableHeader/tableCell (GFM `| a | b |`)
  *  Inline: text, hardBreak, taskMention, projectMention
- *  Marks: bold, italic, code, strike
+ *  Marks: bold, italic, code, strike, link (`[testo](href)`)
  *
- * NON supportati v1: tables, images, links inline (link via marks: ignorati).
- * Future Fase 5+: userMention.
+ * NON supportati: images. Future Fase 5+: userMention.
  *
  * Vedi docs/NEBULA-DOCS.md §6.4 (format exchange).
  */
@@ -130,7 +130,7 @@ function expandPlaceholdersInText(text, marks, placeholders) {
     return result;
 }
 function tokensToInline(tokens, placeholders, parentMarks = []) {
-    var _a, _b, _c;
+    var _a, _b, _c, _d;
     if (!tokens)
         return [];
     const out = [];
@@ -160,8 +160,14 @@ function tokensToInline(tokens, placeholders, parentMarks = []) {
             out.push({ type: 'hardBreak' });
         }
         else if (tt === 'link') {
-            // v1: ignora href, emette solo testo (link marks NON nel nostro schema)
-            out.push(...tokensToInline(t.tokens, placeholders, parentMarks));
+            // Link inline → mark `link` (schema: Link extension, attr href).
+            // Solo href esplicito: target/rel ereditano i default dello schema
+            // in nodeFromJSON, evitando drift coi default dell'editor.
+            const href = (_d = t.href) !== null && _d !== void 0 ? _d : '';
+            const marks = href
+                ? [...(parentMarks !== null && parentMarks !== void 0 ? parentMarks : []), { type: 'link', attrs: { href } }]
+                : parentMarks;
+            out.push(...tokensToInline(t.tokens, placeholders, marks));
         }
         else if ('tokens' in t && Array.isArray(t.tokens)) {
             out.push(...tokensToInline(t.tokens, placeholders, parentMarks));
@@ -173,7 +179,7 @@ function tokensToInline(tokens, placeholders, parentMarks = []) {
     return out;
 }
 function tokenToBlock(t, placeholders) {
-    var _a, _b, _c, _d, _e, _f, _g, _h;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k;
     const tt = t.type;
     if (tt === 'space')
         return null;
@@ -256,8 +262,30 @@ function tokenToBlock(t, placeholders) {
         const txt = (_g = t.text) !== null && _g !== void 0 ? _g : '';
         return { type: 'paragraph', content: expandPlaceholdersInText(txt, [], placeholders) };
     }
-    // Tabelle, html, ecc. → wrap in paragrafo con raw text
-    const raw = (_h = t.raw) !== null && _h !== void 0 ? _h : '';
+    if (tt === 'table') {
+        const tbl = t;
+        const buildCell = (c, header) => {
+            const inline = tokensToInline(c.tokens, placeholders);
+            return {
+                type: header ? 'tableHeader' : 'tableCell',
+                content: [{ type: 'paragraph', content: inline }],
+            };
+        };
+        const rows = [];
+        rows.push({
+            type: 'tableRow',
+            content: ((_h = tbl.header) !== null && _h !== void 0 ? _h : []).map(c => buildCell(c, true)),
+        });
+        for (const r of (_j = tbl.rows) !== null && _j !== void 0 ? _j : []) {
+            rows.push({
+                type: 'tableRow',
+                content: (r !== null && r !== void 0 ? r : []).map(c => buildCell(c, false)),
+            });
+        }
+        return rows.length ? { type: 'table', content: rows } : null;
+    }
+    // html e altri token non gestiti → wrap in paragrafo con raw text
+    const raw = (_k = t.raw) !== null && _k !== void 0 ? _k : '';
     if (raw)
         return { type: 'paragraph', content: [{ type: 'text', text: raw.trim() }] };
     return null;
@@ -284,7 +312,7 @@ function escapeMd(s) {
     return s.replace(/([*_`\\])/g, '\\$1');
 }
 function inlineToMd(nodes) {
-    var _a, _b, _c, _d, _e, _f;
+    var _a, _b, _c, _d, _e, _f, _g;
     if (!nodes)
         return '';
     let out = '';
@@ -304,16 +332,20 @@ function inlineToMd(nodes) {
                 if (hasMark('strike'))
                     s = '~~' + s + '~~';
             }
+            const linkMark = marks.find(m => m.type === 'link');
+            const href = (_c = linkMark === null || linkMark === void 0 ? void 0 : linkMark.attrs) === null || _c === void 0 ? void 0 : _c.href;
+            if (href)
+                s = `[${s}](${href})`;
             out += s;
         }
         else if (n.type === 'hardBreak') {
             out += '  \n';
         }
         else if (n.type === 'taskMention') {
-            out += `@task:${(_d = (_c = n.attrs) === null || _c === void 0 ? void 0 : _c.taskId) !== null && _d !== void 0 ? _d : ''}`;
+            out += `@task:${(_e = (_d = n.attrs) === null || _d === void 0 ? void 0 : _d.taskId) !== null && _e !== void 0 ? _e : ''}`;
         }
         else if (n.type === 'projectMention') {
-            out += `@project:${(_f = (_e = n.attrs) === null || _e === void 0 ? void 0 : _e.projectId) !== null && _f !== void 0 ? _f : ''}`;
+            out += `@project:${(_g = (_f = n.attrs) === null || _f === void 0 ? void 0 : _f.projectId) !== null && _g !== void 0 ? _g : ''}`;
         }
         else if (n.content) {
             out += inlineToMd(n.content);
@@ -374,6 +406,39 @@ function taskItemToMd(node, depth) {
     const rest = restBlocks.map(b => blockToMd(b, depth + 1)).join('\n');
     return rest ? `${line}\n${rest}` : line;
 }
+function tableCellToMd(cell) {
+    var _a;
+    // Una cella contiene blocchi (di norma un paragrafo): estraiamo il markdown
+    // inline collassando i newline (una riga tabella non può andare a capo) ed
+    // escapando i pipe interni.
+    return ((_a = cell.content) !== null && _a !== void 0 ? _a : [])
+        .map(b => blockToMd(b, 0))
+        .join(' ')
+        .replace(/\n+/g, ' ')
+        .replace(/\|/g, '\\|')
+        .trim();
+}
+function tableToMd(node) {
+    var _a;
+    const rows = (_a = node.content) !== null && _a !== void 0 ? _a : [];
+    if (!rows.length)
+        return '';
+    const cols = (row) => { var _a; return ((_a = row.content) !== null && _a !== void 0 ? _a : []).map(tableCellToMd); };
+    const header = cols(rows[0]);
+    const ncol = header.length;
+    if (!ncol)
+        return '';
+    const lines = [];
+    lines.push('| ' + header.join(' | ') + ' |');
+    lines.push('| ' + Array(ncol).fill('---').join(' | ') + ' |');
+    for (const row of rows.slice(1)) {
+        const c = cols(row);
+        while (c.length < ncol)
+            c.push('');
+        lines.push('| ' + c.join(' | ') + ' |');
+    }
+    return lines.join('\n');
+}
 function blockToMd(node, depth = 0) {
     var _a, _b, _c, _d, _e, _f, _g, _h, _j;
     switch (node.type) {
@@ -409,6 +474,8 @@ function blockToMd(node, depth = 0) {
             return '---';
         case 'taskEmbed':
             return embedToMd(node);
+        case 'table':
+            return tableToMd(node);
         default:
             // Fallback: tratta come paragrafo
             if (node.content)
