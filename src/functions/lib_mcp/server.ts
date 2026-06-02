@@ -99,7 +99,7 @@ const TOOLS = [
             properties: {
                 title: { type: 'string', description: 'Titolo del documento' },
                 parentId: { type: ['string', 'null'], description: 'Parent doc id opzionale' },
-                content: { type: 'string', description: 'Contenuto markdown iniziale. Supporta: heading (#/##/###), **bold**, *italic*, `code`, ~~strike~~, bullet/ordered list, blockquote (>), code block fenced, hr (---), **checkbox** (`- [ ]` / `- [x]`), @task:id, @project:id, {{embed-tasks ...}}' },
+                content: { type: 'string', description: 'Contenuto markdown iniziale. Supporta: heading (#/##/###), **bold**, *italic*, `code`, ~~strike~~, [testo](href), bullet/ordered list, blockquote (>), code block fenced, hr (---), tabelle GFM (`| a | b |`), **checkbox** (`- [ ]` / `- [x]`), @task:id, @project:id, {{embed-tasks ...}}' },
                 icon: {
                     type: 'object',
                     description: 'Icona Material Symbols (es. { set: "material", name: "rocket_launch" })',
@@ -117,7 +117,7 @@ const TOOLS = [
     },
     {
         name: 'nebula_appendBlock',
-        description: 'Aggiunge blocchi markdown in fondo a un documento esistente. Supporta: heading, bold, italic, code, strike, liste, blockquote, code block, hr, **checkbox** (`- [ ]` / `- [x]`), @task:id, @project:id, {{embed-tasks ...}}.',
+        description: 'Aggiunge blocchi markdown in fondo a un documento esistente. Supporta: heading, bold, italic, code, strike, [testo](href), liste, blockquote, code block, hr, tabelle GFM (`| a | b |`), **checkbox** (`- [ ]` / `- [x]`), @task:id, @project:id, {{embed-tasks ...}}.',
         inputSchema: {
             type: 'object',
             properties: {
@@ -136,7 +136,7 @@ const TOOLS = [
             properties: {
                 docId: { type: 'string', description: 'ID del documento' },
                 sectionAnchor: { type: 'string', description: 'Testo del heading da matchare (case-insensitive, partial OK)' },
-                markdown: { type: 'string', description: 'Nuovo contenuto markdown della sezione (deve includere heading se vuoi mantenerlo). Supporta checkbox `- [ ]` / `- [x]`, @task:id, @project:id, {{embed-tasks ...}}.' },
+                markdown: { type: 'string', description: 'Nuovo contenuto markdown della sezione (deve includere heading se vuoi mantenerlo). Supporta [testo](href), tabelle GFM (`| a | b |`), checkbox `- [ ]` / `- [x]`, @task:id, @project:id, {{embed-tasks ...}}.' },
             },
             required: ['docId', 'sectionAnchor', 'markdown'],
         },

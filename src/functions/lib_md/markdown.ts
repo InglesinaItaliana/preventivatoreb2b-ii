@@ -11,12 +11,12 @@
  * Nodi PM supportati:
  *  Block: doc, paragraph, heading (1-3), bulletList, orderedList, listItem,
  *         taskList, taskItem (GFM `- [ ]` / `- [x]`),
- *         blockquote, codeBlock, horizontalRule, taskEmbed
+ *         blockquote, codeBlock, horizontalRule, taskEmbed,
+ *         table/tableRow/tableHeader/tableCell (GFM `| a | b |`)
  *  Inline: text, hardBreak, taskMention, projectMention
- *  Marks: bold, italic, code, strike
+ *  Marks: bold, italic, code, strike, link (`[testo](href)`)
  *
- * NON supportati v1: tables, images, links inline (link via marks: ignorati).
- * Future Fase 5+: userMention.
+ * NON supportati: images. Future Fase 5+: userMention.
  *
  * Vedi docs/NEBULA-DOCS.md §6.4 (format exchange).
  */
@@ -175,8 +175,14 @@ function tokensToInline(
         } else if (tt === 'br') {
             out.push({ type: 'hardBreak' });
         } else if (tt === 'link') {
-            // v1: ignora href, emette solo testo (link marks NON nel nostro schema)
-            out.push(...tokensToInline((t as any).tokens, placeholders, parentMarks));
+            // Link inline → mark `link` (schema: Link extension, attr href).
+            // Solo href esplicito: target/rel ereditano i default dello schema
+            // in nodeFromJSON, evitando drift coi default dell'editor.
+            const href = (t as any).href ?? '';
+            const marks = href
+                ? [...(parentMarks ?? []), { type: 'link', attrs: { href } }]
+                : parentMarks;
+            out.push(...tokensToInline((t as any).tokens, placeholders, marks));
         } else if ('tokens' in t && Array.isArray((t as any).tokens)) {
             out.push(...tokensToInline((t as any).tokens, placeholders, parentMarks));
         } else if ((t as any).text) {
@@ -269,7 +275,29 @@ function tokenToBlock(
         const txt = (t as any).text ?? '';
         return { type: 'paragraph', content: expandPlaceholdersInText(txt, [], placeholders) };
     }
-    // Tabelle, html, ecc. → wrap in paragrafo con raw text
+    if (tt === 'table') {
+        const tbl = t as Tokens.Table;
+        const buildCell = (c: Tokens.TableCell, header: boolean): PMNode => {
+            const inline = tokensToInline((c as any).tokens, placeholders);
+            return {
+                type: header ? 'tableHeader' : 'tableCell',
+                content: [{ type: 'paragraph', content: inline }],
+            };
+        };
+        const rows: PMNode[] = [];
+        rows.push({
+            type: 'tableRow',
+            content: (tbl.header ?? []).map(c => buildCell(c, true)),
+        });
+        for (const r of tbl.rows ?? []) {
+            rows.push({
+                type: 'tableRow',
+                content: (r ?? []).map(c => buildCell(c, false)),
+            });
+        }
+        return rows.length ? { type: 'table', content: rows } : null;
+    }
+    // html e altri token non gestiti → wrap in paragrafo con raw text
     const raw = (t as any).raw ?? '';
     if (raw) return { type: 'paragraph', content: [{ type: 'text', text: raw.trim() }] };
     return null;
@@ -313,6 +341,9 @@ function inlineToMd(nodes: PMNode[] | undefined): string {
                 if (hasMark('italic')) s = '*' + s + '*';
                 if (hasMark('strike')) s = '~~' + s + '~~';
             }
+            const linkMark = marks.find(m => m.type === 'link');
+            const href = linkMark?.attrs?.href;
+            if (href) s = `[${s}](${href})`;
             out += s;
         } else if (n.type === 'hardBreak') {
             out += '  \n';
@@ -375,6 +406,36 @@ function taskItemToMd(node: PMNode, depth: number): string {
     return rest ? `${line}\n${rest}` : line;
 }
 
+function tableCellToMd(cell: PMNode): string {
+    // Una cella contiene blocchi (di norma un paragrafo): estraiamo il markdown
+    // inline collassando i newline (una riga tabella non può andare a capo) ed
+    // escapando i pipe interni.
+    return (cell.content ?? [])
+        .map(b => blockToMd(b, 0))
+        .join(' ')
+        .replace(/\n+/g, ' ')
+        .replace(/\|/g, '\\|')
+        .trim();
+}
+
+function tableToMd(node: PMNode): string {
+    const rows = node.content ?? [];
+    if (!rows.length) return '';
+    const cols = (row: PMNode) => (row.content ?? []).map(tableCellToMd);
+    const header = cols(rows[0]);
+    const ncol = header.length;
+    if (!ncol) return '';
+    const lines: string[] = [];
+    lines.push('| ' + header.join(' | ') + ' |');
+    lines.push('| ' + Array(ncol).fill('---').join(' | ') + ' |');
+    for (const row of rows.slice(1)) {
+        const c = cols(row);
+        while (c.length < ncol) c.push('');
+        lines.push('| ' + c.join(' | ') + ' |');
+    }
+    return lines.join('\n');
+}
+
 function blockToMd(node: PMNode, depth = 0): string {
     switch (node.type) {
         case 'paragraph':
@@ -409,6 +470,8 @@ function blockToMd(node: PMNode, depth = 0): string {
             return '---';
         case 'taskEmbed':
             return embedToMd(node);
+        case 'table':
+            return tableToMd(node);
         default:
             // Fallback: tratta come paragrafo
             if (node.content) return inlineToMd(node.content);

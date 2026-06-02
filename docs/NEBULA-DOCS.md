@@ -355,13 +355,18 @@ Esponiamo un **MCP server HTTP** che Claude Desktop / claude.ai aggiunge come co
 ### 6.4 Formato di scambio
 
 Claude lavora in **markdown esteso**:
-- markdown standard (heading, lista, code, ecc.)
+- markdown standard: heading (#/##/###), **bold**, *italic*, `code`, ~~strike~~, liste, blockquote, code block fenced, hr (`---`)
+- `[testo](href)` → mark `link` (e viceversa in read)
+- tabelle GFM (`| a | b |` + riga separatore) → nodi `table/tableRow/tableHeader/tableCell`
+- checkbox GFM (`- [ ]` / `- [x]`) → `taskList`/`taskItem`
 - `@task:abc123` → convertito in nodo `task-mention` (e viceversa in read)
 - `@project:p_def456` → `project-mention`
 - `@user:marco@inglesina.it` → `user-mention`
 - `{{embed-tasks: projectId=p_def456, status=todo,doing}}` → `task-embed`
 
-Server fa conversione markdown ⇄ ProseMirror JSON via `marked` + transformer custom. Test unitari obbligatori per round-trip (markdown → JSON → markdown deve essere idempotente).
+Non supportato: immagini.
+
+Server fa conversione markdown ⇄ ProseMirror JSON via `marked` + transformer custom (`src/functions/lib_md/markdown.ts`). I nodi/mark prodotti devono combaciare 1:1 con `nebulaSchema` (`lib_yjs/pmSchema.ts`), altrimenti `applyJSONToYDoc` lancia in scrittura: il test `lib_md/__tests__/markdown.test.ts` valida sia il round-trip sia l'accettazione da parte di `nebulaSchema.nodeFromJSON`.
 
 ### 6.5 Sicurezza
 
@@ -603,6 +608,7 @@ match /nebulaDocs/{docId} {
 - [x] Doc utente per la connessione
 - **Deploy:** ✅ mergiata in `main`. Endpoint: `europe-west1-preventivatoreb2b-ii.cloudfunctions.net/mcpNebula`
 - **Nota:** chiavi/integrazioni Claude/MCP successivamente spostate da NEBULA a **CORE → Integrazioni** (refactor `847a147`).
+- **Fix 2026-06-02 (`fix/nebula-md-links-tables`):** il converter `lib_md/markdown.ts` ora supporta **link** (`[testo](href)` ⇄ mark `link`) e **tabelle GFM** (⇄ `table/tableRow/tableHeader/tableCell`), prima scartati ("v1: non supportati"): Claude inseriva il testo del link senza href e la tabella come blob grezzo. Lo schema Yjs/editor li supportava già; il collo di bottiglia era solo il converter. Test `lib_md/__tests__/markdown.test.ts` (round-trip + accettazione da `nebulaSchema.nodeFromJSON`).
 
 ### Fase 5 — Polish ✅ COMPLETATA (in prod, rolling)
 - [x] `user-mention` + `notifyOnMention`
