@@ -63,5 +63,18 @@ export function useFunzioni() {
     await batch.commit()
   }
 
-  return { funzioni, effective, isSeeded, loading, addFunzione, updateFunzione, deleteFunzione, seedDefaults }
+  /** Cancella TUTTE le funzioni e riscrive i predefiniti puliti (rimuove anche
+   *  eventuali campi residui, es. `role` da doc seedati prima del collasso). */
+  async function resetToDefaults() {
+    const batch = writeBatch(db)
+    funzioni.value.forEach(f => batch.delete(doc(db, 'funzioni', f.id)))
+    DEFAULT_FUNZIONI.forEach((f, i) => {
+      batch.set(doc(collection(db, 'funzioni')), {
+        label: f.position, category: f.category, order: i, createdAt: serverTimestamp(),
+      })
+    })
+    await batch.commit()
+  }
+
+  return { funzioni, effective, isSeeded, loading, addFunzione, updateFunzione, deleteFunzione, seedDefaults, resetToDefaults }
 }

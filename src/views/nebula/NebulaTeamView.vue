@@ -1,8 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { PencilSquareIcon } from '@heroicons/vue/24/outline'
-import { useNebulaTeam, POSITION_OPTIONS, CATEGORY_OPTIONS, type NebulaMember } from '../../composables/nebula/useNebulaTeam'
-import { useCan } from '../../composables/sidera/useCan'
+import { useNebulaTeam, CATEGORY_OPTIONS, type NebulaMember } from '../../composables/nebula/useNebulaTeam'
 import StarAvatar from '../../components/shared/StarAvatar.vue'
 import MdPageHeader from '../../components/shared/MdPageHeader.vue'
 import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
@@ -18,14 +16,9 @@ const viewTabs: { id: 'org' | 'list'; label: string; icon: string }[] = [
   { id: 'list', label: 'Lista',        icon: 'list' },
 ]
 
-const { members, loading, updatePosition, updateCategory } = useNebulaTeam()
-const { can } = useCan()
+const { members, loading } = useNebulaTeam()
 
-const view          = ref<'org' | 'list'>('org')
-const editingMember = ref<NebulaMember | null>(null)
-const saving        = ref(false)
-
-const isAdmin = computed(() => can('canManageTeamMeta'))
+const view = ref<'org' | 'list'>('org')
 
 const active = computed(() => members.value.filter(m => m.active !== false))
 const all    = computed(() => members.value)
@@ -69,27 +62,6 @@ function memberStar(m: NebulaMember) {
     category: m.category || 'amministrazione',
     hueIndex: m.hueIndex,
   }
-}
-
-function openEdit(m: NebulaMember) {
-  if (!isAdmin.value) return
-  editingMember.value = { ...m }
-}
-
-async function confirmPosition(pos: string) {
-  if (!editingMember.value) return
-  saving.value = true
-  await updatePosition(editingMember.value.email, pos)
-  saving.value = false
-  editingMember.value = null
-}
-
-async function confirmCategory(cat: string) {
-  if (!editingMember.value) return
-  saving.value = true
-  await updateCategory(editingMember.value.email, cat)
-  editingMember.value.category = cat   // riflette la selezione nel popover
-  saving.value = false
 }
 
 // Role accents mappati su tonal palettes M3 dei moduli con dominio semantico
@@ -175,43 +147,6 @@ const roleAccent: Record<string, string> = {
     </div>
 
     <!-- ── Position editor overlay ── -->
-    <Teleport to="body">
-      <div v-if="editingMember" class="nb-overlay" @click.self="editingMember = null">
-        <div class="nb-popover">
-          <p class="nb-popover-title">Avatar di <strong>{{ editingMember.firstName }}</strong></p>
-          <div class="nb-cat-preview">
-            <StarAvatar v-bind="memberStar(editingMember)" :size="56" />
-            <span class="nb-cat-hint">La forma della stella dipende dalla categoria; il colore è stabile per persona.</span>
-          </div>
-          <div class="nb-pos-grid">
-            <button
-              v-for="c in CATEGORY_OPTIONS"
-              :key="c.key"
-              class="nb-pos-opt"
-              :class="{ selected: editingMember.category === c.key }"
-              :disabled="saving"
-              @click="confirmCategory(c.key)"
-            >{{ c.label }}</button>
-          </div>
-
-          <p class="nb-popover-title" style="margin-top: 20px;">Ruolo aziendale</p>
-          <div class="nb-pos-grid">
-            <button
-              v-for="p in POSITION_OPTIONS"
-              :key="p"
-              class="nb-pos-opt"
-              :class="{ selected: editingMember.position === p }"
-              :disabled="saving"
-              @click="confirmPosition(p)"
-            >{{ p }}</button>
-          </div>
-          <button class="nb-pos-clear" :disabled="saving" @click="confirmPosition('')">
-            Rimuovi ruolo
-          </button>
-        </div>
-      </div>
-    </Teleport>
-
   </div>
 </template>
 

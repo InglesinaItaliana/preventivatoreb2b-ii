@@ -16,7 +16,7 @@ import { roleForCategory } from '../../router/permissions'
 const router = useRouter()
 const { isCoreAdmin, initialized } = useCoreAdmins()
 const { currentUser } = useCurrentUser()
-const { funzioni, isSeeded, loading, addFunzione, updateFunzione, deleteFunzione, seedDefaults } = useFunzioni()
+const { funzioni, isSeeded, loading, addFunzione, updateFunzione, deleteFunzione, seedDefaults, resetToDefaults } = useFunzioni()
 
 const canAccessCore = computed(() =>
   isCoreAdmin(currentUser.value?.email) ||
@@ -73,6 +73,15 @@ async function onSeed() {
   catch (e: any) { console.error('[CoreFunzioni] seed', e); errorMsg.value = e?.message || 'Errore caricamento predefiniti.' }
   finally { seeding.value = false }
 }
+
+const resetting = ref(false)
+async function onReset() {
+  if (!confirm('Ripristinare le funzioni predefinite?\n\nCancella le funzioni attuali (e i campi residui) e ricarica i predefiniti puliti.')) return
+  resetting.value = true; errorMsg.value = ''
+  try { await resetToDefaults() }
+  catch (e: any) { console.error('[CoreFunzioni] reset', e); errorMsg.value = e?.message || 'Errore ripristino.' }
+  finally { resetting.value = false }
+}
 </script>
 
 <template>
@@ -93,9 +102,14 @@ async function onSeed() {
           <h3 class="m-task-title">Etichette funzione</h3>
           <p class="m-task-desc">Ogni funzione ha una <strong>categoria</strong> (forma avatar); il <strong>ruolo-permessi</strong> è derivato automaticamente dalla categoria.</p>
         </div>
-        <button class="m-btn" type="button" @click="showAdd = !showAdd">
-          <MIcon name="add" :size="16" /> Nuova funzione
-        </button>
+        <div class="m-head-actions">
+          <button v-if="isSeeded" class="m-btn m-btn--ghost" type="button" :disabled="resetting" @click="onReset">
+            <MIcon name="restart_alt" :size="16" /> {{ resetting ? '…' : 'Ripristina predefiniti' }}
+          </button>
+          <button class="m-btn" type="button" @click="showAdd = !showAdd">
+            <MIcon name="add" :size="16" /> Nuova funzione
+          </button>
+        </div>
       </div>
 
       <form v-if="showAdd" class="m-add-f" @submit.prevent="onAdd">
@@ -172,6 +186,12 @@ async function onSeed() {
   cursor: pointer; transition: background 0.15s; font-family: inherit;
 }
 .m-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.m-head-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.m-btn--ghost {
+  background: transparent; color: var(--md-sys-color-on-surface-variant, #6A6560);
+  border: 1px solid var(--md-sys-color-outline-variant, #CEC6B4);
+}
+.m-btn--ghost:hover:not(:disabled) { background: var(--md-sys-color-surface-container, #F5EDDF); }
 
 .m-input {
   min-width: 0; background: var(--md-sys-color-surface-container-lowest, #FFFFFF);
