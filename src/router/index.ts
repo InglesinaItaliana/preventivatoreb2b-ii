@@ -2,7 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router';
 import { auth, db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { getTeamDoc } from '../composables/sidera/useTeamMembers';
-import { ENABLE_NEBULA_DOCS } from '../views/sidera/scopeConfig';
+import { ENABLE_NEBULA_DOCS, detectScope, getScopeConfig } from '../views/sidera/scopeConfig';
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -262,19 +262,12 @@ router.beforeEach(async (to, from, next) => {
     return;
   }
 
-  // 2. Se richiede auth ma non c'è utente -> Login (scoped per PWA)
+  // 2. Se richiede auth ma non c'è utente -> Login (scoped per PWA).
+  // Scope unificato via detectScope (riusa scopeConfig, POLARIS Az.6):
+  // pulsar/cepheid/nebula/quasar -> loro login; SIDERA/POPS -> '/'.
   if (!currentUser) {
-    const isPulsarScope = to.matched.some(r => r.meta.pulsarScope);
-    const isCepheidScope = to.matched.some(r => r.meta.cepheidScope);
-    const isNebulaScope = to.matched.some(r => r.meta.nebulaScope);
-    const isQuasarScope = to.matched.some(r => r.meta.quasarScope);
-    next(
-      isCepheidScope ? '/cepheid/login' :
-      isPulsarScope  ? '/pulsar/login'  :
-      isNebulaScope  ? '/nebula/login'  :
-      isQuasarScope  ? '/quasar/login'  :
-      '/'
-    );
+    const scope = detectScope(to.path);
+    next(getScopeConfig(scope)?.loginPath ?? '/');
     return;
   }
 
