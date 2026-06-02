@@ -8,12 +8,14 @@
 import { ref, reactive, computed, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { httpsCallable } from 'firebase/functions'
+import { sendPasswordResetEmail } from 'firebase/auth'
 import { doc, updateDoc, collection, onSnapshot } from 'firebase/firestore'
 import { db, auth, functions } from '../../firebase'
 import MIcon from '../../components/shared/MIcon.vue'
 import StarAvatar from '../../components/shared/StarAvatar.vue'
 import { useCoreAdmins } from '../../composables/sidera/useCoreAdmins'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
+import { useFunzioni } from '../../composables/sidera/useFunzioni'
 import { displayName, starAvatarProps, isHiddenTeamEmail, dedupeTeamDocs, type TeamMember } from '../../composables/sidera/useTeamMembers'
 
 const router = useRouter()
@@ -21,7 +23,7 @@ const { isCoreAdmin, addAdmin, removeAdmin, initialized, SUPER_ADMIN } = useCore
 const { currentUser } = useCurrentUser()
 
 interface Member {
-  email: string; firstName: string; lastName: string; role: string
+  email: string; firstName: string; lastName: string; role: string; position?: string
   active: boolean; uid?: string; category?: string; hueIndex?: number; docId: string
 }
 
@@ -34,6 +36,7 @@ const unsub = onSnapshot(collection(db, 'team'), (snap) => {
     firstName: e.data.firstName ?? '',
     lastName:  e.data.lastName  ?? '',
     role:      e.data.role      ?? '',
+    position:  e.data.position  ?? undefined,
     active:    e.data.active !== false,
     uid:       e.uid,
     category:  e.data.category  ?? undefined,
@@ -46,7 +49,22 @@ onUnmounted(unsub)
 
 // Agenti = persone reali. Account di sistema = HIDDEN_TEAM_EMAILS (info@, lavorazioni@):
 // mostrati a parte, fuori dal concetto di "agente", sola lettura.
-const agents = computed(() => allMembers.value.filter(m => !isHiddenTeamEmail(m.email)))
+// Ordine dei gruppi-funzione (le 6 categorie avatar) per l'elenco agenti.
+const CATEGORY_ORDER = ['direzione', 'amministrazione', 'produzione', 'tecnico', 'logistica', 'commerciale']
+function catRank(c?: string): number {
+  const i = CATEGORY_ORDER.indexOf(c ?? '')
+  return i === -1 ? CATEGORY_ORDER.length : i
+}
+// Agenti ordinati per gruppo-funzione (categoria) poi alfabetico per nome.
+const agents = computed(() =>
+  allMembers.value
+    .filter(m => !isHiddenTeamEmail(m.email))
+    .slice()
+    .sort((a, b) =>
+      catRank(a.category) - catRank(b.category) ||
+      displayName(a.email, teamLike.value).localeCompare(displayName(b.email, teamLike.value), 'it'),
+    ),
+)
 const systemAccounts = computed(() => allMembers.value.filter(m => isHiddenTeamEmail(m.email)))
 
 const canAccessCore = computed(() =>
@@ -54,9 +72,15 @@ const canAccessCore = computed(() =>
   (!initialized.value && currentUser.value?.role === 'ADMIN'),   // bootstrap
 )
 
-const ROLES = ['ADMIN', 'PRODUZIONE', 'LOGISTICA', 'COMMERCIALE'] as const
 const roleLabel: Record<string, string> = {
   ADMIN: 'Admin', PRODUZIONE: 'Produzione', LOGISTICA: 'Logistica', COMMERCIALE: 'Commerciale',
+}
+// Cosa comporta ciascun ruolo (permessi). Mostrato nel form per chi crea/modifica.
+const roleDescriptions: Record<string, string> = {
+  ADMIN:       'Accesso completo: progetti, tutte le task, smistamento. (SIDERA CORE si concede a parte con lo scudo.)',
+  COMMERCIALE: 'PULSAR completo · CEPHEID ampio: crea/vede/modifica tutte le task + smistamento. Niente gestione progetti.',
+  PRODUZIONE:  'PULSAR completo · CEPHEID: crea task, vede e completa solo le proprie assegnate. Niente smistamento.',
+  LOGISTICA:   'PULSAR completo · CEPHEID: vede e completa solo le proprie task (sola lettura, niente creazione).',
 }
 
 // Per StarAvatar/displayName: tutti i membri (agenti + sistema).
@@ -79,23 +103,37 @@ const okMsg = ref('')
 
 function flash(msg: string) { okMsg.value = msg; setTimeout(() => { if (okMsg.value === msg) okMsg.value = '' }, 3000) }
 
-// --- Cambio ruolo (+ refresh token §4) ---
-async function changeRole(m: Member, role: string) {
-  if (!m.docId || m.role === role) return
+// --- Cambio funzione dell'agente (deriva categoria-avatar + ruolo-permessi) ---
+// Handler del select riga: conferma e ripristina la selezione se annulli.
+async function onFunzioneChange(m: Member, e: Event) {
+  const sel = e.target as HTMLSelectElement
+  const newLabel = sel.value
+  if (newLabel === (m.position ?? '')) return
+  const f = funzioniOptions.value.find(x => x.label === newLabel)
+  if (!f) { sel.value = m.position ?? ''; return }
+  if (!confirm(
+    `Cambiare la funzione di ${displayName(m.email, teamLike.value)} in "${newLabel}"?\n\n`
+    + `Ruolo-permessi: ${roleLabel[f.role] ?? f.role}. Categoria/avatar: ${f.category}.`
+  )) {
+    sel.value = m.position ?? ''   // ripristina
+    return
+  }
+  if (!m.docId) return
   busy.value = m.docId; errorMsg.value = ''
   try {
-    await updateDoc(doc(db, 'team', m.docId), { role })
-    // §4: se cambio il MIO ruolo, forzo il refresh del token; altrimenti l'utente
-    // vedrà i nuovi permessi al suo prossimo login/refresh (non forzabile da qui).
+    // Funzione → position + categoria-avatar + ruolo-permessi (derivato).
+    await updateDoc(doc(db, 'team', m.docId), { position: newLabel, category: f.category, role: f.role })
+    // §4: se cambio la MIA funzione, forzo il refresh del token; altrimenti l'utente
+    // vedrà i nuovi permessi al prossimo login (non forzabile da qui).
     if (m.uid && m.uid === currentUser.value?.uid) {
       await auth.currentUser?.getIdToken(true)
-      flash('Ruolo aggiornato. Token rinfrescato (il tuo).')
+      flash('Funzione aggiornata. Token rinfrescato (il tuo).')
     } else {
-      flash(`Ruolo aggiornato. ${displayName(m.email, teamLike.value)} vedrà i nuovi permessi al prossimo login.`)
+      flash(`Funzione aggiornata. ${displayName(m.email, teamLike.value)} vedrà i nuovi permessi al prossimo login.`)
     }
-  } catch (e: any) {
-    console.error('[CoreTeam] changeRole', e)
-    errorMsg.value = e?.message || 'Errore nel cambio ruolo.'
+  } catch (err: any) {
+    console.error('[CoreTeam] changeFunzione', err)
+    errorMsg.value = err?.message || 'Errore nel cambio funzione.'
   } finally {
     busy.value = ''
   }
@@ -121,8 +159,14 @@ async function toggleActive(m: Member) {
 // --- Toggle Admin CORE (allowlist core/admins, accesso sezione CORE) ---
 async function toggleCoreAdmin(m: Member) {
   if (!m.email || m.email === SUPER_ADMIN) return
-  busy.value = m.docId || m.email; errorMsg.value = ''
   const wasAdmin = isCoreAdmin(m.email)
+  // Conferma esplicita quando si CONCEDE (azione sensibile: accesso a manutenzione,
+  // gestione team, integrazioni).
+  if (!wasAdmin && !confirm(
+    `Concedere a ${displayName(m.email, teamLike.value)} l'accesso Admin CORE?\n\n`
+    + 'Potrà entrare in Manutenzione, Gestione team e Integrazioni.'
+  )) return
+  busy.value = m.docId || m.email; errorMsg.value = ''
   try {
     if (wasAdmin) await removeAdmin(m.email)
     else await addAdmin(m.email)
@@ -130,6 +174,23 @@ async function toggleCoreAdmin(m: Member) {
   } catch (e: any) {
     console.error('[CoreTeam] toggleCoreAdmin', e)
     errorMsg.value = e?.message || 'Errore Admin CORE.'
+  } finally {
+    busy.value = ''
+  }
+}
+
+// --- Reset password: invia all'agente l'email per reimpostarla ---
+// (Firebase gestisce il link sicuro; l'agente può anche usare "Password
+// dimenticata?" dalla schermata di login.)
+async function resetPassword(m: Member) {
+  if (!confirm(`Inviare a ${m.email} un'email per reimpostare la password?`)) return
+  busy.value = m.docId || m.email; errorMsg.value = ''
+  try {
+    await sendPasswordResetEmail(auth, m.email)
+    flash(`Email di reset password inviata a ${m.email}.`)
+  } catch (e: any) {
+    console.error('[CoreTeam] resetPassword', e)
+    errorMsg.value = e?.message || 'Errore invio reset password.'
   } finally {
     busy.value = ''
   }
@@ -157,11 +218,23 @@ async function changeEmail(m: Member) {
 // --- Creazione membro ---
 const showCreate = ref(false)
 const creating = ref(false)
-const form = reactive({ firstName: '', lastName: '', email: '', password: '', role: 'PRODUZIONE', phone: '' })
-function resetForm() { Object.assign(form, { firstName: '', lastName: '', email: '', password: '', role: 'PRODUZIONE', phone: '' }) }
+const form = reactive({ firstName: '', lastName: '', email: '', password: '', role: '', phone: '', position: '', category: '' })
+function resetForm() { Object.assign(form, { firstName: '', lastName: '', email: '', password: '', role: '', phone: '', position: '', category: '' }) }
+
+// Elenco funzioni gestibili (collezione Firestore, fallback ai default).
+const { effective: funzioniOptions } = useFunzioni()
+
+// Funzione-first: la funzione (= label) determina role + category-avatar.
+// Il ruolo-permessi è in sola lettura qui; si aggiusta semmai dopo, dalla lista.
+function onFunzione() {
+  const f = funzioniOptions.value.find(x => x.label === form.position)
+  if (f) { form.role = f.role; form.category = f.category }
+  else { form.role = ''; form.category = '' }
+}
 
 async function createMember() {
   errorMsg.value = ''
+  if (!form.position || !form.role) { errorMsg.value = 'Scegli una funzione.'; return }
   if (!form.firstName || !form.lastName || !form.email) { errorMsg.value = 'Nome, cognome ed email obbligatori.'; return }
   if (form.password.length < 6) { errorMsg.value = 'Password di almeno 6 caratteri.'; return }
   creating.value = true
@@ -195,7 +268,7 @@ async function createMember() {
       <div class="m-task-head">
         <div>
           <h3 class="m-task-title">Agenti</h3>
-          <p class="m-task-desc">SIDERA possiede l'identità (uid). Crea, cambia ruolo, concedi accesso <strong>Admin CORE</strong> (scudo), disabilita (soft) o cambia email.</p>
+          <p class="m-task-desc">Crea, cambia ruolo, concedi accesso <strong>Admin CORE</strong>, disabilita agente o cambia email.</p>
         </div>
         <button class="m-btn" type="button" @click="showCreate = !showCreate">
           <MIcon name="add" :size="16" /> Nuovo agente
@@ -203,16 +276,21 @@ async function createMember() {
       </div>
 
       <form v-if="showCreate" class="m-create" @submit.prevent="createMember">
+        <select v-model="form.position" @change="onFunzione" class="m-input m-input--full">
+          <option value="">Funzione… (determina ruolo e avatar)</option>
+          <option v-for="f in funzioniOptions" :key="f.label" :value="f.label">{{ f.label }}</option>
+        </select>
         <div class="m-create-grid">
           <input v-model="form.firstName" class="m-input" placeholder="Nome" />
           <input v-model="form.lastName" class="m-input" placeholder="Cognome" />
           <input v-model="form.email" type="email" class="m-input" placeholder="email@dominio.it" autocomplete="off" />
           <input v-model="form.password" type="password" class="m-input" placeholder="Password (min 6)" autocomplete="new-password" />
-          <input v-model="form.phone" class="m-input" placeholder="Telefono (opz.)" />
-          <select v-model="form.role" class="m-input">
-            <option v-for="r in ROLES" :key="r" :value="r">{{ roleLabel[r] }}</option>
-          </select>
+          <input v-model="form.phone" class="m-input m-input--full" placeholder="Telefono (opz.)" />
         </div>
+        <p v-if="form.role" class="m-role-desc">
+          <strong>Ruolo: {{ roleLabel[form.role] }}</strong> — {{ roleDescriptions[form.role] }}
+        </p>
+        <p class="m-create-hint">Il <strong>ruolo-permessi</strong> è determinato dalla funzione. Lo puoi aggiustare dopo, dalla lista. L'accesso <strong>Admin CORE</strong> si concede separatamente (scudo).</p>
         <button class="m-btn" type="submit" :disabled="creating">
           <MIcon name="person_add" :size="16" /> {{ creating ? 'Creazione…' : 'Crea agente' }}
         </button>
@@ -236,11 +314,15 @@ async function createMember() {
           </div>
 
           <select
-            class="m-role" :value="m.role" :disabled="busy === m.docId"
-            @change="changeRole(m, ($event.target as HTMLSelectElement).value)"
+            class="m-funz" :value="m.position ?? ''" :disabled="busy === m.docId"
+            title="Funzione (determina avatar e ruolo-permessi)"
+            @change="onFunzioneChange(m, $event)"
           >
-            <option v-for="r in ROLES" :key="r" :value="r">{{ roleLabel[r] }}</option>
+            <option value="" disabled>— funzione —</option>
+            <option v-if="m.position && !funzioniOptions.some(f => f.label === m.position)" :value="m.position">{{ m.position }} (fuori lista)</option>
+            <option v-for="f in funzioniOptions" :key="f.label" :value="f.label">{{ f.label }}</option>
           </select>
+          <span class="m-role-chip" :title="roleDescriptions[m.role]">{{ roleLabel[m.role] || m.role || '—' }}</span>
 
           <button
             class="m-icon-btn" :class="{ 'is-admin': isCoreAdmin(m.email) }"
@@ -252,6 +334,9 @@ async function createMember() {
 
           <button class="m-icon-btn" title="Cambia email" :disabled="busy === m.docId" @click="changeEmail(m)">
             <MIcon name="alternate_email" :size="18" />
+          </button>
+          <button class="m-icon-btn" title="Invia reset password" :disabled="busy === (m.docId || m.email)" @click="resetPassword(m)">
+            <MIcon name="lock_reset" :size="18" />
           </button>
           <button
             class="m-icon-btn" :title="m.active === false ? 'Riattiva' : 'Disabilita'"
@@ -291,7 +376,10 @@ async function createMember() {
   font-family: 'Outfit', sans-serif;
   background: var(--md-sys-color-surface, #FFF8F0);
   color: var(--md-sys-color-on-surface, #1A1917);
-  min-height: 100vh; padding: 24px 32px;
+  /* La shell SIDERA (.s-main) ha overflow:hidden → lo scroll vive sul root della view */
+  height: 100%; min-height: 0; overflow-y: auto;
+  padding: 24px 32px; padding-bottom: calc(24px + env(safe-area-inset-bottom));
+  box-sizing: border-box;
 }
 .m-header { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
 .m-back {
@@ -324,6 +412,13 @@ async function createMember() {
 
 .m-create { background: var(--md-sys-color-surface-container, #F5EDDF); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
 .m-create-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+.m-input--full { width: 100%; margin-bottom: 8px; }
+.m-role-desc {
+  font-size: 12px; line-height: 1.5; margin: 0 0 8px; padding: 8px 12px; border-radius: 8px;
+  background: color-mix(in srgb, var(--md-sys-color-primary, #C4941C) 10%, transparent);
+  color: var(--md-sys-color-on-surface, #1A1917);
+}
+.m-create-hint { font-size: 12px; line-height: 1.5; color: var(--md-sys-color-on-surface-variant, #6A6560); margin: 0 0 12px; }
 .m-input {
   min-width: 0; background: var(--md-sys-color-surface-container-lowest, #FFFFFF);
   border: 1px solid var(--md-sys-color-outline-variant, #CEC6B4);
@@ -343,10 +438,17 @@ async function createMember() {
 .m-row-name { font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 8px; }
 .m-row-email { font-size: 11px; color: var(--md-sys-color-on-surface-variant, #6A6560); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-.m-role {
+.m-funz {
   flex: 0 0 auto; background: var(--md-sys-color-surface-container-lowest, #FFFFFF);
   border: 1px solid var(--md-sys-color-outline-variant, #CEC6B4); border-radius: 8px;
   padding: 6px 8px; font-size: 12px; font-family: inherit; color: inherit; cursor: pointer;
+  text-align-last: center; min-width: 150px; max-width: 180px;
+}
+.m-role-chip {
+  flex: 0 0 auto; font-size: 10px; font-weight: 700; letter-spacing: 0.03em; text-transform: uppercase;
+  padding: 3px 8px; border-radius: var(--md-sys-shape-corner-full); min-width: 78px; text-align: center;
+  background: color-mix(in srgb, var(--md-sys-color-primary, #C4941C) 14%, transparent);
+  color: var(--md-sys-color-primary, #C4941C);
 }
 .m-icon-btn {
   flex: 0 0 auto; background: none; border: none; cursor: pointer; padding: 6px; border-radius: var(--md-sys-shape-corner-full);

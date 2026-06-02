@@ -23,7 +23,6 @@ export const CATEGORY_OPTIONS = [
   { key: 'direzione',       label: 'Direzione' },
   { key: 'amministrazione', label: 'Amministrazione' },
   { key: 'produzione',      label: 'Produzione' },
-  { key: 'tecnico',         label: 'Tecnico' },
   { key: 'logistica',       label: 'Logistica' },
   { key: 'commerciale',     label: 'Commerciale' },
 ] as const
@@ -43,6 +42,31 @@ export const POSITION_OPTIONS = [
   'Autista',
   'Amministrativo',
   'Contabile',
+]
+
+/**
+ * FUNZIONE → categoria di default per la creazione "funzione-first" (POLARIS Az.9 /
+ * opzione B, vedi docs/STELLA-GRAFO.md). Si sceglie la funzione → categoria (avatar)
+ * e il RUOLO-permessi si DERIVA dalla categoria (CATEGORY_TO_ROLE in permissions.ts):
+ * una sola tassonomia gestita a mano. direzione/amministrazione → ADMIN, ma si
+ * differenziano per avatar e accesso CORE (scudo, a parte). (`tecnico` rimosso.)
+ */
+export interface Funzione { position: string; category: string }
+export const FUNZIONI: Funzione[] = [
+  { position: 'Titolare',                 category: 'direzione' },
+  { position: 'Socio',                    category: 'direzione' },
+  { position: 'Amministratore Delegato',  category: 'direzione' },
+  { position: 'Amministrativo',           category: 'amministrazione' },
+  { position: 'Contabile',                category: 'amministrazione' },
+  { position: 'Responsabile Commerciale', category: 'commerciale' },
+  { position: 'Agente Commerciale',       category: 'commerciale' },
+  { position: 'Responsabile Produzione',  category: 'produzione' },
+  { position: 'Capo Officina',            category: 'produzione' },
+  { position: 'Operaio Specializzato',    category: 'produzione' },
+  { position: 'Operaio',                  category: 'produzione' },
+  { position: 'Responsabile Logistica',   category: 'logistica' },
+  { position: 'Magazziniere',             category: 'logistica' },
+  { position: 'Autista',                  category: 'logistica' },
 ]
 
 export function useNebulaTeam() {

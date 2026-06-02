@@ -68,6 +68,12 @@ service cloud.firestore {
       allow read: if request.auth != null;
       allow write: if isAdmin();
     }
+
+    // FUNZIONI/MANSIONI (etichette → categoria + ruolo). Gestite in CORE.
+    match /funzioni/{id} {
+      allow read:  if request.auth != null;
+      allow write: if isAdmin();
+    }
     
     // Configurazione (es. fic, notion) - Protezione extra
     match /config/{docId} {

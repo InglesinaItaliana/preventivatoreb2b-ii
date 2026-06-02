@@ -1,5 +1,5 @@
 import { ref, onUnmounted } from 'vue'
-import { collection, doc, getDoc, onSnapshot, type DocumentData, type DocumentSnapshot } from 'firebase/firestore'
+import { collection, doc, getDoc, getDocFromServer, onSnapshot, type DocumentData, type DocumentSnapshot } from 'firebase/firestore'
 import { db } from '../../firebase'
 
 export interface TeamMember {
@@ -54,8 +54,21 @@ export async function getTeamDoc(
   uid: string | null | undefined,
 ): Promise<DocumentSnapshot<DocumentData> | null> {
   if (!uid) return null
-  const snap = await getDoc(doc(db, 'team', uid))
-  return snap.exists() ? snap : null
+  const ref = doc(db, 'team', uid)
+  const snap = await getDoc(ref)
+  if (snap.exists()) return snap
+  // Cache-hit negativo: con persistentLocalCache un not-found dalla cache locale
+  // può essere stantio (POLARIS Az.9). Riconferma dal server prima di dichiarare
+  // "non esiste" — evita lo staff bloccato con "Utenza non configurata".
+  if (snap.metadata.fromCache) {
+    try {
+      const fresh = await getDocFromServer(ref)
+      return fresh.exists() ? fresh : null
+    } catch {
+      return null   // offline reale → not-found come prima
+    }
+  }
+  return null
 }
 
 /**

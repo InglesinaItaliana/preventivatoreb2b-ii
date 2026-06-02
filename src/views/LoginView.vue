@@ -4,6 +4,7 @@
   import { doc, getDoc } from 'firebase/firestore';
   import { auth, db } from '../firebase';
   import { getTeamDoc } from '../composables/sidera/useTeamMembers';
+  import { postLoginRoute, type Role } from '../router/permissions';
   import { signInWithEmailAndPassword, signOut, sendPasswordResetEmail } from 'firebase/auth';
 
   const router = useRouter();
@@ -68,17 +69,10 @@ const handleLogin = async () => {
         const teamDoc = await getTeamDoc(user.uid);
 
         if (teamDoc?.exists()) {
-          const role = teamDoc.data().role; // 'ADMIN', 'PRODUZIONE', 'LOGISTICA'
-          
-          // Reindirizzamento in base al ruolo
-          if (role === 'PRODUZIONE') {
-            router.push('/delivery');
-          } else if (role === 'LOGISTICA') {
-            router.push('/delivery');
-          } else {
-            // ADMIN, COMMERCIALE o altri
-            router.push('/admin');
-          }
+          const role = (teamDoc.data().role ?? '') as Role;
+          // Routing post-login centralizzato (router/permissions.ts), coerente col
+          // guard. NB POLARIS B1: PRODUZIONE → /production (prima → /delivery).
+          router.push(postLoginRoute(role));
           return; // Login completato per il team
         }
       }

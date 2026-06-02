@@ -14,6 +14,7 @@ import MIcon from './MIcon.vue'
 import type { ScopeConfig } from '../../views/sidera/scopeConfig'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
 import { useCoreAdmins } from '../../composables/sidera/useCoreAdmins'
+import { useCan } from '../../composables/sidera/useCan'
 
 const props = defineProps<{
   config: ScopeConfig
@@ -42,12 +43,16 @@ function isActive(item: { path: string; exact: boolean }) {
 
 const { currentUser } = useCurrentUser()
 const { isCoreAdmin } = useCoreAdmins()
+const { can } = useCan()
 
 // Voci marcate requiresCoreAdmin (es. "Doc" sotto NEBULA in Fase 1 di
 // NEBULA-DOCS) sono nascoste a chi non è CORE admin. Filtro coerente con
 // quello in SideraLayout.vue (sidebar desktop).
 const items = computed(() =>
-  props.config.mobileNav.filter(it => !it.requiresCoreAdmin || isCoreAdmin(currentUser.value?.email))
+  props.config.mobileNav.filter(it =>
+    (!it.requiresCoreAdmin || isCoreAdmin(currentUser.value?.email)) &&
+    (!it.requiresCapability || can(it.requiresCapability)),
+  )
 )
 </script>
 

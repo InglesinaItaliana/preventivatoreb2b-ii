@@ -545,10 +545,16 @@ exports.createTeamMember = functions
     if (!context.auth) {
         throw new functions.https.HttpsError("unauthenticated", "Devi essere loggato per creare un membro del team.");
     }
-    const { email, password, firstName, lastName, role, phone } = data;
+    const { email, password, firstName, lastName, role, phone, category, position } = data;
     if (!email || !password || !role) {
         throw new functions.https.HttpsError("invalid-argument", "Dati mancanti.");
     }
+    // Creazione "funzione-first" (opzione B): category/position opzionali. Se
+    // assenti, il trigger syncTeamRoleToAuth deriva category da defaultCategoryForRole.
+    // Validazione blanda della category (6 forme avatar note).
+    const VALID_CATEGORIES = ['direzione', 'amministrazione', 'produzione', 'tecnico', 'logistica', 'commerciale'];
+    const cleanCategory = typeof category === 'string' && VALID_CATEGORIES.includes(category) ? category : undefined;
+    const cleanPosition = typeof position === 'string' && position.trim() ? position.trim() : undefined;
     try {
         // 2. Crea l'utente in Firebase Authentication
         const userRecord = await admin.auth().createUser({
@@ -559,17 +565,9 @@ exports.createTeamMember = functions
         });
         // 3. Crea il documento nel Database 'team' UID-KEYED (re-key Strada B,
         //    docs/STELLA-GRAFO.md). L'email resta come campo (mutabile via updateUser).
-        await admin.firestore().collection("team").doc(userRecord.uid).set({
-            uid: userRecord.uid,
-            email: email.toLowerCase().trim(),
-            firstName,
+        await admin.firestore().collection("team").doc(userRecord.uid).set(Object.assign(Object.assign(Object.assign({ uid: userRecord.uid, email: email.toLowerCase().trim(), firstName,
             lastName,
-            role,
-            phone: phone || "",
-            active: true,
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
-            createdBy: context.auth.uid
-        });
+            role, phone: phone || "", active: true }, (cleanCategory ? { category: cleanCategory } : {})), (cleanPosition ? { position: cleanPosition } : {})), { createdAt: admin.firestore.FieldValue.serverTimestamp(), createdBy: context.auth.uid }));
         return { success: true, message: `Utente ${email} creato con successo.` };
     }
     catch (error) {

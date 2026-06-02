@@ -6,7 +6,7 @@ import CepheidProjectCard from '../../components/cepheid/CepheidProjectCard.vue'
 import CepheidViewSwitcher from '../../components/cepheid/CepheidViewSwitcher.vue'
 import { useProjects, type Project } from '../../composables/sidera/useProjects'
 import { useObiettivi } from '../../composables/sidera/useObiettivi'
-import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
+import { useCan } from '../../composables/sidera/useCan'
 import { useTeamMembers } from '../../composables/sidera/useTeamMembers'
 import { useAllTasks } from '../../composables/sidera/useAllTasks'
 import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
@@ -16,10 +16,10 @@ const { hidden: headerHidden } = useAutoHideHeader(scrollEl)
 
 const { projects, activeProjects, loading, createProject, updateProject, deleteProject, toggleActive, toggleCompleted } = useProjects()
 const { obiettiviAttivi } = useObiettivi()
-const { currentUser } = useCurrentUser()
+const { can } = useCan()
 const { members } = useTeamMembers()
 const { tasks: allTasks } = useAllTasks()
-const isAdmin = computed(() => currentUser.value?.role === 'ADMIN' || currentUser.value?.email === 'info@inglesinaitaliana.it')
+const isAdmin = computed(() => can('canEditProjects'))
 
 // ── Visibility: admin vede anche inactive (port da ProjectsView SIDERA) ────
 const adminProjects = computed(() => projects.value.filter(p => !p.archived))
