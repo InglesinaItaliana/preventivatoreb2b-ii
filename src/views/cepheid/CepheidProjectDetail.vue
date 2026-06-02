@@ -12,6 +12,7 @@ import StarAvatar from '../../components/shared/StarAvatar.vue'
 import CepheidTimeline from '../../components/cepheid/CepheidTimeline.vue'
 import CepheidCreateMenu from '../../components/cepheid/CepheidCreateMenu.vue'
 import CepheidCreateModal from '../../components/cepheid/CepheidCreateModal.vue'
+import CepheidViewSwitcher from '../../components/cepheid/CepheidViewSwitcher.vue'
 import LinkedDocsPanel from '../../components/shared/LinkedDocsPanel.vue'
 
 const route   = useRoute()
@@ -47,6 +48,16 @@ const sortedStates = computed(() => states.value)  // alias semantico per list v
 const taskItems = computed(() => tasks.value.filter(t => !t.type || t.type === 'task'))
 const milestoneItems = computed(() => tasks.value.filter(t => t.type === 'milestone'))
 const deliverableItems = computed(() => tasks.value.filter(t => t.type === 'deliverable'))
+
+// definizioni tab per la pillola view-switcher (label + icona + count opzionale)
+const tabDefs = computed(() => [
+  { id: 'kanban',      label: 'Kanban',      icon: 'view_kanban', count: taskItems.value.length || undefined },
+  { id: 'list',        label: 'Lista',       icon: 'list',        count: taskItems.value.length || undefined },
+  { id: 'milestone',   label: 'Milestone',   icon: 'flag',        count: milestoneItems.value.length || undefined },
+  { id: 'deliverable', label: 'Deliverable', icon: 'inventory_2', count: deliverableItems.value.length || undefined },
+  { id: 'timeline',    label: 'Timeline',    icon: 'timeline' },
+  { id: 'notes',       label: 'Note',        icon: 'description' },
+])
 
 // ── KANBAN ────────────────────────────────────────────────────────────────
 const grouped = computed(() => {
@@ -248,50 +259,14 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
       </div>
     </header>
 
-    <!-- Tab bar -->
+    <!-- Tab bar (pillola view-switcher) -->
     <div class="pd-tabs">
-      <div class="pd-tabs-list">
-        <button
-          :class="['pd-tab', { 'is-active': activeTab === 'kanban' }]"
-          @click="activeTab = 'kanban'"
-        >
-          <MIcon name="view_kanban" :size="14" /> Kanban
-          <span v-if="taskItems.length" class="pd-tab-count">{{ taskItems.length }}</span>
-        </button>
-        <button
-          :class="['pd-tab', { 'is-active': activeTab === 'list' }]"
-          @click="activeTab = 'list'"
-        >
-          <MIcon name="list" :size="14" /> Lista
-          <span v-if="taskItems.length" class="pd-tab-count">{{ taskItems.length }}</span>
-        </button>
-        <button
-          :class="['pd-tab', { 'is-active': activeTab === 'milestone' }]"
-          @click="activeTab = 'milestone'"
-        >
-          <MIcon name="flag" :size="14" /> Milestone
-          <span v-if="milestoneItems.length" class="pd-tab-count">{{ milestoneItems.length }}</span>
-        </button>
-        <button
-          :class="['pd-tab', { 'is-active': activeTab === 'deliverable' }]"
-          @click="activeTab = 'deliverable'"
-        >
-          <MIcon name="inventory_2" :size="14" /> Deliverable
-          <span v-if="deliverableItems.length" class="pd-tab-count">{{ deliverableItems.length }}</span>
-        </button>
-        <button
-          :class="['pd-tab', { 'is-active': activeTab === 'timeline' }]"
-          @click="activeTab = 'timeline'"
-        >
-          <MIcon name="timeline" :size="14" /> Timeline
-        </button>
-        <button
-          :class="['pd-tab', { 'is-active': activeTab === 'notes' }]"
-          @click="activeTab = 'notes'"
-        >
-          <MIcon name="description" :size="14" /> Note
-        </button>
-      </div>
+      <CepheidViewSwitcher
+        :model-value="activeTab"
+        :tabs="tabDefs"
+        labels
+        @update:model-value="(v) => (activeTab = v as Tab)"
+      />
       <CepheidCreateMenu class="header-create" @select="openCreate" />
     </div>
 
@@ -637,76 +612,18 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
 }
 .pd-description-toggle:hover { color: #6A6560; }
 
-/* Tabs */
+/* Tabs (pillola view-switcher) */
 .pd-tabs {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
-  padding: 8px 16px 0;
+  padding: 10px 16px;
   background: #fff;
   border-bottom: 1px solid #E8E5DF;
   flex-shrink: 0;
 }
-.pd-tabs-list { display: flex; gap: 2px; flex: 1; min-width: 0; overflow-x: auto; }
-
-.header-cta {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 7px 12px;
-  margin-bottom: 6px;
-  background: var(--md-sys-color-primary);
-  border: none;
-  border-radius: 10px;
-  font-family: 'Outfit', sans-serif;
-  font-size: 12px;
-  font-weight: 600;
-  color: #fff;
-  cursor: pointer;
-  transition: background 0.15s;
-  flex-shrink: 0;
-}
-.header-cta:hover { background: #B8870E; }
-@media (max-width: 768px) { .header-cta { display: none; } }
-
-.pd-tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  padding: 8px 12px 10px;
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
-  font-family: 'Outfit', sans-serif;
-  font-size: 12px;
-  font-weight: 600;
-  color: #9B9590;
-  cursor: pointer;
-  transition: all 0.15s;
-}
-.pd-tab:hover { color: #6A6560; }
-.pd-tab.is-active {
-  color: var(--md-sys-color-primary);
-  border-bottom-color: var(--md-sys-color-primary);
-}
-.pd-tab-count {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 18px;
-  height: 18px;
-  padding: 0 6px;
-  background: #F4F2EE;
-  border-radius: var(--md-sys-shape-corner-full);
-  font-size: 10px;
-  font-weight: 700;
-  color: #6A6560;
-}
-.pd-tab.is-active .pd-tab-count {
-  background: color-mix(in srgb, var(--md-sys-color-primary) 18%, transparent);
-  color: var(--md-sys-color-primary-hover);
-}
+.pd-tabs > :deep(.vsw) { flex: 1; min-width: 0; }
 
 .pd-content { padding: 16px; flex: 1; min-height: 0; overflow-y: auto; }
 /* Sfondo pagina della Timeline come nel prototipo cepheid-timeline.html */

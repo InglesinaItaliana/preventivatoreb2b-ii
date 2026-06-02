@@ -3,12 +3,14 @@ import { ref, computed, inject, watch, onMounted, nextTick, type Ref } from 'vue
 import { useRoute, useRouter } from 'vue-router'
 import MIcon from '../../components/shared/MIcon.vue'
 import MdPageHeader from '../../components/shared/MdPageHeader.vue'
-import GoalProgressBar from '../../components/cepheid/GoalProgressBar.vue'
-import { useObiettivi, GOAL_COLOR_PRESETS } from '../../composables/sidera/useObiettivi'
+import CepheidGoalCard from '../../components/cepheid/CepheidGoalCard.vue'
+import CepheidPeriodPicker from '../../components/cepheid/CepheidPeriodPicker.vue'
+import { useObiettivi, GOAL_COLOR_PRESETS, type Obiettivo } from '../../composables/sidera/useObiettivi'
 import { useProjects } from '../../composables/sidera/useProjects'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
 import { useCan } from '../../composables/sidera/useCan'
 import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
+import { yearToDates } from '../../composables/cepheid/usePeriods'
 
 const scrollEl = ref<HTMLElement | null>(null)
 const { hidden: headerHidden } = useAutoHideHeader(scrollEl)
@@ -16,93 +18,122 @@ const { hidden: headerHidden } = useAutoHideHeader(scrollEl)
 const route  = useRoute()
 const router = useRouter()
 const scopeBase = computed(() => route.path.startsWith('/sidera') ? '/sidera' : '/cepheid')
-const { obiettiviAttivi, loading, createObiettivo } = useObiettivi()
+const { obiettiviAttivi, loading, createObiettivo, updateObiettivo, deleteObiettivo } = useObiettivi()
 
 // Obiettivi riservati a chi può gestirli (solo ADMIN). Accesso diretto degli
 // altri ruoli → rimando alla root del modulo. Attende currentUser (async-auth).
 const { currentUser } = useCurrentUser()
 const { can } = useCan()
+const isAdmin = computed(() => can('canManageGoals'))
 watch(currentUser, (u) => { if (u && !can('canManageGoals')) router.replace(scopeBase.value) }, { immediate: true })
-const { activeProjects } = useProjects()
+const { activeProjects, updateProject } = useProjects()
 
 const currentYear = new Date().getFullYear()
 
-interface GoalStats {
-  progetti: number
-  progettiCompletati: number
-  taskTotali: number
-  taskDone: number
-  percentuale: number
+function linkedFor(obiettivoId: string) {
+  return activeProjects.value.filter(p => p.obiettivoId === obiettivoId)
+}
+const unlinkedProjects = computed(() => activeProjects.value.filter(p => !p.obiettivoId))
+
+interface PeriodValue { periodKind: 'year' | 'quarters'; startDate: Date; endDate: Date }
+function defaultPeriod(): PeriodValue {
+  const { startDate, endDate } = yearToDates(currentYear)
+  return { periodKind: 'year', startDate, endDate }
 }
 
-function statsFor(obiettivoId: string): GoalStats {
-  const linked = activeProjects.value.filter(p => p.obiettivoId === obiettivoId)
-  let taskTotali = 0
-  let taskDone   = 0
-  let progettiCompletati = 0
-  for (const p of linked) {
-    taskTotali += p.taskCount
-    taskDone   += p.doneCount
-    if (p.taskCount > 0 && p.doneCount >= p.taskCount) progettiCompletati++
-  }
-  const percentuale = taskTotali > 0 ? Math.round((taskDone / taskTotali) * 100) : 0
-  return { progetti: linked.length, progettiCompletati, taskTotali, taskDone, percentuale }
-}
-
-// ── Nuovo obiettivo (modal) ────────────────────────────────────────────────
+// ── Crea / Modifica obiettivo (modal unico) ─────────────────────────────────
 const showGoalModal = ref(false)
 const goalSaving    = ref(false)
-const goalForm = ref({
-  titolo:         '',
-  descrizione:    '',
-  metrica:        '',
-  valoreTarget:   '' as string | number,
-  valoreCorrente: '' as string | number,
-  anno:           currentYear,
-  colore:         GOAL_COLOR_PRESETS[0],
+const editingGoal   = ref<Obiettivo | null>(null)
+const goalForm = ref<{ titolo: string; descrizione: string; colore: string; period: PeriodValue }>({
+  titolo:      '',
+  descrizione: '',
+  colore:      GOAL_COLOR_PRESETS[0],
+  period:      defaultPeriod(),
 })
 
 function openGoalModal() {
-  if (!can('canManageGoals')) return
-  goalForm.value = {
-    titolo:         '',
-    descrizione:    '',
-    metrica:        '',
-    valoreTarget:   '',
-    valoreCorrente: '',
-    anno:           currentYear,
-    colore:         GOAL_COLOR_PRESETS[0],
-  }
+  if (!isAdmin.value) return
+  editingGoal.value = null
+  goalForm.value = { titolo: '', descrizione: '', colore: GOAL_COLOR_PRESETS[0], period: defaultPeriod() }
   showGoalModal.value = true
 }
 
-function parseNum(v: string | number): number | null {
-  if (typeof v === 'number') return Number.isFinite(v) ? v : null
-  const t = v.trim()
-  if (!t) return null
-  const n = Number(t.replace(',', '.'))
-  return Number.isFinite(n) ? n : null
+function openEditModal(g: Obiettivo) {
+  if (!isAdmin.value) return
+  editingGoal.value = g
+  goalForm.value = {
+    titolo:      g.titolo,
+    descrizione: g.descrizione,
+    colore:      g.colore,
+    period:      {
+      periodKind: g.periodKind,
+      startDate:  g.startDate ?? new Date(g.anno, 0, 1),
+      endDate:    g.endDate ?? new Date(g.anno, 11, 31),
+    },
+  }
+  showGoalModal.value = true
 }
 
 async function submitGoal() {
   if (!goalForm.value.titolo.trim() || goalSaving.value) return
   goalSaving.value = true
   try {
-    await createObiettivo({
-      titolo:         goalForm.value.titolo.trim(),
-      descrizione:    goalForm.value.descrizione.trim(),
-      metrica:        goalForm.value.metrica.trim(),
-      valoreTarget:   parseNum(goalForm.value.valoreTarget),
-      valoreCorrente: parseNum(goalForm.value.valoreCorrente),
-      anno:           Number(goalForm.value.anno) || currentYear,
-      colore:         goalForm.value.colore,
-    })
+    const f = goalForm.value
+    if (editingGoal.value) {
+      await updateObiettivo(editingGoal.value.id, {
+        titolo:      f.titolo.trim(),
+        descrizione: f.descrizione.trim(),
+        periodKind:  f.period.periodKind,
+        startDate:   f.period.startDate,
+        endDate:     f.period.endDate,
+        colore:      f.colore,
+      })
+    } else {
+      await createObiettivo({
+        titolo:      f.titolo.trim(),
+        descrizione: f.descrizione.trim(),
+        periodKind:  f.period.periodKind,
+        startDate:   f.period.startDate,
+        endDate:     f.period.endDate,
+        colore:      f.colore,
+      })
+    }
     showGoalModal.value = false
   } catch (e) {
-    console.error('[CEPHEID] obiettivo creation error', e)
+    console.error('[CEPHEID] obiettivo save error', e)
   } finally {
     goalSaving.value = false
   }
+}
+
+async function deleteGoal(g: Obiettivo) {
+  if (!isAdmin.value) return
+  if (!confirm('Eliminare definitivamente questo obiettivo? I progetti collegati restano, ma non saranno più associati.')) return
+  for (const p of linkedFor(g.id)) {
+    await updateProject(p.id, { obiettivoId: null })
+  }
+  await deleteObiettivo(g.id)
+}
+
+// ── Collega progetti (modal) ────────────────────────────────────────────────
+const showLinkModal = ref(false)
+const linkTargetId  = ref<string | null>(null)
+function openLinkModal(g: Obiettivo) {
+  if (!isAdmin.value) return
+  linkTargetId.value = g.id
+  showLinkModal.value = true
+}
+async function linkProject(projectId: string) {
+  if (!linkTargetId.value) return
+  await updateProject(projectId, { obiettivoId: linkTargetId.value })
+}
+
+function openProject(id: string) {
+  router.push(scopeBase.value === '/sidera' ? '/sidera/projects/' + id : '/cepheid/project/' + id)
+}
+function openGoalDetail(id: string) {
+  router.push(scopeBase.value + '/goal/' + id)
 }
 
 // ── Trigger dal FAB del layout ─────────────────────────────────────────────
@@ -148,90 +179,49 @@ const totalActive = computed(() => obiettiviAttivi.value.length)
         <div class="empty-hint">Gli obiettivi sono le "destinazioni" dell'anno. I progetti li servono.</div>
       </div>
 
-      <div
+      <CepheidGoalCard
         v-for="o in obiettiviAttivi"
         :key="o.id"
-        class="goal-card"
-        @click="router.push(scopeBase + '/goal/' + o.id)"
-      >
-        <div class="goal-stripe" :style="{ background: o.colore }" />
-        <div class="goal-body">
-          <div class="goal-top">
-            <div class="goal-titolo">{{ o.titolo }}</div>
-            <span class="goal-anno">{{ o.anno }}</span>
-          </div>
-          <div v-if="o.metrica" class="goal-metrica">
-            <MIcon name="trending_up" :size="13" />
-            <span>{{ o.metrica }}</span>
-          </div>
-          <div v-if="o.descrizione" class="goal-desc">{{ o.descrizione }}</div>
-
-          <template v-if="statsFor(o.id).progetti > 0">
-            <GoalProgressBar
-              :percentuale="statsFor(o.id).percentuale"
-              :colore="o.colore"
-              :show-label="false"
-            />
-            <div class="goal-stats">
-              <span class="goal-stat-pct" :style="{ color: o.colore }">{{ statsFor(o.id).percentuale }}%</span>
-              <span class="goal-stat-meta">{{ statsFor(o.id).progetti }} {{ statsFor(o.id).progetti === 1 ? 'progetto' : 'progetti' }} · {{ statsFor(o.id).taskDone }}/{{ statsFor(o.id).taskTotali }} azioni</span>
-            </div>
-          </template>
-          <div v-else class="goal-stats goal-stats--empty">
-            Nessun progetto collegato
-          </div>
-        </div>
-      </div>
+        :goal="o"
+        :linked-projects="linkedFor(o.id)"
+        :is-admin="isAdmin"
+        @open="openGoalDetail(o.id)"
+        @edit="openEditModal(o)"
+        @delete="deleteGoal(o)"
+        @link="openLinkModal(o)"
+        @open-project="openProject"
+      />
     </div>
 
-    <!-- Modal Nuovo obiettivo -->
+    <!-- Modal Crea / Modifica obiettivo -->
     <Teleport to="body">
       <div v-if="showGoalModal" class="modal-backdrop md-modal-backdrop" @click.self="showGoalModal = false">
         <div class="modal md-modal-dialog" @click.stop>
           <div class="modal-header md-modal-header">
-            <span class="modal-title">Nuovo obiettivo</span>
+            <span class="modal-title">{{ editingGoal ? 'Modifica obiettivo' : 'Nuovo obiettivo' }}</span>
             <button class="modal-close md-modal-close" @click="showGoalModal = false"><MIcon name="close" :size="18" /></button>
           </div>
           <div class="modal-body md-modal-body">
             <label class="field-label md-text-field-label">Titolo *</label>
             <input v-model="goalForm.titolo" class="field-input md-text-field-input" autofocus placeholder="Es. Aumentare il fatturato del 30%" />
 
-            <label class="field-label md-text-field-label" style="margin-top:12px">Metrica</label>
-            <input v-model="goalForm.metrica" class="field-input md-text-field-input" placeholder="Es. Fatturato annuo (€)" />
-
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
-              <div>
-                <label class="field-label md-text-field-label">Valore corrente</label>
-                <input v-model="goalForm.valoreCorrente" type="number" class="field-input md-text-field-input" placeholder="0" />
-              </div>
-              <div>
-                <label class="field-label md-text-field-label">Valore target</label>
-                <input v-model="goalForm.valoreTarget" type="number" class="field-input md-text-field-input" placeholder="0" />
-              </div>
-            </div>
-
             <label class="field-label md-text-field-label" style="margin-top:12px">Descrizione</label>
             <textarea v-model="goalForm.descrizione" class="field-input md-text-field-input" rows="2" />
 
-            <div style="display:grid;grid-template-columns:80px 1fr;gap:12px;margin-top:12px">
-              <div>
-                <label class="field-label md-text-field-label">Anno</label>
-                <input v-model="goalForm.anno" type="number" class="field-input md-text-field-input" />
-              </div>
-              <div>
-                <label class="field-label md-text-field-label">Colore</label>
-                <div class="color-picker">
-                  <button
-                    v-for="c in GOAL_COLOR_PRESETS"
-                    :key="c"
-                    type="button"
-                    class="color-swatch"
-                    :class="{ 'is-sel': goalForm.colore === c }"
-                    :style="{ background: c }"
-                    @click="goalForm.colore = c"
-                  />
-                </div>
-              </div>
+            <label class="field-label md-text-field-label" style="margin-top:16px">Periodo</label>
+            <CepheidPeriodPicker v-model="goalForm.period" />
+
+            <label class="field-label md-text-field-label" style="margin-top:16px">Colore</label>
+            <div class="color-picker">
+              <button
+                v-for="c in GOAL_COLOR_PRESETS"
+                :key="c"
+                type="button"
+                class="color-swatch"
+                :class="{ 'is-sel': goalForm.colore === c }"
+                :style="{ background: c }"
+                @click="goalForm.colore = c"
+              />
             </div>
           </div>
           <div class="modal-footer md-modal-footer">
@@ -240,7 +230,40 @@ const totalActive = computed(() => obiettiviAttivi.value.length)
               class="btn-primary md-btn md-btn--filled md-btn--rounded"
               :disabled="!goalForm.titolo.trim() || goalSaving"
               @click="submitGoal"
-            >{{ goalSaving ? 'Creazione…' : 'Crea obiettivo' }}</button>
+            >{{ goalSaving ? 'Salvataggio…' : (editingGoal ? 'Salva' : 'Crea obiettivo') }}</button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- Modal Collega progetti -->
+    <Teleport to="body">
+      <div v-if="showLinkModal" class="modal-backdrop md-modal-backdrop" @click.self="showLinkModal = false">
+        <div class="modal md-modal-dialog" @click.stop>
+          <div class="modal-header md-modal-header">
+            <span class="modal-title">Collega progetto</span>
+            <button class="modal-close md-modal-close" @click="showLinkModal = false"><MIcon name="close" :size="18" /></button>
+          </div>
+          <div class="modal-body md-modal-body">
+            <div v-if="!unlinkedProjects.length" class="link-empty">
+              Tutti i progetti attivi sono già collegati a un obiettivo.
+            </div>
+            <div
+              v-for="p in unlinkedProjects"
+              :key="p.id"
+              class="link-row"
+              @click="linkProject(p.id)"
+            >
+              <span class="link-stripe" :style="{ background: p.color }" />
+              <div class="link-info">
+                <div class="link-name">{{ p.name }}</div>
+                <div class="link-stats">{{ p.doneCount }}/{{ p.taskCount }} azioni</div>
+              </div>
+              <MIcon name="add" :size="16" class="link-add" />
+            </div>
+          </div>
+          <div class="modal-footer md-modal-footer">
+            <button class="btn-ghost md-btn md-btn--outlined md-btn--rounded" @click="showLinkModal = false" style="flex:1">Chiudi</button>
           </div>
         </div>
       </div>
@@ -292,91 +315,19 @@ const totalActive = computed(() => obiettiviAttivi.value.length)
 .empty-icon { color: var(--md-sys-color-primary); opacity: 0.35; margin-bottom: 4px; }
 .empty-hint { font-size: 12px; color: #B4B0AA; max-width: 280px; line-height: 1.5; }
 
-.goal-card {
-  display: flex;
-  background: #FFF8F0;
-  border: 1px solid var(--md-sys-color-outline-variant);
-  border-radius: 16px;
-  box-shadow: var(--md-sys-elevation-level-1);
-  overflow: hidden;
-  cursor: pointer;
-  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+/* Modal "Collega progetto" — righe progetto */
+.link-empty { padding: 24px 8px; text-align: center; font-size: 12px; color: #9B9590; }
+.link-row {
+  display: flex; align-items: center; gap: 10px; padding: 10px 0;
+  cursor: pointer; border-bottom: 1px solid #F0EDE8;
 }
-.s-surface-dark .goal-card { background: #16130B; }
-@media (prefers-color-scheme: dark) { .goal-card { background: #16130B; } }
-
-.goal-card:hover {
-  border-color: var(--md-sys-color-primary);
-  background: color-mix(in srgb, var(--md-sys-color-primary) 4%, transparent);
-  box-shadow: var(--md-sys-elevation-level-2);
-}
-
-.goal-stripe { width: 8px; flex-shrink: 0; }
-
-.goal-body { padding: 14px 16px; flex: 1; min-width: 0; }
-
-.goal-top {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 4px;
-}
-
-.goal-titolo {
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-  color: var(--md-sys-color-on-surface);
-  flex: 1;
-  min-width: 0;
-}
-
-.goal-anno {
-  font-size: 11px;
-  font-weight: 600;
-  color: var(--md-sys-color-on-surface-variant);
-  background: var(--md-sys-color-surface-container);
-  padding: 2px 8px;
-  border-radius: var(--md-sys-shape-corner-full);
-  flex-shrink: 0;
-}
-
-.goal-metrica {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  font-size: 12px;
-  color: var(--md-sys-color-on-surface-variant);
-  margin-bottom: 4px;
-}
-
-.goal-desc {
-  font-size: 12px;
-  color: var(--md-sys-color-on-surface-variant);
-  margin-bottom: 10px;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-}
-
-.goal-stats {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  margin-top: 8px;
-  gap: 8px;
-}
-
-.goal-stat-pct { font-size: 13px; font-weight: 700; }
-.goal-stat-meta { font-size: 11px; color: var(--md-sys-color-on-surface-variant); }
-.goal-stats--empty {
-  font-size: 11px;
-  color: var(--md-sys-color-on-surface-variant);
-  font-style: italic;
-  margin-top: 4px;
-}
+.link-row:hover { background: #FAF8F4; }
+.link-row:last-child { border-bottom: none; }
+.link-stripe { width: 4px; height: 30px; border-radius: 2px; flex-shrink: 0; }
+.link-info { flex: 1; min-width: 0; }
+.link-name { font-size: 13px; font-weight: 600; color: #1A1917; }
+.link-stats { font-size: 11px; color: #9B9590; }
+.link-add { color: var(--md-sys-color-primary); flex-shrink: 0; }
 
 /* Modal — copia pattern Projects */
 .modal-backdrop {

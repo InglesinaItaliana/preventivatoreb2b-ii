@@ -3,8 +3,10 @@ import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import MIcon from '../../components/shared/MIcon.vue'
 import GoalProgressBar from '../../components/cepheid/GoalProgressBar.vue'
+import CepheidPeriodPicker from '../../components/cepheid/CepheidPeriodPicker.vue'
 import { useObiettivi, GOAL_COLOR_PRESETS } from '../../composables/sidera/useObiettivi'
 import { useProjects } from '../../composables/sidera/useProjects'
+import { formatPeriodLabel } from '../../composables/cepheid/usePeriods'
 
 const route   = useRoute()
 const router  = useRouter()
@@ -57,50 +59,42 @@ async function unlinkProject(projectId: string) {
 }
 
 // ── Edit obiettivo modal ──────────────────────────────────────────────────
+interface PeriodValue { periodKind: 'year' | 'quarters'; startDate: Date; endDate: Date }
 const showEditModal = ref(false)
 const editSaving = ref(false)
-const editForm = ref({
-  titolo: '', descrizione: '', metrica: '',
-  valoreCorrente: '' as string | number,
-  valoreTarget: '' as string | number,
-  anno: new Date().getFullYear(),
-  colore: GOAL_COLOR_PRESETS[0],
+const editForm = ref<{ titolo: string; descrizione: string; colore: string; period: PeriodValue }>({
+  titolo: '', descrizione: '', colore: GOAL_COLOR_PRESETS[0],
+  period: { periodKind: 'year', startDate: new Date(new Date().getFullYear(), 0, 1), endDate: new Date(new Date().getFullYear(), 11, 31) },
 })
 
 function openEditModal() {
   if (!goal.value) return
+  const g = goal.value
   editForm.value = {
-    titolo:         goal.value.titolo,
-    descrizione:    goal.value.descrizione,
-    metrica:        goal.value.metrica,
-    valoreCorrente: goal.value.valoreCorrente ?? '',
-    valoreTarget:   goal.value.valoreTarget ?? '',
-    anno:           goal.value.anno,
-    colore:         goal.value.colore,
+    titolo:      g.titolo,
+    descrizione: g.descrizione,
+    colore:      g.colore,
+    period: {
+      periodKind: g.periodKind,
+      startDate:  g.startDate ?? new Date(g.anno, 0, 1),
+      endDate:    g.endDate ?? new Date(g.anno, 11, 31),
+    },
   }
   showEditModal.value = true
-}
-
-function parseNum(v: string | number): number | null {
-  if (typeof v === 'number') return Number.isFinite(v) ? v : null
-  const t = v.trim()
-  if (!t) return null
-  const n = Number(t.replace(',', '.'))
-  return Number.isFinite(n) ? n : null
 }
 
 async function submitEdit() {
   if (!editForm.value.titolo.trim() || editSaving.value || !goal.value) return
   editSaving.value = true
   try {
+    const f = editForm.value
     await updateObiettivo(goal.value.id, {
-      titolo:         editForm.value.titolo.trim(),
-      descrizione:    editForm.value.descrizione.trim(),
-      metrica:        editForm.value.metrica.trim(),
-      valoreCorrente: parseNum(editForm.value.valoreCorrente),
-      valoreTarget:   parseNum(editForm.value.valoreTarget),
-      anno:           Number(editForm.value.anno) || new Date().getFullYear(),
-      colore:         editForm.value.colore,
+      titolo:      f.titolo.trim(),
+      descrizione: f.descrizione.trim(),
+      periodKind:  f.period.periodKind,
+      startDate:   f.period.startDate,
+      endDate:     f.period.endDate,
+      colore:      f.colore,
     })
     showEditModal.value = false
   } catch (e) {
@@ -133,12 +127,9 @@ async function doDelete() {
 const descExpanded = ref(false)
 const descIsLong   = computed(() => (goal.value?.descrizione?.length ?? 0) > 120)
 
-function metricaCorrenteVsTarget(): string {
-  const g = goal.value
-  if (!g || g.valoreTarget == null) return ''
-  const curr = g.valoreCorrente ?? 0
-  return `${curr.toLocaleString('it-IT')} / ${g.valoreTarget.toLocaleString('it-IT')}`
-}
+const periodLabel = computed(() =>
+  goal.value ? formatPeriodLabel(goal.value.startDate, goal.value.endDate, goal.value.periodKind) : ''
+)
 </script>
 
 <template>
@@ -165,7 +156,7 @@ function metricaCorrenteVsTarget(): string {
           <div class="gd-top-row">
             <h2 class="p-page-title">{{ goal.titolo }}</h2>
             <div class="gd-actions">
-              <span class="gd-anno-chip">{{ goal.anno }}</span>
+              <span class="gd-anno-chip">{{ periodLabel }}</span>
               <button class="gd-menu-btn" @click="showMenu = !showMenu" aria-label="Azioni">
                 <MIcon name="more_vert" :size="18" />
               </button>
@@ -181,12 +172,6 @@ function metricaCorrenteVsTarget(): string {
                 </button>
               </div>
             </div>
-          </div>
-
-          <div v-if="goal.metrica" class="gd-metrica">
-            <MIcon name="trending_up" :size="14" />
-            <span>{{ goal.metrica }}</span>
-            <span v-if="goal.valoreTarget != null" class="gd-metrica-val">{{ metricaCorrenteVsTarget() }}</span>
           </div>
 
           <div v-if="goal.descrizione" class="gd-description">
@@ -290,42 +275,23 @@ function metricaCorrenteVsTarget(): string {
             <label class="field-label md-text-field-label">Titolo *</label>
             <input v-model="editForm.titolo" class="field-input md-text-field-input" autofocus />
 
-            <label class="field-label md-text-field-label" style="margin-top:12px">Metrica</label>
-            <input v-model="editForm.metrica" class="field-input md-text-field-input" />
-
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
-              <div>
-                <label class="field-label md-text-field-label">Valore corrente</label>
-                <input v-model="editForm.valoreCorrente" type="number" class="field-input md-text-field-input" />
-              </div>
-              <div>
-                <label class="field-label md-text-field-label">Valore target</label>
-                <input v-model="editForm.valoreTarget" type="number" class="field-input md-text-field-input" />
-              </div>
-            </div>
-
             <label class="field-label md-text-field-label" style="margin-top:12px">Descrizione</label>
             <textarea v-model="editForm.descrizione" class="field-input md-text-field-input" rows="2" />
 
-            <div style="display:grid;grid-template-columns:80px 1fr;gap:12px;margin-top:12px">
-              <div>
-                <label class="field-label md-text-field-label">Anno</label>
-                <input v-model="editForm.anno" type="number" class="field-input md-text-field-input" />
-              </div>
-              <div>
-                <label class="field-label md-text-field-label">Colore</label>
-                <div class="color-picker">
-                  <button
-                    v-for="c in GOAL_COLOR_PRESETS"
-                    :key="c"
-                    type="button"
-                    class="color-swatch"
-                    :class="{ 'is-sel': editForm.colore === c }"
-                    :style="{ background: c }"
-                    @click="editForm.colore = c"
-                  />
-                </div>
-              </div>
+            <label class="field-label md-text-field-label" style="margin-top:16px">Periodo</label>
+            <CepheidPeriodPicker v-model="editForm.period" />
+
+            <label class="field-label md-text-field-label" style="margin-top:16px">Colore</label>
+            <div class="color-picker">
+              <button
+                v-for="c in GOAL_COLOR_PRESETS"
+                :key="c"
+                type="button"
+                class="color-swatch"
+                :class="{ 'is-sel': editForm.colore === c }"
+                :style="{ background: c }"
+                @click="editForm.colore = c"
+              />
             </div>
           </div>
           <div class="modal-footer md-modal-footer">
