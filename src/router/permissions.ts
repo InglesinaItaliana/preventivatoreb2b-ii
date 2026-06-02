@@ -61,6 +61,7 @@ export function postLoginRoute(role: Role): string {
  */
 export interface Capabilities {
   canEditProjects: boolean    // CepheidProjectsView: crea/edit/elimina progetti
+  canManageGoals: boolean     // CEPHEID Obiettivi: vede la pagina + crea (solo ADMIN)
   canManageTeamMeta: boolean  // NebulaTeamView: edit posizione/categoria organigramma
   canCreateTasks: boolean     // CEPHEID: creare azioni/task
   canTriage: boolean          // CEPHEID: accesso a Smistamento (assegnare task)
@@ -70,19 +71,19 @@ export interface Capabilities {
 }
 
 const EMPTY_CAPS: Capabilities = {
-  canEditProjects: false, canManageTeamMeta: false, canCreateTasks: false,
+  canEditProjects: false, canManageGoals: false, canManageTeamMeta: false, canCreateTasks: false,
   canTriage: false, canSeeAllTasks: false, canEditAnyTask: false, canEditOwnTask: false,
 }
 
 export const ROLE_CAPABILITIES: Record<Role, Capabilities> = {
   // ADMIN: tutto.
-  ADMIN:       { canEditProjects: true, canManageTeamMeta: true, canCreateTasks: true, canTriage: true, canSeeAllTasks: true, canEditAnyTask: true, canEditOwnTask: true },
-  // COMMERCIALE: accesso ampio CEPHEID (come storicamente), ma niente edit progetti/team.
-  COMMERCIALE: { canEditProjects: false, canManageTeamMeta: false, canCreateTasks: true, canTriage: true, canSeeAllTasks: true, canEditAnyTask: true, canEditOwnTask: true },
-  // PRODUZIONE: crea task + vede/modifica SOLO le proprie. Niente smistamento.
-  PRODUZIONE:  { canEditProjects: false, canManageTeamMeta: false, canCreateTasks: true, canTriage: false, canSeeAllTasks: false, canEditAnyTask: false, canEditOwnTask: true },
-  // LOGISTICA: sola lettura delle proprie + completamento. Niente creazione/edit/smistamento.
-  LOGISTICA:   { canEditProjects: false, canManageTeamMeta: false, canCreateTasks: false, canTriage: false, canSeeAllTasks: false, canEditAnyTask: false, canEditOwnTask: false },
+  ADMIN:       { canEditProjects: true,  canManageGoals: true,  canManageTeamMeta: true, canCreateTasks: true, canTriage: true, canSeeAllTasks: true, canEditAnyTask: true, canEditOwnTask: true },
+  // COMMERCIALE: accesso ampio CEPHEID + può creare progetti. NIENTE Obiettivi, niente edit team.
+  COMMERCIALE: { canEditProjects: true,  canManageGoals: false, canManageTeamMeta: false, canCreateTasks: true, canTriage: true, canSeeAllTasks: true, canEditAnyTask: true, canEditOwnTask: true },
+  // PRODUZIONE: crea task + vede/modifica SOLO le proprie. Niente Obiettivi/smistamento.
+  PRODUZIONE:  { canEditProjects: false, canManageGoals: false, canManageTeamMeta: false, canCreateTasks: true, canTriage: false, canSeeAllTasks: false, canEditAnyTask: false, canEditOwnTask: true },
+  // LOGISTICA: sola lettura delle proprie + completamento. Niente creazione/edit/Obiettivi/smistamento.
+  LOGISTICA:   { canEditProjects: false, canManageGoals: false, canManageTeamMeta: false, canCreateTasks: false, canTriage: false, canSeeAllTasks: false, canEditAnyTask: false, canEditOwnTask: false },
   '':          { ...EMPTY_CAPS },
 }
 

@@ -189,18 +189,20 @@ async function changeEmail(m: Member) {
 // --- Creazione membro ---
 const showCreate = ref(false)
 const creating = ref(false)
-const form = reactive({ firstName: '', lastName: '', email: '', password: '', role: 'PRODUZIONE', phone: '', position: '', category: '' })
-function resetForm() { Object.assign(form, { firstName: '', lastName: '', email: '', password: '', role: 'PRODUZIONE', phone: '', position: '', category: '' }) }
+const form = reactive({ firstName: '', lastName: '', email: '', password: '', role: '', phone: '', position: '', category: '' })
+function resetForm() { Object.assign(form, { firstName: '', lastName: '', email: '', password: '', role: '', phone: '', position: '', category: '' }) }
 
-// Funzione-first: scelta la funzione (= position), deriva role + category-avatar.
-// Il role resta visibile e overridabile sotto.
+// Funzione-first: la funzione (= position) determina role + category-avatar.
+// Il ruolo-permessi è in sola lettura qui; si aggiusta semmai dopo, dalla lista.
 function onFunzione() {
   const f = FUNZIONI.find(x => x.position === form.position)
   if (f) { form.role = f.role; form.category = f.category }
+  else { form.role = ''; form.category = '' }
 }
 
 async function createMember() {
   errorMsg.value = ''
+  if (!form.position || !form.role) { errorMsg.value = 'Scegli una funzione.'; return }
   if (!form.firstName || !form.lastName || !form.email) { errorMsg.value = 'Nome, cognome ed email obbligatori.'; return }
   if (form.password.length < 6) { errorMsg.value = 'Password di almeno 6 caratteri.'; return }
   creating.value = true
@@ -243,7 +245,7 @@ async function createMember() {
 
       <form v-if="showCreate" class="m-create" @submit.prevent="createMember">
         <select v-model="form.position" @change="onFunzione" class="m-input m-input--full">
-          <option value="">Funzione… (deriva ruolo e avatar)</option>
+          <option value="">Funzione… (determina ruolo e avatar)</option>
           <option v-for="f in FUNZIONI" :key="f.position" :value="f.position">{{ f.position }}</option>
         </select>
         <div class="m-create-grid">
@@ -251,13 +253,12 @@ async function createMember() {
           <input v-model="form.lastName" class="m-input" placeholder="Cognome" />
           <input v-model="form.email" type="email" class="m-input" placeholder="email@dominio.it" autocomplete="off" />
           <input v-model="form.password" type="password" class="m-input" placeholder="Password (min 6)" autocomplete="new-password" />
-          <input v-model="form.phone" class="m-input" placeholder="Telefono (opz.)" />
-          <select v-model="form.role" class="m-input" title="Ruolo-permessi (derivato dalla funzione, modificabile)">
-            <option v-for="r in ROLES" :key="r" :value="r">{{ roleLabel[r] }}</option>
-          </select>
+          <input v-model="form.phone" class="m-input m-input--full" placeholder="Telefono (opz.)" />
         </div>
-        <p class="m-role-desc">{{ roleDescriptions[form.role] }}</p>
-        <p class="m-create-hint">Il <strong>ruolo</strong> (permessi) è derivato dalla funzione ma resta modificabile. L'accesso <strong>Admin CORE</strong> si concede dopo, dalla lista (scudo).</p>
+        <p v-if="form.role" class="m-role-desc">
+          <strong>Ruolo: {{ roleLabel[form.role] }}</strong> — {{ roleDescriptions[form.role] }}
+        </p>
+        <p class="m-create-hint">Il <strong>ruolo-permessi</strong> è determinato dalla funzione. Lo puoi aggiustare dopo, dalla lista. L'accesso <strong>Admin CORE</strong> si concede separatamente (scudo).</p>
         <button class="m-btn" type="submit" :disabled="creating">
           <MIcon name="person_add" :size="16" /> {{ creating ? 'Creazione…' : 'Crea agente' }}
         </button>

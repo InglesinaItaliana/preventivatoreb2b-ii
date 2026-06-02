@@ -6,6 +6,8 @@ import MdPageHeader from '../../components/shared/MdPageHeader.vue'
 import GoalProgressBar from '../../components/cepheid/GoalProgressBar.vue'
 import { useObiettivi, GOAL_COLOR_PRESETS } from '../../composables/sidera/useObiettivi'
 import { useProjects } from '../../composables/sidera/useProjects'
+import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
+import { useCan } from '../../composables/sidera/useCan'
 import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
 
 const scrollEl = ref<HTMLElement | null>(null)
@@ -15,6 +17,12 @@ const route  = useRoute()
 const router = useRouter()
 const scopeBase = computed(() => route.path.startsWith('/sidera') ? '/sidera' : '/cepheid')
 const { obiettiviAttivi, loading, createObiettivo } = useObiettivi()
+
+// Obiettivi riservati a chi può gestirli (solo ADMIN). Accesso diretto degli
+// altri ruoli → rimando alla root del modulo. Attende currentUser (async-auth).
+const { currentUser } = useCurrentUser()
+const { can } = useCan()
+watch(currentUser, (u) => { if (u && !can('canManageGoals')) router.replace(scopeBase.value) }, { immediate: true })
 const { activeProjects } = useProjects()
 
 const currentYear = new Date().getFullYear()
@@ -55,6 +63,7 @@ const goalForm = ref({
 })
 
 function openGoalModal() {
+  if (!can('canManageGoals')) return
   goalForm.value = {
     titolo:         '',
     descrizione:    '',

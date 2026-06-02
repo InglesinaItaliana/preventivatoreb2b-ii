@@ -89,7 +89,7 @@ export const SCOPE_CONFIGS: Record<Exclude<ScopeId, 'sidera'>, ScopeConfig> = {
     mobileNav: [
       { path: '/cepheid',          exact: true,  label: 'Azioni',    icon: 'check_circle' },
       { path: '/cepheid/projects', exact: false, label: 'Progetti',  icon: 'folder' },
-      { path: '/cepheid/goals',    exact: false, label: 'Obiettivi', icon: 'flag' },
+      { path: '/cepheid/goals',    exact: false, label: 'Obiettivi', icon: 'flag', requiresCapability: 'canManageGoals' },
       { path: '/cepheid/smistamento', exact: false, label: 'Smistamento', icon: 'move_to_inbox', requiresCapability: 'canTriage' },
     ],
     fab: { icon: 'add_circle', action: 'new-task', ariaLabel: 'Nuova azione' },
