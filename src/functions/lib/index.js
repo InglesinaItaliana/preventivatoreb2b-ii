@@ -545,7 +545,8 @@ exports.createTeamMember = functions
     if (!context.auth) {
         throw new functions.https.HttpsError("unauthenticated", "Devi essere loggato per creare un membro del team.");
     }
-    const { email, password, firstName, lastName, role, phone, category, position } = data;
+    const { email, password, firstName, lastName, role, phone, category, position, managerUid } = data;
+    const cleanManagerUid = typeof managerUid === 'string' && managerUid.trim() ? managerUid.trim() : undefined;
     if (!email || !password || !role) {
         throw new functions.https.HttpsError("invalid-argument", "Dati mancanti.");
     }
@@ -565,9 +566,9 @@ exports.createTeamMember = functions
         });
         // 3. Crea il documento nel Database 'team' UID-KEYED (re-key Strada B,
         //    docs/STELLA-GRAFO.md). L'email resta come campo (mutabile via updateUser).
-        await admin.firestore().collection("team").doc(userRecord.uid).set(Object.assign(Object.assign(Object.assign({ uid: userRecord.uid, email: email.toLowerCase().trim(), firstName,
+        await admin.firestore().collection("team").doc(userRecord.uid).set(Object.assign(Object.assign(Object.assign(Object.assign({ uid: userRecord.uid, email: email.toLowerCase().trim(), firstName,
             lastName,
-            role, phone: phone || "", active: true }, (cleanCategory ? { category: cleanCategory } : {})), (cleanPosition ? { position: cleanPosition } : {})), { createdAt: admin.firestore.FieldValue.serverTimestamp(), createdBy: context.auth.uid }));
+            role, phone: phone || "", active: true }, (cleanCategory ? { category: cleanCategory } : {})), (cleanPosition ? { position: cleanPosition } : {})), (cleanManagerUid ? { managerUid: cleanManagerUid } : {})), { createdAt: admin.firestore.FieldValue.serverTimestamp(), createdBy: context.auth.uid }));
         return { success: true, message: `Utente ${email} creato con successo.` };
     }
     catch (error) {
