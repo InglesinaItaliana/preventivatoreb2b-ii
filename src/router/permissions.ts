@@ -91,6 +91,23 @@ export function capabilitiesFor(role: Role): Capabilities {
   return ROLE_CAPABILITIES[role] ?? EMPTY_CAPS
 }
 
+// --- Categoria (famiglia/avatar) → Ruolo-permessi (derivazione deterministica) ---
+// Una sola tassonomia gestita a mano (le categorie); il ruolo si calcola. NB:
+// direzione e amministrazione condividono il ruolo ADMIN — si differenziano per
+// avatar e per l'accesso CORE (scudo, gestito a parte da core/admins).
+export const CATEGORY_TO_ROLE: Record<string, Role> = {
+  direzione:       'ADMIN',
+  amministrazione: 'ADMIN',
+  produzione:      'PRODUZIONE',
+  tecnico:         'PRODUZIONE',  // legacy (categoria rimossa dalle scelte): mappata per i doc storici
+  logistica:       'LOGISTICA',
+  commerciale:     'COMMERCIALE',
+}
+
+export function roleForCategory(category?: string | null): Role {
+  return (category && CATEGORY_TO_ROLE[category]) || ''
+}
+
 // --- Predicati task-level (puri) per il gating CEPHEID ---
 interface TaskLike { assignees?: string[]; createdBy?: string }
 

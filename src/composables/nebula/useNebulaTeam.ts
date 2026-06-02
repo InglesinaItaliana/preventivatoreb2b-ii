@@ -2,7 +2,6 @@ import { ref, onUnmounted } from 'vue'
 import { collection, doc, onSnapshot, updateDoc } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { isHiddenTeamEmail, dedupeTeamDocs } from '../sidera/useTeamMembers'
-import type { Role } from '../../router/permissions'
 
 export interface NebulaMember {
   email:      string
@@ -24,7 +23,6 @@ export const CATEGORY_OPTIONS = [
   { key: 'direzione',       label: 'Direzione' },
   { key: 'amministrazione', label: 'Amministrazione' },
   { key: 'produzione',      label: 'Produzione' },
-  { key: 'tecnico',         label: 'Tecnico' },
   { key: 'logistica',       label: 'Logistica' },
   { key: 'commerciale',     label: 'Commerciale' },
 ] as const
@@ -47,31 +45,28 @@ export const POSITION_OPTIONS = [
 ]
 
 /**
- * FUNZIONE → (role, category) di default per la creazione "funzione-first"
- * (POLARIS Az.9 / opzione B, vedi docs/STELLA-GRAFO.md). Si sceglie la funzione e
- * il software deriva ruolo-permessi + categoria-avatar; il `role` resta sempre
- * visibile e overridabile. NB:
- *  - Amministrativo/Contabile → role ADMIN (= "tutto l'admin tranne SIDERA CORE":
- *    il CORE è governato a parte da core/admins, NON dal role).
- *  - Operaio Specializzato → category `tecnico` (role resta PRODUZIONE).
- *  - `direzione` vs `amministrazione` = forme avatar distinte legittime (role≠category).
+ * FUNZIONE → categoria di default per la creazione "funzione-first" (POLARIS Az.9 /
+ * opzione B, vedi docs/STELLA-GRAFO.md). Si sceglie la funzione → categoria (avatar)
+ * e il RUOLO-permessi si DERIVA dalla categoria (CATEGORY_TO_ROLE in permissions.ts):
+ * una sola tassonomia gestita a mano. direzione/amministrazione → ADMIN, ma si
+ * differenziano per avatar e accesso CORE (scudo, a parte). (`tecnico` rimosso.)
  */
-export interface Funzione { position: string; role: Role; category: string }
+export interface Funzione { position: string; category: string }
 export const FUNZIONI: Funzione[] = [
-  { position: 'Titolare',                 role: 'ADMIN',       category: 'direzione' },
-  { position: 'Socio',                    role: 'ADMIN',       category: 'direzione' },
-  { position: 'Amministratore Delegato',  role: 'ADMIN',       category: 'direzione' },
-  { position: 'Amministrativo',           role: 'ADMIN',       category: 'amministrazione' },
-  { position: 'Contabile',                role: 'ADMIN',       category: 'amministrazione' },
-  { position: 'Responsabile Commerciale', role: 'COMMERCIALE', category: 'commerciale' },
-  { position: 'Agente Commerciale',       role: 'COMMERCIALE', category: 'commerciale' },
-  { position: 'Responsabile Produzione',  role: 'PRODUZIONE',  category: 'produzione' },
-  { position: 'Capo Officina',            role: 'PRODUZIONE',  category: 'produzione' },
-  { position: 'Operaio Specializzato',    role: 'PRODUZIONE',  category: 'tecnico' },
-  { position: 'Operaio',                  role: 'PRODUZIONE',  category: 'produzione' },
-  { position: 'Responsabile Logistica',   role: 'LOGISTICA',   category: 'logistica' },
-  { position: 'Magazziniere',             role: 'LOGISTICA',   category: 'logistica' },
-  { position: 'Autista',                  role: 'LOGISTICA',   category: 'logistica' },
+  { position: 'Titolare',                 category: 'direzione' },
+  { position: 'Socio',                    category: 'direzione' },
+  { position: 'Amministratore Delegato',  category: 'direzione' },
+  { position: 'Amministrativo',           category: 'amministrazione' },
+  { position: 'Contabile',                category: 'amministrazione' },
+  { position: 'Responsabile Commerciale', category: 'commerciale' },
+  { position: 'Agente Commerciale',       category: 'commerciale' },
+  { position: 'Responsabile Produzione',  category: 'produzione' },
+  { position: 'Capo Officina',            category: 'produzione' },
+  { position: 'Operaio Specializzato',    category: 'produzione' },
+  { position: 'Operaio',                  category: 'produzione' },
+  { position: 'Responsabile Logistica',   category: 'logistica' },
+  { position: 'Magazziniere',             category: 'logistica' },
+  { position: 'Autista',                  category: 'logistica' },
 ]
 
 export function useNebulaTeam() {

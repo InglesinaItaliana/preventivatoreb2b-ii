@@ -11,7 +11,7 @@ import { useCoreAdmins } from '../../composables/sidera/useCoreAdmins'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
 import { useFunzioni } from '../../composables/sidera/useFunzioni'
 import { CATEGORY_OPTIONS } from '../../composables/nebula/useNebulaTeam'
-import type { Role } from '../../router/permissions'
+import { roleForCategory } from '../../router/permissions'
 
 const router = useRouter()
 const { isCoreAdmin, initialized } = useCoreAdmins()
@@ -23,9 +23,12 @@ const canAccessCore = computed(() =>
   (!initialized.value && currentUser.value?.role === 'ADMIN'),
 )
 
-const ROLES: Role[] = ['ADMIN', 'PRODUZIONE', 'LOGISTICA', 'COMMERCIALE']
 const roleLabel: Record<string, string> = {
   ADMIN: 'Admin', PRODUZIONE: 'Produzione', LOGISTICA: 'Logistica', COMMERCIALE: 'Commerciale',
+}
+// Il ruolo-permessi è derivato dalla categoria (non si gestisce a mano).
+function roleLabelFor(category: string): string {
+  return roleLabel[roleForCategory(category)] ?? '—'
 }
 
 const busy = ref('')
@@ -49,14 +52,14 @@ async function onDelete(id: string, label: string) {
 // --- Nuova funzione ---
 const showAdd = ref(false)
 const adding = ref(false)
-const form = reactive({ label: '', category: 'amministrazione', role: 'PRODUZIONE' as Role })
+const form = reactive({ label: '', category: 'amministrazione' })
 async function onAdd() {
   errorMsg.value = ''
   if (!form.label.trim()) { errorMsg.value = 'Inserisci il nome della funzione.'; return }
   adding.value = true
   try {
-    await addFunzione({ label: form.label.trim(), category: form.category, role: form.role })
-    Object.assign(form, { label: '', category: 'amministrazione', role: 'PRODUZIONE' as Role })
+    await addFunzione({ label: form.label.trim(), category: form.category })
+    Object.assign(form, { label: '', category: 'amministrazione' })
     showAdd.value = false
   } catch (e: any) { console.error('[CoreFunzioni] add', e); errorMsg.value = e?.message || 'Errore creazione.' }
   finally { adding.value = false }
@@ -88,7 +91,7 @@ async function onSeed() {
       <div class="m-task-head">
         <div>
           <h3 class="m-task-title">Etichette funzione</h3>
-          <p class="m-task-desc">Ogni funzione determina, alla creazione di un agente, la <strong>categoria</strong> (forma avatar) e il <strong>ruolo-permessi</strong>.</p>
+          <p class="m-task-desc">Ogni funzione ha una <strong>categoria</strong> (forma avatar); il <strong>ruolo-permessi</strong> è derivato automaticamente dalla categoria.</p>
         </div>
         <button class="m-btn" type="button" @click="showAdd = !showAdd">
           <MIcon name="add" :size="16" /> Nuova funzione
@@ -100,9 +103,7 @@ async function onSeed() {
         <select v-model="form.category" class="m-input">
           <option v-for="c in CATEGORY_OPTIONS" :key="c.key" :value="c.key">{{ c.label }}</option>
         </select>
-        <select v-model="form.role" class="m-input">
-          <option v-for="r in ROLES" :key="r" :value="r">{{ roleLabel[r] }}</option>
-        </select>
+        <span class="m-derived" title="Ruolo-permessi derivato dalla categoria">→ {{ roleLabelFor(form.category) }}</span>
         <button class="m-btn" type="submit" :disabled="adding">{{ adding ? '…' : 'Crea' }}</button>
       </form>
 
@@ -126,9 +127,7 @@ async function onSeed() {
           <select class="m-input m-frow-sel" :value="f.category" @change="onField(f.id, { category: ($event.target as HTMLSelectElement).value })">
             <option v-for="c in CATEGORY_OPTIONS" :key="c.key" :value="c.key">{{ c.label }}</option>
           </select>
-          <select class="m-input m-frow-sel" :value="f.role" @change="onField(f.id, { role: ($event.target as HTMLSelectElement).value })">
-            <option v-for="r in ROLES" :key="r" :value="r">{{ roleLabel[r] }}</option>
-          </select>
+          <span class="m-derived" title="Ruolo-permessi derivato dalla categoria">→ {{ roleLabelFor(f.category) }}</span>
           <button class="m-icon-btn" title="Elimina" :disabled="busy === f.id" @click="onDelete(f.id, f.label)">
             <MIcon name="delete" :size="18" />
           </button>
@@ -182,7 +181,11 @@ async function onSeed() {
 }
 .m-input:focus { border-color: var(--md-sys-color-primary, #C4941C); }
 
-.m-add-f { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 8px; margin-bottom: 16px; }
+.m-add-f { display: grid; grid-template-columns: 2fr 1fr auto auto; gap: 8px; margin-bottom: 16px; align-items: center; }
+.m-derived {
+  font-size: 12px; font-weight: 600; white-space: nowrap; padding: 0 6px;
+  color: var(--md-sys-color-primary, #C4941C);
+}
 
 .m-empty-seed {
   background: var(--md-sys-color-surface-container, #F5EDDF); padding: 20px; border-radius: 12px;
@@ -192,7 +195,7 @@ async function onSeed() {
 
 .m-list { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
 .m-frow {
-  display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 8px; align-items: center;
+  display: grid; grid-template-columns: 2fr 1fr auto auto; gap: 8px; align-items: center;
   padding: 6px 8px; border-radius: 12px; background: var(--md-sys-color-surface-container, #F5EDDF);
 }
 .m-frow.is-busy { opacity: 0.6; }

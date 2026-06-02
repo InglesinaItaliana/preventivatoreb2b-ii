@@ -5,17 +5,17 @@ import {
 } from 'firebase/firestore'
 import { db } from '../../firebase'
 import { FUNZIONI as DEFAULT_FUNZIONI } from '../nebula/useNebulaTeam'
-import type { Role } from '../../router/permissions'
+import { roleForCategory, type Role } from '../../router/permissions'
 
 /**
  * Funzioni/mansioni gestibili (POLARIS Az.9 / opzione B): ogni etichetta-funzione
- * lega un nome (es. "Agente Commerciale") a una CATEGORIA-avatar (gruppo di 6) e a
- * un RUOLO-permessi. Persistite in Firestore `funzioni/{id}` per essere editabili
- * senza codice. Sorgente per il select "Funzione" nella creazione agente.
+ * lega un nome (es. "Agente Commerciale") a una CATEGORIA-avatar. Il RUOLO-permessi
+ * NON si memorizza: si DERIVA dalla categoria (CATEGORY_TO_ROLE). Persistite in
+ * Firestore `funzioni/{id}`. Sorgente per il select "Funzione" nella creazione agente.
  */
-export interface FunzioneDoc { id: string; label: string; category: string; role: Role; order: number }
+export interface FunzioneDoc { id: string; label: string; category: string; order: number }
 
-/** Forma minima usata dal select creazione agente (collezione o default). */
+/** Forma usata dal select creazione agente: role derivato dalla categoria. */
 export interface FunzioneOption { label: string; category: string; role: Role }
 
 export function useFunzioni() {
@@ -33,18 +33,18 @@ export function useFunzioni() {
   onUnmounted(unsub)
 
   // Lista effettiva per la creazione agente: la collezione se popolata, altrimenti
-  // i default hardcoded (così la creazione funziona anche prima del seed).
+  // i default hardcoded. Il role è DERIVATO dalla categoria.
   const effective = computed<FunzioneOption[]>(() =>
     funzioni.value.length
-      ? funzioni.value.map(f => ({ label: f.label, category: f.category, role: f.role }))
-      : DEFAULT_FUNZIONI.map(f => ({ label: f.position, category: f.category, role: f.role })),
+      ? funzioni.value.map(f => ({ label: f.label, category: f.category, role: roleForCategory(f.category) }))
+      : DEFAULT_FUNZIONI.map(f => ({ label: f.position, category: f.category, role: roleForCategory(f.category) })),
   )
 
   const isSeeded = computed(() => funzioni.value.length > 0)
 
-  async function addFunzione(f: FunzioneOption) {
+  async function addFunzione(f: { label: string; category: string }) {
     const order = funzioni.value.length ? Math.max(...funzioni.value.map(x => x.order ?? 0)) + 1 : 0
-    await addDoc(collection(db, 'funzioni'), { ...f, order, createdAt: serverTimestamp() })
+    await addDoc(collection(db, 'funzioni'), { label: f.label, category: f.category, order, createdAt: serverTimestamp() })
   }
   async function updateFunzione(id: string, patch: Partial<Omit<FunzioneDoc, 'id'>>) {
     await updateDoc(doc(db, 'funzioni', id), patch)
@@ -57,7 +57,7 @@ export function useFunzioni() {
     const batch = writeBatch(db)
     DEFAULT_FUNZIONI.forEach((f, i) => {
       batch.set(doc(collection(db, 'funzioni')), {
-        label: f.position, category: f.category, role: f.role, order: i, createdAt: serverTimestamp(),
+        label: f.position, category: f.category, order: i, createdAt: serverTimestamp(),
       })
     })
     await batch.commit()
