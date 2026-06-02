@@ -1,14 +1,26 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import MdPageHeader from '../../components/shared/MdPageHeader.vue'
 import CepheidInboxCard from '../../components/cepheid/CepheidInboxCard.vue'
 import { useAllTasks, type Task } from '../../composables/sidera/useAllTasks'
 import { useProjects } from '../../composables/sidera/useProjects'
 import { useTeamMembers } from '../../composables/sidera/useTeamMembers'
+import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
+import { useCan } from '../../composables/sidera/useCan'
 import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
 
 const scrollEl = ref<HTMLElement | null>(null)
 const { hidden: headerHidden } = useAutoHideHeader(scrollEl)
+
+// Smistamento riservato a chi può triage (ADMIN/COMMERCIALE). Accesso diretto
+// di PRODUZIONE/LOGISTICA → rimando alle Azioni. Si attende il caricamento di
+// currentUser per non rimbalzare un admin mentre il ruolo è ancora async
+// (vedi feedback async-auth-subscribe).
+const router = useRouter()
+const { currentUser } = useCurrentUser()
+const { can } = useCan()
+watch(currentUser, (u) => { if (u && !can('canTriage')) router.replace('/cepheid') }, { immediate: true })
 
 const { tasks, loading, updateTask, deleteTask, fileStandaloneTask, attachToDeliverable } = useAllTasks()
 const { activeProjects } = useProjects()

@@ -15,10 +15,12 @@ import { useChats } from '../../composables/pulsar/useChats'
 import { useNotifications, type NotificationScope } from '../../composables/shared/useNotifications'
 import { useTriageCount } from '../../composables/cepheid/useTriageCount'
 import { useCoreAdmins } from '../../composables/sidera/useCoreAdmins'
+import { useCan } from '../../composables/sidera/useCan'
 
 const route  = useRoute()
 const router = useRouter()
 const { currentUser } = useCurrentUser()
+const { can } = useCan()
 const { members } = useTeamMembers()
 const { chats } = useChats()
 const { triageCount } = useTriageCount()
@@ -48,6 +50,15 @@ function syncMobile() {
 const isMobileLayout = computed(() => isStandalone.value || isMobileViewport.value)
 const currentScope = computed<ScopeId>(() => detectScope(route.path))
 const currentScopeConfig = computed(() => getScopeConfig(currentScope.value))
+
+// FAB gating per ruolo (POLARIS Az.9): in CEPHEID il FAB "new-task" è nascosto
+// a chi non può creare task (es. LOGISTICA). Gli altri FAB restano invariati.
+const showFab = computed(() => {
+  const fab = currentScopeConfig.value?.fab
+  if (!fab) return false
+  if (fab.action === 'new-task') return can('canCreateTasks')
+  return true
+})
 
 // PULSAR — quando sei DENTRO una chat (route /pulsar/chat/:id) la
 // bottom-nav + FAB vengono nascoste: il box di scrittura messaggio diventa
@@ -320,7 +331,10 @@ function persistExpanded(name: string | null) {
  */
 function visibleItems(mod: typeof modules[0]) {
   const userEmail = currentUser.value?.email
-  return mod.items.filter((it: any) => !it.requiresCoreAdmin || isCoreAdmin(userEmail))
+  return mod.items.filter((it: any) =>
+    (!it.requiresCoreAdmin || isCoreAdmin(userEmail)) &&
+    (!it.requiresCapability || can(it.requiresCapability)),
+  )
 }
 
 function selectSection(mod: typeof modules[0]) {
@@ -709,7 +723,7 @@ const roleLabel: Record<string, string> = {
         :triage-count="triageCount"
       >
         <template #fab>
-          <ContextualFab :config="currentScopeConfig" @trigger="onFabTrigger" />
+          <ContextualFab v-if="showFab" :config="currentScopeConfig" @trigger="onFabTrigger" />
         </template>
       </ContextualBottomNav>
     </div>

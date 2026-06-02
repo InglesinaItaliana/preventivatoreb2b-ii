@@ -9,6 +9,8 @@
  * isn't auto-derived. Vedi docs/ATLAS.md sez. 3 e 14.
  */
 
+import type { Capabilities } from '../../router/permissions'
+
 export type ScopeId = 'pulsar' | 'cepheid' | 'nebula' | 'nova' | 'magnetar' | 'quasar' | 'sidera'
 
 export interface NavItem {
@@ -22,6 +24,11 @@ export interface NavItem {
    * ContextualBottomNav) filtrano prima del render.
    */
   requiresCoreAdmin?: boolean
+  /**
+   * Quando presente, l'entry è visibile solo se l'utente ha questa capability
+   * (useCan). Es. Smistamento CEPHEID → 'canTriage'. Filtrato dai consumer.
+   */
+  requiresCapability?: keyof Capabilities
 }
 
 /**
@@ -83,7 +90,7 @@ export const SCOPE_CONFIGS: Record<Exclude<ScopeId, 'sidera'>, ScopeConfig> = {
       { path: '/cepheid',          exact: true,  label: 'Azioni',    icon: 'check_circle' },
       { path: '/cepheid/projects', exact: false, label: 'Progetti',  icon: 'folder' },
       { path: '/cepheid/goals',    exact: false, label: 'Obiettivi', icon: 'flag' },
-      { path: '/cepheid/smistamento', exact: false, label: 'Smistamento', icon: 'move_to_inbox' },
+      { path: '/cepheid/smistamento', exact: false, label: 'Smistamento', icon: 'move_to_inbox', requiresCapability: 'canTriage' },
     ],
     fab: { icon: 'add_circle', action: 'new-task', ariaLabel: 'Nuova azione' },
     isTopLevelPath: (p) =>

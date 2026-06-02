@@ -6,6 +6,8 @@ import CepheidViewSwitcher from '../../components/cepheid/CepheidViewSwitcher.vu
 import { useAllTasks, createStandaloneTask } from '../../composables/sidera/useAllTasks'
 import { useProjects } from '../../composables/sidera/useProjects'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
+import { useCan } from '../../composables/sidera/useCan'
+import { isOwnTask, canEditTask, canCompleteTask } from '../../router/permissions'
 import { useTeamMembers, displayName, starAvatarProps } from '../../composables/sidera/useTeamMembers'
 import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
 
@@ -17,17 +19,28 @@ import LinkedDocsPanel from '../../components/shared/LinkedDocsPanel.vue'
 const { tasks, loading: tasksLoading, completeTask, uncompleteTask, createTask, updateTask, deleteTask } = useAllTasks()
 const { activeProjects } = useProjects()
 const { currentUser } = useCurrentUser()
+const { caps } = useCan()
 const { members } = useTeamMembers()
+
+// Permessi CEPHEID per ruolo (POLARIS Az.9, docs/STELLA-GRAFO.md).
+const canCreate = computed(() => caps.value.canCreateTasks)
+const canSeeAll = computed(() => caps.value.canSeeAllTasks)
+const myEmail = computed(() => currentUser.value?.email ?? '')
+const myUid   = computed(() => currentUser.value?.uid ?? '')
 
 // ── Filtri (port da TasksView SIDERA 2026-05-20) ───────────────────────────
 type Filter = 'mine' | 'all' | 'late' | 'done'
 const filter = ref<Filter>('mine')
-const filterTabs: { id: Filter; label: string; icon: string }[] = [
-  { id: 'mine', label: 'Le mie',     icon: 'person' },
-  { id: 'all',  label: 'Tutte',      icon: 'list' },
-  { id: 'late', label: 'In ritardo', icon: 'warning' },
-  { id: 'done', label: 'Completate', icon: 'check_circle' },
-]
+const filterTabs = computed<{ id: Filter; label: string; icon: string }[]>(() => {
+  const tabs: { id: Filter; label: string; icon: string }[] = [
+    { id: 'mine', label: 'Le mie',     icon: 'person' },
+    { id: 'all',  label: 'Tutte',      icon: 'list' },
+    { id: 'late', label: 'In ritardo', icon: 'warning' },
+    { id: 'done', label: 'Completate', icon: 'check_circle' },
+  ]
+  // Ruoli ristretti: la tab "Tutte" non ha senso (vedono solo le proprie).
+  return canSeeAll.value ? tabs : tabs.filter(t => t.id !== 'all')
+})
 
 
 // ── Quick-add: scrivi e premi Invio per creare un'azione (assegnata a me) ───
@@ -35,7 +48,7 @@ const quickTitle = ref('')
 const quickSaving = ref(false)
 async function quickAdd() {
   const title = quickTitle.value.trim()
-  if (!title || quickSaving.value) return
+  if (!title || quickSaving.value || !canCreate.value) return
   quickSaving.value = true
   try {
     // task "da smistare" (triaged:false) senza assegnatario → entra in Smistamento;
@@ -59,19 +72,28 @@ async function quickAdd() {
 const pendingDone = ref<Set<string>>(new Set())
 const pendingUndo = ref<Set<string>>(new Set())
 
-async function doComplete(t: { id: string; projectId: string }) {
+type CompletableTask = { id: string; projectId: string; assignees?: string[]; createdBy?: string }
+
+async function doComplete(t: CompletableTask) {
   if (pendingDone.value.has(t.id)) return
+  if (!canCompleteTask(caps.value, t, myEmail.value, myUid.value)) return
   pendingDone.value = new Set([...pendingDone.value, t.id])
   await completeTask(t.projectId, t.id)
 }
 
-async function doUncomplete(t: { id: string; projectId: string }) {
+async function doUncomplete(t: CompletableTask) {
   if (pendingUndo.value.has(t.id)) return
+  if (!canCompleteTask(caps.value, t, myEmail.value, myUid.value)) return
   pendingUndo.value = new Set([...pendingUndo.value, t.id])
   await uncompleteTask(t.projectId, t.id)
 }
 
-const realTasks = computed(() => tasks.value.filter(t => !t.type || t.type === 'task'))
+const realTasks = computed(() => {
+  const list = tasks.value.filter(t => !t.type || t.type === 'task')
+  // Ruoli ristretti (PRODUZIONE/LOGISTICA): vedono SOLO le proprie task assegnate/create.
+  // Filtrando qui, tutto il downstream (active/done/visible/groups/count) eredita la restrizione.
+  return canSeeAll.value ? list : list.filter(t => isOwnTask(t, myEmail.value, myUid.value))
+})
 
 const activeTasks = computed(() => realTasks.value.filter(t => !t.completedAt && !pendingDone.value.has(t.id)))
 
@@ -176,6 +198,7 @@ const prioOptions = [
 ] as const
 
 function openTaskModal() {
+  if (!canCreate.value) return
   editingTask.value = null
   taskForm.value = {
     title:     '',
@@ -188,6 +211,8 @@ function openTaskModal() {
 }
 
 function openEditTaskModal(t: TaskLike) {
+  // Solo chi può editare la task apre il modale (LOGISTICA: mai; PRODUZIONE: le proprie).
+  if (!canEditTask(caps.value, t, myEmail.value, myUid.value)) return
   editingTask.value = t
   taskForm.value = {
     title:     t.title,
@@ -216,6 +241,7 @@ async function submitTask() {
   try {
     const dueDate = taskForm.value.dueDate ? parseDateInput(taskForm.value.dueDate) : null
     if (editingTask.value) {
+      if (!canEditTask(caps.value, editingTask.value, myEmail.value, myUid.value)) { taskSaving.value = false; return }
       await updateTask(editingTask.value.projectId, editingTask.value.id, {
         title:     taskForm.value.title.trim(),
         priority:  taskForm.value.priority,
@@ -223,6 +249,7 @@ async function submitTask() {
         assignees: taskForm.value.assignees,
       })
     } else {
+      if (!canCreate.value) { taskSaving.value = false; return }
       await createStandaloneTask({
         title:     taskForm.value.title.trim(),
         projectId: taskForm.value.projectId || null,
@@ -241,6 +268,7 @@ async function submitTask() {
 
 async function doDeleteTask() {
   if (!editingTask.value || taskDeleting.value) return
+  if (!canEditTask(caps.value, editingTask.value, myEmail.value, myUid.value)) return
   if (!confirm('Eliminare questa azione?')) return
   taskDeleting.value = true
   try {
@@ -284,7 +312,7 @@ onMounted(() => {
 
     <div class="av-content">
       <!-- quick-add: scrivi e premi Invio per aggiungere un'azione (iperrapido) -->
-      <div class="quick-add">
+      <div v-if="canCreate" class="quick-add">
         <MIcon name="add" :size="18" class="quick-add-icon" />
         <input
           v-model="quickTitle"

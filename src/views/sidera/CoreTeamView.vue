@@ -60,6 +60,13 @@ const ROLES = ['ADMIN', 'PRODUZIONE', 'LOGISTICA', 'COMMERCIALE'] as const
 const roleLabel: Record<string, string> = {
   ADMIN: 'Admin', PRODUZIONE: 'Produzione', LOGISTICA: 'Logistica', COMMERCIALE: 'Commerciale',
 }
+// Cosa comporta ciascun ruolo (permessi). Mostrato nel form per chi crea/modifica.
+const roleDescriptions: Record<string, string> = {
+  ADMIN:       'Accesso completo: progetti, tutte le task, smistamento. (SIDERA CORE si concede a parte con lo scudo.)',
+  COMMERCIALE: 'PULSAR completo · CEPHEID ampio: crea/vede/modifica tutte le task + smistamento. Niente gestione progetti.',
+  PRODUZIONE:  'PULSAR completo · CEPHEID: crea task, vede e completa solo le proprie assegnate. Niente smistamento.',
+  LOGISTICA:   'PULSAR completo · CEPHEID: vede e completa solo le proprie task (sola lettura, niente creazione).',
+}
 
 // Per StarAvatar/displayName: tutti i membri (agenti + sistema).
 const teamLike = computed<TeamMember[]>(() =>
@@ -249,6 +256,7 @@ async function createMember() {
             <option v-for="r in ROLES" :key="r" :value="r">{{ roleLabel[r] }}</option>
           </select>
         </div>
+        <p class="m-role-desc">{{ roleDescriptions[form.role] }}</p>
         <p class="m-create-hint">Il <strong>ruolo</strong> (permessi) è derivato dalla funzione ma resta modificabile. L'accesso <strong>Admin CORE</strong> si concede dopo, dalla lista (scudo).</p>
         <button class="m-btn" type="submit" :disabled="creating">
           <MIcon name="person_add" :size="16" /> {{ creating ? 'Creazione…' : 'Crea agente' }}
@@ -274,6 +282,7 @@ async function createMember() {
 
           <select
             class="m-role" :value="m.role" :disabled="busy === m.docId"
+            :title="roleDescriptions[m.role]"
             @change="changeRole(m, ($event.target as HTMLSelectElement).value)"
           >
             <option v-for="r in ROLES" :key="r" :value="r">{{ roleLabel[r] }}</option>
@@ -368,6 +377,11 @@ async function createMember() {
 .m-create { background: var(--md-sys-color-surface-container, #F5EDDF); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
 .m-create-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
 .m-input--full { width: 100%; margin-bottom: 8px; }
+.m-role-desc {
+  font-size: 12px; line-height: 1.5; margin: 0 0 8px; padding: 8px 12px; border-radius: 8px;
+  background: color-mix(in srgb, var(--md-sys-color-primary, #C4941C) 10%, transparent);
+  color: var(--md-sys-color-on-surface, #1A1917);
+}
 .m-create-hint { font-size: 12px; line-height: 1.5; color: var(--md-sys-color-on-surface-variant, #6A6560); margin: 0 0 12px; }
 .m-input {
   min-width: 0; background: var(--md-sys-color-surface-container-lowest, #FFFFFF);
