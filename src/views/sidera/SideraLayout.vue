@@ -375,36 +375,27 @@ function isSectionOpen(name: string) {
   return hoveredSection.value ? hoveredSection.value === name : isSectionExpanded(name)
 }
 
-// Ancoraggio scroll: tiene il top del gruppo `el` fisso a `targetTop` (coord.
-// viewport) per tutta la durata della transizione di altezza (grid-template-rows
-// ~500ms). Le sezioni sopra collassano/espandono frame-by-frame; a ogni frame
-// ricompenso lo scrollTop così il gruppo hover-ato non scivola sotto il cursore.
-let pinRaf = 0
-let pinUntil = 0
-function pinGroup(el: HTMLElement, navEl: HTMLElement, targetTop: number) {
-  cancelAnimationFrame(pinRaf)
-  pinUntil = performance.now() + 650   // long2 (500ms) + margine
-  const step = (now: number) => {
-    const diff = el.getBoundingClientRect().top - targetTop
-    if (Math.abs(diff) > 0.5) navEl.scrollTop += diff
-    if (now < pinUntil) pinRaf = requestAnimationFrame(step)
-  }
-  pinRaf = requestAnimationFrame(step)
-}
-
+// Ancoraggio scroll (singola correzione). La sezione sopra collassa in modo
+// ISTANTANEO (vedi CSS: transition solo in apertura), quindi lo shift di layout
+// avviene in un solo reflow: basta una correzione una-tantum dello scrollTop,
+// arrotondata all'intero, per ri-pinnare il gruppo hover-ato sotto il cursore.
+// Niente loop rAF → niente scroll sub-pixel → niente shimmer ai bordi.
+// L'apertura della sezione hover-ata è animata ma cresce SOTTO la sua label
+// (il top del gruppo non si muove), quindi non serve compensarla.
 function previewSection(name: string, ev: MouseEvent) {
   if (hoveredSection.value === name) return
   const navEl = navRef.value
   const groupEl = ev.currentTarget as HTMLElement | null
-  const targetTop = groupEl?.getBoundingClientRect().top ?? 0
+  const before = groupEl?.getBoundingClientRect().top ?? 0
   hoveredSection.value = name
-  if (navEl && groupEl) nextTick(() => pinGroup(groupEl, navEl, targetTop))
+  if (navEl && groupEl) {
+    nextTick(() => {
+      const delta = Math.round(groupEl.getBoundingClientRect().top - before)
+      if (delta) navEl.scrollTop += delta
+    })
+  }
 }
-function clearHovered() {
-  cancelAnimationFrame(pinRaf)
-  hoveredSection.value = null
-}
-onBeforeUnmount(() => cancelAnimationFrame(pinRaf))
+function clearHovered() { hoveredSection.value = null }
 
 // Inizializza: ultima sezione aperta da localStorage, fallback su quella della
 // route corrente, fallback finale sul primo modulo. Il route-watcher sotto
@@ -908,10 +899,14 @@ const roleLabel: Record<string, string> = {
 .s-section-items {
   display: grid;
   grid-template-rows: 0fr;
-  transition: grid-template-rows var(--md-sys-motion-duration-long2) var(--md-sys-motion-easing-emphasized);
+  /* Collasso ISTANTANEO (nessuna transizione in uscita): un solo reflow,
+     compensato da una singola correzione di scroll → niente shimmer ai bordi. */
 }
 .s-section-items.s-is-open {
   grid-template-rows: 1fr;
+  /* L'apertura, invece, è animata (la transizione esiste solo nello stato aperto,
+     così si attiva entrando in .s-is-open e non quando lo si lascia). */
+  transition: grid-template-rows var(--md-sys-motion-duration-long2) var(--md-sys-motion-easing-emphasized);
 }
 .s-section-items-inner {
   overflow: hidden;
@@ -937,6 +932,7 @@ const roleLabel: Record<string, string> = {
 @media (prefers-reduced-motion: reduce) {
   .s-section-label,
   .s-section-items,
+  .s-section-items.s-is-open,
   .s-section-items-inner { transition: none; }
   .s-section-items.s-is-open .s-nav-item { animation: none; }
 }
