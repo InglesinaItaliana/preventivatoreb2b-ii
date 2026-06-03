@@ -247,8 +247,11 @@ router.beforeEach(async (to, from, next) => {
   // così se l'utente tocca la tab "Squadra" della bottom-nav venendo da
   // /nebula/docs il navigation funziona regolare. Senza questo check l'utente
   // resta intrappolato su /nebula/docs.
+  // NB: lo start_url del manifest è "/nebula/" (con slash finale): includiamo
+  // entrambe le forme, altrimenti al cold-launch della PWA il redirect non scatta
+  // e si resta su Squadra.
   if (
-    to.path === '/nebula'
+    (to.path === '/nebula' || to.path === '/nebula/')
     && isMobileLayout()
     && !from.path.startsWith('/nebula')
   ) {

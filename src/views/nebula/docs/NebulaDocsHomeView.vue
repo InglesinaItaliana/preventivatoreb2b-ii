@@ -409,7 +409,6 @@ function isActiveTouch(d: DocRow): boolean {
       >
         <template #tools>
           <CepheidViewSwitcher
-            labels
             :model-value="activeTab"
             :tabs="docTabs"
             @update:model-value="(v) => (activeTab = v as DocTab)"

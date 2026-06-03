@@ -360,8 +360,10 @@ function isSectionExpanded(name: string) {
   return expandedSection.value === name
 }
 
-// Hover-preview ESCLUSIVO (desktop): passando il mouse su una sezione si svelano
-// le sue schede ed è aperta SOLO quella; uscendo dalla nav torna la sezione attiva.
+// Hover-preview (desktop): passando il mouse su una sezione si svelano le sue
+// schede. La sezione ATTIVA (route) resta SEMPRE aperta — anche mentre ti muovi
+// verso il basso su altre sezioni — così non perdi di vista dove sei; in più si
+// apre quella sotto il cursore. Uscendo dalla nav resta solo l'attiva.
 //
 // Il loop/flash nasceva dallo shift di layout: aprendo una sezione, quella sopra
 // collassava, il contenuto risaliva e la sezione hover-ata scivolava sotto il
@@ -372,7 +374,7 @@ function isSectionExpanded(name: string) {
 const navRef = ref<HTMLElement | null>(null)
 const hoveredSection = ref<string | null>(null)
 function isSectionOpen(name: string) {
-  return hoveredSection.value ? hoveredSection.value === name : isSectionExpanded(name)
+  return isSectionExpanded(name) || hoveredSection.value === name
 }
 
 // Gate anti-flash. Un `mouseenter` può scattare anche SENZA che il mouse si muova,

@@ -1,8 +1,10 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import MIcon from '../shared/MIcon.vue'
 import StarAvatar from '../shared/StarAvatar.vue'
 import { starAvatarProps, displayName, type TeamMember } from '../../composables/sidera/useTeamMembers'
+// @ts-expect-error — starAvatar.js è vanilla senza tipi (stesso motore di StarAvatar)
+import { makeStar } from '../../lib/starAvatar.js'
 import type { TaskVM } from '../../composables/cepheid/useProjectTimeline'
 
 const props = defineProps<{
@@ -22,6 +24,25 @@ defineEmits<{
 const left  = () => (props.preview ? props.preview.leftPct : props.task.leftPct)
 const width = () => (props.preview ? props.preview.widthPct : props.task.widthPct)
 const avOpen = ref(false)   // tap su mobile per aprire le pillole assegnatari
+
+// Colori pillola assegnatario, derivati dallo stesso motore dello StarAvatar:
+//  - bg   = sfondo del bollino (makeStar.bgColor, pastello hsl(hue,42%,92%))
+//  - name = colore della stella (hue + sat/light "rinforzati" come in drawStar)
+// Così la pillola del nome è dello stesso colore di sfondo del bollino e il nome
+// dello stesso colore della stella.
+const avColors = computed<Record<string, { bg: string; name: string }>>(() => {
+  const out: Record<string, { bg: string; name: string }> = {}
+  for (const email of props.task.assignees ?? []) {
+    const s = makeStar(starAvatarProps(email, props.members))
+    const sB = Math.min(100, s.sat + 12)
+    const lB = Math.max(40, s.light - 12)
+    out[email] = {
+      bg: s.bgColor,
+      name: `hsl(${Math.round(s.hue)}, ${Math.round(sB)}%, ${Math.round(lB)}%)`,
+    }
+  }
+  return out
+})
 </script>
 
 <template>
@@ -48,9 +69,14 @@ const avOpen = ref(false)   // tap su mobile per aprire le pillole assegnatari
         </div>
         <div class="trow2">
           <div class="avg" :class="{ 'is-open': avOpen }" @click.stop="avOpen = !avOpen">
-            <span v-for="email in task.assignees" :key="email" class="av-pill">
+            <span
+              v-for="email in task.assignees"
+              :key="email"
+              class="av-pill"
+              :style="{ background: avColors[email]?.bg }"
+            >
               <StarAvatar class="av" v-bind="starAvatarProps(email, members)" :size="22" />
-              <span class="av-name">{{ displayName(email, members) }}</span>
+              <span class="av-name" :style="{ color: avColors[email]?.name }">{{ displayName(email, members) }}</span>
             </span>
           </div>
           <template v-if="task.timed">
@@ -119,7 +145,7 @@ const avOpen = ref(false)   // tap su mobile per aprire le pillole assegnatari
 .av-pill { display: inline-flex; align-items: center; background: #05090F; border-radius: 999px; transition: margin-left .2s ease, padding-right .2s ease; }
 .av-pill:not(:first-child) { margin-left: -7px; }
 .avg.is-open .av-pill, .avg:hover .av-pill { margin-left: 0; padding-right: 4px; }
-.av-pill .av { border: 1.5px solid var(--md-sys-color-surface); border-radius: 50%; flex: 0 0 auto; }
+.av-pill .av { border-radius: 50%; flex: 0 0 auto; }
 .av-name {
   max-width: 0; overflow: hidden; white-space: nowrap; opacity: 0; padding-left: 0;
   color: #fff; font-size: 11px; font-weight: 500; line-height: 1;
