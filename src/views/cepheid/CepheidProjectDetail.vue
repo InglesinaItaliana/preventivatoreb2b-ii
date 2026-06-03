@@ -21,7 +21,7 @@ const router  = useRouter()
 const projectId = route.params.id as string
 
 const { projects, updateProject } = useProjects()
-const { tasks, loading, createTask, completeTask, uncompleteTask, updateTaskStatus, updateTask, deleteTask, approvePhase, unapprovePhase, createPhaseBundle } = useProjectTasks(projectId)
+const { tasks, loading, createTask, completeTask, uncompleteTask, updateTaskStatus, updateTask, approvePhase, unapprovePhase, createPhaseBundle } = useProjectTasks(projectId)
 const { obiettiviAttivi } = useObiettivi()
 const { currentUser } = useCurrentUser()
 const { members } = useTeamMembers()
@@ -132,20 +132,8 @@ const milestoneSorted = computed(() => {
   })
 })
 
-async function toggleMilestone(m: { id: string; completedAt: Date | null }) {
-  if (m.completedAt) await uncompleteTask(m.id)
-  else await completeTask(m.id)
-}
-
-// edit titolo milestone (inline)
-const editingMileId = ref<string | null>(null)
-const editMileTitle = ref('')
-function startEditMile(m: { id: string; title: string }) { editingMileId.value = m.id; editMileTitle.value = m.title }
-async function saveMile() {
-  const id = editingMileId.value
-  if (id && editMileTitle.value.trim()) await updateTask(id, { title: editMileTitle.value.trim() })
-  editingMileId.value = null
-}
+// Milestone/deliverable nelle rispettive tab sono in sola lettura (gestione via
+// timeline): niente toggle/edit/delete qui. Vedi markup tab milestone/deliverable.
 
 // ── DELIVERABLE ───────────────────────────────────────────────────────────
 const deliverableSorted = computed(() => {
@@ -170,6 +158,17 @@ function deliverablePct(d: { deliverableTaskIds: string[] }): number {
   if (!sub.length) return 0
   const done = sub.filter(t => t.completedAt).length
   return Math.round((done / sub.length) * 100)
+}
+
+// Spunta deliverable conforme alla timeline: completabile solo se TUTTE le task
+// associate sono complete (o se non ne ha). La spunta esistente si può togliere.
+function deliverableTasksDone(d: { deliverableTaskIds: string[] }): boolean {
+  const sub = tasksOfDeliverable(d.deliverableTaskIds)
+  return sub.length === 0 || sub.every(t => !!t.completedAt)
+}
+function onDeliverableCheck(d: { id: string; completedAt: Date | null; deliverableTaskIds: string[] }) {
+  if (d.completedAt) { doUncomplete(d); return }
+  if (deliverableTasksDone(d)) doComplete(d)
 }
 
 // ── NOTE (text editor con autosave su projects/{id}.notes) ────────────────
@@ -222,11 +221,6 @@ if (newTaskTick) {
   watch(newTaskTick, () => openCreate('task'))
 }
 
-// ── Delete con conferma ───────────────────────────────────────────────────
-async function deleteItem(t: { id: string; completedAt: Date | null; title: string }) {
-  if (!confirm(`Eliminare "${t.title}"?`)) return
-  await deleteTask(t.id, !!t.completedAt)
-}
 </script>
 
 <template>
@@ -353,6 +347,7 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
         </div>
 
         <div v-else class="milestone-timeline">
+          <!-- sola lettura: la spunta riflette lo stato (raggiunta dalla timeline) -->
           <div
             v-for="m in milestoneSorted"
             :key="m.id"
@@ -360,31 +355,17 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
             :class="{ 'is-done': m.completedAt }"
           >
             <div class="milestone-line" />
-            <button
+            <span
               class="milestone-circle"
               :class="{ 'is-done': m.completedAt }"
-              @click="toggleMilestone(m)"
-              :title="m.completedAt ? 'Riapri' : 'Segna come raggiunta'"
+              :title="m.completedAt ? 'Raggiunta' : 'Non ancora raggiunta'"
             >
               <MIcon v-if="m.completedAt" name="check" :size="14" />
-            </button>
+            </span>
             <div class="milestone-body">
-              <input
-                v-if="editingMileId === m.id"
-                v-model="editMileTitle"
-                class="milestone-edit-input"
-                @keyup.enter="saveMile"
-                @blur="saveMile"
-              />
-              <div v-else class="milestone-title" :class="{ 'is-done': m.completedAt }" @click="startEditMile(m)">{{ m.title }}</div>
+              <div class="milestone-title" :class="{ 'is-done': m.completedAt }">{{ m.title }}</div>
               <div class="milestone-date">{{ mileDateLabel(m.id) }}</div>
             </div>
-            <button class="row-del-btn" @click="startEditMile(m)" title="Rinomina">
-              <MIcon name="edit" :size="14" />
-            </button>
-            <button class="row-del-btn" @click="deleteItem(m)" title="Elimina">
-              <MIcon name="close" :size="14" />
-            </button>
           </div>
         </div>
       </template>
@@ -404,16 +385,20 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
             class="deliverable-card"
             :class="{ 'is-done': d.completedAt }"
           >
-            <div class="deliverable-stripe" :style="{ background: prioColor[d.priority] }" />
             <div class="deliverable-body">
               <div class="deliverable-top">
-                <div class="checkbox" @click="d.completedAt ? doUncomplete(d) : doComplete(d)">
+                <!-- spunta cliccabile solo se tutte le task del deliverable sono complete -->
+                <div
+                  class="checkbox"
+                  :class="{ 'is-locked': !d.completedAt && !deliverableTasksDone(d) }"
+                  :title="!d.completedAt && !deliverableTasksDone(d) ? 'Completa prima le task associate' : ''"
+                  @click="onDeliverableCheck(d)"
+                >
                   <MIcon v-if="d.completedAt" name="check" :size="14" class="check-icon" />
+                  <MIcon v-else-if="!deliverableTasksDone(d)" name="lock" :size="11" class="lock-icon" />
                 </div>
+                <span class="prio-dot" :style="{ background: prioColor[d.priority] }" :title="'Priorità ' + d.priority" />
                 <div class="deliverable-title" :class="{ 'is-done': d.completedAt }">{{ d.title }}</div>
-                <button class="row-del-btn" @click="deleteItem(d)" title="Elimina">
-                  <MIcon name="close" :size="14" />
-                </button>
               </div>
 
               <div class="deliverable-meta">
@@ -422,9 +407,6 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
                 </span>
                 <span v-if="d.assignees.length" class="d-meta-chip">
                   <MIcon name="person" :size="11" /> {{ displayName(d.assignees[0], members) }}
-                </span>
-                <span class="d-meta-chip" :style="{ background: prioColor[d.priority] + '15', color: prioColor[d.priority] }">
-                  {{ d.priority }}
                 </span>
               </div>
 
@@ -629,23 +611,20 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
 .empty-tab-icon { color: var(--md-sys-color-primary); opacity: 0.35; margin-bottom: 4px; }
 
 /* ── LIST view (assorbita da ProjectBoard SIDERA 2026-05-20) ───────────── */
-.list-view { max-width: 720px; display: flex; flex-direction: column; gap: 6px; }
+.list-view { display: flex; flex-direction: column; gap: 6px; }
 .list-row {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 11px 14px;
-  background: var(--md-sys-color-surface);
-  border-radius: var(--md-sys-shape-corner-small);
-  border: 1px solid var(--md-sys-color-outline-variant);
+  padding: 12px 14px;
+  background: #FFF8F0;
+  border-radius: 12px;
   cursor: pointer;
-  transition: border-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
-              box-shadow   var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
+  transition: background var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
 }
-.list-row:hover {
-  border-color: var(--md-sys-color-outline);
-  box-shadow: var(--md-sys-elevation-level-1);
-}
+.s-surface-dark .list-row { background: #16130B; }
+.list-row:hover { background: color-mix(in srgb, var(--md-sys-color-primary) 5%, #FFF8F0); }
+.s-surface-dark .list-row:hover { background: color-mix(in srgb, var(--md-sys-color-primary) 10%, #16130B); }
 .list-title { flex: 1; font-size: 13px; color: var(--md-sys-color-on-surface); }
 .list-title.is-done { text-decoration: line-through; color: var(--md-sys-color-on-surface-variant); }
 .list-state { font-size: 11px; font-weight: 600; flex-shrink: 0; }
@@ -661,7 +640,6 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
 /* ── CAL view (group-by relative due date) ─────────────────────────────── */
 /* ── NOTES view ─────────────────────────────────────────────────────────── */
 .notes-view {
-  max-width: 720px;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -675,10 +653,19 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
 .notes-textarea {
   min-height: 360px;
   resize: vertical;
+  width: 100%;
+  box-sizing: border-box;
+  background: #FFF8F0;
+  border: none;
+  border-radius: 16px;
+  padding: 16px 18px;
+  color: var(--md-sys-color-on-surface);
+  outline: none;
   font-family: var(--md-sys-typescale-body-large-font);
   font-size:   var(--md-sys-typescale-body-large-size);
   line-height: var(--md-sys-typescale-body-large-line-height);
 }
+.s-surface-dark .notes-textarea { background: #16130B; }
 .notes-status {
   font-size: 11px;
   color: var(--md-sys-color-on-surface-variant);
@@ -750,6 +737,10 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
 
 .checkbox:hover { border-color: var(--md-sys-color-primary); }
 .check-icon { color: var(--md-sys-color-primary); }
+/* deliverable non ancora completabile: spunta bloccata finché le task non sono finite */
+.checkbox.is-locked { cursor: not-allowed; border-style: dashed; border-color: #C8C5C0; }
+.checkbox.is-locked:hover { border-color: #C8C5C0; }
+.lock-icon { color: #B4B0AA; }
 
 .row-title { flex: 1; font-size: 14px; min-width: 0; }
 .row-title--done { text-decoration: line-through; color: #9B9590; }
@@ -880,15 +871,12 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
   width: 22px; height: 22px;
   border-radius: var(--md-sys-shape-corner-full);
   border: 2px solid #B4B0AA;
-  background: #fff;
+  background: var(--md-sys-color-surface);
   display: flex; align-items: center; justify-content: center;
-  cursor: pointer;
   z-index: 1;
   color: #fff;
   flex-shrink: 0;
-  transition: all 0.15s;
 }
-.milestone-circle:hover { border-color: var(--md-sys-color-primary); }
 .milestone-circle.is-done {
   background: #2F6B4A;
   border-color: #2F6B4A;
@@ -897,12 +885,12 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
 .milestone-body {
   flex: 1;
   min-width: 0;
-  padding: 10px 14px;
-  background: #fff;
-  border: 1px solid #E8E5DF;
-  border-radius: 10px;
+  padding: 12px 14px;
+  background: #FFF8F0;
+  border-radius: 12px;
 }
-.milestone-item.is-done .milestone-body { background: #FAF8F4; opacity: 0.7; }
+.s-surface-dark .milestone-body { background: #16130B; }
+.milestone-item.is-done .milestone-body { opacity: 0.7; }
 
 .milestone-title {
   font-size: 14px;
@@ -929,17 +917,14 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
 .deliverable-list { display: flex; flex-direction: column; gap: 8px; }
 
 .deliverable-card {
-  display: flex;
-  background: #fff;
-  border: 1px solid #E8E5DF;
-  border-radius: var(--md-sys-shape-corner-medium);
+  background: #FFF8F0;
+  border-radius: 12px;
   overflow: hidden;
 }
+.s-surface-dark .deliverable-card { background: #16130B; }
 .deliverable-card.is-done { opacity: 0.6; }
 
-.deliverable-stripe { width: 5px; flex-shrink: 0; }
-
-.deliverable-body { flex: 1; padding: 12px 14px; min-width: 0; }
+.deliverable-body { padding: 12px 14px; min-width: 0; }
 
 .deliverable-top {
   display: flex;
