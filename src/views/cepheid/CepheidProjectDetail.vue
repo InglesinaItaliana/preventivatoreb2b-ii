@@ -354,7 +354,6 @@ if (newTaskTick) {
             class="milestone-item"
             :class="{ 'is-done': m.completedAt }"
           >
-            <div class="milestone-line" />
             <span
               class="milestone-circle"
               :class="{ 'is-done': m.completedAt }"
@@ -573,8 +572,10 @@ if (newTaskTick) {
 }
 .pd-description-toggle:hover { color: #6A6560; }
 
-/* sfondo del contenuto = pagina CEPHEID Progetti (#EFE7D9), per tutti i tab */
-.pd-content { padding: 16px; flex: 1; min-height: 0; overflow-y: auto; background: #EFE7D9; }
+/* sfondo del contenuto = pagina CEPHEID Progetti (#EFE7D9), per tutti i tab.
+   scrollbar-gutter:stable riserva sempre lo spazio della scrollbar → la larghezza
+   del contenuto è IDENTICA tra tab che scrollano e tab che non scrollano. */
+.pd-content { padding: 16px; flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; background: #EFE7D9; }
 .s-surface-dark .pd-content { background: #0E0C07; }
 
 /* container della timeline: card del colore dell'header (#FFF8F0) */
@@ -845,35 +846,26 @@ if (newTaskTick) {
 .done-list { display: flex; flex-direction: column; }
 
 /* Milestone timeline */
-.milestone-timeline {
-  position: relative;
-  padding-left: 8px;
-}
+/* milestone come card piena a tutta larghezza (come task/list/deliverable):
+   il cerchio-stato è dentro la card, niente più linea/indent esterni. */
+.milestone-timeline { display: flex; flex-direction: column; gap: 6px; }
 .milestone-item {
-  position: relative;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 8px 8px 8px 0;
+  gap: 10px;
+  padding: 12px 14px;
+  background: #FFF8F0;
+  border-radius: 12px;
 }
-.milestone-item .milestone-line {
-  position: absolute;
-  left: 17px;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: #E8E5DF;
-}
-.milestone-item:first-child .milestone-line { top: 50%; }
-.milestone-item:last-child .milestone-line { bottom: 50%; }
+.s-surface-dark .milestone-item { background: #16130B; }
+.milestone-item.is-done { opacity: 0.7; }
 
 .milestone-circle {
-  width: 22px; height: 22px;
+  width: 20px; height: 20px;
   border-radius: var(--md-sys-shape-corner-full);
   border: 2px solid #B4B0AA;
-  background: var(--md-sys-color-surface);
+  background: transparent;
   display: flex; align-items: center; justify-content: center;
-  z-index: 1;
   color: #fff;
   flex-shrink: 0;
 }
@@ -885,12 +877,7 @@ if (newTaskTick) {
 .milestone-body {
   flex: 1;
   min-width: 0;
-  padding: 12px 14px;
-  background: #FFF8F0;
-  border-radius: 12px;
 }
-.s-surface-dark .milestone-body { background: #16130B; }
-.milestone-item.is-done .milestone-body { opacity: 0.7; }
 
 .milestone-title {
   font-size: 14px;
