@@ -46,6 +46,11 @@ export function useCollabDoc(
   canWrite: Ref<boolean>,
   docLoaded: Ref<boolean>,
 ) {
+  // Strumentazione perf (temporanea): marca la creazione del composable
+  // (≈ mount della pagina doc, dopo il caricamento del chunk editor) per misurare
+  // l'attesa fino a start() e le fasi del percorso critico. Vedi [NEBULA perf].
+  const tCreate = performance.now()
+
   // Sincroni: l'editor li riceve al momento della creazione.
   const ydoc = new Y.Doc()
   const awareness = new Awareness(ydoc)
@@ -81,28 +86,59 @@ export function useCollabDoc(
     if (started || !me.value?.email || !docLoaded.value) return
     started = true
 
+    // ── Strumentazione perf (temporanea) ──────────────────────────────────
+    const t0 = performance.now()
+    const readyWaitMs = t0 - tCreate     // mount → start (attesa doc+auth)
+    let killSwitchMs = 0
+    let initYDocMs = 0
+    let providerCreatedMs = 0
+
     // Kill-switch globale (freno d'emergenza, no redeploy).
+    const tKill = performance.now()
     try {
       const snap = await getDoc(fsDoc(db, 'core', 'nebula'))
+      killSwitchMs = performance.now() - tKill
       if (snap.exists() && snap.data()?.collabEnabled === false) {
         collabEnabled.value = false
         status.value = 'disabled'
+        console.info('[NEBULA perf] doc-open (kill-switch OFF)', {
+          docId, readyWaitMs: Math.round(readyWaitMs), killSwitchMs: Math.round(killSwitchMs),
+        })
         return // editor resterà read-only sulla proiezione content
       }
-    } catch { /* assente = abilitato (default) */ }
+    } catch { killSwitchMs = performance.now() - tKill /* assente = abilitato */ }
 
     // Migrazione idempotente del Y.Doc (solo chi può scrivere; i reader
     // leggono ydocState già inizializzato da un writer, o cadono sul fallback).
     if (canWrite.value) {
+      const tInit = performance.now()
       try { await initYDocCallable({ docId }) }
       catch (e) { console.warn('[useCollabDoc] initYDoc fail:', e) }
+      initYDocMs = performance.now() - tInit
     }
 
+    providerCreatedMs = performance.now() - t0
     const color = cursorColorFor(me.value.email)
     provider.value = new FirestoreYjsProvider(
       db, docId, ydoc, awareness,
       { email: me.value.email, displayName: me.value.name ?? me.value.email, color },
-      (s) => { status.value = s },
+      (s) => {
+        status.value = s
+        if (s === 'synced') {
+          const totalToSynced = performance.now() - t0
+          // Breakdown del percorso critico: dove se ne va il tempo fino a editable.
+          console.info('[NEBULA perf] doc-open timing (ms)', {
+            docId,
+            readyWait: Math.round(readyWaitMs),               // mount→start (doc+auth)
+            killSwitch: Math.round(killSwitchMs),             // getDoc core/nebula
+            initYDoc: Math.round(initYDocMs),                 // Cloud Function (cold start?)
+            providerToSynced: Math.round(totalToSynced - providerCreatedMs), // listener parent+updates
+            totalToSynced: Math.round(totalToSynced),         // start→synced (≈ time-to-editable)
+            grandTotal: Math.round(performance.now() - tCreate), // mount→synced
+            canWrite: canWrite.value,
+          })
+        }
+      },
     )
   }
 
