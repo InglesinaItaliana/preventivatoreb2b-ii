@@ -743,7 +743,6 @@ void editorRef
   gap: 12px;
   margin-bottom: 12px;
   padding-bottom: 12px;
-  border-bottom: 1px solid rgba(0,0,0,0.06);
 }
 .nd-back {
   background: transparent;

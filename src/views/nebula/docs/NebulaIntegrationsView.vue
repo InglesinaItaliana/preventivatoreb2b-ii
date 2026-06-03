@@ -384,7 +384,6 @@ const revokedKeys = computed(() => keys.value.filter(k => k.revoked))
   gap: 12px;
   margin-bottom: 24px;
   padding-bottom: 14px;
-  border-bottom: 1px solid rgba(0,0,0,0.08);
 }
 .ni-back {
   background: transparent; border: 0; padding: 6px; border-radius: 8px;

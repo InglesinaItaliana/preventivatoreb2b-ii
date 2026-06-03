@@ -303,7 +303,6 @@ onBeforeUnmount(() => {
   gap: 12px;
   margin-bottom: 18px;
   padding-bottom: 14px;
-  border-bottom: 1px solid rgba(0,0,0,0.08);
   flex-wrap: wrap;
 }
 .nh-back {

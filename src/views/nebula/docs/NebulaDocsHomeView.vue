@@ -549,7 +549,6 @@ function isActiveTouch(d: DocRow): boolean {
 :deep(.md-page-header) { padding: 18px 16px 14px; }
 :deep(.md-page-header.is-sticky) {
   background: var(--md-sys-color-surface);
-  border-bottom: 1px solid var(--md-sys-color-outline-variant);
 }
 
 .ndh-content {

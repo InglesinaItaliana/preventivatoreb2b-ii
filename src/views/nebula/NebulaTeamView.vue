@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useNebulaTeam, CATEGORY_OPTIONS, type NebulaMember } from '../../composables/nebula/useNebulaTeam'
+import { useNebulaTeam, CATEGORY_OPTIONS, POSITION_OPTIONS, type NebulaMember } from '../../composables/nebula/useNebulaTeam'
 import StarAvatar from '../../components/shared/StarAvatar.vue'
 import MdPageHeader from '../../components/shared/MdPageHeader.vue'
 import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
@@ -24,6 +24,19 @@ const view = ref<ViewId>('org')
 
 const active = computed(() => members.value.filter(m => m.active !== false))
 const all    = computed(() => members.value)
+
+// Lista: ordine per posizione/ruolo (gerarchia POSITION_OPTIONS Titolare→…→Contabile;
+// posizioni assenti/ignote in coda) e poi alfabetico per nome.
+const posRank = (m: NebulaMember) => {
+  const i = POSITION_OPTIONS.indexOf(m.position ?? '')
+  return i === -1 ? POSITION_OPTIONS.length : i
+}
+const sortedList = computed<NebulaMember[]>(() =>
+  [...all.value].sort((a, b) => {
+    const r = posRank(a) - posRank(b)
+    return r !== 0 ? r : fullName(a).localeCompare(fullName(b), 'it')
+  }),
+)
 
 // ── Gerarchia: albero da managerUid (STELLA-GRAFO). Flatten in pre-order con
 //    profondità, per un render a lista indentata. Guard anti-ciclo + radici =
@@ -145,7 +158,10 @@ const roleAccent: Record<string, string> = {
               <div class="nb-level-cards">
                 <div v-for="m in byCategory(cat)" :key="m.email" class="nb-card">
                   <StarAvatar v-bind="memberStar(m)" :size="42" />
-                  <div class="nb-card-name">{{ fullName(m) }}</div>
+                  <div class="nb-card-name">
+                    <span class="nb-card-fn">{{ m.firstName || m.email }}</span>
+                    <span v-if="m.lastName" class="nb-card-ln">{{ m.lastName }}</span>
+                  </div>
                   <span class="nb-pos-label">{{ m.position || '—' }}</span>
                 </div>
               </div>
@@ -174,7 +190,7 @@ const roleAccent: Record<string, string> = {
 
     <!-- ── LIST VIEW ── -->
     <div v-else class="nb-list">
-      <div v-for="m in all" :key="m.email" class="nb-list-card" :class="{ inactive: !m.active }">
+      <div v-for="m in sortedList" :key="m.email" class="nb-list-card" :class="{ inactive: !m.active }">
         <StarAvatar v-bind="memberStar(m)" :size="40" />
         <div class="nb-list-info">
           <div class="nb-list-name">
@@ -226,7 +242,6 @@ const roleAccent: Record<string, string> = {
 :deep(.md-page-header) { padding: 18px 16px 14px; }
 :deep(.md-page-header.is-sticky) {
   background: var(--md-sys-color-surface);
-  border-bottom: 1px solid var(--md-sys-color-outline-variant);
 }
 @media (min-width: 1024px) {
   :deep(.md-page-header) { padding: 24px max(40px, calc(50% - 410px)) 18px; }
@@ -315,11 +330,15 @@ const roleAccent: Record<string, string> = {
 .nb-card-name {
   font-family: var(--md-sys-typescale-label-medium-font);
   font-size: var(--md-sys-typescale-label-medium-size);
-  line-height: 1.3;
+  line-height: 1.25;
   font-weight: var(--md-sys-typescale-label-medium-weight);
   text-align: center;
   color: var(--md-sys-color-on-surface);
+  display: flex;
+  flex-direction: column;
 }
+/* Cognome su riga separata, leggermente più tenue del nome */
+.nb-card-ln { color: var(--md-sys-color-on-surface-variant); }
 
 .nb-pos-trigger {
   display: flex;
