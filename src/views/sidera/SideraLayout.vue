@@ -375,37 +375,42 @@ function isSectionOpen(name: string) {
   return hoveredSection.value ? hoveredSection.value === name : isSectionExpanded(name)
 }
 
-// Gate anti-flash: un `mouseenter` può scattare anche SENZA che il mouse si muova,
+// Gate anti-flash. Un `mouseenter` può scattare anche SENZA che il mouse si muova,
 // quando il re-layout (collasso della sezione sopra + eventuale scroll) sposta gli
-// elementi sotto un puntatore fermo. Quegli enter "indotti" sono la causa del flash
-// sulle categorie corte (il cursore cade oltre il corpo breve sulla label sotto).
-// Conto i mousemove reali: se non ce n'è stato nessuno dall'ultimo cambio di
-// sezione, l'enter è del layout → lo ignoro.
-let moveSeq = 0
-let committedSeq = -1
-function onNavMove() { moveSeq++ }
-
-// Ancoraggio scroll (singola correzione): il collasso della sezione sopra è
-// ISTANTANEO (CSS: transition solo in apertura), quindi è un solo reflow; ri-pinno
-// il gruppo con una correzione una-tantum dello scrollTop arrotondata all'intero
-// (niente loop rAF → niente scroll sub-pixel → niente shimmer). L'apertura cresce
-// sotto la propria label, quindi non sposta il top e non va compensata.
+// elementi sotto un puntatore fermo. Questi enter "indotti" aprono per un frame la
+// sezione sbagliata → flash, evidente sulle categorie corte (1-2 voci: il corpo non
+// arriva fino al cursore spostato → l'enter scatta sulla label sotto).
+//
+// Discriminante valido ANCHE durante uno sweep continuo: l'enter indotto scatta con
+// il puntatore alla STESSA clientY del commit precedente (tra il cambio di stato e
+// il re-layout il browser non processa input del mouse), mentre un enter reale
+// arriva dopo che il puntatore si è spostato sulla label vicina (≥ altezza label).
+// Se la clientY non è cambiata oltre soglia rispetto all'ultimo commit → indotto.
+let committedY = Number.NEGATIVE_INFINITY
 function previewSection(name: string, ev: MouseEvent) {
   if (hoveredSection.value === name) return
-  if (moveSeq === committedSeq) return   // enter indotto dal re-layout → ignora
-  committedSeq = moveSeq
+  if (Math.abs(ev.clientY - committedY) < 5) return   // enter indotto dal re-layout → ignora
+  committedY = ev.clientY
   const navEl = navRef.value
   const groupEl = ev.currentTarget as HTMLElement | null
   const before = groupEl?.getBoundingClientRect().top ?? 0
   hoveredSection.value = name
   if (navEl && groupEl) {
+    // Ancoraggio scroll (singola correzione): il collasso della sezione sopra è
+    // ISTANTANEO (CSS: transition solo in apertura) → un solo reflow; ri-pinno il
+    // gruppo con una correzione una-tantum dello scrollTop arrotondata all'intero
+    // (niente rAF → niente scroll sub-pixel → niente shimmer). L'apertura cresce
+    // sotto la label, quindi non sposta il top e non va compensata.
     nextTick(() => {
       const delta = Math.round(groupEl.getBoundingClientRect().top - before)
       if (delta) navEl.scrollTop += delta
     })
   }
 }
-function clearHovered() { hoveredSection.value = null }
+function clearHovered() {
+  hoveredSection.value = null
+  committedY = Number.NEGATIVE_INFINITY   // il prossimo enter reale riparte pulito
+}
 
 // Inizializza: ultima sezione aperta da localStorage, fallback su quella della
 // route corrente, fallback finale sul primo modulo. Il route-watcher sotto
@@ -631,7 +636,7 @@ const roleLabel: Record<string, string> = {
         </span>
       </div>
 
-      <nav class="s-nav" ref="navRef" @mousemove="onNavMove" @mouseleave="clearHovered()">
+      <nav class="s-nav" ref="navRef" @mouseleave="clearHovered()">
         <div
           v-for="mod in modules"
           :key="mod.name"
