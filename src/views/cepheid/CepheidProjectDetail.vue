@@ -490,18 +490,20 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
 
       <!-- TIMELINE (ciclo di vita: fasi → task → deliverable → milestone) ────── -->
       <template v-else-if="activeTab === 'timeline'">
-        <CepheidTimeline
-          :project="project"
-          :tasks="tasks"
-          :members="members"
-          :update-task="updateTask"
-          :complete-task="completeTask"
-          :uncomplete-task="uncompleteTask"
-          :update-project="updateProject"
-          :approve-phase="approvePhase"
-          :unapprove-phase="unapprovePhase"
-          @new-phase="openCreate('fase')"
-        />
+        <div class="pd-timeline-card">
+          <CepheidTimeline
+            :project="project"
+            :tasks="tasks"
+            :members="members"
+            :update-task="updateTask"
+            :complete-task="completeTask"
+            :uncomplete-task="uncompleteTask"
+            :update-project="updateProject"
+            :approve-phase="approvePhase"
+            :unapprove-phase="unapprovePhase"
+            @new-phase="openCreate('fase')"
+          />
+        </div>
       </template>
 
       <!-- NOTE (markdown-style per progetto, salvate in projects/{id}.notes) ──── -->
@@ -593,17 +595,20 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
 .pd-content { padding: 16px; flex: 1; min-height: 0; overflow-y: auto; background: #EFE7D9; }
 .s-surface-dark .pd-content { background: #0E0C07; }
 
+/* container della timeline: card del colore dell'header (#FFF8F0) */
+.pd-timeline-card { background: #FFF8F0; border-radius: 16px; padding: 14px 16px 16px; }
+.s-surface-dark .pd-timeline-card { background: #16130B; }
+
 /* Desktop wide: container centrato + padding generoso. Le tabs interne
    (kanban/milestone/deliverable) sono gia' responsive multi-colonna.
    ProjectBoard SIDERA (/sidera/projects/:id) ha viste aggiuntive
    list/cal/notes — power-view, accessibile via URL diretto. */
+/* Desktop: stessa colonna centrata 900px delle altre schede CEPHEID
+   (Progetti/Azioni/Obiettivi) → header, sotto-header e contenuto allineati. */
 @media (min-width: 1024px) {
-  .pd > :deep(.md-page-header) { padding: 24px 40px 18px; }
-  .pd-subhead { padding: 0 40px 14px; }
-  .pd-content { padding: 24px 40px; max-width: 1280px; margin: 0 auto; }
-}
-@media (min-width: 1440px) {
-  .pd-content { max-width: 1440px; padding: 32px 56px; }
+  .pd > :deep(.md-page-header) { padding: 24px max(40px, calc(50% - 410px)) 18px; }
+  .pd-subhead { padding: 0 max(40px, calc(50% - 410px)) 14px; }
+  .pd-content { padding: 24px 40px; max-width: 900px; margin: 0 auto; }
 }
 
 .loading-rows { display: flex; flex-direction: column; gap: 6px; }

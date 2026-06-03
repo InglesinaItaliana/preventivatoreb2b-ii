@@ -178,11 +178,17 @@ export function drawStar(ctx, size, star, t = 0) {
   ctx.save();
   ctx.globalCompositeOperation = 'lighter';
 
+  // Su sfondo CHIARO (bgColor) il blending additivo sbiadisce l'hue: rinforziamo
+  // le bande colorate -> +saturazione, -luminosita', alpha piu' alte. Cosi' il
+  // colore-firma resta marcato; il pinpoint bianco centrale resta per il brillio.
+  const sB = Math.min(100, star.sat + 12);
+  const lB = Math.max(40, star.light - 12);
+
   const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, glowR);
-  g.addColorStop(0,    hsla(star.hue, star.sat, star.light, 0.50));
-  g.addColorStop(0.2,  hsla(star.hue, star.sat, star.light, 0.26));
-  g.addColorStop(0.55, hsla(star.hue, star.sat, star.light, 0.07));
-  g.addColorStop(1,    hsla(star.hue, star.sat, star.light, 0));
+  g.addColorStop(0,    hsla(star.hue, sB, lB, 0.72));
+  g.addColorStop(0.2,  hsla(star.hue, sB, lB, 0.46));
+  g.addColorStop(0.55, hsla(star.hue, sB, lB, 0.15));
+  g.addColorStop(1,    hsla(star.hue, sB, lB, 0));
   ctx.fillStyle = g;
   ctx.beginPath(); ctx.arc(cx, cy, glowR, 0, 7); ctx.fill();
 
@@ -192,15 +198,19 @@ export function drawStar(ctx, size, star, t = 0) {
     const w = coreR * star.spikeW;
     for (let i = 0; i < star.points; i++) {
       const a = spin + i * (Math.PI * 2 / star.points);
-      drawSpike(ctx, cx, cy, a, len, w, star.hue, star.sat, star.light, 0.7, star.innerRatio);
+      drawSpike(ctx, cx, cy, a, len, w, star.hue, sB, lB, 0.9, star.innerRatio);
     }
   }
 
   const tw = 0.85 + Math.sin(t * 2.2 + star.twinkle) * 0.15;
   const cg = ctx.createRadialGradient(cx, cy, 0, cx, cy, coreR);
-  cg.addColorStop(0, `rgba(255,255,255,${0.98 * tw})`);
-  cg.addColorStop(0.45, hsla(star.hue, star.sat, Math.min(92, star.light + 22), 0.95));
-  cg.addColorStop(1, hsla(star.hue, star.sat, star.light, 0));
+  // Pinpoint bianco piccolo e morbido: su sfondo chiaro un centro bianco largo
+  // diventa una "palla di luce" slavata (evidente sugli hue chiari, es. ambra).
+  // Riduciamo l'alpha del bianco e portiamo il colore PIENO gia' al 18% del
+  // raggio (niente +12 di luminosita'): il centro resta colorato e definito.
+  cg.addColorStop(0,    `rgba(255,255,255,${0.78 * tw})`);
+  cg.addColorStop(0.18, hsla(star.hue, sB, lB, 0.96));
+  cg.addColorStop(1,    hsla(star.hue, sB, lB, 0));
   ctx.fillStyle = cg;
   ctx.beginPath(); ctx.arc(cx, cy, coreR, 0, 7); ctx.fill();
   ctx.restore();
