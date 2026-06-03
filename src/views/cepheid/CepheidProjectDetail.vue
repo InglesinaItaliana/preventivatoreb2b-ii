@@ -2,6 +2,7 @@
 import { ref, computed, inject, watch, type Ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import MIcon from '../../components/shared/MIcon.vue'
+import MdPageHeader from '../../components/shared/MdPageHeader.vue'
 import GoalChip from '../../components/cepheid/GoalChip.vue'
 import { useProjects, DEFAULT_STATES } from '../../composables/sidera/useProjects'
 import { useProjectTasks } from '../../composables/sidera/useProjectTasks'
@@ -230,44 +231,45 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
 
 <template>
   <div class="pd s-scope-cepheid">
-    <header class="pd-header" v-if="project">
-      <div class="pd-stripe" :style="{ background: project.color }" />
-      <div class="pd-titles">
-        <div class="pd-top-row">
-          <h2 class="p-page-title">{{ project.name }}</h2>
-          <GoalChip
-            v-if="obiettivoCollegato"
-            :titolo="obiettivoCollegato.titolo"
-            :colore="obiettivoCollegato.colore"
-            size="sm"
-            clickable
-            @click="router.push('/cepheid/goal/' + obiettivoCollegato.id)"
+    <!-- Header coerente con le altre schede CEPHEID (MdPageHeader + accento colore progetto).
+         Le tab (collassabili come nei Progetti) + il menu crea stanno nello slot #tools. -->
+    <MdPageHeader
+      v-if="project"
+      :title="project.name"
+      :subtitle="`${project.doneCount}/${project.taskCount} azioni · ${pct(project)}%`"
+      :accent-color="project.color"
+    >
+      <template #tools>
+        <div class="pd-tools">
+          <CepheidViewSwitcher
+            :model-value="activeTab"
+            :tabs="tabDefs"
+            @update:model-value="(v) => (activeTab = v as Tab)"
           />
+          <CepheidCreateMenu @select="openCreate" />
         </div>
-        <p class="p-page-sub">{{ project.doneCount }}/{{ project.taskCount }} azioni · {{ pct(project) }}%</p>
-        <div v-if="project.description" class="pd-description">
-          <p class="pd-description-text" :class="{ 'is-collapsed': !descExpanded && descIsLong }">
-            {{ project.description }}
-          </p>
-          <button v-if="descIsLong" class="pd-description-toggle" @click="descExpanded = !descExpanded">
-            {{ descExpanded ? 'mostra meno' : 'leggi tutto' }}
-          </button>
-        </div>
+      </template>
+    </MdPageHeader>
 
-        <!-- NEBULA-DOCS: pannello "Citato in N doc" (hidden se zero refs). -->
-        <LinkedDocsPanel kind="project" :id="projectId" />
-      </div>
-    </header>
-
-    <!-- Tab bar (pillola view-switcher) -->
-    <div class="pd-tabs">
-      <CepheidViewSwitcher
-        :model-value="activeTab"
-        :tabs="tabDefs"
-        labels
-        @update:model-value="(v) => (activeTab = v as Tab)"
+    <!-- Sotto-header: obiettivo collegato + descrizione + "citato in N doc" -->
+    <div v-if="project" class="pd-subhead">
+      <GoalChip
+        v-if="obiettivoCollegato"
+        :titolo="obiettivoCollegato.titolo"
+        :colore="obiettivoCollegato.colore"
+        size="sm"
+        clickable
+        @click="router.push('/cepheid/goal/' + obiettivoCollegato.id)"
       />
-      <CepheidCreateMenu class="header-create" @select="openCreate" />
+      <div v-if="project.description" class="pd-description">
+        <p class="pd-description-text" :class="{ 'is-collapsed': !descExpanded && descIsLong }">
+          {{ project.description }}
+        </p>
+        <button v-if="descIsLong" class="pd-description-toggle" @click="descExpanded = !descExpanded">
+          {{ descExpanded ? 'mostra meno' : 'leggi tutto' }}
+        </button>
+      </div>
+      <LinkedDocsPanel kind="project" :id="projectId" />
     </div>
 
     <div class="pd-content" :class="{ 'pd-content--timeline': activeTab === 'timeline' }">
@@ -290,11 +292,11 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
             v-for="t in grouped[s.id]"
             :key="t.id"
             class="task-row"
-            :style="{ borderLeftColor: prioColor[t.priority] }"
           >
             <div class="checkbox" @click="doComplete(t)">
               <MIcon v-if="pendingDone.has(t.id)" name="check" :size="14" class="check-icon" />
             </div>
+            <span class="prio-dot" :style="{ background: prioColor[t.priority] }" :title="'Priorità ' + t.priority" />
             <div class="row-title">{{ t.title }}</div>
             <button class="state-pill" :style="{ background: s.color + '20', color: s.color }" @click.stop="openStatusMenu(t.id)">
               {{ s.label }}
@@ -546,43 +548,18 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
   min-height: 0;
   display: flex;
   flex-direction: column;
+  /* sfondo come la pagina CEPHEID Progetti */
+  background: #EFE7D9;
 }
+.s-surface-dark .pd { background: #0E0C07; color: #F5EFE3; }
 
-.pd-header {
-  display: flex;
-  align-items: stretch;
-  background: #fff;
-  border-bottom: 1px solid #E8E5DF;
-  flex-shrink: 0;
-}
+/* header (MdPageHeader) + sotto-header non scrollano (lo scroll è in .pd-content) */
+.pd > :deep(.md-page-header) { flex-shrink: 0; padding: 18px 16px 14px; }
+.pd-subhead { flex-shrink: 0; background: var(--md-sys-color-surface); padding: 0 16px 12px; }
+.pd-subhead > * + * { margin-top: 8px; }
+.pd-tools { display: flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; overflow-x: auto; }
 
-.pd-stripe { width: 6px; flex-shrink: 0; }
-
-.pd-titles { padding: 18px 20px 14px; flex: 1; min-width: 0; }
-
-.pd-top-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 4px;
-}
-
-.p-page-title {
-  font-family: 'Outfit', sans-serif;
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: #1A1917;
-  margin: 0;
-  flex: 1;
-  min-width: 0;
-}
-
-.p-page-sub { font-size: 12px; color: #9B9590; margin: 0; }
-
-.pd-description { margin-top: 8px; }
+.pd-description {}
 .pd-description-text {
   margin: 0;
   font-family: 'Outfit', sans-serif;
@@ -612,33 +589,17 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
 }
 .pd-description-toggle:hover { color: #6A6560; }
 
-/* Tabs (pillola view-switcher) */
-.pd-tabs {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 16px;
-  background: #fff;
-  border-bottom: 1px solid #E8E5DF;
-  flex-shrink: 0;
-}
-.pd-tabs > :deep(.vsw) { flex: 1; min-width: 0; }
-
-.pd-content { padding: 16px; flex: 1; min-height: 0; overflow-y: auto; }
-/* Sfondo pagina della Timeline come nel prototipo cepheid-timeline.html */
-.pd-content--timeline { background: #EFE7D9; }
-.s-surface-dark .pd-content--timeline { background: #0E0C07; }
-@media (prefers-color-scheme: dark) {
-  .pd-content--timeline { background: #0E0C07; }
-}
+/* sfondo del contenuto = pagina CEPHEID Progetti (#EFE7D9), per tutti i tab */
+.pd-content { padding: 16px; flex: 1; min-height: 0; overflow-y: auto; background: #EFE7D9; }
+.s-surface-dark .pd-content { background: #0E0C07; }
 
 /* Desktop wide: container centrato + padding generoso. Le tabs interne
    (kanban/milestone/deliverable) sono gia' responsive multi-colonna.
    ProjectBoard SIDERA (/sidera/projects/:id) ha viste aggiuntive
    list/cal/notes — power-view, accessibile via URL diretto. */
 @media (min-width: 1024px) {
-  .pd-header  { padding: 24px 40px 18px; }
+  .pd > :deep(.md-page-header) { padding: 24px 40px 18px; }
+  .pd-subhead { padding: 0 40px 14px; }
   .pd-content { padding: 24px 40px; max-width: 1280px; margin: 0 auto; }
 }
 @media (min-width: 1440px) {
@@ -764,15 +725,13 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
   align-items: center;
   gap: 10px;
   padding: 12px 14px;
-  background: #fff;
-  border-radius: 10px;
-  border: 1px solid #E8E5DF;
-  border-left: 6px solid transparent;
+  background: #FFF8F0;
+  border-radius: 12px;
   margin-bottom: 6px;
-  box-shadow: var(--md-sys-elevation-level-1);
 }
+.s-surface-dark .task-row { background: #16130B; }
 
-.task-row--done { opacity: 0.5; border-left: 6px solid #E8E5DF; }
+.task-row--done { opacity: 0.5; }
 
 .checkbox {
   width: 18px; height: 18px;

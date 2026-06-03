@@ -188,12 +188,14 @@ onMounted(() => {
           <span class="bucket-count">{{ b.list.length }}</span>
         </div>
 
-        <div v-for="t in b.list" :key="t.id" class="task-row" :style="{ borderLeftColor: prioColor[t.priority] }">
+        <div v-for="t in b.list" :key="t.id" class="task-row">
           <div class="checkbox" @click="doComplete(t)">
             <MIcon v-if="pendingDone.has(t.id)" name="check" :size="14" class="check-icon" />
           </div>
           <div class="row-body">
-            <div class="row-title">{{ t.title }}</div>
+            <div class="row-title">
+              <span class="row-prio-dot" :style="{ background: prioColor[t.priority] }" :title="'Priorità ' + t.priority" />{{ t.title }}
+            </div>
             <div v-if="t.projectId" class="row-meta">
               <span class="row-proj" :style="{ background: projectColor(t.projectId) + '20', color: projectColor(t.projectId) }">{{ projectName(t.projectId) }}</span>
             </div>
@@ -337,26 +339,24 @@ onMounted(() => {
   border-radius: var(--md-sys-shape-corner-full);
 }
 
+/* flat: niente bordo/ombra; priorità = pallino accanto al titolo (.row-prio-dot) */
 .task-row {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 12px 14px;
   background: var(--md-sys-color-surface);
-  border-radius: var(--md-sys-shape-corner-small);
-  border: 1px solid var(--md-sys-color-outline-variant);
-  border-left: 6px solid transparent;
+  border-radius: 16px;
   margin-bottom: 6px;
-  box-shadow: var(--md-sys-elevation-level-1);
-  transition: border-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
-              box-shadow   var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
-              transform    var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
+  transition: background var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
 }
 .task-row:hover {
-  border-color: var(--md-sys-color-primary);
-  background:   var(--md-sys-color-primary-state-hover);
-  box-shadow:   var(--md-sys-elevation-level-2);
-  transform:    translateY(-1px);
+  background: var(--md-sys-color-primary-state-hover);
+}
+
+.row-prio-dot {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  margin-right: 8px; vertical-align: middle; flex-shrink: 0;
 }
 
 .checkbox {

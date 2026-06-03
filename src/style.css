@@ -424,6 +424,16 @@ input[type=number] {
   background: var(--md-sys-color-surface);
 }
 
+/* CEPHEID: header (MdPageHeader) del colore delle card (surface), senza bordo
+   inferiore — look piatto coerente con le card. Il prefisso `.s-shell` dà la
+   specificità per battere la regola scoped `.md-page-header.is-sticky` (sticky
+   usa --page-bg). Vale per liste (sticky) e dettaglio progetto (non-sticky). */
+.s-shell .s-scope-cepheid .md-page-header,
+.s-shell .s-scope-cepheid .md-page-header.is-sticky {
+  background: var(--md-sys-color-surface);
+  border-bottom: none;
+}
+
 .s-scope-magnetar {
   --md-sys-color-primary:               var(--s-magnetar-on-light);
   --md-sys-color-on-primary:            #FFFFFF;

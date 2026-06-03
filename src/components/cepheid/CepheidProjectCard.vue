@@ -138,9 +138,7 @@ const projectDueIso = computed(() => {
      bottom-nav (z-index:5) e il MdPageHeader sticky (z-index:10). */
   isolation: isolate;
   background: #FFF8F0;
-  border: 1px solid var(--md-sys-color-outline-variant);
   border-radius: 16px;
-  box-shadow: var(--md-sys-elevation-level-1);
   padding: 12px 14px;
   flex-shrink: 0;   /* in un flex-column scrollabile evita che la card espansa venga compressa */
 }

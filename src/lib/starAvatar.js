@@ -121,6 +121,9 @@ export function makeStar({ seed, category, hueIndex, hue }) {
   const toneShift = (hueIndex != null) ? lightOffsetFromIndex(hueIndex) : 0;
   return {
     category, label: role.label, points: role.points, hue: finalHue,
+    // Sfondo chiaro coordinato con l'hue-firma: pastello tenue (sat 42%, light 92%)
+    // per usarlo come background CSS del bollino (v-bind in StarAvatar.vue).
+    bgColor: `hsl(${finalHue}, 42%, 92%)`,
     sat:   role.sat   + (rnd() * 8 - 4),
     // Light = base categoria + jitter +/-4 + tone-shift esplicito dal ciclo dell'hueIndex.
     // Con hueIndex assegnato dal counter per-categoria, i primi 6 della stessa
@@ -244,6 +247,7 @@ export function mountStarAvatar(canvas, opts) {
     inst.size = o.size ?? inst.size ?? 40;
     inst.ctx = size(canvas, inst.size);
     inst.star = makeStar({ seed: o.seed, category: o.category, hueIndex: o.hueIndex, hue: o.hue });
+    o.onStar?.(inst.star);   // notifica il wrapper (es. per leggere star.bgColor)
     const animated = (o.animated ?? true) && !reduce;
     _instances.delete(inst);
     if (animated) { _instances.add(inst); _start(); }

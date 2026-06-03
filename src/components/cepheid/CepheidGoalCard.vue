@@ -154,9 +154,7 @@ function pct(p: Project) {
   position: relative;
   isolation: isolate;
   background: #FFF8F0;
-  border: 1px solid var(--md-sys-color-outline-variant);
   border-radius: 16px;
-  box-shadow: var(--md-sys-elevation-level-1);
   padding: 12px 14px;
   flex-shrink: 0;
   font-family: 'Outfit', sans-serif;
@@ -225,11 +223,11 @@ function pct(p: Project) {
 .gcard-link-cta:hover { background: color-mix(in srgb, var(--md-sys-color-primary) 18%, transparent); }
 
 .proj-row {
-  display: flex; align-items: stretch; background: var(--md-sys-color-surface);
-  border: 1px solid var(--md-sys-color-outline-variant); border-radius: var(--md-sys-shape-corner-medium);
-  overflow: hidden; cursor: pointer; transition: border-color 0.15s, background 0.15s;
+  display: flex; align-items: stretch; background: var(--md-sys-color-surface-container-low);
+  border-radius: var(--md-sys-shape-corner-medium);
+  overflow: hidden; cursor: pointer; transition: background 0.15s;
 }
-.proj-row:hover { border-color: var(--md-sys-color-primary); background: color-mix(in srgb, var(--md-sys-color-primary) 4%, transparent); }
+.proj-row:hover { background: color-mix(in srgb, var(--md-sys-color-primary) 8%, var(--md-sys-color-surface-container-low)); }
 .proj-stripe { width: 6px; flex-shrink: 0; }
 .proj-body { padding: 10px 12px; flex: 1; min-width: 0; }
 .proj-name { font-size: 14px; font-weight: 600; margin-bottom: 3px; color: var(--md-sys-color-on-surface); }
