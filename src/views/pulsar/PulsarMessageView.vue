@@ -486,10 +486,15 @@ function escapeHtml(s: string): string {
 function escapeAttr(s: string): string {
   return escapeHtml(s).replace(/"/g, '&quot;')
 }
+const REF_ICON: Record<MsgRef['type'], string> = {
+  task: 'task_alt', project: 'folder', doc: 'description',
+}
 function chipHtml(r: MsgRef): string {
+  // icona via .m-icon (font Material Symbols globale, ligature) → renderizzabile in v-html
+  const icon = `<span class="m-icon msg-ref-ic">${REF_ICON[r.type]}</span>`
   return `<span class="msg-ref msg-ref--${r.type}" data-ref-type="${r.type}"`
     + ` data-ref-id="${escapeAttr(r.id)}" data-ref-project="${escapeAttr(r.projectId ?? '')}"`
-    + ` role="link" tabindex="0">${escapeHtml(r.label)}</span>`
+    + ` role="link" tabindex="0">${icon}${escapeHtml(r.label)}</span>`
 }
 
 // Resa ricca della bolla: i `refs` (task/progetto/doc) diventano chip cliccabili;
@@ -1233,15 +1238,18 @@ function onBubbleClick(e: MouseEvent) {
 
 /* chip cliccabili dentro la bolla (mention di entità) */
 :deep(.msg-ref) {
-  display: inline; padding: 0 4px; border-radius: 6px;
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 0 6px 0 4px; border-radius: 7px;
   font-weight: 600; cursor: pointer; text-decoration: none;
-  transition: background 0.12s;
+  vertical-align: -3px; line-height: 1.5;
+  border: 1px solid transparent; transition: background 0.12s, border-color 0.12s;
 }
-:deep(.msg-ref--task) { color: #8b6a14; background: rgba(212, 160, 32, 0.14); }
-:deep(.msg-ref--project) { color: #2F6B4A; background: rgba(47, 107, 74, 0.12); }
-:deep(.msg-ref--doc) { color: #C46030; background: rgba(196, 96, 48, 0.12); }
-:deep(.msg-ref:hover) { filter: brightness(0.95); text-decoration: underline; }
-.msg-bubble.is-mine :deep(.msg-ref) { color: var(--md-sys-color-on-primary); background: rgba(255,255,255,0.18); }
+:deep(.msg-ref-ic) { font-size: 14px; }
+:deep(.msg-ref--task) { color: #8b6a14; background: rgba(212, 160, 32, 0.16); border-color: rgba(212, 160, 32, 0.35); }
+:deep(.msg-ref--project) { color: #2F6B4A; background: rgba(47, 107, 74, 0.14); border-color: rgba(47, 107, 74, 0.32); }
+:deep(.msg-ref--doc) { color: #C46030; background: rgba(196, 96, 48, 0.14); border-color: rgba(196, 96, 48, 0.32); }
+:deep(.msg-ref:hover) { filter: brightness(0.96); text-decoration: underline; }
+.msg-bubble.is-mine :deep(.msg-ref) { color: var(--md-sys-color-on-primary); background: rgba(255,255,255,0.20); border-color: rgba(255,255,255,0.28); }
 
 /* Hashtag picker: trasparente come la barra di scrittura. Il campo di
    ricerca (.tag-search) e i chip (.tag-option/.sel-tag) restano "bolle"

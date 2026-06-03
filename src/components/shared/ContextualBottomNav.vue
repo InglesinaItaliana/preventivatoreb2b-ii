@@ -113,10 +113,8 @@ const items = computed(() =>
 }
 
 /* PULSAR: il contenitore pillole usa lo stesso colore delle card (surface),
-   non surface-container. Scope sul `.s-scope-pulsar` applicato dalla shell. */
-:global(.s-scope-pulsar) .cm-nav-pill {
-  background: var(--md-sys-color-surface);
-}
+   non surface-container. La regola vive in style.css globale (`.s-shell.s-scope-pulsar
+   .cm-nav-pill`) per battere in specificità la regola scoped qui sopra. */
 
 .cm-pill-btn {
   position: relative;
