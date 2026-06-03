@@ -112,6 +112,12 @@ const items = computed(() =>
   box-shadow: var(--md-sys-elevation-level-1);
 }
 
+/* PULSAR: il contenitore pillole usa lo stesso colore delle card (surface),
+   non surface-container. Scope sul `.s-scope-pulsar` applicato dalla shell. */
+:global(.s-scope-pulsar) .cm-nav-pill {
+  background: var(--md-sys-color-surface);
+}
+
 .cm-pill-btn {
   position: relative;
   display: flex;

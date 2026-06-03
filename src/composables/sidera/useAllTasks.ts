@@ -24,6 +24,9 @@ export interface Task {
   createdAt: Date
   completedAt: Date | null
   completedBy: string | null
+  /** Origine PULSAR: chat/messaggio da cui l'azione è stata creata (back-link). */
+  sourceChatId: string | null
+  sourceMessageId: string | null
 }
 
 function toDate(raw: unknown): Date | null {
@@ -63,6 +66,8 @@ export function useAllTasks() {
         createdAt:          toDate(data.createdAt) ?? new Date(),
         completedAt:        toDate(data.completedAt),
         completedBy:        data.completedBy ?? null,
+        sourceChatId:       data.sourceChatId ?? null,
+        sourceMessageId:    data.sourceMessageId ?? null,
       }
     })
     loading.value = false
@@ -212,6 +217,8 @@ export async function createStandaloneTask(data: {
   assignees: string[]
   type?: TaskType
   deliverableTaskIds?: string[]
+  /** Origine PULSAR: chat/messaggio da cui nasce l'azione (back-link). */
+  source?: { chatId: string; messageId: string }
 }): Promise<string> {
   const type = data.type ?? 'task'
   const payload = {
@@ -229,6 +236,8 @@ export async function createStandaloneTask(data: {
     createdAt:          serverTimestamp(),
     completedAt:        null,
     completedBy:        null,
+    sourceChatId:       data.source?.chatId ?? null,
+    sourceMessageId:    data.source?.messageId ?? null,
   }
   if (data.projectId) {
     const ref = await addDoc(collection(db, 'projects', data.projectId, 'tasks'), payload)

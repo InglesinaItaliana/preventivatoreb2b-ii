@@ -19,6 +19,8 @@ export interface Message {
   /** Quando il destinatario ha rifiutato un msg flaggato 'task' senza crearlo. */
   rejectedAt: Date | null
   replyToId: string | null
+  /** true finché la scrittura locale non è confermata dal server (optimistic/offline). */
+  pending: boolean
 }
 
 function toDate(raw: unknown): Date | null {
@@ -38,7 +40,7 @@ export function useMessages(chatId: string) {
     orderBy('createdAt', 'asc'),
   )
 
-  const unsubscribe = onSnapshot(q, (snap) => {
+  const unsubscribe = onSnapshot(q, { includeMetadataChanges: true }, (snap) => {
     messages.value = snap.docs.map((d) => {
       const data = d.data()
       return {
@@ -53,6 +55,8 @@ export function useMessages(chatId: string) {
         answeredAt: toDate(data.answeredAt),
         rejectedAt: toDate(data.rejectedAt),
         replyToId:  data.replyToId  ?? null,
+        // hasPendingWrites = scrittura locale non ancora confermata dal server
+        pending:    d.metadata.hasPendingWrites,
       }
     })
     loading.value = false
