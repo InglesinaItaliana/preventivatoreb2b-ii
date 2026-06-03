@@ -312,6 +312,19 @@ async function rejectTaskMsg(msg: PendingMsg) {
     rejectingIds.value = next
   }
 }
+
+// Conferma rifiuto: il rifiuto è irreversibile (la pendenza sparisce), quindi
+// passa da un dialog di conferma invece di scattare al primo tap.
+const taskToReject = ref<PendingMsg | null>(null)
+function askRejectTask(msg: PendingMsg) {
+  showTaskModal.value = false   // se aperto dal modal "Crea azione", chiudilo
+  taskToReject.value = msg
+}
+function confirmReject() {
+  const msg = taskToReject.value
+  taskToReject.value = null
+  if (msg) void rejectTaskMsg(msg)
+}
 </script>
 
 <template>
@@ -414,7 +427,7 @@ async function rejectTaskMsg(msg: PendingMsg) {
                 <button
                   class="action-btn action-btn--reject"
                   :disabled="rejectingIds.has(msg.id)"
-                  @click="rejectTaskMsg(msg)"
+                  @click="askRejectTask(msg)"
                 >
                   <MIcon name="block" class="action-icon" />
                   Rifiuta
@@ -442,8 +455,29 @@ async function rejectTaskMsg(msg: PendingMsg) {
         :projects="projects"
         :context="taskContext"
         @created="onTaskCreated"
-        @reject="taskMsg && rejectTaskMsg(taskMsg)"
+        @reject="taskMsg && askRejectTask(taskMsg)"
       />
+
+      <!-- Conferma rifiuto pendenza (irreversibile) -->
+      <Teleport to="body">
+        <div v-if="taskToReject" class="md-modal-backdrop" @click.self="taskToReject = null">
+          <div class="md-modal-dialog pv-confirm">
+            <div class="md-modal-header">
+              <span class="md-modal-title">Rifiutare l'azione?</span>
+              <button class="md-modal-close" aria-label="Annulla" @click="taskToReject = null">
+                <MIcon name="close" :size="18" />
+              </button>
+            </div>
+            <div class="md-modal-body">
+              Stai per rifiutare «{{ taskToReject.text }}». La pendenza sparirà dalla lista e non verrà creata alcuna azione.
+            </div>
+            <div class="md-modal-footer">
+              <button class="md-btn md-btn--outlined md-btn--rounded" @click="taskToReject = null">Annulla</button>
+              <button class="md-btn md-btn--danger md-btn--rounded" @click="confirmReject">Rifiuta</button>
+            </div>
+          </div>
+        </div>
+      </Teleport>
 
       <!-- All resolved -->
       <div v-if="!pendingQuestions.length && !pendingTasks.length" class="empty-state">
@@ -467,6 +501,9 @@ async function rejectTaskMsg(msg: PendingMsg) {
 @media (prefers-color-scheme: dark) {
   .pv { --page-bg: #0E0C07; }
 }
+
+/* Dialog di conferma rifiuto: leggermente più stretto del default M3. */
+.pv-confirm { max-width: 380px; }
 
 /* Header flat: stesso bg della pagina, niente bordo/ombra. */
 :deep(.md-page-header) {
