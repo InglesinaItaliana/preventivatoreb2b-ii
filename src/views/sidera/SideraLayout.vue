@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount, provide } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, provide, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { signOut } from 'firebase/auth'
 import { auth } from '../../firebase'
@@ -360,19 +360,51 @@ function isSectionExpanded(name: string) {
   return expandedSection.value === name
 }
 
-// Hover-preview ADDITIVO (desktop): passando il mouse su una sezione si svelano
-// le sue schede SENZA chiudere le altre già aperte. È additivo per necessità:
-// un hover esclusivo chiuderebbe la sezione *sopra* il puntatore, lo scroll
-// risalirebbe e il cursore rientrerebbe nella sezione sopra → loop apri/chiudi
-// (le sezioni in basso non si stabilizzavano mai). Accumulando e basta, nessuna
-// sezione sopra il cursore collassa, quindi niente shift di layout → niente loop.
-// Tutte le preview si richiudono uscendo dalla nav, tornando alla sola attiva.
-const hovered = ref<Set<string>>(new Set())
-function previewSection(name: string) { hovered.value.add(name) }
-function clearHovered() { hovered.value.clear() }
+// Hover-preview ESCLUSIVO (desktop): passando il mouse su una sezione si svelano
+// le sue schede ed è aperta SOLO quella; uscendo dalla nav torna la sezione attiva.
+//
+// Il loop/flash nasceva dallo shift di layout: aprendo una sezione, quella sopra
+// collassava, il contenuto risaliva e la sezione hover-ata scivolava sotto il
+// cursore → re-entry su un'altra sezione → cascata infinita. Fix: SCROLL-ANCHORING.
+// Prima del cambio stato registro la posizione (top) del gruppo hover-ato; dopo il
+// re-render correggo lo scrollTop della nav per rimetterlo dov'era → il gruppo
+// resta inchiodato sotto il cursore, niente re-entry, niente loop.
+const navRef = ref<HTMLElement | null>(null)
+const hoveredSection = ref<string | null>(null)
 function isSectionOpen(name: string) {
-  return isSectionExpanded(name) || hovered.value.has(name)
+  return hoveredSection.value ? hoveredSection.value === name : isSectionExpanded(name)
 }
+
+// Ancoraggio scroll: tiene il top del gruppo `el` fisso a `targetTop` (coord.
+// viewport) per tutta la durata della transizione di altezza (grid-template-rows
+// ~500ms). Le sezioni sopra collassano/espandono frame-by-frame; a ogni frame
+// ricompenso lo scrollTop così il gruppo hover-ato non scivola sotto il cursore.
+let pinRaf = 0
+let pinUntil = 0
+function pinGroup(el: HTMLElement, navEl: HTMLElement, targetTop: number) {
+  cancelAnimationFrame(pinRaf)
+  pinUntil = performance.now() + 650   // long2 (500ms) + margine
+  const step = (now: number) => {
+    const diff = el.getBoundingClientRect().top - targetTop
+    if (Math.abs(diff) > 0.5) navEl.scrollTop += diff
+    if (now < pinUntil) pinRaf = requestAnimationFrame(step)
+  }
+  pinRaf = requestAnimationFrame(step)
+}
+
+function previewSection(name: string, ev: MouseEvent) {
+  if (hoveredSection.value === name) return
+  const navEl = navRef.value
+  const groupEl = ev.currentTarget as HTMLElement | null
+  const targetTop = groupEl?.getBoundingClientRect().top ?? 0
+  hoveredSection.value = name
+  if (navEl && groupEl) nextTick(() => pinGroup(groupEl, navEl, targetTop))
+}
+function clearHovered() {
+  cancelAnimationFrame(pinRaf)
+  hoveredSection.value = null
+}
+onBeforeUnmount(() => cancelAnimationFrame(pinRaf))
 
 // Inizializza: ultima sezione aperta da localStorage, fallback su quella della
 // route corrente, fallback finale sul primo modulo. Il route-watcher sotto
@@ -598,12 +630,12 @@ const roleLabel: Record<string, string> = {
         </span>
       </div>
 
-      <nav class="s-nav" @mouseleave="clearHovered()">
+      <nav class="s-nav" ref="navRef" @mouseleave="clearHovered()">
         <div
           v-for="mod in modules"
           :key="mod.name"
           class="s-section-group"
-          @mouseenter="previewSection(mod.name)"
+          @mouseenter="previewSection(mod.name, $event)"
         >
           <button
             type="button"
@@ -666,7 +698,7 @@ const roleLabel: Record<string, string> = {
 
         <!-- CORE: sezione admin-only in fondo (manutenzione + impostazioni).
              Stesso hover-preview additivo dei moduli. -->
-        <div v-if="canAccessCore" class="s-section-group" @mouseenter="previewSection('CORE')">
+        <div v-if="canAccessCore" class="s-section-group" @mouseenter="previewSection('CORE', $event)">
           <button
             type="button"
             class="s-section-label"
