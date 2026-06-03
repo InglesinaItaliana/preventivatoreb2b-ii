@@ -29,7 +29,10 @@ onAuthStateChanged(auth, async user => {
     if (snap?.exists()) {
       const d = snap.data()
       role = d.role ?? ''
-      name = d.name
+      // I doc team usano firstName/lastName: componi "Nome Cognome". Fallback al
+      // campo legacy `name`, poi a undefined (chi consuma cade sull'email). Così la
+      // presence NEBULA (cursori/«sta scrivendo») mostra il nome, non la mail.
+      name = [d.firstName, d.lastName].filter(Boolean).join(' ') || d.name || undefined
       category = d.category ?? undefined
       hueIndex = typeof d.hueIndex === 'number' ? d.hueIndex : undefined
     }

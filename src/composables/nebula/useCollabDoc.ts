@@ -40,17 +40,30 @@ const initYDocCallable = httpsCallable<{ docId: string }, { docId: string; initi
   functions, 'initYDoc',
 )
 
+// ── Kill-switch con cache a finestra ─────────────────────────────────────────
+// `core/nebula.collabEnabled === false` è il freno d'emergenza. Rileggerlo a OGNI
+// apertura costa un RTT (~250ms misurati). Lo cachiamo per KILL_TTL: resta un gate
+// d'emergenza (effetto entro la finestra, senza redeploy), ma non pesa su ogni doc.
+const KILL_TTL = 60_000
+let killAt = 0
+let killCache: Promise<boolean> | null = null   // resolve: true = collab abilitata
+function isCollabEnabled(): Promise<boolean> {
+  const now = performance.now()
+  if (!killCache || now - killAt > KILL_TTL) {
+    killAt = now
+    killCache = getDoc(fsDoc(db, 'core', 'nebula'))
+      .then((snap) => !(snap.exists() && snap.data()?.collabEnabled === false))
+      .catch(() => true)   // doc assente / errore = abilitato (default)
+  }
+  return killCache
+}
+
 export function useCollabDoc(
   docId: string,
   me: Ref<CollabUser | null>,
   canWrite: Ref<boolean>,
   docLoaded: Ref<boolean>,
 ) {
-  // Strumentazione perf (temporanea): marca la creazione del composable
-  // (≈ mount della pagina doc, dopo il caricamento del chunk editor) per misurare
-  // l'attesa fino a start() e le fasi del percorso critico. Vedi [NEBULA perf].
-  const tCreate = performance.now()
-
   // Sincroni: l'editor li riceve al momento della creazione.
   const ydoc = new Y.Doc()
   const awareness = new Awareness(ydoc)
@@ -86,57 +99,29 @@ export function useCollabDoc(
     if (started || !me.value?.email || !docLoaded.value) return
     started = true
 
-    // ── Strumentazione perf (temporanea) ──────────────────────────────────
-    const t0 = performance.now()
-    const readyWaitMs = t0 - tCreate     // mount → start (attesa doc+auth)
-    let killSwitchMs = 0
-    let initYDocMs = 0
-    let providerCreatedMs = 0
-
-    // Kill-switch globale (freno d'emergenza, no redeploy).
-    const tKill = performance.now()
-    try {
-      const snap = await getDoc(fsDoc(db, 'core', 'nebula'))
-      killSwitchMs = performance.now() - tKill
-      if (snap.exists() && snap.data()?.collabEnabled === false) {
-        collabEnabled.value = false
-        status.value = 'disabled'
-        console.info('[NEBULA perf] doc-open (kill-switch OFF)', {
-          docId, readyWaitMs: Math.round(readyWaitMs), killSwitchMs: Math.round(killSwitchMs),
-        })
-        return // editor resterà read-only sulla proiezione content
-      }
-    } catch { killSwitchMs = performance.now() - tKill /* assente = abilitato */ }
-
-    // Migrazione idempotente del Y.Doc (solo chi può scrivere; i reader
-    // leggono ydocState già inizializzato da un writer, o cadono sul fallback).
-    if (canWrite.value) {
-      const tInit = performance.now()
-      try { await initYDocCallable({ docId }) }
-      catch (e) { console.warn('[useCollabDoc] initYDoc fail:', e) }
-      initYDocMs = performance.now() - tInit
+    // Kill-switch (cache a finestra): gate d'emergenza che non costa un RTT ad
+    // ogni apertura. Resta serial-before-connect, ma di norma è già in cache → ~0.
+    if (!(await isCollabEnabled())) {
+      collabEnabled.value = false
+      status.value = 'disabled'
+      return // editor resterà read-only sulla proiezione content
     }
 
-    providerCreatedMs = performance.now() - t0
+    // Provider connesso SUBITO: il listener `parent` consegna `ydocState` (il
+    // contenuto) e sblocca l'editable su 'synced'. La migrazione idempotente
+    // initYDoc NON è sul percorso critico: parte SOLO se il doc non ha ancora
+    // ydocState (callback onFirstParent), in background, senza bloccare l'editor.
     const color = cursorColorFor(me.value.email)
     provider.value = new FirestoreYjsProvider(
       db, docId, ydoc, awareness,
       { email: me.value.email, displayName: me.value.name ?? me.value.email, color },
-      (s) => {
-        status.value = s
-        if (s === 'synced') {
-          const totalToSynced = performance.now() - t0
-          // Breakdown del percorso critico: dove se ne va il tempo fino a editable.
-          console.info('[NEBULA perf] doc-open timing (ms)', {
-            docId,
-            readyWait: Math.round(readyWaitMs),               // mount→start (doc+auth)
-            killSwitch: Math.round(killSwitchMs),             // getDoc core/nebula
-            initYDoc: Math.round(initYDocMs),                 // Cloud Function (cold start?)
-            providerToSynced: Math.round(totalToSynced - providerCreatedMs), // listener parent+updates
-            totalToSynced: Math.round(totalToSynced),         // start→synced (≈ time-to-editable)
-            grandTotal: Math.round(performance.now() - tCreate), // mount→synced
-            canWrite: canWrite.value,
-          })
+      (s) => { status.value = s },
+      (hasState) => {
+        // Migrazione lazy: solo doc non ancora migrato + chi può scrivere.
+        // Fire-and-forget: l'editable è già sbloccato dal provider; quando
+        // initYDoc semina ydocState, il listener parent lo applica (idempotente).
+        if (!hasState && canWrite.value) {
+          initYDocCallable({ docId }).catch((e) => console.warn('[useCollabDoc] initYDoc fail:', e))
         }
       },
     )

@@ -62,6 +62,10 @@ export class FirestoreYjsProvider {
   private readonly ydoc: Y.Doc
   private readonly user: ProviderUser
   private readonly onStatus?: (s: ProviderStatus) => void
+  // Notifica UNA volta al primo snapshot del doc padre se `ydocState` è presente.
+  // Serve a useCollabDoc per decidere se lanciare la migrazione lazy (initYDoc)
+  // senza bloccare l'editable: se lo stato c'è già, initYDoc è superfluo.
+  private readonly onFirstParent?: (hasState: boolean) => void
 
   private readonly yupdatesCol
   private readonly parentRef
@@ -74,12 +78,14 @@ export class FirestoreYjsProvider {
     awareness: Awareness,
     user: ProviderUser,
     onStatus?: (s: ProviderStatus) => void,
+    onFirstParent?: (hasState: boolean) => void,
   ) {
     this.db = db
     this.docId = docId
     this.ydoc = ydoc
     this.user = user
     this.onStatus = onStatus
+    this.onFirstParent = onFirstParent
     // L'Awareness è creato esternamente (useCollabDoc) così l'editor può
     // montarsi con CollaborationCaret prima che il provider si connetta.
     this.awareness = awareness
@@ -111,6 +117,7 @@ export class FirestoreYjsProvider {
         // Riapplica lo snapshot (load iniziale + re-baseline post-compaction).
         Y.applyUpdate(this.ydoc, this.toU8(state), REMOTE_ORIGIN)
       }
+      if (!this.parentSeen) this.onFirstParent?.(!!state)   // una sola volta
       this.parentSeen = true
       this.maybeSynced()
     }, (err) => console.warn('[FirestoreYjsProvider] parent sub err:', err)))
