@@ -64,11 +64,6 @@ export function useCollabDoc(
   canWrite: Ref<boolean>,
   docLoaded: Ref<boolean>,
 ) {
-  // Strumentazione perf (temporanea): marca la creazione del composable
-  // (≈ mount della pagina doc, dopo il caricamento del chunk editor) per misurare
-  // l'attesa fino a start() e le fasi del percorso critico. Vedi [NEBULA perf].
-  const tCreate = performance.now()
-
   // Sincroni: l'editor li riceve al momento della creazione.
   const ydoc = new Y.Doc()
   const awareness = new Awareness(ydoc)
@@ -104,48 +99,23 @@ export function useCollabDoc(
     if (started || !me.value?.email || !docLoaded.value) return
     started = true
 
-    // ── Strumentazione perf (temporanea) ──────────────────────────────────
-    const t0 = performance.now()
-    const readyWaitMs = t0 - tCreate     // mount → start (attesa doc+auth)
-
     // Kill-switch (cache a finestra): gate d'emergenza che non costa un RTT ad
     // ogni apertura. Resta serial-before-connect, ma di norma è già in cache → ~0.
-    const tKill = performance.now()
-    const enabled = await isCollabEnabled()
-    const killSwitchMs = performance.now() - tKill
-    if (!enabled) {
+    if (!(await isCollabEnabled())) {
       collabEnabled.value = false
       status.value = 'disabled'
-      console.info('[NEBULA perf] doc-open (kill-switch OFF)', {
-        docId, readyWaitMs: Math.round(readyWaitMs), killSwitchMs: Math.round(killSwitchMs),
-      })
       return // editor resterà read-only sulla proiezione content
     }
 
     // Provider connesso SUBITO: il listener `parent` consegna `ydocState` (il
     // contenuto) e sblocca l'editable su 'synced'. La migrazione idempotente
-    // initYDoc NON è più sul percorso critico: parte SOLO se il doc non ha ancora
+    // initYDoc NON è sul percorso critico: parte SOLO se il doc non ha ancora
     // ydocState (callback onFirstParent), in background, senza bloccare l'editor.
-    const providerCreatedMs = performance.now() - t0
     const color = cursorColorFor(me.value.email)
     provider.value = new FirestoreYjsProvider(
       db, docId, ydoc, awareness,
       { email: me.value.email, displayName: me.value.name ?? me.value.email, color },
-      (s) => {
-        status.value = s
-        if (s === 'synced') {
-          const totalToSynced = performance.now() - t0
-          console.info('[NEBULA perf] doc-open timing (ms)', {
-            docId,
-            readyWait: Math.round(readyWaitMs),               // mount→start (doc+auth)
-            killSwitch: Math.round(killSwitchMs),             // getDoc core/nebula (cache?)
-            providerToSynced: Math.round(totalToSynced - providerCreatedMs), // listener parent+updates
-            totalToSynced: Math.round(totalToSynced),         // start→synced (≈ time-to-editable)
-            grandTotal: Math.round(performance.now() - tCreate), // mount→synced
-            canWrite: canWrite.value,
-          })
-        }
-      },
+      (s) => { status.value = s },
       (hasState) => {
         // Migrazione lazy: solo doc non ancora migrato + chi può scrivere.
         // Fire-and-forget: l'editable è già sbloccato dal provider; quando
