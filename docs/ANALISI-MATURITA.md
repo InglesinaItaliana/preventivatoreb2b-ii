@@ -6,9 +6,13 @@
 > vive in `docs/POLARIS.md` (Azioni 10-15), che resta la fonte di verità del
 > "cosa fare". Qui si risponde a: *sono coerenti? sono pronti per la consegna?*
 
-**Data audit:** 2026-05-30
+**Data audit:** 2026-05-30 · **Ultimo aggiornamento:** 2026-06-03
 **Metodo:** lettura statica di views + composables + components + `functions/index.ts` + `firestore.rules` + `scopeConfig.ts` + router. Nessuna prova runtime.
 **Verdetto sintetico:** coerenza architetturale alta (~85%); maturità media ~70% (sotto la soglia "80% consegnabile"); i gap principali sono **trasversali**, non per-modulo.
+
+> **Aggiornamento 2026-06-03** — chiusi diversi punti PULSAR (PR #62 + #64) e
+> verificato che l'hardening rules S1/S2 (Az.11) è **già in prod**. Le righe
+> impattate sono marcate ✅ qui sotto; dettaglio nella §6 Cronologia.
 
 ---
 
@@ -28,7 +32,7 @@
 |---|---|---|
 | `isMobileLayout()` duplicata | `router/index.ts:227` ↔ `SideraLayout.vue` | Commentata come scelta obbligata (il router gira prima del setup Vue). Accettabile. |
 | 3 composabili mini quasi identici | `useTaskMini` / `useProjectMini` / `useUserMini` (NEBULA) | Da unificare in un pattern generico. |
-| Modal "crea task" duplicato (~130 righe) | `PulsarMessageView.vue` ↔ `PulsarPendingView.vue` | Estrarre `components/pulsar/TaskCreationModal.vue`. |
+| ~~Modal "crea task" duplicato (~130 righe)~~ ✅ | `PulsarMessageView.vue` ↔ `PulsarPendingView.vue` | **Risolto (PR #62)**: estratto `components/pulsar/TaskCreationModal.vue`. |
 | Form-modal CEPHEID ripetuti | 5 view CEPHEID | Stesso template field-label/field-input. |
 | Logica risoluzione attore triplicata | `actorLabel`/`resolveMember`/`iconFor`/`toneFor` nelle 3 view QUASAR | Estrarre in composable condiviso. |
 | Colori hardcoded nei componenti shared | `LinkedDocsPanel.vue:171` (`#C46030`) | Manca token accent dinamico per scope. |
@@ -43,7 +47,7 @@
 |---|---|---|
 | Shell condivisa (SideraLayout) | **72–85%** | Coerenza alta, maturità buona |
 | CEPHEID | **72%** | Core solido (Obiettivi→Progetti→Azioni→Smistamento), manca rifinitura |
-| PULSAR | **72%** | Chat solida; mancano allegati, offline, reazioni |
+| PULSAR | **~80%** ↑ | Chat solida + mention unificate, optimistic/offline, back-link; mancano allegati, reazioni, edit/delete |
 | QUASAR | **68%** | Logica sofisticata (Eisenhower, forecast), duplicazioni |
 | NEBULA — Documentale | **72%** | Editor Notion-like maturo (autosave, LWW, presence, history, share, MCP) |
 | **NEBULA — "HR/Anagrafiche"** | **35%** | ⚠️ Solo organigramma + edit ruolo. **Anagrafe / profili / HR non esistono** |
@@ -54,7 +58,7 @@
 
 **CEPHEID (72%)** — Nessun TODO/FIXME esplicito. Try/catch su tutte le azioni async, loading flags, empty states ovunque. Componenti ben riusati (`CepheidProjectCard`, `CepheidInboxCard`, `CepheidViewSwitcher`, `CepheidTimeline`). Debolezze: `confirm()` nativi non localizzati (`CepheidGoalsView.vue:117`, `CepheidProjectDetail.vue:177`), nessuna validazione input assignee, rischio timezone drift in `parseISO` (`useProjectTimeline.ts`), nessun toast errore.
 
-**PULSAR (72%)** — Core chat completo: invio multilinea, `#hashtag`, `@mention` (autocomplete), presence (heartbeat 45s), unread (localStorage), reply quote, flag question/task, creazione task da messaggio, grouping bolle. **Mancano**: allegati/file, reazioni emoji, typing indicator, edit/delete messaggio, read receipts, offline queue, optimistic update. TODO esplicito: paginazione "carica altri" in `PulsarPendingView.vue:81` (cap a 100). Chat eliminate lasciano subcollection `messages` orfane (gestito però da Cloud Function `onChatDeleted`).
+**PULSAR (~80%, era 72%)** — Core chat completo: invio multilinea, `#hashtag`, presence (heartbeat 45s), unread (localStorage), reply quote, flag question/task, creazione task da messaggio, grouping bolle. **Aggiunto (PR #62 + #64, 2026-06-03)**: **mention `@` unificate** (persone/azioni/progetti/documenti) con chip cliccabili + deep-link cross-PWA; **optimistic send** + indicatore "in invio"; **offline** (la persistenza `persistentLocalCache` in `src/firebase.ts` era già attiva → scritture accodate e rispedite alla riconnessione); **paginazione "carica altri"** (rimosso il cap fisso 100); **back-link task→chat** (`sourceChatId`/`sourceMessageId`). **Mancano ancora**: allegati/file, reazioni emoji, typing indicator, edit/delete messaggio, read receipts, offline-queue completa con Service Worker (oggi solo persistenza SDK, non sopravvive a chiusura app). Chat eliminate lasciano subcollection `messages` orfane (gestito però da Cloud Function `onChatDeleted`).
 
 **QUASAR (68%)** — Matrice Eisenhower (`useQuadranti`), carico risorse (`useResourceLoad`), activity feed real-time (`useActivityLog`). Try/catch + loading + empty states presenti. Debolezze: duplicazione attore-resolution triplicata, nessun debounce sul cursor temporale (range slider → molte recompute), soglie urgenza/importanza hardcoded, nessun feedback su date scheduling fallito.
 
@@ -70,15 +74,16 @@
 
 | # | Severità | Finding | Riga |
 |---|---|---|---|
-| S1 | 🟠 Media | `tasks/{tid}` root: `allow update: if request.auth != null` → **qualunque utente loggato può modificare/completare/riassegnare task di chiunque** | `firestore.rules:115` |
-| S2 | 🟠 Media | `obiettivi/{oid}`: `allow update: if request.auth != null` → idem su obiettivi altrui | `firestore.rules:161` |
+| S1 | ✅ Risolto | ~~`tasks/{tid}`: update aperto a qualunque loggato~~ → **hardened (Az.11)**: `update` solo admin / assegnatario (email in `assignees`) / creatore (uid) | `firestore.rules:127-137` |
+| S2 | ✅ Risolto | ~~`obiettivi/{oid}`: update aperto a qualunque loggato~~ → **hardened (Az.11)**: `update` solo admin / creatore | `firestore.rules:178-187` |
 | S3 | 🟡 Bassa | `preventivi/{id}` create senza validazione di stato (nessun vincolo `state == DRAFT`) | `firestore.rules:57` |
 | S4 | 🟢 Info | Nessun rate-limiting server-side su create chat/task/doc (Firestore non lo offre nativamente) | — |
 | S5 | 🟢 Info | `VAPID_KEY` hardcoded in sorgente (`useNotifications.ts:31`) → push FCM mai completate per moduli ≠ PULSAR | `useNotifications.ts:31` |
 
 **Punti di forza rules:** `nebulaDocs` (ACL + mention + CORE-admin), `nebulaApiKeys`/`nebulaOauth*`/`config` (callable-only, Admin SDK), `activityLog` (scrittura solo backend → audit non falsificabile), `chats`/`messages` (member-gated). Pattern corretto.
 
-> S1/S2 hanno forte overlap con **POLARIS Azione 9** (ruoli e permessi granulari).
+> ✅ S1/S2 **chiusi** (hardening Az.11 in prod). Il gating fine per-ruolo
+> (es. LOGISTICA solo "eseguito") resta lato client. Restano aperti S3-S5.
 
 ---
 
@@ -93,12 +98,12 @@ Proposte, in ordine di rapporto valore/sforzo (→ tradotte in POLARIS Azioni 10
 | **`useToast` condiviso** (feedback errore visibile ovunque) | 🔴 Alto | Basso | Azione 10 |
 | **Hardening rules** (S1/S2) | 🔴 Alto | Basso | Azione 11 (↔ Az.9) |
 | **Push uniformi cross-modulo** (completa VAPID + assegnazione task/scadenze/mention) | 🟠 Alto | Medio | Azione 12 (↔ Az.1) |
-| **@mention unificato** (PULSAR + CEPHEID, generalizzando `UniversalMention` NEBULA) | 🟠 Alto | Medio | Azione 13 |
+| **@mention unificato** — ✅ lato **PULSAR** fatto (PR #64: persone/azioni/progetti/doc, chip + deep-link); resta da portare in **CEPHEID** | 🟠 Alto | Medio | Azione 13 |
 | **Ricerca globale / Cmd-K** cross-modulo (doc + task + chat) | 🟡 Medio | Medio-alto | Azione 14 |
 | **Stream attività consolidato** (sfrutta `activityLog` già scritto) | 🟡 Medio | Basso-medio | Azione 15 |
 
 **Sinergie specifiche tra moduli:**
-- PULSAR→CEPHEID esiste (crea task da messaggio): aggiungere link inverso (dal task → chat d'origine).
+- ✅ PULSAR→CEPHEID **bidirezionale** (PR #62): oltre a "crea task da messaggio", il task salva `sourceChatId`/`sourceMessageId` e in *Azioni* (PulsarSequentia) c'è il link alla chat d'origine. (Follow-up: superficiare il back-link anche in CEPHEID quando esisterà un task-detail.)
 - NEBULA doc↔CEPHEID: `LinkedDocsPanel` c'è in un verso; completare `TaskMentionNode` per aprire il task in modale.
 - QUASAR come tetto analitico: legge già `activityLog`; potrebbe aggregare KPI di tutta la suite (doc creati, throughput task, tempi risposta chat) → la "BI della suite".
 
@@ -108,19 +113,25 @@ Proposte, in ordine di rapporto valore/sforzo (→ tradotte in POLARIS Azioni 10
 
 **Bloccanti trasversali (i tre che tengono la suite sotto l'80%):**
 1. **Zero feedback errore visibile all'utente** — ovunque `console.error`, mai un toast. Un `useToast` condiviso eleva la maturità percepita di tutti e 4 i moduli in un colpo solo.
-2. **Rules permissive** S1/S2 (vincolare `update` a owner/assignee/admin).
-3. **Niente offline/optimistic** (critico per PULSAR mobile).
+2. ~~**Rules permissive** S1/S2~~ → ✅ **chiuso** (hardening Az.11 in prod: `update` vincolato a owner/assignee/admin).
+3. ~~**Niente offline/optimistic**~~ → ✅ in **PULSAR** (PR #62: optimistic send + persistenza offline SDK già attiva). Resta da estendere agli altri moduli + offline-queue completa con Service Worker.
 
 **Da chiudere prima del go-live:**
 - Rimuovere route `_dev/icons` (NEBULA).
 - Decidere il destino di "Squadra/HR" NEBULA: declassare il claim a "Documentale + mini-Team" *oppure* pianificare l'anagrafe.
 - Completare `VAPID_KEY` → push FCM (S5).
-- Paginazione "carica altri" `PulsarPendingView`.
+- ~~Paginazione "carica altri" `PulsarPendingView`~~ → ✅ fatto (PR #62).
 
 **Verdetto onesto:** consegnabili come **beta interna controllata** sì; come **prodotto "1.0 finito" no** — sei a ~70%, non 80%. Con ~2 settimane sui tre bloccanti trasversali (Azioni 10-12) la suite arriva all'80-85% reale tutta insieme.
+
+> **Update 2026-06-03:** 2 dei 3 bloccanti trasversali sono di fatto chiusi
+> (rules S1/S2 hardened; offline/optimistic in PULSAR). Resta il #1 — **`useToast`
+> condiviso** (feedback errore visibile) — come singolo intervento col miglior
+> rapporto valore/sforzo per alzare la maturità percepita di tutti i moduli.
 
 ---
 
 ## 6. Cronologia
 
 - **2026-05-30** — Creazione documento. Audit statico completo dei 4 moduli + shell + backend + rules. Piano d'azione derivato inserito in POLARIS come Azioni 10-15.
+- **2026-06-03** — Aggiornamento PULSAR (PR #62 + #64 in prod): TaskCreationModal (dedup), optimistic send + offline (persistenza SDK già attiva), paginazione Pendenze, back-link task→chat, filtro Azioni, pillola bottom-nav, **mention `@` unificate** (persone/azioni/progetti/doc → chip cliccabili + deep-link cross-PWA). PULSAR ~72% → ~80%. Verificato + annotato che l'**hardening rules S1/S2 (Az.11) è già in prod**.
