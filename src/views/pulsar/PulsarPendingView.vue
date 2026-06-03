@@ -1,16 +1,15 @@
 <script setup lang="ts">
-import { ref, computed, onUnmounted, nextTick } from 'vue'
+import { ref, computed, watch, onUnmounted, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import {
   collectionGroup, collection, query, where, orderBy, limit,
   onSnapshot, getDoc, addDoc, doc, updateDoc, serverTimestamp,
 } from 'firebase/firestore'
 import { db, auth } from '../../firebase'
-import { displayName, useTeamMembers, starAvatarProps } from '../../composables/sidera/useTeamMembers'
-import StarAvatar from '../../components/shared/StarAvatar.vue'
+import { displayName, useTeamMembers } from '../../composables/sidera/useTeamMembers'
 import { useProjects } from '../../composables/sidera/useProjects'
 import { useChats } from '../../composables/pulsar/useChats'
-import { createStandaloneTask } from '../../composables/sidera/useAllTasks'
+import TaskCreationModal from '../../components/pulsar/TaskCreationModal.vue'
 import MIcon from '../../components/shared/MIcon.vue'
 import MdPageHeader from '../../components/shared/MdPageHeader.vue'
 import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
@@ -74,12 +73,10 @@ function toDate(raw: unknown): Date | null {
   return null
 }
 
-const q = query(
-  collectionGroup(db, 'messages'),
-  where('flags', 'array-contains-any', ['question', 'task']),
-  orderBy('createdAt', 'desc'),
-  limit(100),  // performance: cap iniziale, paginazione "carica altri" rimane TODO
-)
+// Paginazione "carica altri": cap reattivo, incrementato a step di PAGE.
+const PAGE = 50
+const limitN = ref(PAGE)
+const hasMore = ref(false)
 
 // Cache fallback per chat NON in chatCache (es. utente non è membro,
 // caso raro dato che la query Firestore filtra per flags, non per membership).
@@ -105,7 +102,18 @@ function resolveChat(chatId: string, chatRef: any): Promise<ChatInfo | null> {
   return promise
 }
 
-const unsubscribe = onSnapshot(q, async (snap) => {
+let unsubscribe: (() => void) | null = null
+function subscribe() {
+  unsubscribe?.()
+  const q = query(
+    collectionGroup(db, 'messages'),
+    where('flags', 'array-contains-any', ['question', 'task']),
+    orderBy('createdAt', 'desc'),
+    limit(limitN.value),
+  )
+  unsubscribe = onSnapshot(q, async (snap) => {
+  // se la pagina è piena potrebbero esserci altri risultati → mostra "Carica altri"
+  hasMore.value = snap.docs.length >= limitN.value
   // Cache vuota in attesa del primo round-trip server: niente dati ancora,
   // ma sblocco comunque lo skeleton così la pagina non resta "in caricamento"
   // all'infinito se il server tarda o la rete è assente.
@@ -140,11 +148,18 @@ const unsubscribe = onSnapshot(q, async (snap) => {
   allFlagged.value = results
   loading.value    = false
 }, (err) => {
-  console.error('[PulsarPendingView]', err)
-  loading.value = false
-})
+    console.error('[PulsarPendingView]', err)
+    loading.value = false
+  })
+}
 
-onUnmounted(unsubscribe)
+subscribe()
+watch(limitN, subscribe)
+onUnmounted(() => unsubscribe?.())
+
+function loadMore() {
+  limitN.value += PAGE
+}
 
 // Mostro solo pendenze "verso di me": messaggi flaggati da altri membri
 // (escludo quelli scritti da me — quelli sono pendenze che ho creato io)
@@ -254,73 +269,28 @@ async function submitInlineReply(msg: PendingMsg) {
   }
 }
 
-// ── Inline create task (modal) ────────────────────────────────────────────
+// ── Crea azione da messaggio (modal condiviso TaskCreationModal) ────────────
 const showTaskModal = ref(false)
 const taskMsg = ref<PendingMsg | null>(null)
-const taskSaving = ref(false)
-const taskForm = ref({
-  title: '',
-  projectId: '',
-  priority: 'media' as 'alta' | 'media' | 'bassa',
-  dueDate: '',
-  assignees: [] as string[],
-})
-
-const prioOptions = [
-  { id: 'alta',  label: 'Alta',  color: '#C8521A' },
-  { id: 'media', label: 'Media', color: '#D4A020' },
-  { id: 'bassa', label: 'Bassa', color: '#7A8FA6' },
-] as const
 
 function openTaskModal(msg: PendingMsg) {
   taskMsg.value = msg
-  taskForm.value = {
-    title: msg.text.slice(0, 80),
-    projectId: '',
-    priority: 'media',
-    dueDate: '',
-    assignees: [],
-  }
   showTaskModal.value = true
 }
 
-function closeTaskModal() {
-  showTaskModal.value = false
-  taskMsg.value = null
-}
+const taskContext = computed(() =>
+  taskMsg.value
+    ? { chatName: taskMsg.value.chatName, fromLabel: displayName(taskMsg.value.from, members.value) }
+    : null,
+)
 
-function toggleTaskAssignee(email: string) {
-  const idx = taskForm.value.assignees.indexOf(email)
-  if (idx === -1) taskForm.value.assignees.push(email)
-  else taskForm.value.assignees.splice(idx, 1)
-}
-
-function parseDateInput(s: string): Date {
-  const [y, m, d] = s.split('-').map(Number)
-  return new Date(y, m - 1, d)
-}
-
-async function submitTask() {
-  if (!taskMsg.value || !taskForm.value.title.trim() || taskSaving.value) return
-  taskSaving.value = true
+// forward-link sul messaggio dopo la creazione (il back-link sul task lo scrive il modal)
+async function onTaskCreated(taskId: string) {
+  if (!taskMsg.value) return
   try {
-    const dueDate = taskForm.value.dueDate ? parseDateInput(taskForm.value.dueDate) : null
-    const taskId = await createStandaloneTask({
-      title:     taskForm.value.title.trim(),
-      projectId: taskForm.value.projectId || null,
-      priority:  taskForm.value.priority,
-      dueDate,
-      assignees: taskForm.value.assignees,
-    })
-    await updateDoc(
-      doc(db, 'chats', taskMsg.value.chatId, 'messages', taskMsg.value.id),
-      { taskId },
-    )
-    closeTaskModal()
+    await updateDoc(doc(db, 'chats', taskMsg.value.chatId, 'messages', taskMsg.value.id), { taskId })
   } catch (e) {
-    console.error('[Pendenze] task creation error', e)
-  } finally {
-    taskSaving.value = false
+    console.error('[Pendenze] link task error', e)
   }
 }
 
@@ -340,17 +310,6 @@ async function rejectTaskMsg(msg: PendingMsg) {
     const next = new Set(rejectingIds.value)
     next.delete(msg.id)
     rejectingIds.value = next
-  }
-}
-
-async function rejectFromModal() {
-  if (!taskMsg.value || taskSaving.value) return
-  taskSaving.value = true
-  try {
-    await rejectTaskMsg(taskMsg.value)
-    closeTaskModal()
-  } finally {
-    taskSaving.value = false
   }
 }
 </script>
@@ -470,86 +429,21 @@ async function rejectFromModal() {
         </div>
       </div>
 
-      <!-- Task creation modal -->
-      <Teleport to="body">
-        <div v-if="showTaskModal" class="modal-backdrop md-modal-backdrop" @click.self="closeTaskModal">
-          <div class="task-modal" @click.stop>
-            <div class="modal-header md-modal-header">
-              <span class="modal-title">Crea azione</span>
-              <button class="modal-close md-modal-close" @click="closeTaskModal">
-                <MIcon name="close" :size="18" />
-              </button>
-            </div>
-            <div class="modal-body md-modal-body">
-              <p v-if="taskMsg" class="modal-context">
-                Dalla chat <b>{{ taskMsg.chatName }}</b> · {{ displayName(taskMsg.from, members) }}
-              </p>
-              <label class="field-label md-text-field-label">Titolo *</label>
-              <input v-model="taskForm.title" class="field-input md-text-field-input" autofocus />
+      <!-- Carica altri (paginazione) -->
+      <div v-if="hasMore && (pendingQuestions.length || pendingTasks.length)" class="load-more-wrap">
+        <button class="load-more-btn" @click="loadMore">Carica altri</button>
+      </div>
 
-              <label class="field-label md-text-field-label" style="margin-top:12px">Progetto</label>
-              <select v-model="taskForm.projectId" class="field-input md-text-field-input">
-                <option value="">— Nessun progetto —</option>
-                <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
-              </select>
-
-              <label class="field-label md-text-field-label" style="margin-top:12px">Assegna a</label>
-              <div class="assignees-chips">
-                <div
-                  v-for="m in members"
-                  :key="m.email"
-                  class="assignee-chip"
-                  :class="{ 'is-selected': taskForm.assignees.includes(m.email) }"
-                  :style="taskForm.assignees.includes(m.email)
-                    ? { background: 'var(--md-sys-color-primary-container)', borderColor: 'var(--md-sys-color-primary)', color: 'var(--md-sys-color-on-primary-container)' }
-                    : {}"
-                  @click="toggleTaskAssignee(m.email)"
-                >
-                  <StarAvatar v-bind="starAvatarProps(m.email, members)" :size="20" />
-                  {{ displayName(m.email, members) }}
-                </div>
-              </div>
-
-              <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
-                <div>
-                  <label class="field-label md-text-field-label">Priorità</label>
-                  <div class="prio-picker">
-                    <button
-                      v-for="p in prioOptions"
-                      :key="p.id"
-                      class="prio-opt"
-                      :class="{ 'is-sel': taskForm.priority === p.id }"
-                      :style="taskForm.priority === p.id ? { borderColor: p.color, color: p.color } : {}"
-                      type="button"
-                      @click="taskForm.priority = p.id"
-                    >
-                      <span class="prio-dot" :style="{ background: p.color }" />
-                      {{ p.label }}
-                    </button>
-                  </div>
-                </div>
-                <div>
-                  <label class="field-label md-text-field-label">Scadenza</label>
-                  <input v-model="taskForm.dueDate" type="date" class="field-input field-date" />
-                </div>
-              </div>
-            </div>
-            <div class="modal-footer md-modal-footer">
-              <button class="btn-ghost md-btn md-btn--outlined md-btn--rounded" @click="closeTaskModal">Annulla</button>
-              <button
-                class="btn-reject"
-                :disabled="taskSaving"
-                @click="rejectFromModal"
-              >{{ taskSaving ? '…' : 'Rifiuta' }}</button>
-              <button
-                class="btn-primary md-btn md-btn--filled md-btn--rounded"
-                :disabled="!taskForm.title.trim() || taskSaving"
-                @click="submitTask"
-              >{{ taskSaving ? 'Creazione…' : 'Crea azione' }}</button>
-            </div>
-          </div>
-        </div>
-      </Teleport>
+      <!-- Task creation modal (componente condiviso) -->
+      <TaskCreationModal
+        v-model:open="showTaskModal"
+        :message="taskMsg"
+        :members="members"
+        :projects="projects"
+        :context="taskContext"
+        @created="onTaskCreated"
+        @reject="taskMsg && rejectTaskMsg(taskMsg)"
+      />
 
       <!-- All resolved -->
       <div v-if="!pendingQuestions.length && !pendingTasks.length" class="empty-state">
@@ -621,6 +515,20 @@ async function rejectFromModal() {
 }
 
 .empty-icon { color: var(--md-sys-color-primary); opacity: 0.35; }
+
+.load-more-wrap {
+  max-width: 920px; margin: 0 auto 16px; padding: 0 16px;
+  display: flex; justify-content: center; box-sizing: border-box;
+}
+.load-more-btn {
+  padding: 9px 22px; border-radius: var(--md-sys-shape-corner-full);
+  border: 1px solid var(--md-sys-color-outline-variant);
+  background: var(--md-sys-color-surface); color: var(--md-sys-color-primary);
+  font-family: 'Outfit', sans-serif; font-size: 13px; font-weight: 600; cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.load-more-btn:hover { background: color-mix(in srgb, var(--md-sys-color-primary) 8%, transparent); border-color: var(--md-sys-color-primary); }
+@media (min-width: 1024px) { .load-more-wrap { max-width: 900px; padding: 0 40px; } }
 
 .section { margin-bottom: 16px; padding-top: 16px; padding-bottom: 0; }
 
@@ -863,112 +771,4 @@ async function rejectFromModal() {
 }
 .btn-primary-sm:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* Task modal (uguale a quello in PulsarMessageView) */
-.modal-backdrop {
-  position: fixed; inset: 0;
-  background: rgba(0,0,0,0.4);
-  display: flex; align-items: center; justify-content: center;
-  z-index: 200; padding: 20px;
-}
-
-.task-modal {
-  background: #fff;
-  border-radius: var(--md-sys-shape-corner-large);
-  width: 100%; max-width: 420px;
-  font-family: 'Outfit', sans-serif;
-}
-
-.modal-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 18px 20px 0;
-}
-
-.modal-title { font-size: 16px; font-weight: 600; color: #1A1917; }
-.modal-close { background: none; border: none; cursor: pointer; color: #9B9590; padding: 2px; }
-.modal-body { padding: 16px 20px; }
-.modal-context { font-size: 11px; color: #9B9590; margin-bottom: 14px; }
-
-.field-label {
-  display: block; font-size: 10px; font-weight: 700;
-  letter-spacing: 0.08em; text-transform: uppercase;
-  color: #9B9590; margin-bottom: 6px;
-}
-
-.field-input {
-  width: 100%; box-sizing: border-box;
-  background: #F4F2EE; border: 1px solid #E8E5DF;
-  border-radius: var(--md-sys-shape-corner-small); padding: 9px 12px;
-  font-size: 16px; font-family: 'Outfit', sans-serif;
-  color: #1A1917; outline: none;
-}
-.field-date { cursor: pointer; color-scheme: light; }
-
-.prio-picker { display: flex; gap: 4px; }
-.prio-opt {
-  flex: 1; display: flex; align-items: center; gap: 5px;
-  padding: 7px 6px; border-radius: var(--md-sys-shape-corner-small);
-  border: 1.5px solid #E8E5DF; background: #F4F2EE;
-  font-size: 11px; font-weight: 500; cursor: pointer;
-  font-family: 'Outfit', sans-serif; color: #6A6560;
-  transition: all 0.15s; justify-content: center;
-}
-.prio-opt:hover { border-color: #C8C5C0; color: #1A1917; }
-.prio-opt.is-sel { font-weight: 700; background: transparent; }
-.prio-dot { width: 8px; height: 8px; border-radius: var(--md-sys-shape-corner-full); flex-shrink: 0; }
-
-.assignees-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 0; }
-.assignee-chip {
-  display: flex; align-items: center; gap: 6px;
-  padding: 4px 10px 4px 5px; border-radius: 20px;
-  border: 1.5px solid #E8E5DF; background: #F4F2EE;
-  font-size: 12px; color: #6A6560;
-  cursor: pointer; transition: all 0.15s; user-select: none;
-}
-.assignee-chip:hover { border-color: #C8C5C0; color: #1A1917; }
-.assignee-chip.is-selected { font-weight: 600; }
-.chip-avatar {
-  width: 18px; height: 18px; border-radius: var(--md-sys-shape-corner-full);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 9px; font-weight: 700; flex-shrink: 0;
-}
-
-.modal-footer {
-  display: flex; gap: 8px;
-  padding: 14px 20px 18px;
-  border-top: 1px solid #E8E5DF;
-}
-.btn-ghost {
-  flex: 1; padding: 10px; background: none;
-  border: 1px solid #E8E5DF; border-radius: 10px;
-  font-size: 13px; cursor: pointer; color: #6A6560;
-  font-family: 'Outfit', sans-serif;
-}
-.btn-primary {
-  flex: 2; padding: 10px; background: var(--md-sys-color-primary);
-  border: none; border-radius: 10px;
-  font-size: 13px; font-weight: 600;
-  cursor: pointer; color: #fff;
-  font-family: 'Outfit', sans-serif;
-}
-.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-
-/* Bottone "Rifiuta" del modal (footer: Annulla | Rifiuta | Crea azione) */
-.btn-reject {
-  flex: 1.2;
-  padding: 10px;
-  background: none;
-  border: 1px solid #E8E5DF;
-  border-radius: 10px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  color: #6A6560;
-  font-family: 'Outfit', sans-serif;
-  transition: border-color 0.15s, color 0.15s, background 0.15s;
-}
-.btn-reject:hover:not(:disabled) {
-  border-color: #C8521A;
-  color: #C8521A;
-}
-.btn-reject:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>

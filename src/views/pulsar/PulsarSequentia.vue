@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import MIcon from '../../components/shared/MIcon.vue'
 import MdPageHeader from '../../components/shared/MdPageHeader.vue'
 import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
 import { useAllTasks }    from '../../composables/sidera/useAllTasks'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
+
+const router = useRouter()
 
 const scrollEl = ref<HTMLElement | null>(null)
 const { hidden: headerHidden } = useAutoHideHeader(scrollEl)
@@ -21,17 +24,27 @@ async function doComplete(t: { id: string; projectId: string }) {
   await completeTask(t.projectId, t.id)
 }
 
+// Solo le azioni affidate a me (assegnatario), non quelle che ho solo creato.
 const myTasks = computed(() =>
   tasks.value.filter(t =>
     !t.completedAt &&
     !pendingDone.value.has(t.id) &&
-    (t.assignees.includes(currentUser.value?.email ?? '') || t.createdBy === currentUser.value?.uid)
+    t.assignees.includes(currentUser.value?.email ?? '')
   )
 )
 
 function formatDue(d: Date | null) {
   if (!d) return ''
   return new Intl.DateTimeFormat('it-IT', { day: 'numeric', month: 'short' }).format(d)
+}
+
+// Back-link: apre la chat PULSAR da cui l'azione è stata creata.
+function openSource(t: { sourceChatId: string | null; sourceMessageId: string | null }) {
+  if (!t.sourceChatId) return
+  router.push({
+    path: '/pulsar/chat/' + t.sourceChatId,
+    query: t.sourceMessageId ? { msg: t.sourceMessageId } : {},
+  })
 }
 
 // Task in scadenza oggi
@@ -68,6 +81,14 @@ const dueTodayCount = computed(() => {
           <MIcon v-if="pendingDone.has(t.id)" name="check" :size="14" class="check-icon" />
         </div>
         <div class="row-title">{{ t.title }}</div>
+        <button
+          v-if="t.sourceChatId"
+          class="row-source"
+          title="Apri la chat d'origine"
+          @click="openSource(t)"
+        >
+          <MIcon name="forum" :size="14" />
+        </button>
         <div v-if="t.dueDate" class="row-due">
           <MIcon name="schedule" :size="12" />{{ formatDue(t.dueDate) }}
         </div>
@@ -158,6 +179,14 @@ const dueTodayCount = computed(() => {
 .check-icon { color: var(--md-sys-color-primary); }
 
 .row-title { flex: 1; font-size: 14px; color: var(--md-sys-color-on-surface); }
+
+.row-source {
+  flex-shrink: 0; display: inline-flex; align-items: center; justify-content: center;
+  background: none; border: none; cursor: pointer; padding: 4px;
+  border-radius: var(--md-sys-shape-corner-full);
+  color: var(--md-sys-color-on-surface-variant); transition: background 0.15s, color 0.15s;
+}
+.row-source:hover { background: color-mix(in srgb, var(--md-sys-color-primary) 12%, transparent); color: var(--md-sys-color-primary); }
 
 .row-due { font-size: 11px; color: var(--md-sys-color-on-surface-variant); display: flex; align-items: center; gap: 3px; flex-shrink: 0; }
 </style>

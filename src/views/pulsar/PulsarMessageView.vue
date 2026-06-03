@@ -11,7 +11,7 @@ import { useChatHashtags } from '../../composables/pulsar/useChatHashtags'
 import { useTeamMembers, displayName, starAvatarProps } from '../../composables/sidera/useTeamMembers'
 import StarAvatar from '../../components/shared/StarAvatar.vue'
 import { useProjects } from '../../composables/sidera/useProjects'
-import { createStandaloneTask } from '../../composables/sidera/useAllTasks'
+import TaskCreationModal from '../../components/pulsar/TaskCreationModal.vue'
 import { auth } from '../../firebase'
 
 const route  = useRoute()
@@ -243,37 +243,42 @@ function selectMention(member: { email: string }) {
   inputRef.value?.focus()
 }
 
-// ── Send ──────────────────────────────────────────────────────────────────
-const sending = ref(false)
-
-async function send() {
-  if (!text.value.trim() || sending.value) return
-  sending.value = true
-  const replyToMsg = replyTo.value
-  try {
-    await sendMessage({
-      text:      text.value.trim(),
-      flags:     [...flags.value],
-      hashtags:  [...selectedTags.value],
-      mentions:  [...mentions.value],
-      replyToId: replyToMsg?.id ?? null,
-    })
-    if (replyToMsg?.flags.includes('question') && !replyToMsg.answeredAt) {
-      await markAnswered(replyToMsg.id)
-    }
-    text.value = ''
-    flags.value = []
-    selectedTags.value = []
-    mentions.value = []
-    replyTo.value = null
-    hashtagPicker.value = false
-    showMentions.value = false
-    await nextTick()
-    autoResize()       // ricomprime la textarea a 1 riga dopo l'invio
-    scrollToBottom()
-  } finally {
-    sending.value = false
+// ── Send (optimistic) ─────────────────────────────────────────────────────
+function send() {
+  const body = text.value.trim()
+  if (!body) return
+  const payload = {
+    text:      body,
+    flags:     [...flags.value],
+    hashtags:  [...selectedTags.value],
+    mentions:  [...mentions.value],
+    replyToId: replyTo.value?.id ?? null,
   }
+  const replyToMsg = replyTo.value
+
+  // Optimistic: svuoto subito il composer. La bolla compare immediatamente
+  // dallo snapshot locale (persistenza Firestore attiva) con stato `pending`,
+  // poi confermata dal server; offline resta in coda e parte alla riconnessione.
+  text.value = ''
+  flags.value = []
+  selectedTags.value = []
+  mentions.value = []
+  replyTo.value = null
+  hashtagPicker.value = false
+  showMentions.value = false
+  nextTick(() => { autoResize(); scrollToBottom() })
+
+  sendMessage(payload)
+    .then(() => {
+      if (replyToMsg?.flags.includes('question') && !replyToMsg.answeredAt) {
+        return markAnswered(replyToMsg.id)
+      }
+    })
+    .catch((e) => {
+      console.error('[PULSAR] send error', e)
+      // ripristina il testo per consentire il reinvio (se il composer è ancora vuoto)
+      if (!text.value.trim()) text.value = body
+    })
 }
 
 function onKeydown(e: KeyboardEvent) {
@@ -391,75 +396,24 @@ watch(() => messages.value.length, async () => {
   if (!route.query.msg) nextTick(scrollToBottom)
 })
 
-// ── Create task from message ──────────────────────────────────────────────
-const showTaskModal  = ref(false)
-const taskMsgId      = ref('')
-const taskForm = ref({
-  title:     '',
-  projectId: '',
-  priority:  'media' as 'alta' | 'media' | 'bassa',
-  dueDate:   '',
-  assignees: [] as string[],
-})
-const taskSaving = ref(false)
-
-const prioOptions = [
-  { id: 'alta',  label: 'Alta',  color: '#C8521A' },
-  { id: 'media', label: 'Media', color: '#D4A020' },
-  { id: 'bassa', label: 'Bassa', color: '#7A8FA6' },
-] as const
+// ── Crea azione da messaggio (modal condiviso TaskCreationModal) ───────────
+const showTaskModal = ref(false)
+const taskMsg = ref<{ id: string; text: string } | null>(null)
+const taskModalMessage = computed(() =>
+  taskMsg.value ? { id: taskMsg.value.id, text: taskMsg.value.text, chatId } : null,
+)
 
 function openTaskModal(msg: { id: string; text: string }) {
-  taskMsgId.value = msg.id
-  taskForm.value  = {
-    title:     msg.text.slice(0, 80),
-    projectId: '',
-    priority:  'media',
-    dueDate:   '',
-    assignees: [],
-  }
+  taskMsg.value = { id: msg.id, text: msg.text }
   nextTick(() => { showTaskModal.value = true })
 }
 
-function toggleTaskAssignee(email: string) {
-  const idx = taskForm.value.assignees.indexOf(email)
-  if (idx === -1) taskForm.value.assignees.push(email)
-  else taskForm.value.assignees.splice(idx, 1)
+async function onTaskCreated(taskId: string) {
+  if (taskMsg.value) await linkTask(taskMsg.value.id, taskId)
 }
 
-function parseDateInput(s: string): Date {
-  const [y, m, d] = s.split('-').map(Number)
-  return new Date(y, m - 1, d)
-}
-
-async function createTaskFromMsg() {
-  if (!taskForm.value.title.trim() || taskSaving.value) return
-  taskSaving.value = true
-  try {
-    const dueDate = taskForm.value.dueDate ? parseDateInput(taskForm.value.dueDate) : null
-    const taskId = await createStandaloneTask({
-      title:     taskForm.value.title.trim(),
-      projectId: taskForm.value.projectId || null,
-      priority:  taskForm.value.priority,
-      dueDate,
-      assignees: taskForm.value.assignees,
-    })
-    if (taskMsgId.value) await linkTask(taskMsgId.value, taskId)
-    showTaskModal.value = false
-  } finally {
-    taskSaving.value = false
-  }
-}
-
-async function rejectTaskFromModal() {
-  if (!taskMsgId.value || taskSaving.value) return
-  taskSaving.value = true
-  try {
-    await rejectTask(taskMsgId.value)
-    showTaskModal.value = false
-  } finally {
-    taskSaving.value = false
-  }
+function onTaskReject() {
+  if (taskMsg.value) rejectTask(taskMsg.value.id)
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────
@@ -606,6 +560,11 @@ function renderText(t: string) {
                   @click="router.push('/pulsar/tag/' + tag)"
                 >#{{ tag }}</button>
               </div>
+
+              <!-- stato "in invio" (optimistic/offline): finché non confermato dal server -->
+              <span v-if="group.isMine && msg.pending" class="msg-pending" title="In invio…">
+                <MIcon name="schedule" :size="12" />
+              </span>
             </div>
           </div>
 
@@ -713,7 +672,7 @@ function renderText(t: string) {
           @input="onInput"
           @keydown="onKeydown"
         />
-        <button class="send-btn" :disabled="!text.trim() || sending" @click="send">
+        <button class="send-btn" :disabled="!text.trim()" @click="send">
           <MIcon name="send" filled :size="20" />
         </button>
         <span class="send-hint">{{ sendShortcutHint }}</span>
@@ -722,79 +681,15 @@ function renderText(t: string) {
 
     </div><!-- /.input-stack -->
 
-    <!-- Create task modal -->
-    <Teleport to="body">
-      <div v-if="showTaskModal" class="modal-backdrop md-modal-backdrop" @click.self="showTaskModal = false">
-        <div class="task-modal" @click.stop>
-          <div class="modal-header md-modal-header">
-            <span class="modal-title">Crea azione</span>
-            <button class="modal-close md-modal-close" @click="showTaskModal = false"><MIcon name="close" :size="18" /></button>
-          </div>
-          <div class="modal-body md-modal-body">
-            <label class="field-label md-text-field-label">Titolo *</label>
-            <input v-model="taskForm.title" class="field-input md-text-field-input" autofocus />
-
-            <label class="field-label md-text-field-label" style="margin-top:12px">Progetto</label>
-            <select v-model="taskForm.projectId" class="field-input md-text-field-input">
-              <option value="">— Nessun progetto —</option>
-              <option v-for="p in projects" :key="p.id" :value="p.id">{{ p.name }}</option>
-            </select>
-
-            <label class="field-label md-text-field-label" style="margin-top:12px">Assegna a</label>
-            <div class="assignees-chips">
-              <div
-                v-for="m in members"
-                :key="m.email"
-                class="assignee-chip"
-                :class="{ 'is-selected': taskForm.assignees.includes(m.email) }"
-                :style="taskForm.assignees.includes(m.email) ? { background: 'var(--md-sys-color-primary-container)', borderColor: 'var(--md-sys-color-primary)', color: 'var(--md-sys-color-on-primary-container)' } : {}"
-                @click="toggleTaskAssignee(m.email)"
-              >
-                <StarAvatar v-bind="starAvatarProps(m.email, members)" :size="20" />
-                {{ displayName(m.email, members) }}
-              </div>
-            </div>
-
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px">
-              <div>
-                <label class="field-label md-text-field-label">Priorità</label>
-                <div class="prio-picker">
-                  <button
-                    v-for="p in prioOptions"
-                    :key="p.id"
-                    class="prio-opt"
-                    :class="{ 'is-sel': taskForm.priority === p.id }"
-                    :style="taskForm.priority === p.id ? { borderColor: p.color, color: p.color } : {}"
-                    type="button"
-                    @click="taskForm.priority = p.id"
-                  >
-                    <span class="prio-dot" :style="{ background: p.color }" />
-                    {{ p.label }}
-                  </button>
-                </div>
-              </div>
-              <div>
-                <label class="field-label md-text-field-label">Scadenza</label>
-                <input v-model="taskForm.dueDate" type="date" class="field-input field-date" />
-              </div>
-            </div>
-          </div>
-          <div class="modal-footer md-modal-footer">
-            <button class="btn-ghost md-btn md-btn--outlined md-btn--rounded" @click="showTaskModal = false">Annulla</button>
-            <button
-              class="btn-reject"
-              :disabled="taskSaving"
-              @click="rejectTaskFromModal"
-            >{{ taskSaving ? '…' : 'Rifiuta' }}</button>
-            <button
-              class="btn-primary md-btn md-btn--filled md-btn--rounded"
-              :disabled="!taskForm.title.trim() || taskSaving"
-              @click="createTaskFromMsg"
-            >{{ taskSaving ? 'Creazione…' : 'Crea azione' }}</button>
-          </div>
-        </div>
-      </div>
-    </Teleport>
+    <!-- Create task modal (componente condiviso) -->
+    <TaskCreationModal
+      v-model:open="showTaskModal"
+      :message="taskModalMessage"
+      :members="members"
+      :projects="projects"
+      @created="onTaskCreated"
+      @reject="onTaskReject"
+    />
   </div>
 </template>
 
@@ -1413,140 +1308,9 @@ function renderText(t: string) {
   .send-hint { display: inline; }
 }
 
-/* Task modal */
-.modal-backdrop {
-  position: fixed; inset: 0;
-  background: rgba(0,0,0,0.4);
-  display: flex; align-items: center; justify-content: center;
-  z-index: 200; padding: 20px;
+/* indicatore "in invio" (optimistic/offline) dentro la bolla */
+.msg-pending {
+  display: inline-flex; align-items: center; vertical-align: middle;
+  margin-left: 4px; opacity: 0.55;
 }
-
-.task-modal {
-  background: var(--md-sys-color-surface);
-  border-radius: var(--md-sys-shape-corner-large);
-  width: 100%; max-width: 420px;
-  font-family: 'Outfit', sans-serif;
-}
-
-.modal-header {
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 18px 20px 0;
-}
-
-.modal-title { font-size: 16px; font-weight: 600; color: var(--md-sys-color-on-surface); }
-
-.modal-close {
-  background: none; border: none; cursor: pointer;
-  color: var(--md-sys-color-on-surface-variant); padding: 2px;
-}
-
-.modal-body { padding: 16px 20px; }
-
-.field-label {
-  display: block; font-size: 10px; font-weight: 700;
-  letter-spacing: 0.08em; text-transform: uppercase;
-  color: var(--md-sys-color-on-surface-variant); margin-bottom: 6px;
-}
-
-.field-input {
-  width: 100%; box-sizing: border-box;
-  background: var(--md-sys-color-surface-container);
-  border: 1px solid var(--md-sys-color-outline-variant);
-  border-radius: var(--md-sys-shape-corner-small); padding: 9px 12px;
-  font-size: 13px; font-family: 'Outfit', sans-serif;
-  color: var(--md-sys-color-on-surface); outline: none;
-}
-
-.field-date { cursor: pointer; color-scheme: light; }
-
-.prio-picker { display: flex; gap: 4px; }
-
-.prio-opt {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 7px 6px;
-  border-radius: var(--md-sys-shape-corner-small);
-  border: 1.5px solid var(--md-sys-color-outline-variant);
-  background: var(--md-sys-color-surface-container);
-  font-size: 11px;
-  font-weight: 500;
-  cursor: pointer;
-  font-family: 'Outfit', sans-serif;
-  color: var(--md-sys-color-on-surface-variant);
-  transition: all 0.15s;
-  justify-content: center;
-}
-
-.prio-opt:hover { border-color: var(--md-sys-color-outline); color: var(--md-sys-color-on-surface); }
-.prio-opt.is-sel { font-weight: 700; background: transparent; }
-
-.prio-dot { width: 8px; height: 8px; border-radius: var(--md-sys-shape-corner-full); flex-shrink: 0; }
-
-.assignees-chips { display: flex; flex-wrap: wrap; gap: 6px; padding: 4px 0; }
-
-.assignee-chip {
-  display: flex; align-items: center; gap: 6px;
-  padding: 4px 10px 4px 5px;
-  border-radius: 20px;
-  border: 1.5px solid var(--md-sys-color-outline-variant);
-  background: var(--md-sys-color-surface-container);
-  font-size: 12px; color: var(--md-sys-color-on-surface-variant);
-  cursor: pointer; transition: all 0.15s; user-select: none;
-}
-
-.assignee-chip:hover { border-color: var(--md-sys-color-outline); color: var(--md-sys-color-on-surface); }
-.assignee-chip.is-selected { font-weight: 600; }
-
-.chip-avatar {
-  width: 18px; height: 18px; border-radius: var(--md-sys-shape-corner-full);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 9px; font-weight: 700; flex-shrink: 0;
-}
-
-.modal-footer {
-  display: flex; gap: 8px;
-  padding: 0 20px 18px;
-  border-top: 1px solid var(--md-sys-color-outline-variant);
-  padding-top: 14px;
-}
-
-.btn-ghost {
-  flex: 1; padding: 10px; background: none;
-  border: 1px solid var(--md-sys-color-outline-variant); border-radius: 10px;
-  font-size: 13px; cursor: pointer; color: var(--md-sys-color-on-surface-variant);
-  font-family: 'Outfit', sans-serif;
-}
-
-.btn-primary {
-  flex: 2; padding: 10px; background: var(--md-sys-color-primary);
-  border: none; border-radius: 10px;
-  font-size: 13px; font-weight: 600;
-  cursor: pointer; color: var(--md-sys-color-on-primary);
-  font-family: 'Outfit', sans-serif;
-}
-
-.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-
-/* Bottone "Rifiuta" task: outlined neutro per non competere con il primary
-   "Crea azione". Posizionato in mezzo: Annulla | Rifiuta | Crea azione. */
-.btn-reject {
-  flex: 1.2;
-  padding: 10px;
-  background: none;
-  border: 1px solid var(--md-sys-color-outline-variant);
-  border-radius: 10px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  color: var(--md-sys-color-on-surface-variant);
-  font-family: 'Outfit', sans-serif;
-  transition: border-color 0.15s, color 0.15s;
-}
-.btn-reject:hover:not(:disabled) {
-  border-color: #C8521A;
-  color: #C8521A;
-}
-.btn-reject:disabled { opacity: 0.5; cursor: not-allowed; }
 </style>
