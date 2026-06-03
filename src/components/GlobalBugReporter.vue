@@ -74,7 +74,14 @@
     return []; // I clienti o ruoli sconosciuti non vedono link admin
   });
   const standardLinks = computed(() => visibleLinks.value.filter(l => !['/stack', '/calcoli'].includes(l.route)));
-const constructionLinks = computed(() => visibleLinks.value.filter(l => ['/stack', '/calcoli'].includes(l.route)));
+const constructionLinks = computed(() => {
+  const base = visibleLinks.value.filter(l => ['/stack', '/calcoli'].includes(l.route));
+  // SIDERA visibile solo a Daniele, nella sezione "under construction"
+  if (currentUserEmail.value === 'pastorindaniel@gmail.com') {
+    base.push({ label: 'SIDERA', route: '/sidera', icon: SparklesIcon, color: 'text-amber-400', bg: 'bg-amber-50' });
+  }
+  return base;
+});
 
   const isTeamMember = computed(() => !!role.value);
 
@@ -215,12 +222,14 @@ const openResultModal = (title: string, message: string, type: 'SUCCESS' | 'ERRO
             </div>
           </button>
   
-          <template v-if="visibleLinks.length > 0">
-            <div class="h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent my-3 mx-4"></div>
-            <div class="px-5 py-1 text-[10px] font-extrabold text-gray-400 uppercase tracking-widest flex items-center gap-2">
-              <SparklesIcon class="w-3 h-3 text-amber-400" />
-              {{ role === 'ADMIN' ? 'Amministrazione' : 'Menu Team' }}
-            </div>
+          <template v-if="visibleLinks.length > 0 || constructionLinks.length > 0">
+            <template v-if="visibleLinks.length > 0">
+              <div class="h-px bg-gradient-to-r from-transparent via-gray-200 to-transparent my-3 mx-4"></div>
+              <div class="px-5 py-1 text-[10px] font-extrabold text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                <SparklesIcon class="w-3 h-3 text-amber-400" />
+                {{ role === 'ADMIN' ? 'Amministrazione' : 'Menu Team' }}
+              </div>
+            </template>
 
             <div class="grid grid-cols-1 gap-1 p-1">
   
