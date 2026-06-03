@@ -1249,7 +1249,9 @@ function onBubbleClick(e: MouseEvent) {
 :deep(.msg-ref--project) { color: #2F6B4A; background: rgba(47, 107, 74, 0.14); border-color: rgba(47, 107, 74, 0.32); }
 :deep(.msg-ref--doc) { color: #C46030; background: rgba(196, 96, 48, 0.14); border-color: rgba(196, 96, 48, 0.32); }
 :deep(.msg-ref:hover) { filter: brightness(0.96); text-decoration: underline; }
-.msg-bubble.is-mine :deep(.msg-ref) { color: var(--md-sys-color-on-primary); background: rgba(255,255,255,0.20); border-color: rgba(255,255,255,0.28); }
+/* Nelle bolle proprie (sfondo teal pieno) la chip diventa una pill chiara così
+   il colore-tipo (testo+icona+bordo, da .msg-ref--*) resta leggibile e distinto. */
+.msg-bubble.is-mine :deep(.msg-ref) { background: rgba(255,255,255,0.93); border-color: currentColor; }
 
 /* Hashtag picker: trasparente come la barra di scrittura. Il campo di
    ricerca (.tag-search) e i chip (.tag-option/.sel-tag) restano "bolle"
