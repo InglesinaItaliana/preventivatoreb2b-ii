@@ -5,9 +5,10 @@ import {
 } from 'firebase/firestore'
 import { db, auth } from '../../firebase'
 
-/** Riferimento cliccabile a un'entità menzionata nel messaggio (oltre alle persone). */
+/** Riferimento a un'entità menzionata. task/project/doc sono cliccabili;
+ *  'user' è solo una chip visiva (non naviga) — l'email resta anche in `mentions`. */
 export interface MsgRef {
-  type: 'task' | 'project' | 'doc'
+  type: 'task' | 'project' | 'doc' | 'user'
   id: string
   projectId?: string
   label: string
