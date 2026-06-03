@@ -1251,8 +1251,10 @@ function onBubbleClick(e: MouseEvent) {
   padding: 0 5px; border-radius: 6px;
   border: 1px solid transparent;
   cursor: pointer; text-decoration: none;
-  /* niente nowrap: la chip va a capo dentro la bolla se serve;
-     box-decoration-break:clone tiene la pill continua sulle righe */
+  /* la chip va a capo dentro la bolla se serve, anche da sola: overflow-wrap:anywhere
+     riduce il min-content così il grid max-content della bolla può stringersi;
+     box-decoration-break:clone tiene la pill continua sulle righe. */
+  overflow-wrap: anywhere; word-break: break-word;
   -webkit-box-decoration-break: clone; box-decoration-break: clone;
   transition: background 0.12s, border-color 0.12s;
 }
