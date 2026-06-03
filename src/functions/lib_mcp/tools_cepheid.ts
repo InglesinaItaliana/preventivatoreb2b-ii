@@ -268,7 +268,10 @@ export async function createTask(
     if (start.invalid) warns.push('`startDate` non valida, ignorata');
     if (due.invalid) warns.push('`dueDate` non valida, ignorata');
     const warn = warns.length ? `\n⚠️ ${warns.join('; ')}` : '';
-    return { text: `${type} creato: ${ref.id} «${title}» nel progetto ${projectId}.${warn}` };
+    // Suggerisci la mention QUALIFICATA col progetto: i task vivono in
+    // projects/{pid}/tasks/{id}, quindi referenziarli in un doc come @task:{id}
+    // (senza progetto) li fa risultare "Task eliminato". Forma corretta sotto.
+    return { text: `${type} creato: ${ref.id} «${title}» nel progetto ${projectId}.${warn}\nPer citarlo in un doc Nebula usa la mention: @task:${projectId}/${ref.id}` };
 }
 
 /** Crea una "fase" atomica = milestone (nuova XOR esistente) + deliverable
