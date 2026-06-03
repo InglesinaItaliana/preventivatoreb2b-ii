@@ -524,14 +524,16 @@ function renderRich(msg: { text: string; refs?: MsgRef[] }): string {
   return work.replace(new RegExp(NUL + '(\\d+)' + NUL, 'g'), (_m, n) => chips[Number(n)] ?? '')
 }
 
-// Click su una chip → apre l'entità. window.open('_blank') così su mobile apre
-// la PWA corretta (scope manifest /cepheid/ /nebula/).
+// Click su una chip → naviga all'entità. La suite è UNA sola SPA same-origin,
+// quindi usiamo il router (navigazione in-app): dentro la PWA installata resta
+// nell'app e mostra la schermata CEPHEID/NEBULA, senza aprire un browser in-app.
+// (window.open('_blank') dallo standalone aprirebbe una Custom Tab fuori scope.)
 function openEntity(type: string | undefined, id: string, projectId: string) {
   let url = ''
   if (type === 'task') url = projectId ? `/cepheid/project/${projectId}` : '/cepheid'
   else if (type === 'project') url = `/cepheid/project/${id}`
   else if (type === 'doc') url = `/nebula/docs/${id}`
-  if (url) window.open(url, '_blank')
+  if (url) router.push(url)
 }
 function onBubbleClick(e: MouseEvent) {
   const el = (e.target as HTMLElement).closest('[data-ref-type]') as HTMLElement | null
