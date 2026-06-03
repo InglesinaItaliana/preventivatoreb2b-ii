@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { useNebulaTeam, CATEGORY_OPTIONS, POSITION_OPTIONS, type NebulaMember } from '../../composables/nebula/useNebulaTeam'
+import { useNebulaTeam, CATEGORY_OPTIONS, type NebulaMember } from '../../composables/nebula/useNebulaTeam'
 import StarAvatar from '../../components/shared/StarAvatar.vue'
 import MdPageHeader from '../../components/shared/MdPageHeader.vue'
 import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
@@ -25,15 +25,16 @@ const view = ref<ViewId>('org')
 const active = computed(() => members.value.filter(m => m.active !== false))
 const all    = computed(() => members.value)
 
-// Lista: ordine per posizione/ruolo (gerarchia POSITION_OPTIONS Titolare→…→Contabile;
-// posizioni assenti/ignote in coda) e poi alfabetico per nome.
-const posRank = (m: NebulaMember) => {
-  const i = POSITION_OPTIONS.indexOf(m.position ?? '')
-  return i === -1 ? POSITION_OPTIONS.length : i
+// Lista: ordine per RUOLO (ADMIN→COMMERCIALE→PRODUZIONE→LOGISTICA; ruoli ignoti
+// in coda) e poi alfabetico per nome.
+const ROLE_RANK = ['ADMIN', 'COMMERCIALE', 'PRODUZIONE', 'LOGISTICA']
+const roleRank = (m: NebulaMember) => {
+  const i = ROLE_RANK.indexOf(m.role)
+  return i === -1 ? ROLE_RANK.length : i
 }
 const sortedList = computed<NebulaMember[]>(() =>
   [...all.value].sort((a, b) => {
-    const r = posRank(a) - posRank(b)
+    const r = roleRank(a) - roleRank(b)
     return r !== 0 ? r : fullName(a).localeCompare(fullName(b), 'it')
   }),
 )
@@ -130,6 +131,7 @@ const roleAccent: Record<string, string> = {
       title="Squadra"
       :subtitle="`${active.length} membri attivi · ${all.length - active.length} inattivi`"
       sticky
+      borderless
       :hidden="headerHidden"
     >
       <template #tools>

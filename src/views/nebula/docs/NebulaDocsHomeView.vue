@@ -404,6 +404,7 @@ function isActiveTouch(d: DocRow): boolean {
         title="Documenti"
         :subtitle="headerSubtitle"
         sticky
+        borderless
         :hidden="headerHidden"
       >
         <template #tools>
