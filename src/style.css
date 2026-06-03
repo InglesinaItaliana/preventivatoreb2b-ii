@@ -415,6 +415,15 @@ input[type=number] {
   --md-sys-color-on-primary-container:  var(--md-ref-palette-nova-90);
 }
 
+/* PULSAR: la pillola bottom-nav usa lo stesso colore delle card (surface),
+   non surface-container. Regola globale (non scoped) con specificità
+   `.s-shell.s-scope-pulsar .cm-nav-pill` per battere la regola scoped del
+   componente ContextualBottomNav. Vale sia in light sia in dark (le card
+   PULSAR usano anch'esse `--md-sys-color-surface`). */
+.s-shell.s-scope-pulsar .cm-nav-pill {
+  background: var(--md-sys-color-surface);
+}
+
 .s-scope-magnetar {
   --md-sys-color-primary:               var(--s-magnetar-on-light);
   --md-sys-color-on-primary:            #FFFFFF;
