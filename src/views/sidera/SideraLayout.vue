@@ -375,15 +375,25 @@ function isSectionOpen(name: string) {
   return hoveredSection.value ? hoveredSection.value === name : isSectionExpanded(name)
 }
 
-// Ancoraggio scroll (singola correzione). La sezione sopra collassa in modo
-// ISTANTANEO (vedi CSS: transition solo in apertura), quindi lo shift di layout
-// avviene in un solo reflow: basta una correzione una-tantum dello scrollTop,
-// arrotondata all'intero, per ri-pinnare il gruppo hover-ato sotto il cursore.
-// Niente loop rAF → niente scroll sub-pixel → niente shimmer ai bordi.
-// L'apertura della sezione hover-ata è animata ma cresce SOTTO la sua label
-// (il top del gruppo non si muove), quindi non serve compensarla.
+// Gate anti-flash: un `mouseenter` può scattare anche SENZA che il mouse si muova,
+// quando il re-layout (collasso della sezione sopra + eventuale scroll) sposta gli
+// elementi sotto un puntatore fermo. Quegli enter "indotti" sono la causa del flash
+// sulle categorie corte (il cursore cade oltre il corpo breve sulla label sotto).
+// Conto i mousemove reali: se non ce n'è stato nessuno dall'ultimo cambio di
+// sezione, l'enter è del layout → lo ignoro.
+let moveSeq = 0
+let committedSeq = -1
+function onNavMove() { moveSeq++ }
+
+// Ancoraggio scroll (singola correzione): il collasso della sezione sopra è
+// ISTANTANEO (CSS: transition solo in apertura), quindi è un solo reflow; ri-pinno
+// il gruppo con una correzione una-tantum dello scrollTop arrotondata all'intero
+// (niente loop rAF → niente scroll sub-pixel → niente shimmer). L'apertura cresce
+// sotto la propria label, quindi non sposta il top e non va compensata.
 function previewSection(name: string, ev: MouseEvent) {
   if (hoveredSection.value === name) return
+  if (moveSeq === committedSeq) return   // enter indotto dal re-layout → ignora
+  committedSeq = moveSeq
   const navEl = navRef.value
   const groupEl = ev.currentTarget as HTMLElement | null
   const before = groupEl?.getBoundingClientRect().top ?? 0
@@ -621,7 +631,7 @@ const roleLabel: Record<string, string> = {
         </span>
       </div>
 
-      <nav class="s-nav" ref="navRef" @mouseleave="clearHovered()">
+      <nav class="s-nav" ref="navRef" @mousemove="onNavMove" @mouseleave="clearHovered()">
         <div
           v-for="mod in modules"
           :key="mod.name"
