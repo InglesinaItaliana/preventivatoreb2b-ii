@@ -360,12 +360,18 @@ function isSectionExpanded(name: string) {
   return expandedSection.value === name
 }
 
-// Hover-preview (desktop): passando il mouse su una sezione si svelano le sue
-// schede; uscendo, torna aperta la sezione attiva (`expandedSection`). Esclusivo:
-// in hover è aperta SOLO la sezione hover-ata.
-const hoveredSection = ref<string | null>(null)
+// Hover-preview ADDITIVO (desktop): passando il mouse su una sezione si svelano
+// le sue schede SENZA chiudere le altre già aperte. È additivo per necessità:
+// un hover esclusivo chiuderebbe la sezione *sopra* il puntatore, lo scroll
+// risalirebbe e il cursore rientrerebbe nella sezione sopra → loop apri/chiudi
+// (le sezioni in basso non si stabilizzavano mai). Accumulando e basta, nessuna
+// sezione sopra il cursore collassa, quindi niente shift di layout → niente loop.
+// Tutte le preview si richiudono uscendo dalla nav, tornando alla sola attiva.
+const hovered = ref<Set<string>>(new Set())
+function previewSection(name: string) { hovered.value.add(name) }
+function clearHovered() { hovered.value.clear() }
 function isSectionOpen(name: string) {
-  return hoveredSection.value ? hoveredSection.value === name : isSectionExpanded(name)
+  return isSectionExpanded(name) || hovered.value.has(name)
 }
 
 // Inizializza: ultima sezione aperta da localStorage, fallback su quella della
@@ -592,12 +598,12 @@ const roleLabel: Record<string, string> = {
         </span>
       </div>
 
-      <nav class="s-nav" @mouseleave="hoveredSection = null">
+      <nav class="s-nav" @mouseleave="clearHovered()">
         <div
           v-for="mod in modules"
           :key="mod.name"
           class="s-section-group"
-          @mouseenter="hoveredSection = mod.name"
+          @mouseenter="previewSection(mod.name)"
         >
           <button
             type="button"
@@ -659,14 +665,13 @@ const roleLabel: Record<string, string> = {
         </div>
 
         <!-- CORE: sezione admin-only in fondo (manutenzione + impostazioni).
-             CORE non partecipa all'hover-preview: entrandoci, azzero hoveredSection
-             così i moduli tornano allo stato route-attivo. -->
-        <div v-if="canAccessCore" class="s-section-group" @mouseenter="hoveredSection = null">
+             Stesso hover-preview additivo dei moduli. -->
+        <div v-if="canAccessCore" class="s-section-group" @mouseenter="previewSection('CORE')">
           <button
             type="button"
             class="s-section-label"
             :class="{
-              's-is-expanded': isSectionExpanded('CORE'),
+              's-is-expanded': isSectionOpen('CORE'),
               's-is-active':   route.path.startsWith('/sidera/admin/maintenance') || route.path.startsWith('/sidera/core'),
             }"
             :style="{ '--s-accent': CORE_ACCENT, '--s-accent-glow': CORE_ACCENT + '33', '--s-accent-glow-soft': CORE_ACCENT + '1F' }"
@@ -675,7 +680,7 @@ const roleLabel: Record<string, string> = {
           <div
             id="s-sec-CORE"
             class="s-section-items"
-            :class="{ 's-is-open': isSectionExpanded('CORE') }"
+            :class="{ 's-is-open': isSectionOpen('CORE') }"
             :style="{ '--s-accent': CORE_ACCENT, '--s-accent-glow-soft': CORE_ACCENT + '1F' }"
           >
             <div class="s-section-items-inner">
