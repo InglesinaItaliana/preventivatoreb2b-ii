@@ -592,13 +592,12 @@ const roleLabel: Record<string, string> = {
         </span>
       </div>
 
-      <nav class="s-nav">
+      <nav class="s-nav" @mouseleave="hoveredSection = null">
         <div
           v-for="mod in modules"
           :key="mod.name"
           class="s-section-group"
           @mouseenter="hoveredSection = mod.name"
-          @mouseleave="hoveredSection = null"
         >
           <button
             type="button"
@@ -659,8 +658,10 @@ const roleLabel: Record<string, string> = {
           </div>
         </div>
 
-        <!-- CORE: sezione admin-only in fondo (manutenzione + impostazioni) -->
-        <template v-if="canAccessCore">
+        <!-- CORE: sezione admin-only in fondo (manutenzione + impostazioni).
+             CORE non partecipa all'hover-preview: entrandoci, azzero hoveredSection
+             così i moduli tornano allo stato route-attivo. -->
+        <div v-if="canAccessCore" class="s-section-group" @mouseenter="hoveredSection = null">
           <button
             type="button"
             class="s-section-label"
@@ -696,7 +697,7 @@ const roleLabel: Record<string, string> = {
               </RouterLink>
             </div>
           </div>
-        </template>
+        </div>
       </nav>
 
       <!-- User -->
