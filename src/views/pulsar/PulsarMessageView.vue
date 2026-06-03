@@ -285,7 +285,9 @@ function selectMention(item: MentionItem) {
   const lastAt = val.lastIndexOf('@')
   text.value = (lastAt >= 0 ? val.slice(0, lastAt) : val) + '@' + item.label + ' '
   if (item.kind === 'user') {
+    // email in `mentions` per le notifiche + chip 'user' (non cliccabile) come gli altri
     if (!mentions.value.includes(item.id)) mentions.value.push(item.id)
+    pendingRefs.value.push({ type: 'user', id: item.id, label: item.label })
   } else {
     const type = item.kind as MsgRef['type']
     // niente projectId:undefined nel payload (Firestore rifiuta undefined)
@@ -487,7 +489,7 @@ function escapeAttr(s: string): string {
   return escapeHtml(s).replace(/"/g, '&quot;')
 }
 const REF_ICON: Record<MsgRef['type'], string> = {
-  task: 'task_alt', project: 'folder', doc: 'description',
+  task: 'task_alt', project: 'folder', doc: 'description', user: 'person',
 }
 function chipHtml(r: MsgRef): string {
   // icona via .m-icon (font Material Symbols globale, ligature) → renderizzabile in v-html
@@ -1069,7 +1071,7 @@ function onBubbleClick(e: MouseEvent) {
 .msg-text { font-size: 20px; line-height: 1.4; color: var(--md-sys-color-on-surface); white-space: pre-wrap; word-break: break-word; margin: 0; }
 
 :deep(.msg-hashtag) { color: var(--md-sys-color-primary); font-weight: 600; cursor: pointer; }
-:deep(.msg-mention) { color: #2F6B4A; font-weight: 600; }
+:deep(.msg-mention) { color: var(--s-nebula-on-light); font-weight: 600; }
 
 /* Flag pins — corner-anchored badges.
    Per i miei messaggi i pin stanno a sinistra (angolo interno), per quelli
@@ -1245,10 +1247,23 @@ function onBubbleClick(e: MouseEvent) {
   border: 1px solid transparent; transition: background 0.12s, border-color 0.12s;
 }
 :deep(.msg-ref-ic) { font-size: 14px; }
-:deep(.msg-ref--task) { color: #8b6a14; background: rgba(212, 160, 32, 0.16); border-color: rgba(212, 160, 32, 0.35); }
-:deep(.msg-ref--project) { color: #2F6B4A; background: rgba(47, 107, 74, 0.14); border-color: rgba(47, 107, 74, 0.32); }
-:deep(.msg-ref--doc) { color: #C46030; background: rgba(196, 96, 48, 0.14); border-color: rgba(196, 96, 48, 0.32); }
+/* Due sole famiglie cromatiche, l'icona distingue dentro la famiglia:
+   CEPHEID (oro) per task+progetti, NEBULA (terracotta) per doc+persone. */
+:deep(.msg-ref--task),
+:deep(.msg-ref--project) {
+  color: var(--s-cepheid-on-light);
+  background: color-mix(in srgb, var(--s-cepheid-on-light) 14%, transparent);
+  border-color: color-mix(in srgb, var(--s-cepheid-on-light) 36%, transparent);
+}
+:deep(.msg-ref--doc),
+:deep(.msg-ref--user) {
+  color: var(--s-nebula-on-light);
+  background: color-mix(in srgb, var(--s-nebula-on-light) 14%, transparent);
+  border-color: color-mix(in srgb, var(--s-nebula-on-light) 36%, transparent);
+}
+:deep(.msg-ref--user) { cursor: default; }   /* persona: chip non cliccabile */
 :deep(.msg-ref:hover) { filter: brightness(0.96); text-decoration: underline; }
+:deep(.msg-ref--user:hover) { filter: none; text-decoration: none; }
 /* Nelle bolle proprie (sfondo teal pieno) la chip diventa una pill chiara così
    il colore-tipo (testo+icona+bordo, da .msg-ref--*) resta leggibile e distinto. */
 .msg-bubble.is-mine :deep(.msg-ref) { background: rgba(255,255,255,0.93); border-color: currentColor; }
