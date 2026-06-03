@@ -6,6 +6,9 @@ import MdPageHeader from '../../components/shared/MdPageHeader.vue'
 import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
 import { useAllTasks }    from '../../composables/sidera/useAllTasks'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
+import { useTeamMembers } from '../../composables/sidera/useTeamMembers'
+import { useProjects }    from '../../composables/sidera/useProjects'
+import CepheidActionCard  from '../../components/cepheid/CepheidActionCard.vue'
 
 const router = useRouter()
 
@@ -14,6 +17,11 @@ const { hidden: headerHidden } = useAutoHideHeader(scrollEl)
 
 const { tasks, loading: tasksLoading, completeTask } = useAllTasks()
 const { currentUser } = useCurrentUser()
+const { members } = useTeamMembers()
+const { projects } = useProjects()
+
+function projectName(id: string | null) { return id ? (projects.value.find(p => p.id === id)?.name ?? '') : '' }
+function projectColor(id: string | null) { return id ? (projects.value.find(p => p.id === id)?.color ?? '#7A8FA6') : '#7A8FA6' }
 
 // ── Tasks ─────────────────────────────────────────────────────────────────
 const pendingDone = ref<Set<string>>(new Set())
@@ -32,11 +40,6 @@ const myTasks = computed(() =>
     t.assignees.includes(currentUser.value?.email ?? '')
   )
 )
-
-function formatDue(d: Date | null) {
-  if (!d) return ''
-  return new Intl.DateTimeFormat('it-IT', { day: 'numeric', month: 'short' }).format(d)
-}
 
 // Back-link: apre la chat PULSAR da cui l'azione è stata creata.
 function openSource(t: { sourceChatId: string | null; sourceMessageId: string | null }) {
@@ -76,23 +79,31 @@ const dueTodayCount = computed(() => {
         Nessuna azione assegnata.
       </div>
 
-      <div v-for="t in myTasks" :key="t.id" class="task-row">
-        <div class="checkbox" @click="doComplete(t)">
-          <MIcon v-if="pendingDone.has(t.id)" name="check" :size="14" class="check-icon" />
-        </div>
-        <div class="row-title">{{ t.title }}</div>
-        <button
-          v-if="t.sourceChatId"
-          class="row-source"
-          title="Apri la chat d'origine"
-          @click="openSource(t)"
-        >
-          <MIcon name="forum" :size="14" />
-        </button>
-        <div v-if="t.dueDate" class="row-due">
-          <MIcon name="schedule" :size="12" />{{ formatDue(t.dueDate) }}
-        </div>
-      </div>
+      <CepheidActionCard
+        v-for="t in myTasks"
+        :key="t.id"
+        :task="t"
+        :members="members"
+        :current-user-email="currentUser?.email"
+        :project-name="projectName(t.projectId)"
+        :project-color="projectColor(t.projectId)"
+        :show-project="!!t.projectId"
+        hide-sole-self-assignee
+        :pending="pendingDone.has(t.id)"
+        :clickable="false"
+        @toggle="doComplete(t)"
+      >
+        <template #trailing>
+          <button
+            v-if="t.sourceChatId"
+            class="row-source"
+            title="Apri la chat d'origine"
+            @click.stop="openSource(t)"
+          >
+            <MIcon name="forum" :size="14" />
+          </button>
+        </template>
+      </CepheidActionCard>
     </div>
   </div>
 </template>
@@ -128,6 +139,9 @@ const dueTodayCount = computed(() => {
   margin: 0 auto;
   width: 100%;
   box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 @media (min-width: 1024px) {
   .seq-content { padding: 24px 40px; max-width: 900px; }

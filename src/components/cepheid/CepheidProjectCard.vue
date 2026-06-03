@@ -155,6 +155,11 @@ const projectDueIso = computed(() => {
 }
 .s-surface-dark .pcard { background: #16130B; }
 @media (prefers-color-scheme: dark) { .pcard { background: #16130B; } }
+.pcard:hover { background: color-mix(in srgb, var(--md-sys-color-primary) 5%, #FFF8F0); }
+.s-surface-dark .pcard:hover { background: color-mix(in srgb, var(--md-sys-color-primary) 10%, #16130B); }
+/* l'header sticky interno è opaco: tingilo anch'esso così l'hover si vede su tutta la card */
+.pcard:hover :deep(.cph-sticky) { background: color-mix(in srgb, var(--md-sys-color-primary) 5%, #FFF8F0); }
+.s-surface-dark .pcard:hover :deep(.cph-sticky) { background: color-mix(in srgb, var(--md-sys-color-primary) 10%, #16130B); }
 .pcard--inactive { opacity: 0.6; }
 
 /* card "quiet" (conclusi/in pausa): di default solo la riga del titolo + icone azione.

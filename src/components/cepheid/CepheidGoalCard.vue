@@ -161,6 +161,8 @@ function pct(p: Project) {
 }
 .s-surface-dark .gcard { background: #16130B; }
 @media (prefers-color-scheme: dark) { .gcard { background: #16130B; } }
+.gcard:hover, .gcard:hover .gcard-sticky { background: color-mix(in srgb, var(--md-sys-color-primary) 5%, #FFF8F0); }
+.s-surface-dark .gcard:hover, .s-surface-dark .gcard:hover .gcard-sticky { background: color-mix(in srgb, var(--md-sys-color-primary) 10%, #16130B); }
 
 .gcard-sticky { position: sticky; top: 0; z-index: 6; background: #FFF8F0; padding-bottom: 6px; }
 .s-surface-dark .gcard-sticky { background: #16130B; }

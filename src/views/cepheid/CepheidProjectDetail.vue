@@ -14,6 +14,8 @@ import CepheidTimeline from '../../components/cepheid/CepheidTimeline.vue'
 import CepheidCreateMenu from '../../components/cepheid/CepheidCreateMenu.vue'
 import CepheidCreateModal from '../../components/cepheid/CepheidCreateModal.vue'
 import CepheidViewSwitcher from '../../components/cepheid/CepheidViewSwitcher.vue'
+import CepheidActionCard from '../../components/cepheid/CepheidActionCard.vue'
+import CepheidDoneToggle from '../../components/cepheid/CepheidDoneToggle.vue'
 import LinkedDocsPanel from '../../components/shared/LinkedDocsPanel.vue'
 
 const route   = useRoute()
@@ -283,37 +285,38 @@ if (newTaskTick) {
 
           <div v-if="!grouped[s.id]?.length" class="state-empty">—</div>
 
-          <div
+          <CepheidActionCard
             v-for="t in grouped[s.id]"
             :key="t.id"
-            class="task-row"
+            :task="t"
+            :members="members"
+            :current-user-email="currentUser?.email"
+            :show-project="false"
+            :pending="pendingDone.has(t.id)"
+            :clickable="false"
+            @toggle="doComplete(t)"
           >
-            <div class="checkbox" @click="doComplete(t)">
-              <MIcon v-if="pendingDone.has(t.id)" name="check" :size="14" class="check-icon" />
-            </div>
-            <span class="prio-dot" :style="{ background: prioColor[t.priority] }" :title="'Priorità ' + t.priority" />
-            <div class="row-title">{{ t.title }}</div>
-            <button class="state-pill" :style="{ background: s.color + '20', color: s.color }" @click.stop="openStatusMenu(t.id)">
-              {{ s.label }}
-              <MIcon name="expand_more" :size="14" />
-            </button>
-            <div v-if="t.dueDate" class="row-due">
-              <MIcon name="schedule" :size="12" />{{ formatDue(t.dueDate) }}
-            </div>
-
-            <div v-if="movingTaskId === t.id" class="status-menu" @click.stop>
-              <button
-                v-for="opt in states"
-                :key="opt.id"
-                class="status-menu-item"
-                :class="{ 'is-current': opt.id === t.status }"
-                @click="changeStatus(t.id, opt.id)"
-              >
-                <span class="state-dot" :style="{ background: opt.color }" />
-                {{ opt.label }}
-              </button>
-            </div>
-          </div>
+            <template #trailing>
+              <span class="state-pill-wrap">
+                <button class="state-pill" :style="{ background: s.color + '20', color: s.color }" @click.stop="openStatusMenu(t.id)">
+                  {{ s.label }}
+                  <MIcon name="expand_more" :size="14" />
+                </button>
+                <div v-if="movingTaskId === t.id" class="status-menu" @click.stop>
+                  <button
+                    v-for="opt in states"
+                    :key="opt.id"
+                    class="status-menu-item"
+                    :class="{ 'is-current': opt.id === t.status }"
+                    @click="changeStatus(t.id, opt.id)"
+                  >
+                    <span class="state-dot" :style="{ background: opt.color }" />
+                    {{ opt.label }}
+                  </button>
+                </div>
+              </span>
+            </template>
+          </CepheidActionCard>
         </section>
 
         <button
@@ -355,13 +358,12 @@ if (newTaskTick) {
             class="milestone-item"
             :class="{ 'is-done': m.completedAt }"
           >
-            <span
-              class="milestone-circle"
-              :class="{ 'is-done': m.completedAt }"
+            <CepheidDoneToggle
+              shape="diamond"
+              :done="!!m.completedAt"
+              :interactive="false"
               :title="m.completedAt ? 'Raggiunta' : 'Non ancora raggiunta'"
-            >
-              <MIcon v-if="m.completedAt" name="check" :size="14" />
-            </span>
+            />
             <div class="milestone-body">
               <div class="milestone-title" :class="{ 'is-done': m.completedAt }">{{ m.title }}</div>
               <div class="milestone-date">{{ mileDateLabel(m.id) }}</div>
@@ -388,15 +390,13 @@ if (newTaskTick) {
             <div class="deliverable-body">
               <div class="deliverable-top">
                 <!-- spunta cliccabile solo se tutte le task del deliverable sono complete -->
-                <div
-                  class="checkbox"
-                  :class="{ 'is-locked': !d.completedAt && !deliverableTasksDone(d) }"
+                <CepheidDoneToggle
+                  shape="square"
+                  :done="!!d.completedAt"
+                  :locked="!d.completedAt && !deliverableTasksDone(d)"
                   :title="!d.completedAt && !deliverableTasksDone(d) ? 'Completa prima le task associate' : ''"
-                  @click="onDeliverableCheck(d)"
-                >
-                  <MIcon v-if="d.completedAt" name="check" :size="14" class="check-icon" />
-                  <MIcon v-else-if="!deliverableTasksDone(d)" name="lock" :size="11" class="lock-icon" />
-                </div>
+                  @toggle="onDeliverableCheck(d)"
+                />
                 <span class="prio-dot" :style="{ background: prioColor[d.priority] }" :title="'Priorità ' + d.priority" />
                 <div class="deliverable-title" :class="{ 'is-done': d.completedAt }">{{ d.title }}</div>
               </div>
@@ -431,9 +431,11 @@ if (newTaskTick) {
                     :key="sub.id"
                     class="deliverable-subtask"
                   >
-                    <div class="checkbox checkbox--sm" @click="sub.completedAt ? doUncomplete(sub) : doComplete(sub)">
-                      <MIcon v-if="sub.completedAt" name="check" :size="12" class="check-icon" />
-                    </div>
+                    <CepheidDoneToggle
+                      shape="circle"
+                      :done="!!sub.completedAt"
+                      @toggle="sub.completedAt ? doUncomplete(sub) : doComplete(sub)"
+                    />
                     <span class="subtask-title" :class="{ 'is-done': sub.completedAt }">{{ sub.title }}</span>
                     <span v-if="sub.dueDate" class="subtask-due">{{ formatDue(sub.dueDate) }}</span>
                   </div>
@@ -453,20 +455,23 @@ if (newTaskTick) {
           <div class="empty-tab-hint">Le azioni create dal Kanban appaiono anche in lista, ordinabili per stato e priorità.</div>
         </div>
         <div v-else class="list-view">
-          <div v-for="t in taskItems" :key="t.id" class="list-row" @click="doComplete(t)">
-            <div class="checkbox" :class="{ 'is-checked': !!t.completedAt || pendingDone.has(t.id) }">
-              <MIcon v-if="t.completedAt || pendingDone.has(t.id)" name="check" :size="12" class="check-icon" />
-            </div>
-            <div class="prio-dot" :style="{ background: prioColor[t.priority] }" />
-            <div class="list-title" :class="{ 'is-done': !!t.completedAt }">{{ t.title }}</div>
-            <span
-              class="list-state"
-              :style="{ color: sortedStates.find(s => s.id === t.status)?.color }"
-            >
-              {{ sortedStates.find(s => s.id === t.status)?.label ?? t.status }}
-            </span>
-            <span v-if="t.dueDate" class="list-due">{{ formatDue(t.dueDate) }}</span>
-          </div>
+          <CepheidActionCard
+            v-for="t in taskItems"
+            :key="t.id"
+            :task="t"
+            :members="members"
+            :current-user-email="currentUser?.email"
+            :show-project="false"
+            :pending="pendingDone.has(t.id)"
+            :clickable="false"
+            @toggle="doComplete(t)"
+          >
+            <template #trailing>
+              <span class="list-state" :style="{ color: sortedStates.find(s => s.id === t.status)?.color }">
+                {{ sortedStates.find(s => s.id === t.status)?.label ?? t.status }}
+              </span>
+            </template>
+          </CepheidActionCard>
         </div>
       </template>
 
@@ -751,6 +756,7 @@ if (newTaskTick) {
 .row-title { flex: 1; font-size: 14px; min-width: 0; }
 .row-title--done { text-decoration: line-through; color: #9B9590; }
 
+.state-pill-wrap { position: relative; display: inline-flex; align-items: center; flex-shrink: 0; }
 .state-pill {
   display: inline-flex;
   align-items: center;
@@ -777,7 +783,7 @@ if (newTaskTick) {
 
 .status-menu {
   position: absolute;
-  right: 8px;
+  right: 0;
   top: 100%;
   background: #fff;
   border: 1px solid #E8E5DF;
@@ -863,6 +869,8 @@ if (newTaskTick) {
   border-radius: 12px;
 }
 .s-surface-dark .milestone-item { background: #16130B; }
+.milestone-item:hover { background: color-mix(in srgb, var(--md-sys-color-primary) 5%, #FFF8F0); }
+.s-surface-dark .milestone-item:hover { background: color-mix(in srgb, var(--md-sys-color-primary) 10%, #16130B); }
 .milestone-item.is-done { opacity: 0.7; }
 
 .milestone-circle {
@@ -914,6 +922,8 @@ if (newTaskTick) {
   overflow: hidden;
 }
 .s-surface-dark .deliverable-card { background: #16130B; }
+.deliverable-card:hover { background: color-mix(in srgb, var(--md-sys-color-primary) 5%, #FFF8F0); }
+.s-surface-dark .deliverable-card:hover { background: color-mix(in srgb, var(--md-sys-color-primary) 10%, #16130B); }
 .deliverable-card.is-done { opacity: 0.6; }
 
 .deliverable-body { padding: 12px 14px; min-width: 0; }
