@@ -4,13 +4,15 @@ import { useRoute, useRouter } from 'vue-router'
 import MIcon from '../../components/shared/MIcon.vue'
 import { doc, onSnapshot } from 'firebase/firestore'
 import { db } from '../../firebase'
-import { useMessages } from '../../composables/pulsar/useMessages'
+import { useMessages, type MsgRef } from '../../composables/pulsar/useMessages'
 import { usePulsarPresence } from '../../composables/pulsar/usePulsarPresence'
 import { markChatRead } from '../../composables/pulsar/usePulsarUnread'
 import { useChatHashtags } from '../../composables/pulsar/useChatHashtags'
 import { useTeamMembers, displayName, starAvatarProps } from '../../composables/sidera/useTeamMembers'
 import StarAvatar from '../../components/shared/StarAvatar.vue'
 import { useProjects } from '../../composables/sidera/useProjects'
+import { useAllTasks } from '../../composables/sidera/useAllTasks'
+import { useDocsLight } from '../../composables/nebula/useDocsLight'
 import TaskCreationModal from '../../components/pulsar/TaskCreationModal.vue'
 import { auth } from '../../firebase'
 
@@ -33,6 +35,8 @@ watch(messages, (msgs) => {
 const { hashtags, suggestHashtags }       = useChatHashtags()
 const { members }                         = useTeamMembers()
 const { projects }                        = useProjects()
+const { tasks: allTasks }                 = useAllTasks()
+const { docs: allDocs }                   = useDocsLight()
 
 const myEmail = auth.currentUser?.email ?? ''
 
@@ -176,8 +180,20 @@ function removeTag(name: string) {
 
 const suggestedTags = computed(() => suggestHashtags(tagSearch.value))
 
-// ── @mention autocomplete ─────────────────────────────────────────────────
-const mentions = ref<string[]>([])
+// ── @mention autocomplete (persone + task + progetti + documenti) ──────────
+const mentions = ref<string[]>([])       // email (persone) → notifiche, non cliccabili
+const pendingRefs = ref<MsgRef[]>([])    // riferimenti cliccabili (task/progetto/doc) del messaggio in scrittura
+
+type MentionKind = 'user' | 'task' | 'project' | 'doc'
+interface MentionItem {
+  kind: MentionKind
+  id: string            // email per 'user', id altrimenti
+  label: string
+  sub?: string
+  projectId?: string
+  color?: string
+  status?: string
+}
 
 // Auto-grow: la textarea cresce con il contenuto fino a ~10 righe, poi
 // scrolla internamente. Misurato via scrollHeight dopo aver azzerato
@@ -226,19 +242,59 @@ function onInput() {
   }
 }
 
-const filteredMembers = computed(() =>
-  members.value.filter(m =>
-    m.email !== myEmail &&
-    displayName(m.email, members.value).toLowerCase().includes(mentionQuery.value.toLowerCase())
-  )
-)
+// Suggerimenti unificati: stesse euristiche di NEBULA UniversalMention
+// (match per testo, completati/archiviati esclusi, max per categoria).
+const MAX_PER_KIND = 5
+const mentionSuggestions = computed<MentionItem[]>(() => {
+  const q = mentionQuery.value.toLowerCase().trim()
 
-function selectMention(member: { email: string }) {
+  const people: MentionItem[] = members.value
+    .filter(m => m.email !== myEmail)
+    .filter(m => !q
+      || displayName(m.email, members.value).toLowerCase().includes(q)
+      || m.email.toLowerCase().includes(q))
+    .slice(0, MAX_PER_KIND)
+    .map(m => ({ kind: 'user', id: m.email, label: displayName(m.email, members.value), sub: m.email }))
+
+  const tasks: MentionItem[] = allTasks.value
+    .filter(t => (t.type === 'task' || !t.type) && !t.completedAt)
+    .filter(t => !q || (t.title ?? '').toLowerCase().includes(q))
+    .slice(0, MAX_PER_KIND)
+    .map(t => ({ kind: 'task', id: t.id, label: t.title || '(senza titolo)', projectId: t.projectId || undefined }))
+
+  const projs: MentionItem[] = projects.value
+    .filter(p => !p.archived)
+    .filter(p => !q || (p.name ?? '').toLowerCase().includes(q))
+    .slice(0, MAX_PER_KIND)
+    .map(p => ({ kind: 'project', id: p.id, label: p.name || '(senza nome)', color: p.color }))
+
+  const docs: MentionItem[] = allDocs.value
+    .filter(d => !q || (d.title ?? '').toLowerCase().includes(q))
+    .slice(0, MAX_PER_KIND)
+    .map(d => ({ kind: 'doc', id: d.id, label: d.title || '(senza titolo)' }))
+
+  return [...people, ...tasks, ...projs, ...docs]
+})
+
+const mentionIcon: Record<MentionKind, string> = {
+  user: 'person', task: 'task_alt', project: 'folder', doc: 'description',
+}
+
+function selectMention(item: MentionItem) {
   const val = text.value
   const lastAt = val.lastIndexOf('@')
-  const name = displayName(member.email, members.value)
-  text.value = val.slice(0, lastAt) + '@' + name + ' '
-  if (!mentions.value.includes(member.email)) mentions.value.push(member.email)
+  text.value = (lastAt >= 0 ? val.slice(0, lastAt) : val) + '@' + item.label + ' '
+  if (item.kind === 'user') {
+    if (!mentions.value.includes(item.id)) mentions.value.push(item.id)
+  } else {
+    const type = item.kind as MsgRef['type']
+    // niente projectId:undefined nel payload (Firestore rifiuta undefined)
+    pendingRefs.value.push(
+      item.projectId
+        ? { type, id: item.id, projectId: item.projectId, label: item.label }
+        : { type, id: item.id, label: item.label },
+    )
+  }
   showMentions.value = false
   inputRef.value?.focus()
 }
@@ -252,6 +308,8 @@ function send() {
     flags:     [...flags.value],
     hashtags:  [...selectedTags.value],
     mentions:  [...mentions.value],
+    // tieni solo i ref ancora presenti nel testo (l'utente può averli cancellati)
+    refs:      pendingRefs.value.filter(r => body.includes('@' + r.label)),
     replyToId: replyTo.value?.id ?? null,
   }
   const replyToMsg = replyTo.value
@@ -263,6 +321,7 @@ function send() {
   flags.value = []
   selectedTags.value = []
   mentions.value = []
+  pendingRefs.value = []
   replyTo.value = null
   hashtagPicker.value = false
   showMentions.value = false
@@ -421,10 +480,54 @@ function formatTime(d: Date) {
   return new Intl.DateTimeFormat('it-IT', { hour: '2-digit', minute: '2-digit' }).format(d)
 }
 
-function renderText(t: string) {
-  return t
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+}
+function escapeAttr(s: string): string {
+  return escapeHtml(s).replace(/"/g, '&quot;')
+}
+function chipHtml(r: MsgRef): string {
+  return `<span class="msg-ref msg-ref--${r.type}" data-ref-type="${r.type}"`
+    + ` data-ref-id="${escapeAttr(r.id)}" data-ref-project="${escapeAttr(r.projectId ?? '')}"`
+    + ` role="link" tabindex="0">${escapeHtml(r.label)}</span>`
+}
+
+// Resa ricca della bolla: i `refs` (task/progetto/doc) diventano chip cliccabili;
+// hashtag e mention-persona restano evidenziati (persona non cliccabile). Legacy
+// (messaggi senza refs) e @testo digitato a mano → resa come prima.
+// Sentinel NUL: non digitabile dall'utente e fuori da \w\s, quindi non collide
+// col testo né interferisce con le regex hashtag/mention.
+const NUL = String.fromCharCode(0)
+function renderRich(msg: { text: string; refs?: MsgRef[] }): string {
+  let work = escapeHtml(msg.text)
+  const chips: string[] = []
+  for (const r of (msg.refs ?? [])) {
+    const needle = '@' + escapeHtml(r.label)
+    const idx = work.indexOf(needle)           // prima occorrenza non consumata
+    if (idx === -1) continue
+    const token = NUL + chips.length + NUL
+    chips.push(chipHtml(r))
+    work = work.slice(0, idx) + token + work.slice(idx + needle.length)
+  }
+  work = work
     .replace(/#(\w+)/g, '<span class="msg-hashtag">#$1</span>')
     .replace(/@([\w\s]+)/g, '<span class="msg-mention">@$1</span>')
+  return work.replace(new RegExp(NUL + '(\\d+)' + NUL, 'g'), (_m, n) => chips[Number(n)] ?? '')
+}
+
+// Click su una chip → apre l'entità. window.open('_blank') così su mobile apre
+// la PWA corretta (scope manifest /cepheid/ /nebula/).
+function openEntity(type: string | undefined, id: string, projectId: string) {
+  let url = ''
+  if (type === 'task') url = projectId ? `/cepheid/project/${projectId}` : '/cepheid'
+  else if (type === 'project') url = `/cepheid/project/${id}`
+  else if (type === 'doc') url = `/nebula/docs/${id}`
+  if (url) window.open(url, '_blank')
+}
+function onBubbleClick(e: MouseEvent) {
+  const el = (e.target as HTMLElement).closest('[data-ref-type]') as HTMLElement | null
+  if (!el) return
+  openEntity(el.dataset.refType, el.dataset.refId ?? '', el.dataset.refProject ?? '')
 }
 </script>
 
@@ -448,7 +551,7 @@ function renderText(t: string) {
     </header>
 
     <!-- Messages list -->
-    <div ref="listRef" class="msg-list">
+    <div ref="listRef" class="msg-list" @click="onBubbleClick">
       <div v-if="loading" class="loading-msgs">
         <div v-for="i in 5" :key="i" class="msg-skel" :class="i % 2 ? 'msg-skel--right' : ''" />
       </div>
@@ -549,7 +652,7 @@ function renderText(t: string) {
                 </span>
               </div>
 
-              <p class="msg-text" v-html="renderText(msg.text)" />
+              <p class="msg-text" v-html="renderRich(msg)" />
 
               <!-- Hashtags -->
               <div v-if="msg.hashtags.length" class="msg-tags">
@@ -574,16 +677,25 @@ function renderText(t: string) {
       </div>
     </div>
 
-    <!-- @mention autocomplete -->
-    <div v-if="showMentions && filteredMembers.length" class="mention-popup">
+    <!-- @mention autocomplete (persone + azioni + progetti + documenti) -->
+    <div v-if="showMentions && mentionSuggestions.length" class="mention-popup">
       <div
-        v-for="m in filteredMembers.slice(0, 5)"
-        :key="m.email"
+        v-for="item in mentionSuggestions"
+        :key="item.kind + ':' + item.id"
         class="mention-item"
-        @mousedown.prevent="selectMention(m)"
+        @mousedown.prevent="selectMention(item)"
       >
-        <StarAvatar v-bind="starAvatarProps(m.email, members)" :size="22" />
-        {{ displayName(m.email, members) }}
+        <StarAvatar v-if="item.kind === 'user'" v-bind="starAvatarProps(item.id, members)" :size="22" />
+        <span
+          v-else
+          class="mention-ic"
+          :class="'mention-ic--' + item.kind"
+          :style="item.kind === 'project' && item.color ? { color: item.color } : {}"
+        >
+          <MIcon :name="mentionIcon[item.kind]" :size="15" />
+        </span>
+        <span class="mention-label">{{ item.label }}</span>
+        <span class="mention-kind">{{ item.kind === 'user' ? 'persona' : item.kind === 'task' ? 'azione' : item.kind === 'project' ? 'progetto' : 'doc' }}</span>
       </div>
     </div>
 
@@ -1093,12 +1205,43 @@ function renderText(t: string) {
 
 .mention-item:hover { background: var(--md-sys-color-surface-container); }
 
+.mention-popup { max-height: 40vh; overflow-y: auto; }
+
+/* icona del tipo entità (azione/progetto/doc) nella popup */
+.mention-ic {
+  width: 24px; height: 24px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: var(--md-sys-shape-corner-full);
+}
+.mention-ic--task { background: rgba(212, 160, 32, 0.16); color: #8b6a14; }
+.mention-ic--project { background: color-mix(in srgb, currentColor 14%, transparent); }
+.mention-ic--doc { background: rgba(196, 96, 48, 0.14); color: #C46030; }
+.mention-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mention-kind {
+  flex-shrink: 0; font-size: 10px; font-weight: 700; letter-spacing: 0.04em;
+  text-transform: uppercase; color: var(--md-sys-color-on-surface-variant);
+  background: var(--md-sys-color-surface-container); padding: 2px 7px;
+  border-radius: var(--md-sys-shape-corner-full);
+}
+
 .mention-av {
   width: 28px; height: 28px;
   border-radius: var(--md-sys-shape-corner-full);
   display: flex; align-items: center; justify-content: center;
   font-size: 11px; font-weight: 700; flex-shrink: 0;
 }
+
+/* chip cliccabili dentro la bolla (mention di entità) */
+:deep(.msg-ref) {
+  display: inline; padding: 0 4px; border-radius: 6px;
+  font-weight: 600; cursor: pointer; text-decoration: none;
+  transition: background 0.12s;
+}
+:deep(.msg-ref--task) { color: #8b6a14; background: rgba(212, 160, 32, 0.14); }
+:deep(.msg-ref--project) { color: #2F6B4A; background: rgba(47, 107, 74, 0.12); }
+:deep(.msg-ref--doc) { color: #C46030; background: rgba(196, 96, 48, 0.12); }
+:deep(.msg-ref:hover) { filter: brightness(0.95); text-decoration: underline; }
+.msg-bubble.is-mine :deep(.msg-ref) { color: var(--md-sys-color-on-primary); background: rgba(255,255,255,0.18); }
 
 /* Hashtag picker: trasparente come la barra di scrittura. Il campo di
    ricerca (.tag-search) e i chip (.tag-option/.sel-tag) restano "bolle"
