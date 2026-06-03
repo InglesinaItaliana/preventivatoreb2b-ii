@@ -3,10 +3,8 @@ import { ref, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import MIcon from '../../components/shared/MIcon.vue'
 import MdPageHeader from '../../components/shared/MdPageHeader.vue'
-import CepheidViewSwitcher from '../../components/cepheid/CepheidViewSwitcher.vue'
-import CepheidPeriodPicker from '../../components/cepheid/CepheidPeriodPicker.vue'
-import { useObiettivi, GOAL_COLOR_PRESETS } from '../../composables/sidera/useObiettivi'
-import { useProjects, type Project } from '../../composables/sidera/useProjects'
+import { useObiettivi } from '../../composables/sidera/useObiettivi'
+import { useProjects } from '../../composables/sidera/useProjects'
 import { formatPeriodLabel } from '../../composables/cepheid/usePeriods'
 
 const route   = useRoute()
@@ -15,12 +13,12 @@ const goalId  = computed(() => route.params.id as string)
 const scopeBase = computed(() => route.path.startsWith('/sidera') ? '/sidera' : '/cepheid')
 const projectPathPrefix = computed(() => route.path.startsWith('/sidera') ? '/sidera/projects/' : '/cepheid/project/')
 
-const { obiettivi, updateObiettivo, archiveObiettivo, deleteObiettivo, loading: loadingGoals } = useObiettivi()
+const { obiettivi, loading: loadingGoals } = useObiettivi()
 const { projects, activeProjects, updateProject } = useProjects()
 
 const goal = computed(() => obiettivi.value.find(o => o.id === goalId.value))
 
-// Tutti i progetti collegati (non archiviati), inclusi i completati → tab Tutti/Completati
+// Tutti i progetti collegati (non archiviati)
 const linkedProjects = computed(() =>
   projects.value.filter(p => !p.archived && p.obiettivoId === goalId.value)
 )
@@ -28,22 +26,6 @@ const linkedProjects = computed(() =>
 const unlinkedProjects = computed(() =>
   activeProjects.value.filter(p => !p.obiettivoId)
 )
-
-// ── Tab Attivi / Tutti / Completati (sui progetti collegati) ────────────────
-type ProjTab = 'active' | 'all' | 'completed'
-const projTab = ref<ProjTab>('active')
-function isActive(p: Project) { return p.active !== false && !p.completed }
-const visibleLinked = computed(() => {
-  const l = linkedProjects.value
-  if (projTab.value === 'active') return l.filter(isActive)
-  if (projTab.value === 'completed') return l.filter(p => p.completed)
-  return l
-})
-const projTabDefs = computed(() => [
-  { id: 'active',    label: 'Attivi',     icon: 'play_circle',  count: linkedProjects.value.filter(isActive).length || undefined },
-  { id: 'all',       label: 'Tutti',      icon: 'list',         count: linkedProjects.value.length || undefined },
-  { id: 'completed', label: 'Completati', icon: 'emoji_events', count: linkedProjects.value.filter(p => p.completed).length || undefined },
-])
 
 const stats = computed(() => {
   let taskTotali = 0, taskDone = 0
@@ -74,72 +56,6 @@ async function linkProject(projectId: string) {
 
 async function unlinkProject(projectId: string) {
   await updateProject(projectId, { obiettivoId: null })
-}
-
-// ── Edit obiettivo modal ──────────────────────────────────────────────────
-interface PeriodValue { periodKind: 'year' | 'quarters'; startDate: Date; endDate: Date }
-const showEditModal = ref(false)
-const editSaving = ref(false)
-const editForm = ref<{ titolo: string; descrizione: string; colore: string; period: PeriodValue }>({
-  titolo: '', descrizione: '', colore: GOAL_COLOR_PRESETS[0],
-  period: { periodKind: 'year', startDate: new Date(new Date().getFullYear(), 0, 1), endDate: new Date(new Date().getFullYear(), 11, 31) },
-})
-
-function openEditModal() {
-  if (!goal.value) return
-  const g = goal.value
-  editForm.value = {
-    titolo:      g.titolo,
-    descrizione: g.descrizione,
-    colore:      g.colore,
-    period: {
-      periodKind: g.periodKind,
-      startDate:  g.startDate ?? new Date(g.anno, 0, 1),
-      endDate:    g.endDate ?? new Date(g.anno, 11, 31),
-    },
-  }
-  showEditModal.value = true
-}
-
-async function submitEdit() {
-  if (!editForm.value.titolo.trim() || editSaving.value || !goal.value) return
-  editSaving.value = true
-  try {
-    const f = editForm.value
-    await updateObiettivo(goal.value.id, {
-      titolo:      f.titolo.trim(),
-      descrizione: f.descrizione.trim(),
-      periodKind:  f.period.periodKind,
-      startDate:   f.period.startDate,
-      endDate:     f.period.endDate,
-      colore:      f.colore,
-    })
-    showEditModal.value = false
-  } catch (e) {
-    console.error('[CEPHEID] obiettivo update error', e)
-  } finally {
-    editSaving.value = false
-  }
-}
-
-// ── Archive / Delete ──────────────────────────────────────────────────────
-const showMenu = ref(false)
-async function doArchive() {
-  if (!goal.value) return
-  if (!confirm('Archiviare questo obiettivo? I progetti collegati restano.')) return
-  await archiveObiettivo(goal.value.id)
-  router.push(scopeBase.value + '/goals')
-}
-
-async function doDelete() {
-  if (!goal.value) return
-  if (!confirm('Eliminare definitivamente questo obiettivo? I progetti collegati restano, ma non saranno più associati.')) return
-  // Disassocia tutti i progetti collegati prima di eliminare
-  for (const p of linkedProjects.value) {
-    await updateProject(p.id, { obiettivoId: null })
-  }
-  await deleteObiettivo(goal.value.id)
-  router.push(scopeBase.value + '/goals')
 }
 
 const descExpanded = ref(false)
@@ -175,21 +91,9 @@ const periodLabel = computed(() =>
         :accent-color="goal.colore"
       >
         <template #tools>
-          <div class="gd-tools">
-            <button class="gd-icon-btn" title="Collega progetto" @click="showLinkModal = true">
-              <MIcon name="add_link" :size="18" />
-            </button>
-            <div class="gd-menu-wrap">
-              <button class="gd-icon-btn" aria-label="Azioni" @click="showMenu = !showMenu">
-                <MIcon name="more_vert" :size="18" />
-              </button>
-              <div v-if="showMenu" class="gd-menu" @click="showMenu = false">
-                <button class="gd-menu-item" @click="openEditModal()"><MIcon name="edit" :size="14" /> Modifica</button>
-                <button class="gd-menu-item" @click="doArchive()"><MIcon name="archive" :size="14" /> Archivia</button>
-                <button class="gd-menu-item gd-menu-item--danger" @click="doDelete()"><MIcon name="delete" :size="14" /> Elimina</button>
-              </div>
-            </div>
-          </div>
+          <button class="md-btn md-btn--filled md-btn--sm md-btn--square" @click="showLinkModal = true">
+            <MIcon name="add_link" :size="16" /> Collega progetti
+          </button>
         </template>
       </MdPageHeader>
 
@@ -208,19 +112,14 @@ const periodLabel = computed(() =>
         <div class="gd-content-inner">
           <div class="gd-section-head">
             <span class="gd-section-label">Progetti collegati</span>
-            <CepheidViewSwitcher
-              :model-value="projTab"
-              :tabs="projTabDefs"
-              @update:model-value="(v) => (projTab = v as ProjTab)"
-            />
           </div>
 
-          <div v-if="!visibleLinked.length" class="gd-empty">
-            {{ projTab === 'completed' ? 'Nessun progetto completato.' : projTab === 'active' ? 'Nessun progetto attivo collegato.' : 'Nessun progetto collegato a questo obiettivo.' }}
+          <div v-if="!linkedProjects.length" class="gd-empty">
+            Nessun progetto collegato a questo obiettivo.
           </div>
 
           <div
-            v-for="p in visibleLinked"
+            v-for="p in linkedProjects"
             :key="p.id"
             class="proj-row"
             @click="router.push(projectPathPrefix + p.id)"
@@ -275,48 +174,6 @@ const periodLabel = computed(() =>
       </div>
     </Teleport>
 
-    <!-- Modal Edit obiettivo -->
-    <Teleport to="body">
-      <div v-if="showEditModal" class="modal-backdrop md-modal-backdrop" @click.self="showEditModal = false">
-        <div class="modal md-modal-dialog" @click.stop>
-          <div class="modal-header md-modal-header">
-            <span class="modal-title">Modifica obiettivo</span>
-            <button class="modal-close md-modal-close" @click="showEditModal = false"><MIcon name="close" :size="18" /></button>
-          </div>
-          <div class="modal-body md-modal-body">
-            <label class="field-label md-text-field-label">Titolo *</label>
-            <input v-model="editForm.titolo" class="field-input md-text-field-input" autofocus />
-
-            <label class="field-label md-text-field-label" style="margin-top:12px">Descrizione</label>
-            <textarea v-model="editForm.descrizione" class="field-input md-text-field-input" rows="2" />
-
-            <label class="field-label md-text-field-label" style="margin-top:16px">Periodo</label>
-            <CepheidPeriodPicker v-model="editForm.period" />
-
-            <label class="field-label md-text-field-label" style="margin-top:16px">Colore</label>
-            <div class="color-picker">
-              <button
-                v-for="c in GOAL_COLOR_PRESETS"
-                :key="c"
-                type="button"
-                class="color-swatch"
-                :class="{ 'is-sel': editForm.colore === c }"
-                :style="{ background: c }"
-                @click="editForm.colore = c"
-              />
-            </div>
-          </div>
-          <div class="modal-footer md-modal-footer">
-            <button class="btn-ghost md-btn md-btn--outlined md-btn--rounded" @click="showEditModal = false">Annulla</button>
-            <button
-              class="btn-primary md-btn md-btn--filled md-btn--rounded"
-              :disabled="!editForm.titolo.trim() || editSaving"
-              @click="submitEdit"
-            >{{ editSaving ? 'Salvataggio…' : 'Salva' }}</button>
-          </div>
-        </div>
-      </div>
-    </Teleport>
   </div>
 </template>
 

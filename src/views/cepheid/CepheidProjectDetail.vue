@@ -690,8 +690,8 @@ if (newTaskTick) {
   line-height: 1.6;
 }
 
-/* Kanban — invariato */
-.state-section { margin-bottom: 18px; }
+/* Kanban */
+.state-section { margin-bottom: 18px; display: flex; flex-direction: column; gap: 6px; }
 
 .state-header {
   display: flex;
