@@ -108,6 +108,10 @@ const editor = useEditor({
       // Fase 6: l'undo/redo lo fornisce Collaboration (Y.UndoManager). L'history
       // nativa di StarterKit (in v3 = `undoRedo`) confligge col CRDT → off.
       undoRedo: false,
+      // StarterKit v3 include Link: lo disabilitiamo qui perché più sotto
+      // registriamo una versione custom (openOnClick:false, autolink, linkOnPaste).
+      // Senza questo: "[tiptap warn] Duplicate extension names found: ['link']".
+      link: false,
     }),
     // Collaboration: lega l'editor al Y.Doc condiviso (fragment 'default').
     Collaboration.configure({ document: ydoc }),
