@@ -495,12 +495,10 @@ function chipHtml(r: MsgRef): string {
   // icona via .m-icon (font Material Symbols globale, ligature) → renderizzabile in v-html.
   // is-filled = glifo pieno; il colore lo eredita (currentColor) dalla famiglia chip.
   const icon = `<span class="m-icon is-filled msg-ref-ic">${REF_ICON[r.type]}</span>`
-  // etichetta troncata per non far sforare la bolla; tooltip col testo completo
-  const MAX = 28
-  const shown = r.label.length > MAX ? r.label.slice(0, MAX - 1).trimEnd() + '…' : r.label
+  // etichetta intera: la chip va a capo dentro la bolla (overflow-wrap), nessun troncamento
   return `<span class="msg-ref msg-ref--${r.type}" data-ref-type="${r.type}"`
     + ` data-ref-id="${escapeAttr(r.id)}" data-ref-project="${escapeAttr(r.projectId ?? '')}"`
-    + ` title="${escapeAttr(r.label)}" role="link" tabindex="0">${icon}${escapeHtml(shown)}</span>`
+    + ` role="link" tabindex="0">${icon}${escapeHtml(r.label)}</span>`
 }
 
 // Resa ricca della bolla: i `refs` (task/progetto/doc) diventano chip cliccabili;
