@@ -38,11 +38,6 @@ const projectsList = computed(() => activeProjects.value.map(p => ({ id: p.id, n
 const top  = computed(() => inbox.value[0] ?? null)
 const peek = computed(() => inbox.value[1] ?? null)
 
-// progress di sessione
-const processed = ref(0)
-const total = computed(() => processed.value + inbox.value.length)
-const progressPct = computed(() => total.value ? Math.round(processed.value / total.value * 100) : 0)
-
 async function onSmista(task: Task, d: { assignees: string[]; priority: 'alta' | 'media' | 'bassa'; projectId: string; milestoneId: string; deliverableId: string }) {
   try {
     if (!task.projectId && d.projectId) {
@@ -53,11 +48,10 @@ async function onSmista(task: Task, d: { assignees: string[]; priority: 'alta' |
       await updateTask(task.projectId, task.id, { assignees: d.assignees, priority: d.priority, triaged: true, milestoneId: d.deliverableId ? null : (d.milestoneId || null) })
       if (d.deliverableId) await attachToDeliverable(task.projectId, d.deliverableId, task.id)
     }
-    processed.value++
   } catch (e) { console.error('[SMISTAMENTO] errore smista', e) }
 }
 async function onDelete(task: Task) {
-  try { await deleteTask(task.projectId || null, task.id, !!task.completedAt); processed.value++ }
+  try { await deleteTask(task.projectId || null, task.id, !!task.completedAt) }
   catch (e) { console.error('[SMISTAMENTO] errore delete', e) }
 }
 
@@ -76,16 +70,6 @@ async function onDelete(task: Task) {
 
     <div class="ib-content">
      <div class="ib-inner">
-      <!-- contatore + progress -->
-      <div class="ib-progress">
-        <div class="ib-progress-top">
-          <span class="ib-count">{{ inbox.length }}</span>
-          <span class="ib-count-lab">{{ inbox.length === 1 ? 'task da smistare' : 'task da smistare' }}</span>
-          <span class="ib-progress-pct">{{ progressPct }}%</span>
-        </div>
-        <div class="ib-progress-track"><div class="ib-progress-fill" :style="{ width: progressPct + '%' }" /></div>
-      </div>
-
       <div v-if="loading" class="ib-loading">Caricamento…</div>
 
       <!-- LYRA §6 — quiete inbox-zero: stella osservata (glifo unificato), no animazione -->
@@ -124,17 +108,13 @@ async function onDelete(task: Task) {
 .s-surface-dark .ib-page { --page-bg: #0E0C07; }
 @media (prefers-color-scheme: dark) { .ib-page { --page-bg: #0E0C07; } }
 
+/* header allineato alle altre schede CEPHEID (stessa gutter/grid) */
+:deep(.md-page-header) { padding: 18px 16px 14px; }
+@media (min-width: 1024px) { :deep(.md-page-header) { padding: 24px max(40px, calc(50% - 410px)) 18px; } }
+
 .ib-content { padding: 16px 0; }
 .ib-inner { max-width: 560px; margin: 0 auto; padding: 0 16px; display: flex; flex-direction: column; gap: 16px; }
 @media (min-width: 700px) { .ib-inner { padding: 0 20px; } }
-
-.ib-progress { flex-shrink: 0; }
-.ib-progress-top { display: flex; align-items: baseline; gap: 8px; margin-bottom: 8px; }
-.ib-count { font-family: var(--md-sys-typescale-headline-small-font, serif); font-size: 32px; font-weight: 600; line-height: 1; color: var(--md-sys-color-on-surface); }
-.ib-count-lab { font-size: 13px; color: var(--md-sys-color-on-surface-variant); flex: 1; }
-.ib-progress-pct { font-size: 13px; font-weight: 600; color: var(--md-sys-color-primary); }
-.ib-progress-track { height: 8px; border-radius: var(--md-sys-shape-corner-full); background: color-mix(in srgb, var(--md-sys-color-primary) 14%, var(--md-sys-color-surface-container-high)); overflow: hidden; }
-.ib-progress-fill { height: 100%; border-radius: var(--md-sys-shape-corner-full); background: var(--md-sys-color-primary); transition: width .35s cubic-bezier(.2,0,0,1); }
 
 .ib-loading { text-align: center; color: var(--md-sys-color-on-surface-variant); padding: 40px; }
 

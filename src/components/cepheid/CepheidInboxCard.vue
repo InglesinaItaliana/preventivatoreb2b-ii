@@ -151,8 +151,8 @@ const PRIO = [
 
 <style scoped>
 .ic-card {
-  position: relative; background: #FFF8F0; border: 1px solid var(--md-sys-color-outline-variant);
-  border-radius: 20px; padding: 18px 18px 16px; box-shadow: var(--md-sys-elevation-level-2);
+  position: relative; background: #FFF8F0;
+  border-radius: 20px; padding: 18px 18px 16px;
   display: flex; flex-direction: column; gap: 14px; touch-action: pan-y; user-select: none; cursor: grab;
 }
 .ic-card:active { cursor: grabbing; }

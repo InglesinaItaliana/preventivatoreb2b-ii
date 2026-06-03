@@ -25,6 +25,8 @@ defineProps<{
   /** Attiva sticky-top per consentire l'auto-hide. Senza questo il prop
    *  `hidden` non avrebbe effetto visivo (l'header scrollerebbe via). */
   sticky?: boolean
+  /** Pallino colorato prima del titolo (es. colore-identità del progetto). */
+  accentColor?: string
 }>()
 </script>
 
@@ -34,7 +36,9 @@ defineProps<{
     :class="{ 'is-borderless': borderless, 'is-sticky': sticky, 'is-hidden': sticky && hidden }"
   >
     <div class="md-page-header__text">
-      <h2 class="md-page-header__title">{{ title }}</h2>
+      <h2 class="md-page-header__title">
+        <span v-if="accentColor" class="md-page-header__accent" :style="{ background: accentColor }" />{{ title }}
+      </h2>
       <p v-if="subtitle" class="md-page-header__subtitle">{{ subtitle }}</p>
     </div>
     <div v-if="$slots.tools" class="md-page-header__tools">
@@ -94,6 +98,15 @@ defineProps<{
   font-size: 12px;
   color: var(--md-sys-color-on-surface-variant);
   margin: 0;
+}
+
+.md-page-header__accent {
+  display: inline-block;
+  width: 10px; height: 10px;
+  border-radius: 50%;
+  margin-right: 8px;
+  vertical-align: middle;
+  flex-shrink: 0;
 }
 
 .md-page-header__cta { flex-shrink: 0; display: inline-flex; }

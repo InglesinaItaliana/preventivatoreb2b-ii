@@ -3,6 +3,7 @@ import { ref, computed, inject, watch, onMounted, nextTick, type Ref } from 'vue
 import MIcon from '../../components/shared/MIcon.vue'
 import MdPageHeader from '../../components/shared/MdPageHeader.vue'
 import { useAllTasks, createStandaloneTask } from '../../composables/sidera/useAllTasks'
+import CepheidActionCard from '../../components/cepheid/CepheidActionCard.vue'
 import { useProjects } from '../../composables/sidera/useProjects'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
 import { useTeamMembers, displayName, starAvatarProps } from '../../composables/sidera/useTeamMembers'
@@ -16,8 +17,6 @@ const { tasks, loading, completeTask } = useAllTasks()
 const { activeProjects } = useProjects()
 const { currentUser } = useCurrentUser()
 const { members } = useTeamMembers()
-
-const prioColor: Record<string, string> = { alta: '#C8521A', media: '#D4A020', bassa: '#7A8FA6' }
 
 function projectName(id: string) {
   return activeProjects.value.find(p => p.id === id)?.name ?? ''
@@ -76,11 +75,6 @@ const buckets = computed(() => {
 })
 
 const totalCount = computed(() => buckets.value.reduce((sum, b) => sum + b.list.length, 0))
-
-function formatDue(d: Date | null) {
-  if (!d) return ''
-  return new Intl.DateTimeFormat('it-IT', { day: 'numeric', month: 'short' }).format(d)
-}
 
 // ── Nuova azione modal (riusa stesso pattern di Actions) ───────────────────
 const showTaskModal = ref(false)
@@ -188,20 +182,18 @@ onMounted(() => {
           <span class="bucket-count">{{ b.list.length }}</span>
         </div>
 
-        <div v-for="t in b.list" :key="t.id" class="task-row" :style="{ borderLeftColor: prioColor[t.priority] }">
-          <div class="checkbox" @click="doComplete(t)">
-            <MIcon v-if="pendingDone.has(t.id)" name="check" :size="14" class="check-icon" />
-          </div>
-          <div class="row-body">
-            <div class="row-title">{{ t.title }}</div>
-            <div v-if="t.projectId" class="row-meta">
-              <span class="row-proj" :style="{ background: projectColor(t.projectId) + '20', color: projectColor(t.projectId) }">{{ projectName(t.projectId) }}</span>
-            </div>
-          </div>
-          <div v-if="t.dueDate" class="row-due" :class="{ 'is-overdue': b.id === 'overdue' }">
-            <MIcon name="schedule" :size="12" />{{ formatDue(t.dueDate) }}
-          </div>
-        </div>
+        <CepheidActionCard
+          v-for="t in b.list"
+          :key="t.id"
+          :task="t"
+          :members="members"
+          :current-user-email="currentUser?.email"
+          :project-name="projectName(t.projectId)"
+          :project-color="projectColor(t.projectId)"
+          :pending="pendingDone.has(t.id)"
+          :clickable="false"
+          @toggle="doComplete(t)"
+        />
       </section>
     </div>
 
@@ -308,7 +300,7 @@ onMounted(() => {
 }
 .empty-icon { color: var(--md-sys-color-primary); opacity: 0.35; }
 
-.bucket { margin-bottom: 18px; }
+.bucket { margin-bottom: 18px; display: flex; flex-direction: column; gap: 6px; }
 
 .bucket-header {
   display: flex;
@@ -337,26 +329,24 @@ onMounted(() => {
   border-radius: var(--md-sys-shape-corner-full);
 }
 
+/* flat: niente bordo/ombra; priorità = pallino accanto al titolo (.row-prio-dot) */
 .task-row {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 12px 14px;
   background: var(--md-sys-color-surface);
-  border-radius: var(--md-sys-shape-corner-small);
-  border: 1px solid var(--md-sys-color-outline-variant);
-  border-left: 6px solid transparent;
+  border-radius: 16px;
   margin-bottom: 6px;
-  box-shadow: var(--md-sys-elevation-level-1);
-  transition: border-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
-              box-shadow   var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
-              transform    var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
+  transition: background var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
 }
 .task-row:hover {
-  border-color: var(--md-sys-color-primary);
-  background:   var(--md-sys-color-primary-state-hover);
-  box-shadow:   var(--md-sys-elevation-level-2);
-  transform:    translateY(-1px);
+  background: var(--md-sys-color-primary-state-hover);
+}
+
+.row-prio-dot {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  margin-right: 8px; vertical-align: middle; flex-shrink: 0;
 }
 
 .checkbox {

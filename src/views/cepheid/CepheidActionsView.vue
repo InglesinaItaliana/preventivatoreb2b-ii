@@ -3,6 +3,7 @@ import { ref, computed, inject, watch, onMounted, nextTick, type Ref } from 'vue
 import MIcon from '../../components/shared/MIcon.vue'
 import MdPageHeader from '../../components/shared/MdPageHeader.vue'
 import CepheidViewSwitcher from '../../components/cepheid/CepheidViewSwitcher.vue'
+import CepheidActionCard from '../../components/cepheid/CepheidActionCard.vue'
 import { useAllTasks, createStandaloneTask } from '../../composables/sidera/useAllTasks'
 import { useProjects } from '../../composables/sidera/useProjects'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
@@ -143,18 +144,6 @@ const groups = computed<{ key: GroupKey; label: string; color: string }[]>(() =>
 
 function tasksInGroup(key: GroupKey) {
   return visibleOpen.value.filter(t => taskGroup(t.dueDate) === key)
-}
-
-const prioColor: Record<string, string> = { alta: '#C8521A', media: '#D4A020', bassa: '#7A8FA6' }
-
-function formatDue(d: Date | null): string {
-  if (!d) return ''
-  const now = new Date(); now.setHours(0, 0, 0, 0)
-  const diff = Math.ceil((d.getTime() - now.getTime()) / 86400000)
-  if (diff === 0)  return 'Oggi'
-  if (diff === 1)  return 'Domani'
-  if (diff === -1) return 'Ieri'
-  return new Intl.DateTimeFormat('it-IT', { day: 'numeric', month: 'short' }).format(d)
 }
 
 function projectName(id: string) {
@@ -364,26 +353,19 @@ onMounted(() => {
               <span class="task-group-label">{{ g.label }}</span>
               <span class="task-group-count">{{ tasksInGroup(g.key).length }}</span>
             </div>
-            <div
+            <CepheidActionCard
               v-for="t in tasksInGroup(g.key)"
               :key="t.id"
-              class="task-row"
-              :style="{ borderLeftColor: prioColor[t.priority] }"
-              @click="openEditTaskModal(t as TaskLike)"
-            >
-              <div class="checkbox" @click.stop="doComplete(t)">
-                <MIcon v-if="pendingDone.has(t.id)" name="check" :size="14" class="check-icon" />
-              </div>
-              <div class="row-body">
-                <div class="row-title">{{ t.title }}</div>
-                <div v-if="t.projectId" class="row-meta">
-                  <span class="row-proj" :style="{ background: projectColor(t.projectId) + '20', color: projectColor(t.projectId) }">{{ projectName(t.projectId) }}</span>
-                </div>
-              </div>
-              <div v-if="t.dueDate" class="row-due">
-                <MIcon name="schedule" :size="12" />{{ formatDue(t.dueDate) }}
-              </div>
-            </div>
+              :task="t"
+              :members="members"
+              :current-user-email="myEmail"
+              :project-name="projectName(t.projectId)"
+              :project-color="projectColor(t.projectId)"
+              :pending="pendingDone.has(t.id)"
+              :hide-sole-self-assignee="filter === 'mine'"
+              @toggle="doComplete(t)"
+              @open="openEditTaskModal(t as TaskLike)"
+            />
           </div>
         </template>
 
@@ -538,9 +520,7 @@ onMounted(() => {
   padding: 0 14px;
   margin-bottom: 14px;
   background: #FFF8F0;
-  border: 1px solid var(--md-sys-color-outline-variant);
   border-radius: 16px;
-  box-shadow: var(--md-sys-elevation-level-1);
 }
 .s-surface-dark .quick-add { background: #16130B; }
 @media (prefers-color-scheme: dark) { .quick-add { background: #16130B; } }
@@ -590,7 +570,7 @@ onMounted(() => {
 }
 
 /* Task group-by relative-date (port da TasksView SIDERA 2026-05-20) */
-.task-group { margin-bottom: 20px; }
+.task-group { margin-bottom: 20px; display: flex; flex-direction: column; gap: 6px; }
 .task-group-header {
   display: flex;
   align-items: center;
@@ -624,32 +604,30 @@ onMounted(() => {
 }
 .empty-state-icon { color: var(--md-sys-color-primary); margin-right: 6px; vertical-align: -4px; }
 
-/* Task rows */
-/* stesso "materiale" delle card progetto (.pcard): surface #FFF8F0, raggio 16px,
-   ombra level-1, bordo outline; hover sobrio (niente lift, come le card progetto).
-   Il bordo sinistro colorato resta come affordance di priorità. */
+/* Task rows — flat: surface #FFF8F0, raggio 16px, niente bordo/ombra.
+   La priorità è indicata da un pallino colorato accanto al titolo (.row-prio-dot). */
 .task-row {
   display: flex; align-items: center; gap: 10px;
   padding: 12px 14px;
   background: #FFF8F0;
   border-radius: 16px;
-  border: 1px solid var(--md-sys-color-outline-variant);
-  border-left: 6px solid transparent;
   margin-bottom: 6px;
-  box-shadow: var(--md-sys-elevation-level-1);
-  transition: border-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
-              background   var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
+  transition: background var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
 }
 .task-row:hover {
-  border-color: var(--md-sys-color-primary);
-  background:   color-mix(in srgb, var(--md-sys-color-primary) 5%, #FFF8F0);
+  background: color-mix(in srgb, var(--md-sys-color-primary) 5%, #FFF8F0);
 }
 .s-surface-dark .task-row:hover { background: color-mix(in srgb, var(--md-sys-color-primary) 10%, #16130B); }
 
 .s-surface-dark .task-row { background: #16130B; }
 @media (prefers-color-scheme: dark) { .task-row { background: #16130B; } }
 
-.task-row--done { opacity: 0.5; border-left: 6px solid var(--md-sys-color-outline-variant); }
+.task-row--done { opacity: 0.5; }
+
+.row-prio-dot {
+  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+  margin-right: 8px; vertical-align: middle; flex-shrink: 0;
+}
 
 .checkbox {
   width: 18px; height: 18px;

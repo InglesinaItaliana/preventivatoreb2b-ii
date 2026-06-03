@@ -15,6 +15,9 @@ const props = withDefaults(defineProps<{
 })
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
+// Sfondo chiaro coordinato con l'hue della stella: il motore lo calcola in
+// makeStar() (campo bgColor) e ce lo passa via callback onStar a ogni apply().
+const lightBg = ref('#141b26')
 let inst: { update: (n: any) => void; destroy: () => void } | null = null
 
 function opts() {
@@ -24,6 +27,7 @@ function opts() {
     hueIndex: props.hueIndex,
     size: props.size,
     animated: props.animated,
+    onStar: (star: { bgColor: string }) => { lightBg.value = star.bgColor },
   }
 }
 
@@ -57,10 +61,9 @@ onUnmounted(() => {
   display: block;
   border-radius: 50%;
   flex-shrink: 0;
-  /* Cielo notturno piu' caldo (#141b26 vs #05090F precedente) per non
-     "buttare via" i blu delle stelle, + anello sottile che stacca il bollino
-     anche su sfondi chiari (cards M3, sidera light). */
-  background: #141b26;
+  /* Sfondo chiaro coordinato con l'hue-firma della stella (makeStar -> bgColor,
+     passato via onStar). Fallback #141b26 finche' il motore non ha montato. */
+  background: v-bind(lightBg);
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 </style>

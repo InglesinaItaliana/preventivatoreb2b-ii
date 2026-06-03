@@ -2,6 +2,7 @@
 import { ref, computed, inject, watch, type Ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import MIcon from '../../components/shared/MIcon.vue'
+import MdPageHeader from '../../components/shared/MdPageHeader.vue'
 import GoalChip from '../../components/cepheid/GoalChip.vue'
 import { useProjects, DEFAULT_STATES } from '../../composables/sidera/useProjects'
 import { useProjectTasks } from '../../composables/sidera/useProjectTasks'
@@ -13,6 +14,8 @@ import CepheidTimeline from '../../components/cepheid/CepheidTimeline.vue'
 import CepheidCreateMenu from '../../components/cepheid/CepheidCreateMenu.vue'
 import CepheidCreateModal from '../../components/cepheid/CepheidCreateModal.vue'
 import CepheidViewSwitcher from '../../components/cepheid/CepheidViewSwitcher.vue'
+import CepheidActionCard from '../../components/cepheid/CepheidActionCard.vue'
+import CepheidDoneToggle from '../../components/cepheid/CepheidDoneToggle.vue'
 import LinkedDocsPanel from '../../components/shared/LinkedDocsPanel.vue'
 
 const route   = useRoute()
@@ -20,7 +23,7 @@ const router  = useRouter()
 const projectId = route.params.id as string
 
 const { projects, updateProject } = useProjects()
-const { tasks, loading, createTask, completeTask, uncompleteTask, updateTaskStatus, updateTask, deleteTask, approvePhase, unapprovePhase, createPhaseBundle } = useProjectTasks(projectId)
+const { tasks, loading, createTask, completeTask, uncompleteTask, updateTaskStatus, updateTask, approvePhase, unapprovePhase, createPhaseBundle } = useProjectTasks(projectId)
 const { obiettiviAttivi } = useObiettivi()
 const { currentUser } = useCurrentUser()
 const { members } = useTeamMembers()
@@ -131,20 +134,8 @@ const milestoneSorted = computed(() => {
   })
 })
 
-async function toggleMilestone(m: { id: string; completedAt: Date | null }) {
-  if (m.completedAt) await uncompleteTask(m.id)
-  else await completeTask(m.id)
-}
-
-// edit titolo milestone (inline)
-const editingMileId = ref<string | null>(null)
-const editMileTitle = ref('')
-function startEditMile(m: { id: string; title: string }) { editingMileId.value = m.id; editMileTitle.value = m.title }
-async function saveMile() {
-  const id = editingMileId.value
-  if (id && editMileTitle.value.trim()) await updateTask(id, { title: editMileTitle.value.trim() })
-  editingMileId.value = null
-}
+// Milestone/deliverable nelle rispettive tab sono in sola lettura (gestione via
+// timeline): niente toggle/edit/delete qui. Vedi markup tab milestone/deliverable.
 
 // ── DELIVERABLE ───────────────────────────────────────────────────────────
 const deliverableSorted = computed(() => {
@@ -169,6 +160,17 @@ function deliverablePct(d: { deliverableTaskIds: string[] }): number {
   if (!sub.length) return 0
   const done = sub.filter(t => t.completedAt).length
   return Math.round((done / sub.length) * 100)
+}
+
+// Spunta deliverable conforme alla timeline: completabile solo se TUTTE le task
+// associate sono complete (o se non ne ha). La spunta esistente si può togliere.
+function deliverableTasksDone(d: { deliverableTaskIds: string[] }): boolean {
+  const sub = tasksOfDeliverable(d.deliverableTaskIds)
+  return sub.length === 0 || sub.every(t => !!t.completedAt)
+}
+function onDeliverableCheck(d: { id: string; completedAt: Date | null; deliverableTaskIds: string[] }) {
+  if (d.completedAt) { doUncomplete(d); return }
+  if (deliverableTasksDone(d)) doComplete(d)
 }
 
 // ── NOTE (text editor con autosave su projects/{id}.notes) ────────────────
@@ -221,56 +223,53 @@ if (newTaskTick) {
   watch(newTaskTick, () => openCreate('task'))
 }
 
-// ── Delete con conferma ───────────────────────────────────────────────────
-async function deleteItem(t: { id: string; completedAt: Date | null; title: string }) {
-  if (!confirm(`Eliminare "${t.title}"?`)) return
-  await deleteTask(t.id, !!t.completedAt)
-}
 </script>
 
 <template>
   <div class="pd s-scope-cepheid">
-    <header class="pd-header" v-if="project">
-      <div class="pd-stripe" :style="{ background: project.color }" />
-      <div class="pd-titles">
-        <div class="pd-top-row">
-          <h2 class="p-page-title">{{ project.name }}</h2>
-          <GoalChip
-            v-if="obiettivoCollegato"
-            :titolo="obiettivoCollegato.titolo"
-            :colore="obiettivoCollegato.colore"
-            size="sm"
-            clickable
-            @click="router.push('/cepheid/goal/' + obiettivoCollegato.id)"
+    <!-- Header coerente con le altre schede CEPHEID (MdPageHeader + accento colore progetto).
+         Le tab (collassabili come nei Progetti) + il menu crea stanno nello slot #tools. -->
+    <MdPageHeader
+      v-if="project"
+      :title="project.name"
+      :subtitle="`${project.doneCount}/${project.taskCount} azioni · ${pct(project)}%`"
+      :accent-color="project.color"
+    >
+      <template #tools>
+        <div class="pd-tools">
+          <CepheidViewSwitcher
+            :model-value="activeTab"
+            :tabs="tabDefs"
+            @update:model-value="(v) => (activeTab = v as Tab)"
           />
+          <CepheidCreateMenu @select="openCreate" />
         </div>
-        <p class="p-page-sub">{{ project.doneCount }}/{{ project.taskCount }} azioni · {{ pct(project) }}%</p>
-        <div v-if="project.description" class="pd-description">
-          <p class="pd-description-text" :class="{ 'is-collapsed': !descExpanded && descIsLong }">
-            {{ project.description }}
-          </p>
-          <button v-if="descIsLong" class="pd-description-toggle" @click="descExpanded = !descExpanded">
-            {{ descExpanded ? 'mostra meno' : 'leggi tutto' }}
-          </button>
-        </div>
+      </template>
+    </MdPageHeader>
 
-        <!-- NEBULA-DOCS: pannello "Citato in N doc" (hidden se zero refs). -->
-        <LinkedDocsPanel kind="project" :id="projectId" />
-      </div>
-    </header>
-
-    <!-- Tab bar (pillola view-switcher) -->
-    <div class="pd-tabs">
-      <CepheidViewSwitcher
-        :model-value="activeTab"
-        :tabs="tabDefs"
-        labels
-        @update:model-value="(v) => (activeTab = v as Tab)"
+    <!-- Sotto-header: obiettivo collegato + descrizione + "citato in N doc" -->
+    <div v-if="project" class="pd-subhead">
+      <GoalChip
+        v-if="obiettivoCollegato"
+        :titolo="obiettivoCollegato.titolo"
+        :colore="obiettivoCollegato.colore"
+        size="sm"
+        clickable
+        @click="router.push('/cepheid/goal/' + obiettivoCollegato.id)"
       />
-      <CepheidCreateMenu class="header-create" @select="openCreate" />
+      <div v-if="project.description" class="pd-description">
+        <p class="pd-description-text" :class="{ 'is-collapsed': !descExpanded && descIsLong }">
+          {{ project.description }}
+        </p>
+        <button v-if="descIsLong" class="pd-description-toggle" @click="descExpanded = !descExpanded">
+          {{ descExpanded ? 'mostra meno' : 'leggi tutto' }}
+        </button>
+      </div>
+      <LinkedDocsPanel kind="project" :id="projectId" />
     </div>
 
     <div class="pd-content" :class="{ 'pd-content--timeline': activeTab === 'timeline' }">
+     <div class="pd-content-inner">
       <div v-if="loading" class="loading-rows">
         <div v-for="i in 3" :key="i" class="row-skel" />
       </div>
@@ -286,37 +285,38 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
 
           <div v-if="!grouped[s.id]?.length" class="state-empty">—</div>
 
-          <div
+          <CepheidActionCard
             v-for="t in grouped[s.id]"
             :key="t.id"
-            class="task-row"
-            :style="{ borderLeftColor: prioColor[t.priority] }"
+            :task="t"
+            :members="members"
+            :current-user-email="currentUser?.email"
+            :show-project="false"
+            :pending="pendingDone.has(t.id)"
+            :clickable="false"
+            @toggle="doComplete(t)"
           >
-            <div class="checkbox" @click="doComplete(t)">
-              <MIcon v-if="pendingDone.has(t.id)" name="check" :size="14" class="check-icon" />
-            </div>
-            <div class="row-title">{{ t.title }}</div>
-            <button class="state-pill" :style="{ background: s.color + '20', color: s.color }" @click.stop="openStatusMenu(t.id)">
-              {{ s.label }}
-              <MIcon name="expand_more" :size="14" />
-            </button>
-            <div v-if="t.dueDate" class="row-due">
-              <MIcon name="schedule" :size="12" />{{ formatDue(t.dueDate) }}
-            </div>
-
-            <div v-if="movingTaskId === t.id" class="status-menu" @click.stop>
-              <button
-                v-for="opt in states"
-                :key="opt.id"
-                class="status-menu-item"
-                :class="{ 'is-current': opt.id === t.status }"
-                @click="changeStatus(t.id, opt.id)"
-              >
-                <span class="state-dot" :style="{ background: opt.color }" />
-                {{ opt.label }}
-              </button>
-            </div>
-          </div>
+            <template #trailing>
+              <span class="state-pill-wrap">
+                <button class="state-pill" :style="{ background: s.color + '20', color: s.color }" @click.stop="openStatusMenu(t.id)">
+                  {{ s.label }}
+                  <MIcon name="expand_more" :size="14" />
+                </button>
+                <div v-if="movingTaskId === t.id" class="status-menu" @click.stop>
+                  <button
+                    v-for="opt in states"
+                    :key="opt.id"
+                    class="status-menu-item"
+                    :class="{ 'is-current': opt.id === t.status }"
+                    @click="changeStatus(t.id, opt.id)"
+                  >
+                    <span class="state-dot" :style="{ background: opt.color }" />
+                    {{ opt.label }}
+                  </button>
+                </div>
+              </span>
+            </template>
+          </CepheidActionCard>
         </section>
 
         <button
@@ -351,38 +351,23 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
         </div>
 
         <div v-else class="milestone-timeline">
+          <!-- sola lettura: la spunta riflette lo stato (raggiunta dalla timeline) -->
           <div
             v-for="m in milestoneSorted"
             :key="m.id"
             class="milestone-item"
             :class="{ 'is-done': m.completedAt }"
           >
-            <div class="milestone-line" />
-            <button
-              class="milestone-circle"
-              :class="{ 'is-done': m.completedAt }"
-              @click="toggleMilestone(m)"
-              :title="m.completedAt ? 'Riapri' : 'Segna come raggiunta'"
-            >
-              <MIcon v-if="m.completedAt" name="check" :size="14" />
-            </button>
+            <CepheidDoneToggle
+              shape="diamond"
+              :done="!!m.completedAt"
+              :interactive="false"
+              :title="m.completedAt ? 'Raggiunta' : 'Non ancora raggiunta'"
+            />
             <div class="milestone-body">
-              <input
-                v-if="editingMileId === m.id"
-                v-model="editMileTitle"
-                class="milestone-edit-input"
-                @keyup.enter="saveMile"
-                @blur="saveMile"
-              />
-              <div v-else class="milestone-title" :class="{ 'is-done': m.completedAt }" @click="startEditMile(m)">{{ m.title }}</div>
+              <div class="milestone-title" :class="{ 'is-done': m.completedAt }">{{ m.title }}</div>
               <div class="milestone-date">{{ mileDateLabel(m.id) }}</div>
             </div>
-            <button class="row-del-btn" @click="startEditMile(m)" title="Rinomina">
-              <MIcon name="edit" :size="14" />
-            </button>
-            <button class="row-del-btn" @click="deleteItem(m)" title="Elimina">
-              <MIcon name="close" :size="14" />
-            </button>
           </div>
         </div>
       </template>
@@ -402,16 +387,18 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
             class="deliverable-card"
             :class="{ 'is-done': d.completedAt }"
           >
-            <div class="deliverable-stripe" :style="{ background: prioColor[d.priority] }" />
             <div class="deliverable-body">
               <div class="deliverable-top">
-                <div class="checkbox" @click="d.completedAt ? doUncomplete(d) : doComplete(d)">
-                  <MIcon v-if="d.completedAt" name="check" :size="14" class="check-icon" />
-                </div>
+                <!-- spunta cliccabile solo se tutte le task del deliverable sono complete -->
+                <CepheidDoneToggle
+                  shape="square"
+                  :done="!!d.completedAt"
+                  :locked="!d.completedAt && !deliverableTasksDone(d)"
+                  :title="!d.completedAt && !deliverableTasksDone(d) ? 'Completa prima le task associate' : ''"
+                  @toggle="onDeliverableCheck(d)"
+                />
+                <span class="prio-dot" :style="{ background: prioColor[d.priority] }" :title="'Priorità ' + d.priority" />
                 <div class="deliverable-title" :class="{ 'is-done': d.completedAt }">{{ d.title }}</div>
-                <button class="row-del-btn" @click="deleteItem(d)" title="Elimina">
-                  <MIcon name="close" :size="14" />
-                </button>
               </div>
 
               <div class="deliverable-meta">
@@ -420,9 +407,6 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
                 </span>
                 <span v-if="d.assignees.length" class="d-meta-chip">
                   <MIcon name="person" :size="11" /> {{ displayName(d.assignees[0], members) }}
-                </span>
-                <span class="d-meta-chip" :style="{ background: prioColor[d.priority] + '15', color: prioColor[d.priority] }">
-                  {{ d.priority }}
                 </span>
               </div>
 
@@ -447,9 +431,11 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
                     :key="sub.id"
                     class="deliverable-subtask"
                   >
-                    <div class="checkbox checkbox--sm" @click="sub.completedAt ? doUncomplete(sub) : doComplete(sub)">
-                      <MIcon v-if="sub.completedAt" name="check" :size="12" class="check-icon" />
-                    </div>
+                    <CepheidDoneToggle
+                      shape="circle"
+                      :done="!!sub.completedAt"
+                      @toggle="sub.completedAt ? doUncomplete(sub) : doComplete(sub)"
+                    />
                     <span class="subtask-title" :class="{ 'is-done': sub.completedAt }">{{ sub.title }}</span>
                     <span v-if="sub.dueDate" class="subtask-due">{{ formatDue(sub.dueDate) }}</span>
                   </div>
@@ -469,37 +455,42 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
           <div class="empty-tab-hint">Le azioni create dal Kanban appaiono anche in lista, ordinabili per stato e priorità.</div>
         </div>
         <div v-else class="list-view">
-          <div v-for="t in taskItems" :key="t.id" class="list-row" @click="doComplete(t)">
-            <div class="checkbox" :class="{ 'is-checked': !!t.completedAt || pendingDone.has(t.id) }">
-              <MIcon v-if="t.completedAt || pendingDone.has(t.id)" name="check" :size="12" class="check-icon" />
-            </div>
-            <div class="prio-dot" :style="{ background: prioColor[t.priority] }" />
-            <div class="list-title" :class="{ 'is-done': !!t.completedAt }">{{ t.title }}</div>
-            <span
-              class="list-state"
-              :style="{ color: sortedStates.find(s => s.id === t.status)?.color }"
-            >
-              {{ sortedStates.find(s => s.id === t.status)?.label ?? t.status }}
-            </span>
-            <span v-if="t.dueDate" class="list-due">{{ formatDue(t.dueDate) }}</span>
-          </div>
+          <CepheidActionCard
+            v-for="t in taskItems"
+            :key="t.id"
+            :task="t"
+            :members="members"
+            :current-user-email="currentUser?.email"
+            :show-project="false"
+            :pending="pendingDone.has(t.id)"
+            :clickable="false"
+            @toggle="doComplete(t)"
+          >
+            <template #trailing>
+              <span class="list-state" :style="{ color: sortedStates.find(s => s.id === t.status)?.color }">
+                {{ sortedStates.find(s => s.id === t.status)?.label ?? t.status }}
+              </span>
+            </template>
+          </CepheidActionCard>
         </div>
       </template>
 
       <!-- TIMELINE (ciclo di vita: fasi → task → deliverable → milestone) ────── -->
       <template v-else-if="activeTab === 'timeline'">
-        <CepheidTimeline
-          :project="project"
-          :tasks="tasks"
-          :members="members"
-          :update-task="updateTask"
-          :complete-task="completeTask"
-          :uncomplete-task="uncompleteTask"
-          :update-project="updateProject"
-          :approve-phase="approvePhase"
-          :unapprove-phase="unapprovePhase"
-          @new-phase="openCreate('fase')"
-        />
+        <div class="pd-timeline-card">
+          <CepheidTimeline
+            :project="project"
+            :tasks="tasks"
+            :members="members"
+            :update-task="updateTask"
+            :complete-task="completeTask"
+            :uncomplete-task="uncompleteTask"
+            :update-project="updateProject"
+            :approve-phase="approvePhase"
+            :unapprove-phase="unapprovePhase"
+            @new-phase="openCreate('fase')"
+          />
+        </div>
       </template>
 
       <!-- NOTE (markdown-style per progetto, salvate in projects/{id}.notes) ──── -->
@@ -519,6 +510,7 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
           </div>
         </div>
       </template>
+     </div><!-- /.pd-content-inner -->
     </div>
 
     <!-- Modal di creazione condiviso (fase / deliverable / milestone / task) -->
@@ -546,43 +538,18 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
   min-height: 0;
   display: flex;
   flex-direction: column;
+  /* sfondo come la pagina CEPHEID Progetti */
+  background: #EFE7D9;
 }
+.s-surface-dark .pd { background: #0E0C07; color: #F5EFE3; }
 
-.pd-header {
-  display: flex;
-  align-items: stretch;
-  background: #fff;
-  border-bottom: 1px solid #E8E5DF;
-  flex-shrink: 0;
-}
+/* header (MdPageHeader) + sotto-header non scrollano (lo scroll è in .pd-content) */
+.pd > :deep(.md-page-header) { flex-shrink: 0; padding: 18px 16px 14px; }
+.pd-subhead { flex-shrink: 0; background: var(--md-sys-color-surface); padding: 0 16px 12px; }
+.pd-subhead > * + * { margin-top: 8px; }
+.pd-tools { display: flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; overflow-x: auto; }
 
-.pd-stripe { width: 6px; flex-shrink: 0; }
-
-.pd-titles { padding: 18px 20px 14px; flex: 1; min-width: 0; }
-
-.pd-top-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 4px;
-}
-
-.p-page-title {
-  font-family: 'Outfit', sans-serif;
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: #1A1917;
-  margin: 0;
-  flex: 1;
-  min-width: 0;
-}
-
-.p-page-sub { font-size: 12px; color: #9B9590; margin: 0; }
-
-.pd-description { margin-top: 8px; }
+.pd-description {}
 .pd-description-text {
   margin: 0;
   font-family: 'Outfit', sans-serif;
@@ -612,37 +579,29 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
 }
 .pd-description-toggle:hover { color: #6A6560; }
 
-/* Tabs (pillola view-switcher) */
-.pd-tabs {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 16px;
-  background: #fff;
-  border-bottom: 1px solid #E8E5DF;
-  flex-shrink: 0;
-}
-.pd-tabs > :deep(.vsw) { flex: 1; min-width: 0; }
+/* sfondo del contenuto = pagina CEPHEID Progetti (#EFE7D9). Lo SCROLL è su
+   .pd-content a tutta larghezza (scrollbar al bordo, FUORI dal box 900), mentre
+   .pd-content-inner replica esattamente .pv-content/.av-content delle liste
+   (900 centrato, padding 16/40) → la larghezza del contenuto combacia con
+   Progetti/Azioni e resta identica tra tutti i tab. */
+.pd-content { flex: 1; min-height: 0; overflow-y: auto; background: #EFE7D9; }
+.s-surface-dark .pd-content { background: #0E0C07; }
+.pd-content-inner { padding: 16px; }
 
-.pd-content { padding: 16px; flex: 1; min-height: 0; overflow-y: auto; }
-/* Sfondo pagina della Timeline come nel prototipo cepheid-timeline.html */
-.pd-content--timeline { background: #EFE7D9; }
-.s-surface-dark .pd-content--timeline { background: #0E0C07; }
-@media (prefers-color-scheme: dark) {
-  .pd-content--timeline { background: #0E0C07; }
-}
+/* container della timeline: card del colore dell'header (#FFF8F0) */
+.pd-timeline-card { background: #FFF8F0; border-radius: 16px; padding: 14px 16px 16px; }
+.s-surface-dark .pd-timeline-card { background: #16130B; }
 
 /* Desktop wide: container centrato + padding generoso. Le tabs interne
    (kanban/milestone/deliverable) sono gia' responsive multi-colonna.
    ProjectBoard SIDERA (/sidera/projects/:id) ha viste aggiuntive
    list/cal/notes — power-view, accessibile via URL diretto. */
+/* Desktop: stessa colonna centrata 900px delle altre schede CEPHEID
+   (Progetti/Azioni/Obiettivi) → header, sotto-header e contenuto allineati. */
 @media (min-width: 1024px) {
-  .pd-header  { padding: 24px 40px 18px; }
-  .pd-content { padding: 24px 40px; max-width: 1280px; margin: 0 auto; }
-}
-@media (min-width: 1440px) {
-  .pd-content { max-width: 1440px; padding: 32px 56px; }
+  .pd > :deep(.md-page-header) { padding: 24px max(40px, calc(50% - 410px)) 18px; }
+  .pd-subhead { padding: 0 max(40px, calc(50% - 410px)) 14px; }
+  .pd-content-inner { padding: 24px 40px; max-width: 900px; margin: 0 auto; width: 100%; box-sizing: border-box; }
 }
 
 .loading-rows { display: flex; flex-direction: column; gap: 6px; }
@@ -663,23 +622,20 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
 .empty-tab-icon { color: var(--md-sys-color-primary); opacity: 0.35; margin-bottom: 4px; }
 
 /* ── LIST view (assorbita da ProjectBoard SIDERA 2026-05-20) ───────────── */
-.list-view { max-width: 720px; display: flex; flex-direction: column; gap: 6px; }
+.list-view { display: flex; flex-direction: column; gap: 6px; }
 .list-row {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 11px 14px;
-  background: var(--md-sys-color-surface);
-  border-radius: var(--md-sys-shape-corner-small);
-  border: 1px solid var(--md-sys-color-outline-variant);
+  padding: 12px 14px;
+  background: #FFF8F0;
+  border-radius: 12px;
   cursor: pointer;
-  transition: border-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
-              box-shadow   var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
+  transition: background var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
 }
-.list-row:hover {
-  border-color: var(--md-sys-color-outline);
-  box-shadow: var(--md-sys-elevation-level-1);
-}
+.s-surface-dark .list-row { background: #16130B; }
+.list-row:hover { background: color-mix(in srgb, var(--md-sys-color-primary) 5%, #FFF8F0); }
+.s-surface-dark .list-row:hover { background: color-mix(in srgb, var(--md-sys-color-primary) 10%, #16130B); }
 .list-title { flex: 1; font-size: 13px; color: var(--md-sys-color-on-surface); }
 .list-title.is-done { text-decoration: line-through; color: var(--md-sys-color-on-surface-variant); }
 .list-state { font-size: 11px; font-weight: 600; flex-shrink: 0; }
@@ -695,7 +651,6 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
 /* ── CAL view (group-by relative due date) ─────────────────────────────── */
 /* ── NOTES view ─────────────────────────────────────────────────────────── */
 .notes-view {
-  max-width: 720px;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -709,10 +664,19 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
 .notes-textarea {
   min-height: 360px;
   resize: vertical;
+  width: 100%;
+  box-sizing: border-box;
+  background: #FFF8F0;
+  border: none;
+  border-radius: 16px;
+  padding: 16px 18px;
+  color: var(--md-sys-color-on-surface);
+  outline: none;
   font-family: var(--md-sys-typescale-body-large-font);
   font-size:   var(--md-sys-typescale-body-large-size);
   line-height: var(--md-sys-typescale-body-large-line-height);
 }
+.s-surface-dark .notes-textarea { background: #16130B; }
 .notes-status {
   font-size: 11px;
   color: var(--md-sys-color-on-surface-variant);
@@ -726,8 +690,8 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
   line-height: 1.6;
 }
 
-/* Kanban — invariato */
-.state-section { margin-bottom: 18px; }
+/* Kanban */
+.state-section { margin-bottom: 18px; display: flex; flex-direction: column; gap: 6px; }
 
 .state-header {
   display: flex;
@@ -764,15 +728,13 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
   align-items: center;
   gap: 10px;
   padding: 12px 14px;
-  background: #fff;
-  border-radius: 10px;
-  border: 1px solid #E8E5DF;
-  border-left: 6px solid transparent;
+  background: #FFF8F0;
+  border-radius: 12px;
   margin-bottom: 6px;
-  box-shadow: var(--md-sys-elevation-level-1);
 }
+.s-surface-dark .task-row { background: #16130B; }
 
-.task-row--done { opacity: 0.5; border-left: 6px solid #E8E5DF; }
+.task-row--done { opacity: 0.5; }
 
 .checkbox {
   width: 18px; height: 18px;
@@ -786,10 +748,15 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
 
 .checkbox:hover { border-color: var(--md-sys-color-primary); }
 .check-icon { color: var(--md-sys-color-primary); }
+/* deliverable non ancora completabile: spunta bloccata finché le task non sono finite */
+.checkbox.is-locked { cursor: not-allowed; border-style: dashed; border-color: #C8C5C0; }
+.checkbox.is-locked:hover { border-color: #C8C5C0; }
+.lock-icon { color: #B4B0AA; }
 
 .row-title { flex: 1; font-size: 14px; min-width: 0; }
 .row-title--done { text-decoration: line-through; color: #9B9590; }
 
+.state-pill-wrap { position: relative; display: inline-flex; align-items: center; flex-shrink: 0; }
 .state-pill {
   display: inline-flex;
   align-items: center;
@@ -816,7 +783,7 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
 
 .status-menu {
   position: absolute;
-  right: 8px;
+  right: 0;
   top: 100%;
   background: #fff;
   border: 1px solid #E8E5DF;
@@ -890,41 +857,31 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
 .done-list { display: flex; flex-direction: column; }
 
 /* Milestone timeline */
-.milestone-timeline {
-  position: relative;
-  padding-left: 8px;
-}
+/* milestone come card piena a tutta larghezza (come task/list/deliverable):
+   il cerchio-stato è dentro la card, niente più linea/indent esterni. */
+.milestone-timeline { display: flex; flex-direction: column; gap: 6px; }
 .milestone-item {
-  position: relative;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 8px 8px 8px 0;
+  gap: 10px;
+  padding: 12px 14px;
+  background: #FFF8F0;
+  border-radius: 12px;
 }
-.milestone-item .milestone-line {
-  position: absolute;
-  left: 17px;
-  top: 0;
-  bottom: 0;
-  width: 2px;
-  background: #E8E5DF;
-}
-.milestone-item:first-child .milestone-line { top: 50%; }
-.milestone-item:last-child .milestone-line { bottom: 50%; }
+.s-surface-dark .milestone-item { background: #16130B; }
+.milestone-item:hover { background: color-mix(in srgb, var(--md-sys-color-primary) 5%, #FFF8F0); }
+.s-surface-dark .milestone-item:hover { background: color-mix(in srgb, var(--md-sys-color-primary) 10%, #16130B); }
+.milestone-item.is-done { opacity: 0.7; }
 
 .milestone-circle {
-  width: 22px; height: 22px;
+  width: 20px; height: 20px;
   border-radius: var(--md-sys-shape-corner-full);
   border: 2px solid #B4B0AA;
-  background: #fff;
+  background: transparent;
   display: flex; align-items: center; justify-content: center;
-  cursor: pointer;
-  z-index: 1;
   color: #fff;
   flex-shrink: 0;
-  transition: all 0.15s;
 }
-.milestone-circle:hover { border-color: var(--md-sys-color-primary); }
 .milestone-circle.is-done {
   background: #2F6B4A;
   border-color: #2F6B4A;
@@ -933,12 +890,7 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
 .milestone-body {
   flex: 1;
   min-width: 0;
-  padding: 10px 14px;
-  background: #fff;
-  border: 1px solid #E8E5DF;
-  border-radius: 10px;
 }
-.milestone-item.is-done .milestone-body { background: #FAF8F4; opacity: 0.7; }
 
 .milestone-title {
   font-size: 14px;
@@ -965,17 +917,16 @@ async function deleteItem(t: { id: string; completedAt: Date | null; title: stri
 .deliverable-list { display: flex; flex-direction: column; gap: 8px; }
 
 .deliverable-card {
-  display: flex;
-  background: #fff;
-  border: 1px solid #E8E5DF;
-  border-radius: var(--md-sys-shape-corner-medium);
+  background: #FFF8F0;
+  border-radius: 12px;
   overflow: hidden;
 }
+.s-surface-dark .deliverable-card { background: #16130B; }
+.deliverable-card:hover { background: color-mix(in srgb, var(--md-sys-color-primary) 5%, #FFF8F0); }
+.s-surface-dark .deliverable-card:hover { background: color-mix(in srgb, var(--md-sys-color-primary) 10%, #16130B); }
 .deliverable-card.is-done { opacity: 0.6; }
 
-.deliverable-stripe { width: 5px; flex-shrink: 0; }
-
-.deliverable-body { flex: 1; padding: 12px 14px; min-width: 0; }
+.deliverable-body { padding: 12px 14px; min-width: 0; }
 
 .deliverable-top {
   display: flex;
