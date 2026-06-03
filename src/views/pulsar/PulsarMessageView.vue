@@ -489,11 +489,12 @@ function escapeAttr(s: string): string {
   return escapeHtml(s).replace(/"/g, '&quot;')
 }
 const REF_ICON: Record<MsgRef['type'], string> = {
-  task: 'task_alt', project: 'folder', doc: 'description', user: 'person',
+  task: 'check_circle', project: 'folder', doc: 'description', user: 'person',
 }
 function chipHtml(r: MsgRef): string {
-  // icona via .m-icon (font Material Symbols globale, ligature) → renderizzabile in v-html
-  const icon = `<span class="m-icon msg-ref-ic">${REF_ICON[r.type]}</span>`
+  // icona via .m-icon (font Material Symbols globale, ligature) → renderizzabile in v-html.
+  // is-filled = glifo pieno; il colore lo eredita (currentColor) dalla famiglia chip.
+  const icon = `<span class="m-icon is-filled msg-ref-ic">${REF_ICON[r.type]}</span>`
   return `<span class="msg-ref msg-ref--${r.type}" data-ref-type="${r.type}"`
     + ` data-ref-id="${escapeAttr(r.id)}" data-ref-project="${escapeAttr(r.projectId ?? '')}"`
     + ` role="link" tabindex="0">${icon}${escapeHtml(r.label)}</span>`
@@ -1238,15 +1239,23 @@ function onBubbleClick(e: MouseEvent) {
   font-size: 11px; font-weight: 700; flex-shrink: 0;
 }
 
-/* chip cliccabili dentro la bolla (mention di entità) */
+/* chip cliccabili dentro la bolla (mention di entità). display:inline così la
+   chip scorre nel testo e si allinea al baseline del testo normale a fianco;
+   font-size:inherit = stessa dimensione del testo del messaggio. */
 :deep(.msg-ref) {
-  display: inline-flex; align-items: center; gap: 3px;
-  padding: 0 6px 0 4px; border-radius: 7px;
-  font-weight: 600; cursor: pointer; text-decoration: none;
-  vertical-align: -3px; line-height: 1.5;
-  border: 1px solid transparent; transition: background 0.12s, border-color 0.12s;
+  display: inline;
+  font-size: inherit; font-weight: 600;
+  padding: 0 5px; border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer; text-decoration: none; white-space: nowrap;
+  -webkit-box-decoration-break: clone; box-decoration-break: clone;
+  transition: background 0.12s, border-color 0.12s;
 }
-:deep(.msg-ref-ic) { font-size: 14px; }
+/* icona inline allineata alla linea del testo (override del display:inline-flex di .m-icon) */
+:deep(.msg-ref-ic) {
+  display: inline-block; font-size: 1em;
+  vertical-align: -0.16em; margin-right: 2px;
+}
 /* Due sole famiglie cromatiche, l'icona distingue dentro la famiglia:
    CEPHEID (oro) per task+progetti, NEBULA (terracotta) per doc+persone. */
 :deep(.msg-ref--task),
