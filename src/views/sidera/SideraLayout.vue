@@ -360,6 +360,14 @@ function isSectionExpanded(name: string) {
   return expandedSection.value === name
 }
 
+// Hover-preview (desktop): passando il mouse su una sezione si svelano le sue
+// schede; uscendo, torna aperta la sezione attiva (`expandedSection`). Esclusivo:
+// in hover è aperta SOLO la sezione hover-ata.
+const hoveredSection = ref<string | null>(null)
+function isSectionOpen(name: string) {
+  return hoveredSection.value ? hoveredSection.value === name : isSectionExpanded(name)
+}
+
 // Inizializza: ultima sezione aperta da localStorage, fallback su quella della
 // route corrente, fallback finale sul primo modulo. Il route-watcher sotto
 // gestisce poi i cambi di navigazione.
@@ -585,12 +593,18 @@ const roleLabel: Record<string, string> = {
       </div>
 
       <nav class="s-nav">
-        <template v-for="mod in modules" :key="mod.name">
+        <div
+          v-for="mod in modules"
+          :key="mod.name"
+          class="s-section-group"
+          @mouseenter="hoveredSection = mod.name"
+          @mouseleave="hoveredSection = null"
+        >
           <button
             type="button"
             class="s-section-label"
             :class="{
-              's-is-expanded': isSectionExpanded(mod.name),
+              's-is-expanded': isSectionOpen(mod.name),
               's-is-active':   sectionActive(mod),
             }"
             :style="{ '--s-accent': mod.accent, '--s-accent-glow': mod.accent + '33', '--s-accent-glow-soft': mod.accent + '1F' }"
@@ -599,7 +613,7 @@ const roleLabel: Record<string, string> = {
           <div
             :id="`s-sec-${mod.name}`"
             class="s-section-items"
-            :class="{ 's-is-open': isSectionExpanded(mod.name) }"
+            :class="{ 's-is-open': isSectionOpen(mod.name) }"
             :style="{ '--s-accent': mod.accent, '--s-accent-glow-soft': mod.accent + '1F' }"
           >
             <div class="s-section-items-inner">
@@ -643,7 +657,7 @@ const roleLabel: Record<string, string> = {
               </div>
             </div>
           </div>
-        </template>
+        </div>
 
         <!-- CORE: sezione admin-only in fondo (manutenzione + impostazioni) -->
         <template v-if="canAccessCore">

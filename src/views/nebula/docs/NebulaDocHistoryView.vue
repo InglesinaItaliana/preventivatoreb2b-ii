@@ -375,7 +375,8 @@ onBeforeUnmount(() => {
 .nh-item {
   background: white;
   border-radius: 10px;
-  border: 1px solid rgba(0,0,0,0.06);
+  /* flat: bordo base trasparente; gli accent-border di stato (current/expanded) restano */
+  border: 1px solid transparent;
   transition: background 120ms ease, border-color 120ms ease;
 }
 .nh-item-current {

@@ -31,7 +31,14 @@ const todayLabel = computed(() =>
     .replace(/^\w/, c => c.toUpperCase())
 )
 
-const userName = computed(() => currentUser.value?.email ? displayName(currentUser.value.email, members.value) : '…')
+// Solo il nome (no cognome): firstName del membro, fallback al primo token del displayName.
+const userName = computed(() => {
+  const email = currentUser.value?.email
+  if (!email) return '…'
+  const m = members.value.find(x => x.email === email)
+  if (m?.firstName) return m.firstName
+  return displayName(email, members.value).split(' ')[0] ?? ''
+})
 
 // ── Intro animata (solo prima apertura di sessione) ──────────────────────
 // Flusso: overlay con "Buongiorno, {nome}" centrato e ingrandito → dopo 2s

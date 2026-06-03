@@ -457,9 +457,10 @@ const revokedKeys = computed(() => keys.value.filter(k => k.revoked))
   display: flex; align-items: center; gap: 12px;
   padding: 12px 14px;
   background: var(--md-sys-color-surface-container, #fff);
-  border: 1px solid rgba(0,0,0,0.06);
   border-radius: 10px;
+  transition: background var(--md-sys-motion-duration-short3, 150ms) var(--md-sys-motion-easing-standard, ease);
 }
+.ni-key:hover { background: color-mix(in srgb, var(--md-sys-color-primary) 5%, var(--md-sys-color-surface-container, #fff)); }
 .ni-key-meta {
   display: flex; flex-direction: column; gap: 2px;
   flex: 1; min-width: 0;
