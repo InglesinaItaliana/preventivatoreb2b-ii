@@ -267,6 +267,7 @@ if (newTaskTick) {
     </div>
 
     <div class="pd-content" :class="{ 'pd-content--timeline': activeTab === 'timeline' }">
+     <div class="pd-content-inner">
       <div v-if="loading" class="loading-rows">
         <div v-for="i in 3" :key="i" class="row-skel" />
       </div>
@@ -504,6 +505,7 @@ if (newTaskTick) {
           </div>
         </div>
       </template>
+     </div><!-- /.pd-content-inner -->
     </div>
 
     <!-- Modal di creazione condiviso (fase / deliverable / milestone / task) -->
@@ -572,11 +574,14 @@ if (newTaskTick) {
 }
 .pd-description-toggle:hover { color: #6A6560; }
 
-/* sfondo del contenuto = pagina CEPHEID Progetti (#EFE7D9), per tutti i tab.
-   scrollbar-gutter:stable riserva sempre lo spazio della scrollbar → la larghezza
-   del contenuto è IDENTICA tra tab che scrollano e tab che non scrollano. */
-.pd-content { padding: 16px; flex: 1; min-height: 0; overflow-y: auto; scrollbar-gutter: stable; background: #EFE7D9; }
+/* sfondo del contenuto = pagina CEPHEID Progetti (#EFE7D9). Lo SCROLL è su
+   .pd-content a tutta larghezza (scrollbar al bordo, FUORI dal box 900), mentre
+   .pd-content-inner replica esattamente .pv-content/.av-content delle liste
+   (900 centrato, padding 16/40) → la larghezza del contenuto combacia con
+   Progetti/Azioni e resta identica tra tutti i tab. */
+.pd-content { flex: 1; min-height: 0; overflow-y: auto; background: #EFE7D9; }
 .s-surface-dark .pd-content { background: #0E0C07; }
+.pd-content-inner { padding: 16px; }
 
 /* container della timeline: card del colore dell'header (#FFF8F0) */
 .pd-timeline-card { background: #FFF8F0; border-radius: 16px; padding: 14px 16px 16px; }
@@ -591,7 +596,7 @@ if (newTaskTick) {
 @media (min-width: 1024px) {
   .pd > :deep(.md-page-header) { padding: 24px max(40px, calc(50% - 410px)) 18px; }
   .pd-subhead { padding: 0 max(40px, calc(50% - 410px)) 14px; }
-  .pd-content { padding: 24px 40px; max-width: 900px; margin: 0 auto; }
+  .pd-content-inner { padding: 24px 40px; max-width: 900px; margin: 0 auto; width: 100%; box-sizing: border-box; }
 }
 
 .loading-rows { display: flex; flex-direction: column; gap: 6px; }
