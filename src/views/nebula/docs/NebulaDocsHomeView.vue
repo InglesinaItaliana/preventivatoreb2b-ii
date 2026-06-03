@@ -25,6 +25,7 @@ import { archiveDoc } from '../../../composables/nebula/useArchiveDoc'
 import { useAutoHideHeader } from '../../../composables/shared/useAutoHideHeader'
 import MdPageHeader from '../../../components/shared/MdPageHeader.vue'
 import MIcon from '../../../components/shared/MIcon.vue'
+import CepheidViewSwitcher from '../../../components/cepheid/CepheidViewSwitcher.vue'
 
 const scrollEl = ref<HTMLElement | null>(null)
 const { hidden: headerHidden } = useAutoHideHeader(scrollEl)
@@ -136,22 +137,28 @@ function unsubscribeAll() {
   Object.values(bySource).forEach(m => m.clear())
 }
 
-// "I miei documenti": owner > writer > reader > team. Filter !archived.
-const myDocs = computed<DocRow[]>(() => {
+function byUpdatedDesc(a: DocRow, b: DocRow) {
+  return (b.updatedAt?.toMillis?.() ?? 0) - (a.updatedAt?.toMillis?.() ?? 0)
+}
+
+// "Miei": doc di cui sono owner (non archiviati).
+const ownedDocs = computed<DocRow[]>(() => {
   void tick.value
+  return Array.from(bySource.owner!.values()).filter(r => !r.archived).sort(byUpdatedDesc)
+})
+
+// "Condivisi": writer/reader/team accessibili ma NON di mia proprietà.
+const sharedDocs = computed<DocRow[]>(() => {
+  void tick.value
+  const ownerIds = new Set(bySource.owner!.keys())
   const merged = new Map<string, DocRow>()
-  const priority: DocRow['source'][] = ['owner', 'writer', 'reader', 'team']
-  for (const src of priority) {
+  for (const src of ['writer', 'reader', 'team'] as const) {
     for (const [id, row] of bySource[src]!) {
-      if (row.archived) continue
+      if (row.archived || ownerIds.has(id)) continue
       if (!merged.has(id)) merged.set(id, row)
     }
   }
-  return Array.from(merged.values()).sort((a, b) => {
-    const ta = a.updatedAt?.toMillis?.() ?? 0
-    const tb = b.updatedAt?.toMillis?.() ?? 0
-    return tb - ta
-  })
+  return Array.from(merged.values()).sort(byUpdatedDesc)
 })
 
 // "Sei menzionato in N doc": TUTTI i doc dove sono in refs.users.
@@ -224,12 +231,26 @@ onMounted(() => {
   }
 })
 
-// Sottotitolo MdPageHeader: privilegia il segnale "menzioni pendenti" se >0,
-// altrimenti mostra il conteggio dei propri doc.
-const mentionedSubtitle = computed(() => {
-  const m = mentionedDocs.value.length
-  if (m > 0) return `Sei menzionato in ${m} ${m === 1 ? 'documento' : 'documenti'}`
-  const n = myDocs.value.length
+// ── Tab header: Miei / Condivisi / Menzionato ───────────────────────────────
+type DocTab = 'mine' | 'shared' | 'mentioned'
+const activeTab = ref<DocTab>('mine')
+const visibleDocs = computed<DocRow[]>(() =>
+  activeTab.value === 'mine'
+    ? ownedDocs.value
+    : activeTab.value === 'shared'
+      ? sharedDocs.value
+      : mentionedDocs.value,
+)
+const docTabs = computed(() => [
+  { id: 'mine', label: 'Miei', icon: 'person', count: ownedDocs.value.length || undefined },
+  { id: 'shared', label: 'Condivisi', icon: 'group', count: sharedDocs.value.length || undefined },
+  { id: 'mentioned', label: 'Menzionato', icon: 'alternate_email', count: mentionedDocs.value.length || undefined },
+])
+
+// Sottotitolo MdPageHeader: conteggio del tab attivo.
+const headerSubtitle = computed(() => {
+  if (docsLoading.value) return 'Caricamento…'
+  const n = visibleDocs.value.length
   if (n === 0) return 'Nessun documento'
   return `${n} ${n === 1 ? 'documento' : 'documenti'}`
 })
@@ -381,10 +402,19 @@ function isActiveTouch(d: DocRow): boolean {
     <template v-else>
       <MdPageHeader
         title="Documenti"
-        :subtitle="mentionedSubtitle"
+        :subtitle="headerSubtitle"
         sticky
+        borderless
         :hidden="headerHidden"
       >
+        <template #tools>
+          <CepheidViewSwitcher
+            labels
+            :model-value="activeTab"
+            :tabs="docTabs"
+            @update:model-value="(v) => (activeTab = v as DocTab)"
+          />
+        </template>
         <template #cta>
           <button
             type="button"
@@ -404,19 +434,17 @@ function isActiveTouch(d: DocRow): boolean {
         <span class="material-symbols-outlined">error</span>{{ lastError }}
       </div>
 
-      <!-- Sezione 1: I miei documenti -->
+      <!-- Lista unica guidata dal tab attivo (Miei / Condivisi / Menzionato) -->
       <section class="ndh-list-section">
-        <h3>
-          I miei documenti
-          <span v-if="!docsLoading" class="ndh-count">{{ myDocs.length }}</span>
-        </h3>
         <div v-if="docsLoading" class="ndh-empty">Caricamento…</div>
-        <div v-else-if="myDocs.length === 0" class="ndh-empty">
-          Nessun documento. Crea il primo o aspetta che qualcuno te ne condivida uno.
+        <div v-else-if="visibleDocs.length === 0" class="ndh-empty">
+          <template v-if="activeTab === 'mine'">Nessun documento tuo. Crea il primo con "Nuovo documento".</template>
+          <template v-else-if="activeTab === 'shared'">Nessun documento condiviso con te.</template>
+          <template v-else>Non sei menzionato in nessun documento.</template>
         </div>
         <ul v-else class="ndh-list">
           <li
-            v-for="d in myDocs"
+            v-for="d in visibleDocs"
             :key="d.id"
             class="ndh-item-wrap"
             @touchstart="onTouchStart(d, $event)"
@@ -439,7 +467,10 @@ function isActiveTouch(d: DocRow): boolean {
                   @click.stop="router.push(`/nebula/docs/${d.id}`)"
                   :aria-label="`Apri ${d.title}`"
                 >
-                  <span class="material-symbols-outlined ndh-item-icon">{{ d.iconName || 'description' }}</span>
+                  <span
+                    class="material-symbols-outlined ndh-item-icon"
+                    :class="{ 'ndh-item-icon-mention': activeTab === 'mentioned' }"
+                  >{{ d.iconName || 'description' }}</span>
                   <div class="ndh-item-meta">
                     <div class="ndh-item-title-row">
                       <span class="ndh-item-title">{{ d.title }}</span>
@@ -476,41 +507,6 @@ function isActiveTouch(d: DocRow): boolean {
               >
                 <span class="material-symbols-outlined">delete</span>
                 <span class="ndh-swipe-delete-label">{{ archivingId === d.id ? '…' : 'Elimina' }}</span>
-              </button>
-            </div>
-          </li>
-        </ul>
-      </section>
-
-      <!-- Sezione 2: Sei menzionato (hidden se zero) -->
-      <section v-if="mentionedDocs.length > 0" class="ndh-list-section">
-        <h3>
-          Sei menzionato in {{ mentionedDocs.length }} {{ mentionedDocs.length === 1 ? 'documento' : 'documenti' }}
-        </h3>
-        <ul class="ndh-list">
-          <li
-            v-for="d in mentionedDocs"
-            :key="`m-${d.id}`"
-            class="ndh-item-wrap"
-          >
-            <div class="ndh-item">
-              <button
-                type="button"
-                class="ndh-item-main"
-                @click.stop="router.push(`/nebula/docs/${d.id}`)"
-                :aria-label="`Apri ${d.title}`"
-              >
-                <span class="material-symbols-outlined ndh-item-icon ndh-item-icon-mention">{{ d.iconName || 'description' }}</span>
-                <div class="ndh-item-meta">
-                  <div class="ndh-item-title-row">
-                    <span class="ndh-item-title">{{ d.title }}</span>
-                    <span
-                      class="ndh-badge-privacy"
-                      :class="`ndh-badge-${computeBadge(d).tone}`"
-                    >{{ computeBadge(d).label }}</span>
-                  </div>
-                  <div class="ndh-item-sub">{{ formatTime(d.updatedAt) }}</div>
-                </div>
               </button>
             </div>
           </li>
@@ -554,7 +550,6 @@ function isActiveTouch(d: DocRow): boolean {
 :deep(.md-page-header) { padding: 18px 16px 14px; }
 :deep(.md-page-header.is-sticky) {
   background: var(--md-sys-color-surface);
-  border-bottom: 1px solid var(--md-sys-color-outline-variant);
 }
 
 .ndh-content {
@@ -600,26 +595,6 @@ function isActiveTouch(d: DocRow): boolean {
 
 /* Section */
 .ndh-list-section { margin-bottom: 28px; }
-.ndh-list-section h3 {
-  font-size: 13px;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: #777;
-  margin: 0 0 12px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.ndh-sec-icon { font-size: 16px; color: #C46030; }
-.ndh-count {
-  background: rgba(196, 96, 48, 0.12);
-  color: #C46030;
-  padding: 1px 8px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-}
 .ndh-empty {
   padding: 24px;
   text-align: center;
@@ -668,14 +643,10 @@ function isActiveTouch(d: DocRow): boolean {
   align-items: center;
   gap: 12px;
   padding: 8px 14px 8px 6px;
-  /* Pattern CepheidProjectCard: surface caldo + outline-variant + elevation 1 */
+  /* flat: surface, niente bordo/ombra; solo cambio colore in hover */
   background: var(--md-sys-color-surface);
   border-radius: 16px;
-  border: 1px solid var(--md-sys-color-outline-variant);
-  box-shadow: var(--md-sys-elevation-level-1);
-  transition: background var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
-              border-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
-              box-shadow var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
+  transition: background var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
   -webkit-tap-highlight-color: transparent;
   box-sizing: border-box;
 }
@@ -683,9 +654,7 @@ function isActiveTouch(d: DocRow): boolean {
    attiva al tap → flash della card durante scroll/click. */
 @media (hover: hover) {
   .ndh-item:hover {
-    background: color-mix(in srgb, var(--md-sys-color-primary) 4%, var(--md-sys-color-surface));
-    border-color: color-mix(in srgb, var(--md-sys-color-primary) 30%, var(--md-sys-color-outline-variant));
-    box-shadow: var(--md-sys-elevation-level-2);
+    background: color-mix(in srgb, var(--md-sys-color-primary) 5%, var(--md-sys-color-surface));
   }
 }
 

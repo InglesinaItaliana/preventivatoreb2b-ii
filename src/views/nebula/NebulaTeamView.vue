@@ -25,6 +25,20 @@ const view = ref<ViewId>('org')
 const active = computed(() => members.value.filter(m => m.active !== false))
 const all    = computed(() => members.value)
 
+// Lista: ordine per RUOLO (ADMIN→COMMERCIALE→PRODUZIONE→LOGISTICA; ruoli ignoti
+// in coda) e poi alfabetico per nome.
+const ROLE_RANK = ['ADMIN', 'COMMERCIALE', 'PRODUZIONE', 'LOGISTICA']
+const roleRank = (m: NebulaMember) => {
+  const i = ROLE_RANK.indexOf(m.role)
+  return i === -1 ? ROLE_RANK.length : i
+}
+const sortedList = computed<NebulaMember[]>(() =>
+  [...all.value].sort((a, b) => {
+    const r = roleRank(a) - roleRank(b)
+    return r !== 0 ? r : fullName(a).localeCompare(fullName(b), 'it')
+  }),
+)
+
 // ── Gerarchia: albero da managerUid (STELLA-GRAFO). Flatten in pre-order con
 //    profondità, per un render a lista indentata. Guard anti-ciclo + radici =
 //    chi non ha responsabile (o il cui responsabile non è nel team attivo).
@@ -117,6 +131,7 @@ const roleAccent: Record<string, string> = {
       title="Squadra"
       :subtitle="`${active.length} membri attivi · ${all.length - active.length} inattivi`"
       sticky
+      borderless
       :hidden="headerHidden"
     >
       <template #tools>
@@ -145,7 +160,10 @@ const roleAccent: Record<string, string> = {
               <div class="nb-level-cards">
                 <div v-for="m in byCategory(cat)" :key="m.email" class="nb-card">
                   <StarAvatar v-bind="memberStar(m)" :size="42" />
-                  <div class="nb-card-name">{{ fullName(m) }}</div>
+                  <div class="nb-card-name">
+                    <span class="nb-card-fn">{{ m.firstName || m.email }}</span>
+                    <span v-if="m.lastName" class="nb-card-ln">{{ m.lastName }}</span>
+                  </div>
                   <span class="nb-pos-label">{{ m.position || '—' }}</span>
                 </div>
               </div>
@@ -174,7 +192,7 @@ const roleAccent: Record<string, string> = {
 
     <!-- ── LIST VIEW ── -->
     <div v-else class="nb-list">
-      <div v-for="m in all" :key="m.email" class="nb-list-card" :class="{ inactive: !m.active }">
+      <div v-for="m in sortedList" :key="m.email" class="nb-list-card" :class="{ inactive: !m.active }">
         <StarAvatar v-bind="memberStar(m)" :size="40" />
         <div class="nb-list-info">
           <div class="nb-list-name">
@@ -226,7 +244,6 @@ const roleAccent: Record<string, string> = {
 :deep(.md-page-header) { padding: 18px 16px 14px; }
 :deep(.md-page-header.is-sticky) {
   background: var(--md-sys-color-surface);
-  border-bottom: 1px solid var(--md-sys-color-outline-variant);
 }
 @media (min-width: 1024px) {
   :deep(.md-page-header) { padding: 24px max(40px, calc(50% - 410px)) 18px; }
@@ -278,23 +295,17 @@ const roleAccent: Record<string, string> = {
 .nb-card {
   width: 118px;
   background: var(--md-sys-color-surface);
-  border: 1px solid var(--md-sys-color-outline-variant);
   border-radius: 16px;
-  box-shadow: var(--md-sys-elevation-level-1);
   padding: 18px 12px 14px;
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  transition: border-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
-              background   var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
-              box-shadow   var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
+  transition: background var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
 }
 
 .nb-card:hover {
-  border-color: color-mix(in srgb, var(--md-sys-color-primary) 30%, var(--md-sys-color-outline-variant));
-  background: color-mix(in srgb, var(--md-sys-color-primary) 4%, var(--md-sys-color-surface));
-  box-shadow: var(--md-sys-elevation-level-2);
+  background: color-mix(in srgb, var(--md-sys-color-primary) 5%, var(--md-sys-color-surface));
 }
 
 .nb-avatar {
@@ -321,11 +332,15 @@ const roleAccent: Record<string, string> = {
 .nb-card-name {
   font-family: var(--md-sys-typescale-label-medium-font);
   font-size: var(--md-sys-typescale-label-medium-size);
-  line-height: 1.3;
+  line-height: 1.25;
   font-weight: var(--md-sys-typescale-label-medium-weight);
   text-align: center;
   color: var(--md-sys-color-on-surface);
+  display: flex;
+  flex-direction: column;
 }
+/* Cognome su riga separata, leggermente più tenue del nome */
+.nb-card-ln { color: var(--md-sys-color-on-surface-variant); }
 
 .nb-pos-trigger {
   display: flex;
@@ -433,19 +448,13 @@ const roleAccent: Record<string, string> = {
   align-items: center;
   gap: 14px;
   background: var(--md-sys-color-surface);
-  border: 1px solid var(--md-sys-color-outline-variant);
   border-radius: 16px;
-  box-shadow: var(--md-sys-elevation-level-1);
   padding: 14px 16px;
-  transition: border-color var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
-              background   var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
-              box-shadow   var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
+  transition: background var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
 }
 
 .nb-list-card:hover {
-  border-color: color-mix(in srgb, var(--md-sys-color-primary) 30%, var(--md-sys-color-outline-variant));
-  background: color-mix(in srgb, var(--md-sys-color-primary) 4%, var(--md-sys-color-surface));
-  box-shadow: var(--md-sys-elevation-level-2);
+  background: color-mix(in srgb, var(--md-sys-color-primary) 5%, var(--md-sys-color-surface));
 }
 .nb-list-card.inactive { opacity: 0.45; }
 

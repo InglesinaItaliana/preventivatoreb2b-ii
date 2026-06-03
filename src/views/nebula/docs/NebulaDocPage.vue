@@ -15,7 +15,7 @@
  *
  * Vedi docs/NEBULA-DOCS.md §6.
  */
-import { ref, computed, watch, onBeforeUnmount, shallowRef } from 'vue'
+import { ref, computed, watch, onBeforeUnmount, shallowRef, nextTick } from 'vue'
 import { useRouter } from 'vue-router'
 import { useEditor, EditorContent } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
@@ -175,6 +175,7 @@ watch(doc, (d) => {
   if (!d) return
   if (!titleInitialized.value) {
     localTitle.value = d.title ?? ''
+    nextTick(fitTitle)
     titleInitialized.value = true
   }
 }, { immediate: true })
@@ -202,7 +203,16 @@ watch([collabStatus, canWrite, collabEnabled, doc], () => {
 
 // ── Title save (debounce 1s, niente LWW) ────────────────────────────────────
 let titleSaveTimer: ReturnType<typeof setTimeout> | null = null
+// titolo: textarea auto-grow (va a capo se non ci sta su una riga)
+const titleRef = ref<HTMLTextAreaElement | null>(null)
+function fitTitle() {
+  const el = titleRef.value
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = el.scrollHeight + 'px'
+}
 function onTitleInput() {
+  fitTitle()
   if (!canWrite.value || !doc.value) return
   if (titleSaveTimer) clearTimeout(titleSaveTimer)
   saveStatus.value = 'idle'
@@ -480,14 +490,16 @@ void editorRef
           <MaterialIcon v-else name="add_photo_alternate" :size="44" color="#bbb" />
         </button>
 
-        <input
+        <textarea
+          ref="titleRef"
           v-model="localTitle"
-          type="text"
           class="nd-title-input"
           :readonly="!canWrite"
           placeholder="Senza titolo"
           spellcheck="true"
+          rows="1"
           @input="onTitleInput"
+          @keydown.enter.prevent="($event.target as HTMLTextAreaElement).blur()"
         />
       </div>
 
@@ -731,7 +743,6 @@ void editorRef
   gap: 12px;
   margin-bottom: 12px;
   padding-bottom: 12px;
-  border-bottom: 1px solid rgba(0,0,0,0.06);
 }
 .nd-back {
   background: transparent;
@@ -824,18 +835,25 @@ void editorRef
 .nd-icon-btn:disabled { cursor: default; opacity: 0.5; }
 
 .nd-title-input {
+  display: block;
   width: 100%;
   min-width: 0;
+  box-sizing: border-box;
   border: 0;
   outline: 0;
   background: transparent;
   font-family: 'Cormorant Garamond', serif;
   font-weight: 700;
   font-size: 44px;
-  line-height: 1.1;
+  line-height: 1.25;          /* aria per i discendenti (p/g/y) del serif */
   letter-spacing: -0.005em;
   color: var(--md-sys-color-on-surface, #1a1a1a);
-  padding: 4px 0;
+  padding: 6px 0 10px;        /* clearance in basso */
+  /* textarea auto-grow: va a capo, niente scroll/resize manuale */
+  resize: none;
+  overflow: hidden;
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 .nd-title-input:focus {
   outline: none;

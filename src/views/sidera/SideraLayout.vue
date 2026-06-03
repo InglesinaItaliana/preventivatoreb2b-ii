@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onBeforeUnmount, provide } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, provide, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { signOut } from 'firebase/auth'
 import { auth } from '../../firebase'
@@ -360,6 +360,58 @@ function isSectionExpanded(name: string) {
   return expandedSection.value === name
 }
 
+// Hover-preview ESCLUSIVO (desktop): passando il mouse su una sezione si svelano
+// le sue schede ed è aperta SOLO quella; uscendo dalla nav torna la sezione attiva.
+//
+// Il loop/flash nasceva dallo shift di layout: aprendo una sezione, quella sopra
+// collassava, il contenuto risaliva e la sezione hover-ata scivolava sotto il
+// cursore → re-entry su un'altra sezione → cascata infinita. Fix: SCROLL-ANCHORING.
+// Prima del cambio stato registro la posizione (top) del gruppo hover-ato; dopo il
+// re-render correggo lo scrollTop della nav per rimetterlo dov'era → il gruppo
+// resta inchiodato sotto il cursore, niente re-entry, niente loop.
+const navRef = ref<HTMLElement | null>(null)
+const hoveredSection = ref<string | null>(null)
+function isSectionOpen(name: string) {
+  return hoveredSection.value ? hoveredSection.value === name : isSectionExpanded(name)
+}
+
+// Gate anti-flash. Un `mouseenter` può scattare anche SENZA che il mouse si muova,
+// quando il re-layout (collasso della sezione sopra + eventuale scroll) sposta gli
+// elementi sotto un puntatore fermo. Questi enter "indotti" aprono per un frame la
+// sezione sbagliata → flash, evidente sulle categorie corte (1-2 voci: il corpo non
+// arriva fino al cursore spostato → l'enter scatta sulla label sotto).
+//
+// Discriminante valido ANCHE durante uno sweep continuo: l'enter indotto scatta con
+// il puntatore alla STESSA clientY del commit precedente (tra il cambio di stato e
+// il re-layout il browser non processa input del mouse), mentre un enter reale
+// arriva dopo che il puntatore si è spostato sulla label vicina (≥ altezza label).
+// Se la clientY non è cambiata oltre soglia rispetto all'ultimo commit → indotto.
+let committedY = Number.NEGATIVE_INFINITY
+function previewSection(name: string, ev: MouseEvent) {
+  if (hoveredSection.value === name) return
+  if (Math.abs(ev.clientY - committedY) < 5) return   // enter indotto dal re-layout → ignora
+  committedY = ev.clientY
+  const navEl = navRef.value
+  const groupEl = ev.currentTarget as HTMLElement | null
+  const before = groupEl?.getBoundingClientRect().top ?? 0
+  hoveredSection.value = name
+  if (navEl && groupEl) {
+    // Ancoraggio scroll (singola correzione): il collasso della sezione sopra è
+    // ISTANTANEO (CSS: transition solo in apertura) → un solo reflow; ri-pinno il
+    // gruppo con una correzione una-tantum dello scrollTop arrotondata all'intero
+    // (niente rAF → niente scroll sub-pixel → niente shimmer). L'apertura cresce
+    // sotto la label, quindi non sposta il top e non va compensata.
+    nextTick(() => {
+      const delta = Math.round(groupEl.getBoundingClientRect().top - before)
+      if (delta) navEl.scrollTop += delta
+    })
+  }
+}
+function clearHovered() {
+  hoveredSection.value = null
+  committedY = Number.NEGATIVE_INFINITY   // il prossimo enter reale riparte pulito
+}
+
 // Inizializza: ultima sezione aperta da localStorage, fallback su quella della
 // route corrente, fallback finale sul primo modulo. Il route-watcher sotto
 // gestisce poi i cambi di navigazione.
@@ -584,13 +636,18 @@ const roleLabel: Record<string, string> = {
         </span>
       </div>
 
-      <nav class="s-nav">
-        <template v-for="mod in modules" :key="mod.name">
+      <nav class="s-nav" ref="navRef" @mouseleave="clearHovered()">
+        <div
+          v-for="mod in modules"
+          :key="mod.name"
+          class="s-section-group"
+          @mouseenter="previewSection(mod.name, $event)"
+        >
           <button
             type="button"
             class="s-section-label"
             :class="{
-              's-is-expanded': isSectionExpanded(mod.name),
+              's-is-expanded': isSectionOpen(mod.name),
               's-is-active':   sectionActive(mod),
             }"
             :style="{ '--s-accent': mod.accent, '--s-accent-glow': mod.accent + '33', '--s-accent-glow-soft': mod.accent + '1F' }"
@@ -599,7 +656,7 @@ const roleLabel: Record<string, string> = {
           <div
             :id="`s-sec-${mod.name}`"
             class="s-section-items"
-            :class="{ 's-is-open': isSectionExpanded(mod.name) }"
+            :class="{ 's-is-open': isSectionOpen(mod.name) }"
             :style="{ '--s-accent': mod.accent, '--s-accent-glow-soft': mod.accent + '1F' }"
           >
             <div class="s-section-items-inner">
@@ -643,15 +700,16 @@ const roleLabel: Record<string, string> = {
               </div>
             </div>
           </div>
-        </template>
+        </div>
 
-        <!-- CORE: sezione admin-only in fondo (manutenzione + impostazioni) -->
-        <template v-if="canAccessCore">
+        <!-- CORE: sezione admin-only in fondo (manutenzione + impostazioni).
+             Stesso hover-preview additivo dei moduli. -->
+        <div v-if="canAccessCore" class="s-section-group" @mouseenter="previewSection('CORE', $event)">
           <button
             type="button"
             class="s-section-label"
             :class="{
-              's-is-expanded': isSectionExpanded('CORE'),
+              's-is-expanded': isSectionOpen('CORE'),
               's-is-active':   route.path.startsWith('/sidera/admin/maintenance') || route.path.startsWith('/sidera/core'),
             }"
             :style="{ '--s-accent': CORE_ACCENT, '--s-accent-glow': CORE_ACCENT + '33', '--s-accent-glow-soft': CORE_ACCENT + '1F' }"
@@ -660,7 +718,7 @@ const roleLabel: Record<string, string> = {
           <div
             id="s-sec-CORE"
             class="s-section-items"
-            :class="{ 's-is-open': isSectionExpanded('CORE') }"
+            :class="{ 's-is-open': isSectionOpen('CORE') }"
             :style="{ '--s-accent': CORE_ACCENT, '--s-accent-glow-soft': CORE_ACCENT + '1F' }"
           >
             <div class="s-section-items-inner">
@@ -682,7 +740,7 @@ const roleLabel: Record<string, string> = {
               </RouterLink>
             </div>
           </div>
-        </template>
+        </div>
       </nav>
 
       <!-- User -->
@@ -856,10 +914,14 @@ const roleLabel: Record<string, string> = {
 .s-section-items {
   display: grid;
   grid-template-rows: 0fr;
-  transition: grid-template-rows var(--md-sys-motion-duration-long2) var(--md-sys-motion-easing-emphasized);
+  /* Collasso ISTANTANEO (nessuna transizione in uscita): un solo reflow,
+     compensato da una singola correzione di scroll → niente shimmer ai bordi. */
 }
 .s-section-items.s-is-open {
   grid-template-rows: 1fr;
+  /* L'apertura, invece, è animata (la transizione esiste solo nello stato aperto,
+     così si attiva entrando in .s-is-open e non quando lo si lascia). */
+  transition: grid-template-rows var(--md-sys-motion-duration-long2) var(--md-sys-motion-easing-emphasized);
 }
 .s-section-items-inner {
   overflow: hidden;
@@ -885,6 +947,7 @@ const roleLabel: Record<string, string> = {
 @media (prefers-reduced-motion: reduce) {
   .s-section-label,
   .s-section-items,
+  .s-section-items.s-is-open,
   .s-section-items-inner { transition: none; }
   .s-section-items.s-is-open .s-nav-item { animation: none; }
 }

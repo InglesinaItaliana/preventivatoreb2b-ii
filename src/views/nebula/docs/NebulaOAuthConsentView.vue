@@ -285,7 +285,6 @@ const redirectHost = computed(() => {
   gap: 12px;
   margin-bottom: 18px;
   padding-bottom: 16px;
-  border-bottom: 1px solid rgba(0,0,0,0.08);
 }
 .oc-logo { font-size: 28px; color: #C46030; }
 .oc-header h1 {
