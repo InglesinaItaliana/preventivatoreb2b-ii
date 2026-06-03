@@ -38,7 +38,12 @@ export interface PMNode {
  * Pattern custom NEBULA processati PRIMA del parser markdown.
  * Sostituiamo con placeholder unico, parsing, poi re-inseriamo come nodi PM.
  */
-const TASK_MENTION_RE = /@task:([A-Za-z0-9_-]+)/g;
+// @task:taskId            -> task orfano (projectId null, vive in tasks/{id})
+// @task:projectId/taskId  -> task di progetto (vive in projects/{pid}/tasks/{id})
+// Il prefisso progetto e' opzionale; gli ID Firestore non contengono '/', quindi
+// la forma a due segmenti e' non-ambigua. Senza il progetto il resolver cercava
+// in tasks/{id} e i task di progetto risultavano "Task eliminato".
+const TASK_MENTION_RE = /@task:(?:([A-Za-z0-9_-]+)\/)?([A-Za-z0-9_-]+)/g;
 const PROJECT_MENTION_RE = /@project:([A-Za-z0-9_-]+)/g;
 const EMBED_TASK_RE = /\{\{embed-tasks([^}]*)\}\}/g;
 
@@ -69,14 +74,14 @@ function preprocessCustomSyntax(md: string): { md: string; placeholders: CustomP
         return `\n\n${token}\n\n`;  // forza nuovo blocco
     });
 
-    // 2. @task:id (inline)
-    md = md.replace(TASK_MENTION_RE, (_, taskId: string) => {
+    // 2. @task:[projectId/]id (inline) — projectId opzionale per i task di progetto
+    md = md.replace(TASK_MENTION_RE, (_, projectId: string | undefined, taskId: string) => {
         const token = generatePlaceholder(idx++);
         placeholders.push({
             token,
             node: {
                 type: 'taskMention',
-                attrs: { taskId, projectId: null },
+                attrs: { taskId, projectId: projectId ?? null },
             },
         });
         return token;
