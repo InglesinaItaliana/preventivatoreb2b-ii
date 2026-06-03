@@ -5,6 +5,15 @@ import {
 } from 'firebase/firestore'
 import { db, auth } from '../../firebase'
 
+/** Riferimento a un'entità menzionata. task/project/doc sono cliccabili;
+ *  'user' è solo una chip visiva (non naviga) — l'email resta anche in `mentions`. */
+export interface MsgRef {
+  type: 'task' | 'project' | 'doc' | 'user'
+  id: string
+  projectId?: string
+  label: string
+}
+
 export interface Message {
   id: string
   text: string
@@ -13,6 +22,8 @@ export interface Message {
   flags: string[]
   hashtags: string[]
   mentions: string[]
+  /** Entità menzionate (task/progetti/doc) — le persone restano in `mentions`. */
+  refs: MsgRef[]
   taskId: string | null
   /** Quando il destinatario ha risposto a un msg flaggato 'question'. */
   answeredAt: Date | null
@@ -51,6 +62,7 @@ export function useMessages(chatId: string) {
         flags:      data.flags      ?? [],
         hashtags:   data.hashtags   ?? [],
         mentions:   data.mentions   ?? [],
+        refs:       Array.isArray(data.refs) ? (data.refs as MsgRef[]) : [],
         taskId:     data.taskId     ?? null,
         answeredAt: toDate(data.answeredAt),
         rejectedAt: toDate(data.rejectedAt),
@@ -72,6 +84,7 @@ export function useMessages(chatId: string) {
     flags: string[]
     hashtags: string[]
     mentions: string[]
+    refs?: MsgRef[]
     replyToId?: string | null
   }) {
     const from = auth.currentUser?.email ?? ''
@@ -82,6 +95,7 @@ export function useMessages(chatId: string) {
       flags:      data.flags,
       hashtags:   data.hashtags,
       mentions:   data.mentions,
+      refs:       data.refs ?? [],
       taskId:     null,
       answeredAt: null,
       rejectedAt: null,
