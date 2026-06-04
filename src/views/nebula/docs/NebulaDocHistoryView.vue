@@ -22,10 +22,14 @@ import { useAllTasks } from '../../../composables/sidera/useAllTasks'
 import { useProjects } from '../../../composables/sidera/useProjects'
 import StarAvatar from '../../../components/shared/StarAvatar.vue'
 import MaterialIcon from './components/MaterialIcon.vue'
+import TaskList from '@tiptap/extension-task-list'
+import TaskItem from '@tiptap/extension-task-item'
+import { Table, TableRow, TableCell, TableHeader } from '@tiptap/extension-table'
 import { TaskMention } from './extensions/TaskMention'
 import { ProjectMention } from './extensions/ProjectMention'
 import { TaskEmbed } from './extensions/TaskEmbed'
 import { UserMention } from './extensions/UserMention'
+import { DocMention } from './extensions/DocMention'
 
 const route = useRoute()
 const router = useRouter()
@@ -62,6 +66,10 @@ const { projects: allProjectsRef } = useProjects()
 const previewEditor = useEditor({
   extensions: [
     StarterKit.configure({ heading: { levels: [1, 2, 3] } }),
+    // Stesso set di nodi del main editor: senza TaskList/TaskItem/Table/DocMention
+    // i relativi nodi venivano droppati → anteprima vuota per i doc che li usano.
+    TaskList,
+    TaskItem.configure({ nested: true }),
     TaskMention.configure({ allTasks: () => allTasksRef.value }),
     ProjectMention.configure({ allProjects: () => allProjectsRef.value }),
     TaskEmbed.configure({
@@ -69,6 +77,11 @@ const previewEditor = useEditor({
       allProjects: () => allProjectsRef.value,
     }),
     UserMention,
+    DocMention,
+    Table.configure({ resizable: false, HTMLAttributes: { class: 'nd-table' } }),
+    TableRow,
+    TableHeader,
+    TableCell,
   ],
   editable: false,
   content: { type: 'doc', content: [] },
