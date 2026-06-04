@@ -27,6 +27,8 @@ const props = defineProps<{
   unapprovePhase: (id: string) => Promise<void>
   title?: string
   collapsible?: boolean
+  /** Obiettivo collegato (vista progetti): mostrato sotto al titolo. */
+  obiettivo?: { titolo: string; colore: string } | null
 }>()
 
 const emit = defineEmits<{ (e: 'new-phase'): void; (e: 'completed', done: boolean): void }>()
@@ -235,6 +237,13 @@ defineExpose({ expanded })
       <span class="cph-head-actions" @click.stop><slot name="head-actions" /></span>
     </button>
 
+    <!-- obiettivo collegato: sotto al titolo, icona flag NERA allineata alla
+         colonna delle icone meta (calendario/checklist/clessidra) sotto -->
+    <div v-if="obiettivo" class="cph-goal">
+      <span class="hicon hicon--goal"><MIcon name="flag" :filled="true" :size="18" /></span>
+      <span class="cph-goal-name">{{ obiettivo.titolo }}</span>
+    </div>
+
     <!-- top bars (sempre visibili: riepilogo date + lavoro + tempo) -->
     <div class="topbar" :class="{ 'topbar--static': collapsible }">
       <div class="prange">
@@ -399,7 +408,15 @@ defineExpose({ expanded })
 }
 .cph-head-actions { display: flex; align-items: center; gap: 4px; flex: 0 0 auto; }
 
-.topbar.topbar--static { position: static; border-bottom: 0; margin-bottom: 0; }
+/* obiettivo collegato sotto al titolo: stessa colonna icone della topbar (48px),
+   ma icona NERA (on-surface) per distinguerla dalle meta tenui sotto. */
+.cph-goal { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; min-width: 0; }
+.cph-goal .hicon--goal { color: var(--md-sys-color-on-surface); }
+.cph-goal-name { font-size: 13px; font-weight: 500; color: var(--md-sys-color-on-surface); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* In modalità card la topbar (date + barre) NON deve avere un fondo opaco proprio:
+   trasparente -> eredita lo sfondo della card e si colora insieme ad essa all'hover. */
+.topbar.topbar--static { position: static; border-bottom: 0; margin-bottom: 0; background: transparent; }
 
 .topbar { position: sticky; top: 0; z-index: 5; background: var(--md-sys-color-surface); padding: 8px 0 10px; border-bottom: 1px solid var(--md-sys-color-outline-variant); margin-bottom: 8px; }
 .prange { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; }

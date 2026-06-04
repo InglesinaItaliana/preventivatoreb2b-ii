@@ -7,6 +7,7 @@
 import { computed, ref } from 'vue'
 import MIcon from '../../components/shared/MIcon.vue'
 import MdPageHeader from '../../components/shared/MdPageHeader.vue'
+import CepheidViewSwitcher from '../../components/cepheid/CepheidViewSwitcher.vue'
 import { useActivityLog, type ActivityEvent } from '../../composables/quasar/useActivityLog'
 import { useTeamMembers, displayName } from '../../composables/sidera/useTeamMembers'
 import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
@@ -69,11 +70,28 @@ function relTime(d: Date): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-// Raggruppa gli eventi (già ordinati desc) per etichetta-giorno.
+// ── Filtro per sistema (pillola tab, come in Quadranti) ─────────────────────
+const filterSystem = ref<'' | 'SIDERA' | 'POPS'>('')
+const systemTabs = [
+  { id: '',       label: 'Tutto',  icon: 'apps' },
+  { id: 'SIDERA', label: 'SIDERA', icon: 'auto_awesome' },
+  { id: 'POPS',   label: 'POPS',   icon: 'inventory_2' },
+]
+const filteredEvents = computed(() =>
+  filterSystem.value ? events.value.filter(e => e.system === filterSystem.value) : events.value,
+)
+
+// Contatore eventi di OGGI (rispetta il filtro sistema attivo) → nel sottotitolo.
+const todayCount = computed(() =>
+  filteredEvents.value.filter(e => sameDay(e.ts, new Date())).length
+)
+const headerSubtitle = computed(() => `${todayCount.value} attività oggi`)
+
+// Raggruppa gli eventi filtrati (già ordinati desc) per etichetta-giorno.
 const grouped = computed(() => {
   const out: { label: string; items: ActivityEvent[] }[] = []
   let cur: { label: string; items: ActivityEvent[] } | null = null
-  for (const e of events.value) {
+  for (const e of filteredEvents.value) {
     const label = dayLabel(e.ts)
     if (!cur || cur.label !== label) { cur = { label, items: [] }; out.push(cur) }
     cur.items.push(e)
@@ -84,16 +102,22 @@ const grouped = computed(() => {
 
 <template>
   <div class="qd s-scope-quasar" ref="scrollEl">
+    <!-- Header stile NEBULA Documenti: barra sticky a tutta larghezza (fondo card).
+         Nello slot tools: pillola FILTRO sistema + contatore eventi di oggi. -->
+    <MdPageHeader
+      title="Registro attività"
+      :subtitle="headerSubtitle"
+      borderless
+      sticky
+      :hidden="headerHidden"
+    >
+      <template #tools>
+        <CepheidViewSwitcher :model-value="filterSystem" :tabs="systemTabs" @update:model-value="(v) => (filterSystem = v as '' | 'SIDERA' | 'POPS')" />
+      </template>
+    </MdPageHeader>
+
     <div class="qd-content">
       <div class="panel">
-        <MdPageHeader
-          title="Registro attività"
-          subtitle="tutto ciò che accade su SIDERA e POPS, in tempo reale"
-          borderless
-          sticky
-          :hidden="headerHidden"
-        />
-
         <div v-if="loading" class="lg-loading">
           <div v-for="i in 5" :key="i" class="lg-skel" />
         </div>
@@ -105,8 +129,8 @@ const grouped = computed(() => {
             <span class="livelbl">in tempo reale</span>
           </div>
 
-          <div v-if="!events.length" class="lg-empty">
-            Nessuna attività ancora — comparirà qui in tempo reale.
+          <div v-if="!filteredEvents.length" class="lg-empty">
+            {{ filterSystem ? `Nessuna attività ${filterSystem} ancora.` : 'Nessuna attività ancora — comparirà qui in tempo reale.' }}
           </div>
 
           <template v-for="g in grouped" :key="g.label">
@@ -151,14 +175,20 @@ const grouped = computed(() => {
   max-width: 560px;
   margin: 0 auto;
   background: #FFF8F0;
-  border: 1px solid var(--md-sys-color-outline-variant);
   border-radius: 16px;
-  box-shadow: var(--md-sys-elevation-level-1);
   padding: 14px 16px 22px;
 }
 .s-surface-dark .panel { background: #16130B; }
 @media (prefers-color-scheme: dark) { .panel { background: #16130B; } }
-.panel :deep(.md-page-header) { background: transparent; padding: 4px 2px 12px; }
+/* Header stile NEBULA Documenti: MdPageHeader sticky a tutta larghezza, fondo card
+   #FFF8F0; su desktop il contenuto è allineato (gutter) alla larghezza del pannello (560). */
+:deep(.md-page-header) { padding: 18px 16px 14px; }
+:deep(.md-page-header.is-sticky) { background: #FFF8F0; }
+.s-surface-dark :deep(.md-page-header.is-sticky) { background: #16130B; }
+@media (prefers-color-scheme: dark) { :deep(.md-page-header.is-sticky) { background: #16130B; } }
+@media (min-width: 1024px) {
+  :deep(.md-page-header) { padding: 24px max(40px, calc(50% - 280px)) 18px; }
+}
 
 /* ── Feed ── */
 .feed { position: relative; }

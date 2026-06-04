@@ -95,7 +95,8 @@ function openDuePicker() {
 
 <style scoped>
 .row { display: grid; grid-template-columns: 48px 1fr; align-items: stretch; }
-.row.locked { opacity: .4; pointer-events: none; }
+/* gating: fase non ancora attiva → non interattiva ma SENZA dimming (no opacity) */
+.row.locked { pointer-events: none; }
 .rail { position: relative; display: flex; align-items: center; justify-content: center; }
 .spine { position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; transform: translateX(-50%); background: var(--md-sys-color-outline-variant); }
 .spine.is-on { background: var(--md-sys-color-primary); }

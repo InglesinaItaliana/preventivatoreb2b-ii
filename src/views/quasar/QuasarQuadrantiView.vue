@@ -30,14 +30,43 @@ const { members } = useTeamMembers()
 type ViewId = 'task' | 'resource'
 const view = ref<ViewId>('task')
 const viewTabs = [
-  { id: 'task',     label: 'Task',    icon: 'grid_view' },
+  { id: 'task',     label: 'Azioni',  icon: 'grid_view' },
   { id: 'resource', label: 'Risorse', icon: 'group' },
 ]
+// Titolo della card = nome della tab attiva.
+const cardTitle = computed(() => (view.value === 'task' ? 'Azioni' : 'Risorse'))
 const cursor = ref(0)               // giorni nel futuro (0..14)
-const filterPerson = ref('')        // email assegnatario, o '' = tutti
+const filterSector = ref('')        // categoria/settore, o '' = tutti
 
-const { quadrants, counts, q1Overloaded, fireDelta } = useQuadranti(tasks, cursor, filterPerson)
-const { quadrants: rQuadrants, counts: rCounts } = useResourceLoad(tasks, members, cursor, filterPerson)
+// Pillola FILTRO per settore (estetica/funzionamento = i tab Azioni/Risorse).
+const sectorTabs = [
+  { id: '',                label: 'Tutti',           icon: 'groups' },
+  { id: 'direzione',       label: 'Direzione',       icon: 'workspace_premium' },
+  { id: 'amministrazione', label: 'Amministrazione', icon: 'account_balance' },
+  { id: 'commerciale',     label: 'Commerciale',     icon: 'handshake' },
+  { id: 'produzione',      label: 'Produzione',      icon: 'build' },
+  { id: 'logistica',       label: 'Logistica',       icon: 'local_shipping' },
+]
+
+// Email dei membri del settore selezionato (null = tutti) — usato dai composable.
+const filterEmails = computed<Set<string> | null>(() => {
+  if (!filterSector.value) return null
+  return new Set(
+    members.value.filter(m => (m.category || 'amministrazione') === filterSector.value).map(m => m.email),
+  )
+})
+
+const { quadrants, counts, q1Overloaded } = useQuadranti(tasks, cursor, filterEmails)
+const { quadrants: rQuadrants, counts: rCounts } = useResourceLoad(tasks, members, cursor, filterEmails)
+
+// Pillola CURSORE temporale condensata: oggi / +3gg / +7gg / +14gg (al posto
+// della card "Ritorno al futuro" con lo slider). Va a sx delle altre pillole.
+const cursorTabs = [
+  { id: '0',  label: '',    icon: 'today' },   // solo icona calendario "oggi"
+  { id: '3',  label: '+3' },
+  { id: '7',  label: '+7' },
+  { id: '14', label: '+14' },
+]
 
 // ── Metadati quadranti ────────────────────────────────────────────────────
 const QUADS: { id: QuadId; name: string; sub: string }[] = [
@@ -68,10 +97,6 @@ const subtitle = computed(() => {
   const n = counts.value.q1
   return n === 0 ? 'Nessuna azione da gestire subito' : n === 1 ? '1 azione da gestire subito' : `${n} azioni da gestire subito`
 })
-
-const cursorLabel = computed(() =>
-  cursor.value === 0 ? 'oggi' : `fra ${cursor.value} ${cursor.value === 1 ? 'giorno' : 'giorni'}`,
-)
 
 // ── Label giorni / finestra ──────────────────────────────────────────────────
 function daysLabel(eff: number | null): string {
@@ -166,41 +191,21 @@ async function completeFromModal() {
 
 <template>
   <div class="qd s-scope-quasar" ref="scrollEl">
+    <!-- Header stile NEBULA Documenti: barra sticky a tutta larghezza (fondo card).
+         Nello slot tools, a sx la pillola FILTRO settore, a dx la pillola TAB vista. -->
+    <MdPageHeader title="Quadranti" :subtitle="subtitle" sticky borderless :hidden="headerHidden">
+      <template #tools>
+        <div class="qd-switchers">
+          <CepheidViewSwitcher labels class="cursor-switcher" :model-value="String(cursor)" :tabs="cursorTabs" @update:model-value="(v) => (cursor = Number(v))" />
+          <CepheidViewSwitcher :model-value="filterSector" :tabs="sectorTabs" @update:model-value="(v) => (filterSector = v)" />
+          <CepheidViewSwitcher :model-value="view" :tabs="viewTabs" @update:model-value="(v) => (view = v as ViewId)" />
+        </div>
+      </template>
+    </MdPageHeader>
+
     <div class="qd-content">
      <div class="panel">
-      <MdPageHeader title="Quadranti" :subtitle="subtitle" borderless sticky :hidden="headerHidden">
-        <template #tools>
-          <CepheidViewSwitcher :model-value="view" :tabs="viewTabs" @update:model-value="(v) => (view = v as ViewId)" />
-        </template>
-      </MdPageHeader>
-
-      <!-- Filtro persona (entrambe le viste) -->
-      <div class="avfilter">
-        <button class="avf all" :class="{ on: filterPerson === '' }" @click="filterPerson = ''">Tutti</button>
-        <button
-          v-for="m in members"
-          :key="m.email"
-          class="avf"
-          :class="{ on: filterPerson === m.email }"
-          :title="displayName(m.email, members)"
-          @click="filterPerson = m.email"
-        >
-          <StarAvatar v-bind="starAvatarProps(m.email, members)" :size="24" />
-        </button>
-        <span class="filterlbl">filtra per persona</span>
-      </div>
-
-      <!-- Cursore temporale "Ritorno al futuro" in pillola -->
-      <div class="cursor-pill">
-        <div class="cursor-lbl">
-          Ritorno al futuro <b>{{ cursorLabel }}</b>
-          <span v-if="view === 'task' && cursor > 0 && fireDelta > 0" class="cursor-delta">
-            +{{ fireDelta }} {{ fireDelta === 1 ? 'incendio' : 'incendi' }} rispetto a oggi
-          </span>
-        </div>
-        <input v-model.number="cursor" type="range" min="0" max="14" class="cursor-range" />
-        <div class="cursor-scale"><span>oggi</span><span>fra 7 gg</span><span>fra 14 gg</span></div>
-      </div>
+      <h2 class="panel-title">{{ cardTitle }}</h2>
 
       <div v-if="loading" class="qd-loading">
         <div v-for="i in 4" :key="i" class="quad-skel" />
@@ -380,54 +385,32 @@ async function completeFromModal() {
   max-width: 1000px;
   margin: 0 auto;
   background: #FFF8F0;
-  border: 1px solid var(--md-sys-color-outline-variant);
   border-radius: 16px;
-  box-shadow: var(--md-sys-elevation-level-1);
   padding: 14px 16px 18px;
 }
 .s-surface-dark .panel { background: #16130B; }
 @media (prefers-color-scheme: dark) { .panel { background: #16130B; } }
-/* header dentro la card: nessuna superficie/bordo propri */
-.panel :deep(.md-page-header) { background: transparent; padding: 4px 2px 12px; }
+/* Header stile NEBULA Documenti: MdPageHeader sticky a tutta larghezza, fondo card
+   #FFF8F0; su desktop il contenuto è allineato (gutter) alla larghezza del pannello. */
+:deep(.md-page-header) { padding: 18px 16px 14px; }
+:deep(.md-page-header.is-sticky) { background: #FFF8F0; }
+.s-surface-dark :deep(.md-page-header.is-sticky) { background: #16130B; }
+@media (prefers-color-scheme: dark) { :deep(.md-page-header.is-sticky) { background: #16130B; } }
+@media (min-width: 1024px) {
+  :deep(.md-page-header) { padding: 24px max(40px, calc(50% - 500px)) 18px; }
+}
+/* slot tools: pillola filtro settore (sx) + pillola tab vista (dx) */
+.qd-switchers { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+/* pillola giorni (labels): bottoni compatti come i "quadratini" icona delle
+   pillole a fianco (padding come la variante non-labels). */
+.cursor-switcher :deep(.vbtn) { padding: 0 5px; }
 
-/* ── Cursore temporale "Ritorno al futuro" (pillola, sotto il filtro) ── */
-.cursor-pill {
-  margin-bottom: 16px;
-  padding: 11px 16px 9px;
-  background: color-mix(in srgb, var(--md-sys-color-on-surface) 4%, transparent);
-  border-radius: 16px;
+/* titolo della card = nome della tab attiva (Azioni / Risorse) */
+.panel-title {
+  font-family: 'Cormorant Garamond', serif; font-size: 22px; font-weight: 600; line-height: 1;
+  color: var(--md-sys-color-on-surface); opacity: .9; margin: 2px 2px 14px;
 }
-/* "Ritorno al futuro" + valore: stesso font/peso (marcato) dei titoli quadrante */
-.cursor-lbl { font-family: 'Cormorant Garamond', serif; font-size: 20px; font-weight: 600; line-height: 1; color: var(--md-sys-color-on-surface); opacity: .9; margin-bottom: 11px; }
-.cursor-lbl b { font-weight: 600; color: inherit; }
-.cursor-delta { font-family: 'Outfit', sans-serif; color: #C8521A; font-size: 11px; font-weight: 500; margin-left: 8px; opacity: 1; }
-.cursor-range {
-  width: 100%; -webkit-appearance: none; appearance: none;
-  height: 6px; border-radius: 3px; background: var(--md-sys-color-outline-variant); outline: none;
-}
-.cursor-range::-webkit-slider-thumb {
-  -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%;
-  background: var(--md-sys-color-primary); cursor: pointer; border: 3px solid #FFF8F0; box-shadow: 0 1px 4px rgba(0,0,0,.22);
-}
-.cursor-range::-moz-range-thumb {
-  width: 20px; height: 20px; border-radius: 50%; background: var(--md-sys-color-primary); cursor: pointer; border: 3px solid #FFF8F0;
-}
-.s-surface-dark .cursor-range::-webkit-slider-thumb { border-color: #16130B; }
-.s-surface-dark .cursor-range::-moz-range-thumb { border-color: #16130B; }
-.cursor-scale { display: flex; justify-content: space-between; font-size: 10px; color: var(--md-sys-color-on-surface-variant); margin-top: 5px; }
 
-/* ── Filtro persona ── */
-.avfilter { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
-.avf {
-  width: 36px; height: 36px; border-radius: 50%; padding: 0; cursor: pointer;
-  display: flex; align-items: center; justify-content: center; flex: 0 0 auto;
-  background: var(--md-sys-color-surface-variant); color: var(--md-sys-color-on-surface-variant);
-  border: 2px solid transparent; font-family: inherit; font-size: 11px; font-weight: 500; transition: all .15s;
-}
-.avf.on { border-color: var(--md-sys-color-primary); }
-.avf.all { width: auto; border-radius: 999px; padding: 0 13px; height: 32px; font-size: 11px; }
-.avf.all.on { background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); }
-.filterlbl { font-size: 10px; color: var(--md-sys-color-on-surface-variant); margin-left: 2px; }
 
 /* ── Matrice ── */
 /* dimensioni fisse (concept): q1 AGISCI top-left è più LARGO (col 1.15fr) e più
@@ -479,7 +462,7 @@ async function completeFromModal() {
 /* ── Card azione ── */
 .acard {
   position: relative;
-  background: #FFF8F0; border: 1px solid var(--md-sys-color-outline-variant); border-radius: 9px;
+  background: #FFF8F0; border-radius: 9px;
   padding: 7px 9px; display: flex; align-items: center; gap: 8px;
 }
 .s-surface-dark .acard { background: #16130B; }
@@ -512,7 +495,7 @@ async function completeFromModal() {
 .sched-in { position: absolute; opacity: 0; pointer-events: none; width: 1px; height: 1px; }
 
 /* ── Card risorsa ── */
-.rcard { background: #FFF8F0; border: 1px solid var(--md-sys-color-outline-variant); border-radius: 9px; padding: 9px 11px; display: flex; align-items: center; gap: 10px; }
+.rcard { background: #FFF8F0; border-radius: 9px; padding: 9px 11px; display: flex; align-items: center; gap: 10px; }
 .s-surface-dark .rcard { background: #16130B; }
 .ravatar { flex: 0 0 auto; border-radius: 50%; }
 .rcard.forecast .ravatar { animation: firepulse 2s ease infinite; }

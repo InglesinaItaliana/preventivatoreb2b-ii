@@ -117,7 +117,7 @@ function kindAccent(kind: Kind): string {
 
 function kindIcon(kind: Kind): string {
   if (kind === 'user')    return 'person'
-  if (kind === 'task')    return 'task_alt'
+  if (kind === 'task')    return 'check_circle'
   if (kind === 'project') return 'folder'
   return 'description'
 }
@@ -163,7 +163,7 @@ const isEmpty = computed(() => props.items.length === 0)
             />
             <MaterialIcon
               v-else-if="g.kind === 'task'"
-              name="task_alt"
+              name="check_circle"
               :size="16"
               :fill="item.status === 'done' ? 1 : 0"
               :color="kindAccent(g.kind)"

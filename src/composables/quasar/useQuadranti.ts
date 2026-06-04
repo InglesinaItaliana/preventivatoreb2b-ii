@@ -42,13 +42,13 @@ export function quadOf(t: Task, cursor: number): QuadId {
 export function useQuadranti(
   tasks: Ref<Task[]>,
   cursor: Ref<number>,
-  filterPerson: Ref<string>,   // email assegnatario, o '' per tutti
+  filterEmails: Ref<Set<string> | null>,   // email del settore selezionato; null = tutti
 ) {
-  // Solo azioni reali (no milestone/deliverable), ancora aperte, filtrate per persona.
+  // Solo azioni reali (no milestone/deliverable), ancora aperte, filtrate per settore.
   const active = computed(() => tasks.value.filter(t =>
     (!t.type || t.type === 'task') &&
     !t.completedAt &&
-    (!filterPerson.value || t.assignees.includes(filterPerson.value)),
+    (!filterEmails.value || t.assignees.some(a => filterEmails.value!.has(a))),
   ))
 
   const quadrants = computed<Record<QuadId, QuadTask[]>>(() => {

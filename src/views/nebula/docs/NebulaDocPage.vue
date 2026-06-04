@@ -168,6 +168,18 @@ const editor = useEditor({
     }),
   ],
   editable: false,                              // sbloccato quando provider 'synced' + canWrite
+  editorProps: {
+    // Apertura link: un click/tap su un <a> apre SEMPRE l'URL nel browser
+    // esterno (desktop + mobile). Per modificare un link si seleziona il testo
+    // (drag/toolbar) → bubble menu link. (openOnClick resta false: l'apertura
+    // la gestiamo noi qui per controllarne target/rel.)
+    handleClick(_view, _pos, event) {
+      const a = (event.target as HTMLElement | null)?.closest?.('a[href]') as HTMLAnchorElement | null
+      if (!a) return false
+      window.open(a.href, '_blank', 'noopener,noreferrer')
+      return true   // consuma il click
+    },
+  },
 })
 
 const editorRef = shallowRef(editor)

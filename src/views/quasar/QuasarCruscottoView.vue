@@ -90,8 +90,10 @@ const azioniOggi = computed(() => {
 })
 
 // ── Progetti attivi ───────────────────────────────────────────────────────
+// Tutti i progetti attivi (niente cap): la griglia va a capo e si vedono tutti
+// scrollando la pagina.
 const activeProjects = computed(() =>
-  projects.value.filter(p => !p.archived && p.active !== false).slice(0, 4)
+  projects.value.filter(p => !p.archived && p.active !== false)
 )
 
 function pct(p: { taskCount: number; doneCount: number }) {
@@ -471,9 +473,7 @@ function urgenzaLabel(giorni: number) {
 /* ── Section ── Card panel attorno a ogni gruppo di contenuto */
 .hv-section {
   background: #FFF8F0;
-  border: 1px solid var(--md-sys-color-outline-variant);
   border-radius: 16px;
-  box-shadow: var(--md-sys-elevation-level-1);
   padding: 18px 20px;
   margin-bottom: 18px;
 }
@@ -521,17 +521,14 @@ function urgenzaLabel(giorni: number) {
   padding: 10px 12px;
   background: #FFF8F0;
   border-radius: 9px;
-  border: 1px solid var(--md-sys-color-outline-variant);
   border-left: 5px solid transparent;
   margin-bottom: 6px;
   cursor: pointer;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+  transition: background 0.15s ease;
 }
 
 .azione-row:hover {
-  border-color: #98C0D0;
-  box-shadow: var(--md-sys-elevation-level-1);
-  transform: translateY(-1px);
+  background: color-mix(in srgb, #98C0D0 8%, #FFF8F0);
 }
 
 .checkbox {
@@ -582,18 +579,15 @@ function urgenzaLabel(giorni: number) {
 
 .proj-mini {
   background: #FFF8F0;
-  border: 1px solid var(--md-sys-color-outline-variant);
   border-radius: 9px;
   cursor: pointer;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+  transition: background 0.15s ease;
   position: relative;
   overflow: hidden;
 }
 
 .proj-mini:hover {
-  border-color: #98C0D0;
-  box-shadow: var(--md-sys-elevation-level-1);
-  transform: translateY(-1px);
+  background: color-mix(in srgb, #98C0D0 8%, #FFF8F0);
 }
 
 .proj-stripe {
@@ -634,20 +628,16 @@ function urgenzaLabel(giorni: number) {
 
 .kpi-card {
   background: #FFF8F0;
-  border: 1px solid var(--md-sys-color-outline-variant);
   border-radius: 16px;
-  box-shadow: var(--md-sys-elevation-level-1);
   padding: 18px 20px;
   text-decoration: none;
   color: inherit;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+  transition: background 0.15s ease;
   display: block;
 }
 
 .kpi-card:hover {
-  border-color: #98C0D0;
-  box-shadow: var(--md-sys-elevation-level-2);
-  transform: translateY(-1px);
+  background: color-mix(in srgb, #98C0D0 8%, #FFF8F0);
 }
 
 .kpi-label {
@@ -682,9 +672,7 @@ function urgenzaLabel(giorni: number) {
 
 .hv-grid > div {
   background: #FFF8F0;
-  border: 1px solid var(--md-sys-color-outline-variant);
   border-radius: 16px;
-  box-shadow: var(--md-sys-elevation-level-1);
   padding: 18px 20px;
 }
 
@@ -695,19 +683,16 @@ function urgenzaLabel(giorni: number) {
   justify-content: space-between;
   padding: 11px 13px;
   background: #FFF8F0;
-  border: 1px solid var(--md-sys-color-outline-variant);
   border-left: 5px solid transparent;
   border-radius: 9px;
   margin-bottom: 7px;
   text-decoration: none;
   color: inherit;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease;
+  transition: background 0.15s ease;
 }
 
 .urgenza-card:hover {
-  border-color: #98C0D0;
-  box-shadow: var(--md-sys-elevation-level-1);
-  transform: translateY(-1px);
+  background: color-mix(in srgb, #98C0D0 8%, #FFF8F0);
 }
 
 .urgenza-commessa { font-size: 13px; font-weight: 500; color: var(--md-sys-color-on-surface); margin-bottom: 2px; }

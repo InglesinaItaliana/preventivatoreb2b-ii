@@ -33,14 +33,14 @@ export function useResourceLoad(
   tasks: Ref<Task[]>,
   members: Ref<TeamMember[]>,
   cursor: Ref<number>,
-  filterPerson: Ref<string>,   // email; '' = tutte le persone
+  filterEmails: Ref<Set<string> | null>,   // email del settore; null = tutte
 ) {
   const active = computed(() =>
     tasks.value.filter(t => (!t.type || t.type === 'task') && !t.completedAt),
   )
 
   const shownMembers = computed(() =>
-    filterPerson.value ? members.value.filter(m => m.email === filterPerson.value) : members.value,
+    filterEmails.value ? members.value.filter(m => filterEmails.value!.has(m.email)) : members.value,
   )
 
   const quadrants = computed<Record<QuadId, ResourceLoad[]>>(() => {

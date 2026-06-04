@@ -33,11 +33,6 @@ const projectIdRef = toRef(() => props.node.attrs.projectId)
 
 const { data: task, loading, notFound } = useTaskMini(taskIdRef, projectIdRef)
 
-const truncatedTitle = computed(() => {
-  const t = task.value?.title ?? ''
-  return t.length > 50 ? t.slice(0, 47) + '…' : t
-})
-
 const isDone = computed(() => task.value?.status === 'done')
 
 function onClick() {
@@ -72,12 +67,12 @@ function onClick() {
       <MaterialIcon name="link_off" :size="14" />
     </span>
     <span v-else class="tm-icon">
-      <MaterialIcon name="task_alt" :size="14" :fill="isDone ? 1 : 0" />
+      <MaterialIcon name="check_circle" :size="14" :fill="isDone ? 1 : 0" />
     </span>
     <span class="tm-label">
       <template v-if="loading">…</template>
       <template v-else-if="notFound">[Task eliminato]</template>
-      <template v-else>{{ truncatedTitle }}</template>
+      <template v-else>{{ task?.title }}</template>
     </span>
   </NodeViewWrapper>
 </template>
@@ -99,9 +94,9 @@ function onClick() {
   user-select: none;
   vertical-align: baseline;
   transition: background 100ms ease, border-color 100ms ease;
-  white-space: nowrap;
+  /* titolo leggibile per intero: niente troncamento, va a capo se lungo */
+  white-space: normal;
   max-width: 100%;
-  overflow: hidden;
 }
 .tm-chip:hover {
   background: rgba(212, 160, 32, 0.20);
@@ -113,8 +108,7 @@ function onClick() {
   flex-shrink: 0;
 }
 .tm-label {
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow-wrap: anywhere;
 }
 
 .tm-done {
