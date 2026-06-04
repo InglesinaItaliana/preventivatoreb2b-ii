@@ -105,7 +105,10 @@ const visibleOpen = computed(() => {
   const base = activeTasks.value
   if (filter.value === 'late') return base.filter(t => t.dueDate && t.dueDate < oggi)
   if (filter.value === 'all')  return base
-  if (filter.value === 'mine') return base.filter(t => t.assignees.includes(myEmail) || t.createdBy === myUid)
+  // "Le mie" = azioni assegnate a me, oppure create da me ma SENZA assegnatario
+  // (es. quelle del quick-add, che restano visibili finché non vengono smistate/assegnate).
+  // Le azioni che ho creato ma assegnato ad altri NON compaiono qui.
+  if (filter.value === 'mine') return base.filter(t => t.assignees.includes(myEmail) || (t.createdBy === myUid && t.assignees.length === 0))
   return []
 })
 
