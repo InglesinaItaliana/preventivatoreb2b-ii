@@ -199,7 +199,7 @@ async function completeFromModal() {
             :title="displayName(m.email, members)"
             @click="filterPerson = filterPerson === m.email ? '' : m.email"
           >
-            <StarAvatar v-bind="starAvatarProps(m.email, members)" :size="28" />
+            <StarAvatar v-bind="starAvatarProps(m.email, members)" :size="32" />
             <span class="avf-name" :style="{ color: avColors[m.email]?.name }">{{ displayName(m.email, members) }}</span>
           </button>
         </div>
@@ -405,9 +405,14 @@ async function completeFromModal() {
 }
 .s-surface-dark .panel { background: #16130B; }
 @media (prefers-color-scheme: dark) { .panel { background: #16130B; } }
-/* header di pagina (fuori dalla card, su fondo crema): titolo + sottotitolo + toolbar */
-.qd-pagehead { max-width: 1000px; margin: 0 auto 14px; }
-.qd-pagehead :deep(.md-page-header) { background: transparent; padding: 4px 2px 10px; }
+/* header di pagina (superficie #FFF8F0 a sé, staccata dalla card): titolo + sottotitolo + toolbar */
+.qd-pagehead {
+  max-width: 1000px; margin: 0 auto 14px;
+  background: #FFF8F0; border-radius: 16px; padding: 12px 16px 14px;
+}
+.s-surface-dark .qd-pagehead { background: #16130B; }
+@media (prefers-color-scheme: dark) { .qd-pagehead { background: #16130B; } }
+.qd-pagehead :deep(.md-page-header) { background: transparent; padding: 2px 0 10px; }
 
 /* titolo della card = nome della tab attiva (Azioni / Risorse) */
 .panel-title {
