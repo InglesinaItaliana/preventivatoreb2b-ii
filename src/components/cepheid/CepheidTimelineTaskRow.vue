@@ -1,10 +1,7 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
 import MIcon from '../shared/MIcon.vue'
-import StarAvatar from '../shared/StarAvatar.vue'
-import { starAvatarProps, displayName, type TeamMember } from '../../composables/sidera/useTeamMembers'
-// @ts-expect-error — starAvatar.js è vanilla senza tipi (stesso motore di StarAvatar)
-import { makeStar } from '../../lib/starAvatar.js'
+import CepheidAssigneePills from './CepheidAssigneePills.vue'
+import { type TeamMember } from '../../composables/sidera/useTeamMembers'
 import type { TaskVM } from '../../composables/cepheid/useProjectTimeline'
 
 const props = defineProps<{
@@ -23,26 +20,6 @@ defineEmits<{
 
 const left  = () => (props.preview ? props.preview.leftPct : props.task.leftPct)
 const width = () => (props.preview ? props.preview.widthPct : props.task.widthPct)
-const avOpen = ref(false)   // tap su mobile per aprire le pillole assegnatari
-
-// Colori pillola assegnatario, derivati dallo stesso motore dello StarAvatar:
-//  - bg   = sfondo del bollino (makeStar.bgColor, pastello hsl(hue,42%,92%))
-//  - name = colore della stella (hue + sat/light "rinforzati" come in drawStar)
-// Così la pillola del nome è dello stesso colore di sfondo del bollino e il nome
-// dello stesso colore della stella.
-const avColors = computed<Record<string, { bg: string; name: string }>>(() => {
-  const out: Record<string, { bg: string; name: string }> = {}
-  for (const email of props.task.assignees ?? []) {
-    const s = makeStar(starAvatarProps(email, props.members))
-    const sB = Math.min(100, s.sat + 12)
-    const lB = Math.max(40, s.light - 12)
-    out[email] = {
-      bg: s.bgColor,
-      name: `hsl(${Math.round(s.hue)}, ${Math.round(sB)}%, ${Math.round(lB)}%)`,
-    }
-  }
-  return out
-})
 </script>
 
 <template>
@@ -68,17 +45,7 @@ const avColors = computed<Record<string, { bg: string; name: string }>>(() => {
           <span class="dt" :class="{ late: task.late }">{{ task.dueText }}</span>
         </div>
         <div class="trow2">
-          <div class="avg" :class="{ 'is-open': avOpen }" @click.stop="avOpen = !avOpen">
-            <span
-              v-for="email in task.assignees"
-              :key="email"
-              class="av-pill"
-              :style="{ background: avColors[email]?.bg }"
-            >
-              <StarAvatar class="av" v-bind="starAvatarProps(email, members)" :size="22" />
-              <span class="av-name" :style="{ color: avColors[email]?.name }">{{ displayName(email, members) }}</span>
-            </span>
-          </div>
+          <CepheidAssigneePills :assignees="task.assignees ?? []" :members="members" />
           <template v-if="task.timed">
             <div class="timebar">
               <div
@@ -138,24 +105,7 @@ const avColors = computed<Record<string, { bg: string; name: string }>>(() => {
 
 .trow2 { display: flex; align-items: center; gap: 8px; margin-top: 8px; min-width: 0; }
 .spacer { flex: 1; }
-/* assegnatari: cerchietti sovrapposti che, al hover o al tap, si aprono TUTTI
-   in pillole (Nome Cognome) spostando il layout di conseguenza */
-.avg { display: flex; align-items: center; flex-wrap: wrap; gap: 0; flex: 0 1 auto; cursor: pointer; }
-.avg.is-open, .avg:hover { gap: 6px; }
-/* Il bordo avvolge l'INTERA pillola (avatar + nome): in stato espanso non deve
-   chiudersi attorno al cerchio dell'avatar. Quindi il ring lo mette la pillola
-   e l'avatar dentro lo annulla (box-shadow:none, vince per specificità sul
-   ring globale di StarAvatar). */
-.av-pill { display: inline-flex; align-items: center; background: #05090F; border-radius: 999px; border: 1px solid var(--md-sys-color-outline-variant); transition: margin-left .2s ease, padding-right .2s ease; }
-.av-pill:not(:first-child) { margin-left: 4px; }
-.avg.is-open .av-pill, .avg:hover .av-pill { padding-right: 10px; }
-.av-pill .av { border-radius: 50%; flex: 0 0 auto; box-shadow: none; }
-.av-name {
-  max-width: 0; overflow: hidden; white-space: nowrap; opacity: 0; padding-left: 0;
-  color: #fff; font-size: 11px; font-weight: 500; line-height: 1;
-  transition: max-width .22s ease, opacity .15s ease, padding-left .2s ease;
-}
-.avg.is-open .av-name, .avg:hover .av-name { max-width: 160px; opacity: 1; padding-left: 6px; }
+/* assegnatari: vedi CepheidAssigneePills.vue (componente condiviso) */
 
 .timebar { position: relative; flex: 1; min-width: 0; height: 14px; border-radius: 5px; background: var(--md-sys-color-surface-container-high); touch-action: none; }
 .bar { position: absolute; top: 0; height: 14px; border-radius: 5px; background: var(--md-sys-color-primary); opacity: .9; touch-action: none; cursor: grab; }

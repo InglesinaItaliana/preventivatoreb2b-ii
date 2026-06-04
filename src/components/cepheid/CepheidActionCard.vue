@@ -8,9 +8,9 @@
  */
 import { computed } from 'vue'
 import MIcon from '../shared/MIcon.vue'
-import StarAvatar from '../shared/StarAvatar.vue'
+import CepheidAssigneePills from './CepheidAssigneePills.vue'
 import CepheidDoneToggle from './CepheidDoneToggle.vue'
-import { displayName, starAvatarProps, type TeamMember } from '../../composables/sidera/useTeamMembers'
+import { type TeamMember } from '../../composables/sidera/useTeamMembers'
 
 interface TaskLike {
   id: string
@@ -87,18 +87,13 @@ function onRowClick() { if (props.clickable) emit('open') }
       </div>
     </div>
 
-    <div v-if="visibleAssignees.length" class="ac-assignees">
-      <StarAvatar
-        v-for="a in visibleAssignees.slice(0, 3)"
-        :key="a"
-        v-bind="starAvatarProps(a, members)"
-        :size="20"
-        :animated="false"
-        :title="displayName(a, members)"
-        class="ac-av"
-      />
-      <span v-if="visibleAssignees.length > 3" class="ac-more">+{{ visibleAssignees.length - 3 }}</span>
-    </div>
+    <CepheidAssigneePills
+      v-if="visibleAssignees.length"
+      :assignees="visibleAssignees"
+      :members="members"
+      :size="20"
+      class="ac-assignees"
+    />
 
     <div v-if="showDue && task.dueDate" class="ac-due">
       <MIcon name="schedule" :size="12" />{{ formatDue(task.dueDate) }}
@@ -137,14 +132,9 @@ function onRowClick() { if (props.clickable) emit('open') }
   max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 
-.ac-assignees { display: inline-flex; align-items: center; flex-shrink: 0; }
-.ac-av { margin-left: -5px; box-shadow: 0 0 0 2px #FFF8F0; border-radius: 50%; }
-.ac-av:first-child { margin-left: 0; }
-.s-surface-dark .ac-av { box-shadow: 0 0 0 2px #16130B; }
-.ac-more {
-  font-size: 11px; font-weight: 600; color: var(--md-sys-color-on-surface-variant);
-  margin-left: 4px;
-}
+/* gruppo assegnatari: componente condiviso CepheidAssigneePills.
+   Qui solo il vincolo di layout: non farlo schiacciare dal titolo. */
+.ac-assignees { flex-shrink: 0; }
 
 .ac-due {
   font-size: 11px; color: var(--md-sys-color-on-surface-variant);
