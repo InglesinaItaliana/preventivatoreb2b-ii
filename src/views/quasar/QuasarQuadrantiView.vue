@@ -20,10 +20,8 @@ import { useTeamMembers, displayName, starAvatarProps } from '../../composables/
 import { makeStar } from '../../lib/starAvatar.js'
 import { useQuadranti, type QuadId, type QuadTask } from '../../composables/quasar/useQuadranti'
 import { useResourceLoad } from '../../composables/quasar/useResourceLoad'
-import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
 
 const scrollEl = ref<HTMLElement | null>(null)
-const { hidden: headerHidden } = useAutoHideHeader(scrollEl)
 
 const { tasks, loading, completeTask, updateTask } = useAllTasks()
 const { members } = useTeamMembers()
@@ -45,9 +43,11 @@ const avColors = computed<Record<string, { bg: string; name: string }>>(() => {
 type ViewId = 'task' | 'resource'
 const view = ref<ViewId>('task')
 const viewTabs = [
-  { id: 'task',     label: 'Task',    icon: 'grid_view' },
+  { id: 'task',     label: 'Azioni',  icon: 'grid_view' },
   { id: 'resource', label: 'Risorse', icon: 'group' },
 ]
+// Titolo della card = nome della tab attiva.
+const cardTitle = computed(() => (view.value === 'task' ? 'Azioni' : 'Risorse'))
 const cursor = ref(0)               // giorni nel futuro (0..14)
 const filterPerson = ref('')        // email assegnatario, o '' = tutti
 
@@ -182,11 +182,11 @@ async function completeFromModal() {
 <template>
   <div class="qd s-scope-quasar" ref="scrollEl">
     <div class="qd-content">
-     <div class="panel">
-      <MdPageHeader title="Quadranti" :subtitle="subtitle" borderless sticky :hidden="headerHidden" />
+     <!-- Header di pagina (FUORI dalla card, su fondo crema): titolo + sottotitolo
+          + toolbar con filtro persona e selettore tab a pillola. -->
+     <div class="qd-pagehead">
+      <MdPageHeader title="Quadranti" :subtitle="subtitle" borderless />
 
-      <!-- Toolbar: filtro persona (pillole collassabili, il selezionato mostra il
-           nome) sulla STESSA riga del selettore tab a pillola. -->
       <div class="qd-toolbar">
         <div class="avfilter">
           <button class="avf all" :class="{ on: filterPerson === '' }" @click="filterPerson = ''">Tutti</button>
@@ -199,12 +199,16 @@ async function completeFromModal() {
             :title="displayName(m.email, members)"
             @click="filterPerson = filterPerson === m.email ? '' : m.email"
           >
-            <StarAvatar v-bind="starAvatarProps(m.email, members)" :size="24" />
+            <StarAvatar v-bind="starAvatarProps(m.email, members)" :size="28" />
             <span class="avf-name" :style="{ color: avColors[m.email]?.name }">{{ displayName(m.email, members) }}</span>
           </button>
         </div>
         <CepheidViewSwitcher :model-value="view" :tabs="viewTabs" @update:model-value="(v) => (view = v as ViewId)" />
       </div>
+     </div>
+
+     <div class="panel">
+      <h2 class="panel-title">{{ cardTitle }}</h2>
 
       <!-- Cursore temporale "Ritorno al futuro" in pillola -->
       <div class="cursor-pill">
@@ -401,8 +405,15 @@ async function completeFromModal() {
 }
 .s-surface-dark .panel { background: #16130B; }
 @media (prefers-color-scheme: dark) { .panel { background: #16130B; } }
-/* header dentro la card: nessuna superficie/bordo propri */
-.panel :deep(.md-page-header) { background: transparent; padding: 4px 2px 12px; }
+/* header di pagina (fuori dalla card, su fondo crema): titolo + sottotitolo + toolbar */
+.qd-pagehead { max-width: 1000px; margin: 0 auto 14px; }
+.qd-pagehead :deep(.md-page-header) { background: transparent; padding: 4px 2px 10px; }
+
+/* titolo della card = nome della tab attiva (Azioni / Risorse) */
+.panel-title {
+  font-family: 'Cormorant Garamond', serif; font-size: 22px; font-weight: 600; line-height: 1;
+  color: var(--md-sys-color-on-surface); opacity: .9; margin: 2px 2px 14px;
+}
 
 /* ── Cursore temporale "Ritorno al futuro" (pillola, sotto il filtro) ── */
 .cursor-pill {
@@ -431,20 +442,22 @@ async function completeFromModal() {
 .cursor-scale { display: flex; justify-content: space-between; font-size: 10px; color: var(--md-sys-color-on-surface-variant); margin-top: 5px; }
 
 /* ── Toolbar: filtro persona + selettore tab sulla stessa riga ── */
-.qd-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+.qd-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 0; flex-wrap: wrap; }
 .avfilter { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; flex: 1 1 auto; min-width: 0; }
-/* "Tutti" = pillola di reset */
+/* "Tutti" = pillola di reset. Altezza 34px = pillola container tab (.vsw). */
 .avf.all {
-  border: 2px solid transparent; border-radius: 999px; padding: 0 13px; height: 32px; cursor: pointer;
+  border: 2px solid transparent; border-radius: 999px; padding: 0 13px; height: 34px; cursor: pointer;
   background: var(--md-sys-color-surface-variant); color: var(--md-sys-color-on-surface-variant);
   font-family: inherit; font-size: 11px; font-weight: 500; transition: all .15s; flex: 0 0 auto;
 }
 .avf.all.on { background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); }
 /* Pillola filtro = stesso look di CepheidAssigneePills (card azioni/task):
    sfondo pastello dell'avatar, bordo outline-variant, nome nel colore-stella.
-   Si espande all'hover; al click resta aperta (= selezionata, bordo primary). */
+   Si espande all'hover; al click resta aperta (= selezionata, bordo primary).
+   Altezza 34px = pillola container tab. */
 .avf-pill {
   display: inline-flex; align-items: center; padding: 0; cursor: pointer; flex: 0 0 auto;
+  height: 34px; box-sizing: border-box;
   border: 1px solid var(--md-sys-color-outline-variant); border-radius: 999px;
   font-family: inherit; transition: padding-right .2s ease, border-color .15s ease;
 }
