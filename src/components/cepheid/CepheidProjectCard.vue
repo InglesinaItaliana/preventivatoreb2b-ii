@@ -2,7 +2,6 @@
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import MIcon from '../shared/MIcon.vue'
-import GoalChip from './GoalChip.vue'
 import CepheidTimeline from './CepheidTimeline.vue'
 import CepheidCreateMenu from './CepheidCreateMenu.vue'
 import CepheidCreateModal from './CepheidCreateModal.vue'
@@ -63,6 +62,7 @@ const projectDueIso = computed(() => {
         ref="timelineRef"
         collapsible
         :title="project.name"
+        :obiettivo="obiettivo"
         :project="project"
         :tasks="tasks"
         :members="members"
@@ -84,29 +84,28 @@ const projectDueIso = computed(() => {
           >
             <MIcon :name="project.completed ? 'emoji_events' : 'pause'" :size="16" :filled="project.completed" />
           </span>
-          <GoalChip v-if="obiettivo" :titolo="obiettivo.titolo" :colore="obiettivo.colore" size="sm" />
           <span v-if="project.active === false" class="badge-inactive">Inattivo</span>
           <CepheidCreateMenu v-if="isAdmin" @select="openCreate" />
-          <button
-            v-if="isAdmin"
-            class="pcard-icon"
-            :title="project.active !== false ? 'Disattiva' : 'Attiva'"
-            @click="emit('toggle-active', project.id, project.active === false)"
-          >
-            <MIcon :name="project.active !== false ? 'pause' : 'play_arrow'" :size="16" />
-          </button>
-          <button class="pcard-icon" title="Apri dettaglio" @click="openDetail">
-            <MIcon name="open_in_full" :size="16" />
-          </button>
-          <div v-if="isAdmin" class="pcard-menu-wrap">
+          <div class="pcard-menu-wrap">
             <button class="pcard-icon" aria-label="Menu progetto" @click="menuOpen = !menuOpen">
               <MIcon name="more_horiz" :size="18" />
             </button>
             <div v-if="menuOpen" class="pcard-dropdown" @click="menuOpen = false">
-              <button class="pcard-dropdown-item" @click="emit('edit', project, $event)">
+              <button class="pcard-dropdown-item" @click="openDetail">
+                <MIcon name="open_in_full" :size="14" /> Apri dettaglio
+              </button>
+              <button
+                v-if="isAdmin"
+                class="pcard-dropdown-item"
+                @click="emit('toggle-active', project.id, project.active === false)"
+              >
+                <MIcon :name="project.active !== false ? 'pause' : 'play_arrow'" :size="14" />
+                {{ project.active !== false ? 'Disattiva progetto' : 'Attiva progetto' }}
+              </button>
+              <button v-if="isAdmin" class="pcard-dropdown-item" @click="emit('edit', project, $event)">
                 <MIcon name="edit" :size="14" /> Modifica progetto
               </button>
-              <button class="pcard-dropdown-item pcard-dropdown-item--danger" @click="emit('delete', project.id, $event)">
+              <button v-if="isAdmin" class="pcard-dropdown-item pcard-dropdown-item--danger" @click="emit('delete', project.id, $event)">
                 <MIcon name="delete" :size="14" /> Elimina progetto
               </button>
             </div>
