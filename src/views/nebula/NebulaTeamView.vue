@@ -159,7 +159,9 @@ const roleAccent: Record<string, string> = {
               <span class="nb-level-label" :style="{ color: CATEGORY_ACCENT[cat] }">{{ catLabel(cat) }}</span>
               <div class="nb-level-cards">
                 <div v-for="m in byCategory(cat)" :key="m.email" class="nb-card">
-                  <StarAvatar v-bind="memberStar(m)" :size="42" />
+                  <!-- Badge organigramma: avatar grande e DINAMICO (animato),
+                       l'unico punto della suite dove la stella vive a 150px. -->
+                  <StarAvatar v-bind="memberStar(m)" :size="150" :animated="true" />
                   <div class="nb-card-name">
                     <span class="nb-card-fn">{{ m.firstName || m.email }}</span>
                     <span v-if="m.lastName" class="nb-card-ln">{{ m.lastName }}</span>
@@ -291,16 +293,17 @@ const roleAccent: Record<string, string> = {
   gap: 12px;
 }
 
-/* ── Member card (org) ── allineata alle card NEBULA-DOCS / CEPHEID Progetti */
+/* ── Member card (org) ── allineata alle card NEBULA-DOCS / CEPHEID Progetti.
+   Larghezza tarata sul badge avatar grande (150px + padding laterale). */
 .nb-card {
-  width: 118px;
+  width: 174px;
   background: var(--md-sys-color-surface);
   border-radius: 16px;
   padding: 18px 12px 14px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 10px;
   transition: background var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
 }
 
