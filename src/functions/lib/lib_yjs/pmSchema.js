@@ -15,8 +15,9 @@ exports.nebulaSchema = exports.NEBULA_YJS_FIELD = void 0;
  * Strategia anti-drift:
  *  - Riusiamo `getSchema()` di TipTap con le ESTENSIONI STOCK IDENTICHE a
  *    quelle in `NebulaDocView.vue` (stesse versioni 3.23.6).
- *  - Dei 5 nodi custom (taskMention/projectMention/taskEmbed/userMention/
- *    docMention) qui definiamo dei "gemelli headless" — stessa identità di
+ *  - Degli 8 nodi custom (taskMention/projectMention/taskEmbed/userMention/
+ *    docMention/milestoneMention/deliverableMention/obiettivoMention) qui
+ *    definiamo dei "gemelli headless" — stessa identità di
  *    schema (name/group/inline/atom/attrs/parse/render) ma SENZA `addNodeView`
  *    (Vue) né `addProseMirrorPlugins` (suggester): node-view e plugin NON
  *    influenzano lo schema ProseMirror né il mapping Yjs.
@@ -142,6 +143,66 @@ const DocMentionTwin = core_1.Node.create({
         return ['span', (0, core_1.mergeAttributes)({ 'data-type': 'doc-mention' }, HTMLAttributes)];
     },
 });
+const MilestoneMentionTwin = core_1.Node.create({
+    name: 'milestoneMention',
+    group: 'inline',
+    inline: true,
+    atom: true,
+    selectable: true,
+    draggable: false,
+    addAttributes() {
+        return {
+            milestoneId: { default: null },
+            projectId: { default: null },
+        };
+    },
+    parseHTML() {
+        return [{ tag: 'span[data-type="milestone-mention"]' }];
+    },
+    renderHTML({ HTMLAttributes }) {
+        return ['span', (0, core_1.mergeAttributes)({ 'data-type': 'milestone-mention' }, HTMLAttributes)];
+    },
+});
+const DeliverableMentionTwin = core_1.Node.create({
+    name: 'deliverableMention',
+    group: 'inline',
+    inline: true,
+    atom: true,
+    selectable: true,
+    draggable: false,
+    addAttributes() {
+        return {
+            deliverableId: { default: null },
+            projectId: { default: null },
+        };
+    },
+    parseHTML() {
+        return [{ tag: 'span[data-type="deliverable-mention"]' }];
+    },
+    renderHTML({ HTMLAttributes }) {
+        return ['span', (0, core_1.mergeAttributes)({ 'data-type': 'deliverable-mention' }, HTMLAttributes)];
+    },
+});
+const ObiettivoMentionTwin = core_1.Node.create({
+    name: 'obiettivoMention',
+    group: 'inline',
+    inline: true,
+    atom: true,
+    selectable: true,
+    draggable: false,
+    addAttributes() {
+        return {
+            obiettivoId: { default: null },
+            title: { default: null },
+        };
+    },
+    parseHTML() {
+        return [{ tag: 'span[data-type="obiettivo-mention"]' }];
+    },
+    renderHTML({ HTMLAttributes }) {
+        return ['span', (0, core_1.mergeAttributes)({ 'data-type': 'obiettivo-mention' }, HTMLAttributes)];
+    },
+});
 /**
  * Lista estensioni che genera lo schema. Rispecchia ESATTAMENTE l'ordine e
  * la config schema-rilevante di NebulaDocView.vue. Estensioni non-schema
@@ -162,6 +223,9 @@ const SCHEMA_EXTENSIONS = [
     TaskEmbedTwin,
     UserMentionTwin,
     DocMentionTwin,
+    MilestoneMentionTwin,
+    DeliverableMentionTwin,
+    ObiettivoMentionTwin,
 ];
 /**
  * Schema ProseMirror NEBULA-DOCS, costruito una sola volta. Usare per

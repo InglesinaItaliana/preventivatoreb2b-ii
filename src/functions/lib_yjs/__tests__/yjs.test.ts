@@ -6,7 +6,7 @@ import {
 } from '../ydoc'
 
 // Fixture che esercita OGNI tipo di nodo/mark dello schema NEBULA-DOCS,
-// inclusi i 5 atomi custom con tutti i loro attrs.
+// inclusi gli 8 atomi custom con tutti i loro attrs.
 const FIXTURE = {
   type: 'doc',
   content: [
@@ -28,6 +28,9 @@ const FIXTURE = {
         { type: 'projectMention', attrs: { projectId: 'p9' } },
         { type: 'userMention', attrs: { email: 'a@b.it' } },
         { type: 'docMention', attrs: { docId: 'd1', title: 'Doc collegato' } },
+        { type: 'milestoneMention', attrs: { milestoneId: 'm1', projectId: 'p1' } },
+        { type: 'deliverableMention', attrs: { deliverableId: 'dl1', projectId: 'p1' } },
+        { type: 'obiettivoMention', attrs: { obiettivoId: 'o1', title: 'Obiettivo X' } },
       ],
     },
     { type: 'taskEmbed', attrs: { filter: { status: 'todo', projectId: null, type: 'task', limit: 20 }, view: 'list' } },
@@ -53,20 +56,23 @@ describe('nebulaSchema — guardia anti-drift', () => {
   it('contiene esattamente i nodi attesi', () => {
     const nodes = Object.keys(nebulaSchema.nodes).sort()
     expect(nodes).toEqual([
-      'blockquote', 'bulletList', 'codeBlock', 'doc', 'docMention', 'hardBreak',
-      'heading', 'horizontalRule', 'listItem', 'orderedList', 'paragraph',
+      'blockquote', 'bulletList', 'codeBlock', 'deliverableMention', 'doc', 'docMention', 'hardBreak',
+      'heading', 'horizontalRule', 'listItem', 'milestoneMention', 'obiettivoMention', 'orderedList', 'paragraph',
       'projectMention', 'table', 'tableCell', 'tableHeader', 'tableRow',
       'taskEmbed', 'taskItem', 'taskList', 'taskMention', 'text', 'userMention',
     ].sort())
   })
 
-  it('i 5 nodi custom hanno gli attrs attesi', () => {
+  it('gli 8 nodi custom hanno gli attrs attesi', () => {
     const attrKeys = (n: string) => Object.keys(nebulaSchema.nodes[n].spec.attrs ?? {}).sort()
     expect(attrKeys('taskMention')).toEqual(['projectId', 'taskId'])
     expect(attrKeys('projectMention')).toEqual(['projectId'])
     expect(attrKeys('userMention')).toEqual(['email'])
     expect(attrKeys('docMention')).toEqual(['docId', 'title'])
     expect(attrKeys('taskEmbed')).toEqual(['filter', 'view'])
+    expect(attrKeys('milestoneMention')).toEqual(['milestoneId', 'projectId'])
+    expect(attrKeys('deliverableMention')).toEqual(['deliverableId', 'projectId'])
+    expect(attrKeys('obiettivoMention')).toEqual(['obiettivoId', 'title'])
   })
 
   it('marks attesi presenti', () => {
