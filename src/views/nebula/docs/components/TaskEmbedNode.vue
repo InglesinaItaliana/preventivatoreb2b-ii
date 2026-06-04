@@ -218,7 +218,7 @@ void view
         @click="openTask(t)"
       >
         <MaterialIcon
-          :name="t.type === 'milestone' ? 'flag' : (t.type === 'deliverable' ? 'package_2' : 'task_alt')"
+          :name="t.type === 'milestone' ? 'flag' : (t.type === 'deliverable' ? 'package_2' : 'check_circle')"
           :size="14"
           :fill="t.status === 'done' ? 1 : 0"
           :color="t.status === 'done' ? '#7a9b7a' : '#8b6a14'"

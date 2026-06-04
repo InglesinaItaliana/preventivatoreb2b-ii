@@ -61,7 +61,7 @@ const isEmpty = computed(() => props.items.length === 0)
 <template>
   <div class="ts-root">
     <div class="ts-header">
-      <MaterialIcon name="task_alt" :size="14" color="#8b6a14" />
+      <MaterialIcon name="check_circle" :size="14" color="#8b6a14" />
       <span>Menziona task</span>
     </div>
     <div v-if="isEmpty" class="ts-no-results">
@@ -85,7 +85,7 @@ const isEmpty = computed(() => props.items.length === 0)
       >
         <span class="ts-item-icon">
           <MaterialIcon
-            name="task_alt"
+            name="check_circle"
             :size="16"
             :fill="item.status === 'done' ? 1 : 0"
             :color="item.status === 'done' ? '#7a9b7a' : '#8b6a14'"
