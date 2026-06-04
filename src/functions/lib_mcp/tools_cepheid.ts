@@ -170,6 +170,196 @@ export async function listTeam(_args: unknown, _ctx: ToolContext): Promise<ToolO
     return { text: rows.length ? `Team (${rows.length}):\n${rows.join('\n')}` : 'Nessun membro team.' };
 }
 
+type TaskRow = { id: string } & Record<string, unknown>;
+
+/** Riga compatta di un task/milestone/deliverable. */
+function fmtEntity(x: TaskRow): string {
+    const st = x.status ? `[${x.status}]` : '';
+    const due = x.dueDate ? ` · scad. ${fmtDate(x.dueDate)}` : '';
+    const ass = Array.isArray(x.assignees) && x.assignees.length ? ` · ${(x.assignees as unknown[]).join(', ')}` : '';
+    const approved = x.approved === true ? ' · ✅ approvato' : '';
+    return `${st} «${String(x.title ?? '')}» (${x.id})${due}${ass}${approved}`;
+}
+
+/** Legge tutti i figli di projects/{id}/tasks e li raggruppa per type. */
+async function loadProjectTasks(
+    db: admin.firestore.Firestore,
+    projectId: string,
+): Promise<{ all: TaskRow[]; tasks: TaskRow[]; milestones: TaskRow[]; deliverables: TaskRow[] }> {
+    const snap = await db.collection(`projects/${projectId}/tasks`).get();
+    const all: TaskRow[] = snap.docs.map((d) => ({ id: d.id, ...(d.data() as Record<string, unknown>) }));
+    const byType = (t: TaskType) => all.filter((x) => pickType(x.type) === t);
+    return { all, tasks: byType('task'), milestones: byType('milestone'), deliverables: byType('deliverable') };
+}
+
+/**
+ * Progetto completo: meta + gerarchia milestone → deliverable → task.
+ * Rende esplicite le relazioni `deliverable.milestoneId` e
+ * `deliverable.deliverableTaskIds`. Nessun gate (read-only).
+ */
+export async function getProject(args: { projectId?: string }, _ctx: ToolContext): Promise<ToolOut> {
+    const db = admin.firestore();
+    const projectId = String(args?.projectId ?? '').trim();
+    if (!projectId) throw new Error('Il campo `projectId` è obbligatorio (usa cepheid_listProjects).');
+
+    const projSnap = await db.doc(`projects/${projectId}`).get();
+    if (!projSnap.exists) throw new Error(`Progetto ${projectId} inesistente.`);
+    const p = projSnap.data() as Record<string, unknown>;
+
+    const { all, tasks, milestones, deliverables } = await loadProjectTasks(db, projectId);
+    const findTitle = (id: string) => {
+        const t = all.find((x) => x.id === id);
+        return t ? String(t.title ?? '') : '(eliminato)';
+    };
+
+    const head: string[] = [];
+    head.push(`# Progetto ${projectId} «${String(p.name ?? '')}»`);
+    if (p.description) head.push(String(p.description));
+    const meta: string[] = [];
+    meta.push(`task ${p.doneCount ?? 0}/${p.taskCount ?? 0}`);
+    if (p.dueDate) meta.push(`scad. ${fmtDate(p.dueDate)}`);
+    if (p.obiettivoId) meta.push(`obiettivo: ${p.obiettivoId}`);
+    if (p.archived === true) meta.push('ARCHIVIATO');
+    head.push(meta.join(' · '));
+
+    const linkedTaskIds = new Set<string>();
+    deliverables.forEach((d) => (Array.isArray(d.deliverableTaskIds) ? d.deliverableTaskIds : []).forEach((id) => linkedTaskIds.add(String(id))));
+
+    const renderDeliverable = (d: TaskRow, indent: string): string[] => {
+        const out = [`${indent}- 📦 deliverable ${fmtEntity(d)}`];
+        const ids = (Array.isArray(d.deliverableTaskIds) ? d.deliverableTaskIds : []).map(String);
+        for (const tid of ids) {
+            const t = tasks.find((x) => x.id === tid);
+            out.push(`${indent}    - task ${t ? fmtEntity(t) : `«${findTitle(tid)}» (${tid})`}`);
+        }
+        return out;
+    };
+
+    const lines: string[] = [];
+    // Milestone → deliverable figli → task
+    lines.push(`\n## Milestone (${milestones.length})`);
+    if (!milestones.length) lines.push('_(nessuna)_');
+    for (const m of milestones) {
+        lines.push(`- 🎯 milestone ${fmtEntity(m)}`);
+        const childDelivs = deliverables.filter((d) => String(d.milestoneId ?? '') === m.id);
+        if (!childDelivs.length) lines.push('    _(nessun deliverable collegato)_');
+        for (const d of childDelivs) lines.push(...renderDeliverable(d, '    '));
+    }
+
+    // Deliverable senza milestone
+    const orphanDelivs = deliverables.filter((d) => !milestones.some((m) => m.id === String(d.milestoneId ?? '')));
+    if (orphanDelivs.length) {
+        lines.push(`\n## Deliverable senza milestone (${orphanDelivs.length})`);
+        for (const d of orphanDelivs) lines.push(...renderDeliverable(d, ''));
+    }
+
+    // Task liberi (non collegati ad alcun deliverable)
+    const freeTasks = tasks.filter((t) => !linkedTaskIds.has(t.id));
+    lines.push(`\n## Task liberi (${freeTasks.length})`);
+    if (!freeTasks.length) lines.push('_(nessuno)_');
+    for (const t of freeTasks) lines.push(`- task ${fmtEntity(t)}`);
+
+    return { text: `${head.join('\n')}\n${lines.join('\n')}` };
+}
+
+/**
+ * Singola entità task/milestone/deliverable (stesso path projects/{id}/tasks/{id}).
+ * Risolve le relazioni in base al type. Nessun gate (read-only).
+ */
+export async function getTask(args: { projectId?: string; taskId?: string }, _ctx: ToolContext): Promise<ToolOut> {
+    const db = admin.firestore();
+    const projectId = String(args?.projectId ?? '').trim();
+    const taskId = String(args?.taskId ?? '').trim();
+    if (!projectId) throw new Error('Il campo `projectId` è obbligatorio.');
+    if (!taskId) throw new Error('Il campo `taskId` è obbligatorio.');
+
+    const snap = await db.doc(`projects/${projectId}/tasks/${taskId}`).get();
+    if (!snap.exists) throw new Error(`Entità ${taskId} inesistente nel progetto ${projectId}.`);
+    const x = { id: snap.id, ...(snap.data() as Record<string, unknown>) } as TaskRow;
+    const type = pickType(x.type);
+
+    const out: string[] = [];
+    out.push(`# ${type} ${fmtEntity(x)}`);
+    out.push(`progetto: ${projectId}`);
+    if (x.description) out.push(`\n${String(x.description)}`);
+
+    if (type === 'deliverable') {
+        if (x.milestoneId) {
+            const mSnap = await db.doc(`projects/${projectId}/tasks/${String(x.milestoneId)}`).get();
+            out.push(`\nMilestone: «${String(mSnap.data()?.title ?? '(eliminata)')}» (${String(x.milestoneId)})`);
+        } else {
+            out.push('\nMilestone: _(nessuna)_');
+        }
+        const ids = (Array.isArray(x.deliverableTaskIds) ? x.deliverableTaskIds : []).map(String);
+        out.push(`\nTask collegati (${ids.length}):`);
+        for (const tid of ids) {
+            const tSnap = await db.doc(`projects/${projectId}/tasks/${tid}`).get();
+            out.push(tSnap.exists
+                ? `- ${fmtEntity({ id: tSnap.id, ...(tSnap.data() as Record<string, unknown>) })}`
+                : `- (eliminato) (${tid})`);
+        }
+    } else if (type === 'milestone') {
+        const dSnap = await db.collection(`projects/${projectId}/tasks`)
+            .where('type', '==', 'deliverable').where('milestoneId', '==', taskId).get();
+        out.push(`\nDeliverable collegati (${dSnap.size}):`);
+        if (!dSnap.size) out.push('_(nessuno)_');
+        dSnap.forEach((d) => out.push(`- ${fmtEntity({ id: d.id, ...(d.data() as Record<string, unknown>) })}`));
+    }
+
+    return { text: out.join('\n') };
+}
+
+/** Lista obiettivi (collection top-level `obiettivi`). Esclude archiviati di default. */
+export async function listObiettivi(
+    args: { includeArchived?: boolean; limit?: number },
+    _ctx: ToolContext,
+): Promise<ToolOut> {
+    const db = admin.firestore();
+    const limit = Math.min(Math.max(Number(args?.limit) || 50, 1), 200);
+    const snap = await db.collection('obiettivi').limit(limit).get();
+    const rows = snap.docs
+        .map((d) => ({ id: d.id, data: d.data() as Record<string, unknown> }))
+        .filter(({ data }) => (args?.includeArchived ? true : data.stato !== 'archiviato'))
+        .map(({ id, data }) => {
+            const periodo = data.periodKind === 'year'
+                ? `anno ${data.anno ?? ''}`
+                : [fmtDate(data.startDate), fmtDate(data.endDate)].filter(Boolean).join(' → ');
+            const st = data.stato ? `[${data.stato}]` : '';
+            return `- ${id}  ${st} «${String(data.titolo ?? '')}»${periodo ? `  (${periodo})` : ''}`;
+        });
+    return { text: rows.length ? `Obiettivi (${rows.length}):\n${rows.join('\n')}` : 'Nessun obiettivo trovato.' };
+}
+
+/** Singolo obiettivo + progetti collegati (`projects.obiettivoId == id`). */
+export async function getObiettivo(args: { obiettivoId?: string }, _ctx: ToolContext): Promise<ToolOut> {
+    const db = admin.firestore();
+    const obiettivoId = String(args?.obiettivoId ?? '').trim();
+    if (!obiettivoId) throw new Error('Il campo `obiettivoId` è obbligatorio (usa cepheid_listObiettivi).');
+
+    const snap = await db.doc(`obiettivi/${obiettivoId}`).get();
+    if (!snap.exists) throw new Error(`Obiettivo ${obiettivoId} inesistente.`);
+    const o = snap.data() as Record<string, unknown>;
+
+    const out: string[] = [];
+    const st = o.stato ? `[${o.stato}]` : '';
+    out.push(`# Obiettivo ${obiettivoId}  ${st} «${String(o.titolo ?? '')}»`);
+    if (o.descrizione) out.push(String(o.descrizione));
+    const periodo = o.periodKind === 'year'
+        ? `anno ${o.anno ?? ''}`
+        : [fmtDate(o.startDate), fmtDate(o.endDate)].filter(Boolean).join(' → ');
+    if (periodo) out.push(`periodo: ${periodo}`);
+
+    const projSnap = await db.collection('projects').where('obiettivoId', '==', obiettivoId).get();
+    out.push(`\nProgetti collegati (${projSnap.size}):`);
+    if (!projSnap.size) out.push('_(nessuno)_');
+    projSnap.forEach((d) => {
+        const p = d.data() as Record<string, unknown>;
+        out.push(`- ${d.id} «${String(p.name ?? '')}»  task ${p.doneCount ?? 0}/${p.taskCount ?? 0}`);
+    });
+
+    return { text: out.join('\n') };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // WRITE TOOLS (assertCoreAdmin obbligatorio)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -213,6 +403,7 @@ export async function createTask(
     args: {
         projectId?: string; title?: string; status?: string; priority?: string;
         startDate?: string; dueDate?: string; assignees?: string[]; type?: string;
+        milestoneId?: string | null; deliverableTaskIds?: string[];
     },
     ctx: ToolContext,
 ): Promise<ToolOut> {
@@ -235,6 +426,10 @@ export async function createTask(
     const { resolved, unmatched } = await resolveAssignees(db, args?.assignees);
     const start = parseDate(args?.startDate);
     const due = parseDate(args?.dueDate);
+    // Relazioni opzionali: un deliverable può collegare una milestone e dei task.
+    const milestoneId = String(args?.milestoneId ?? '').trim() || null;
+    const deliverableTaskIds = (Array.isArray(args?.deliverableTaskIds) ? args!.deliverableTaskIds : [])
+        .map((s) => String(s).trim()).filter(Boolean);
 
     const ref = await projRef.collection('tasks').add({
         title,
@@ -246,12 +441,12 @@ export async function createTask(
         assignees: resolved,
         projectId,
         type,
-        deliverableTaskIds: [],
+        deliverableTaskIds,
         order: null,
         approved: false,
         approvedAt: null,
         deliverableId: null,
-        milestoneId: null,
+        milestoneId,
         triaged: type !== 'task',   // task nuovi → inbox (smistamento), milestone/deliverable no
         createdBy: uid,
         createdByEmail: userEmail,
@@ -359,4 +554,46 @@ export async function createPhase(
         text: `Fase creata nel progetto ${projectId}: milestone ${milestoneId}${hasNew ? ' (nuova)' : ' (esistente)'}, `
             + `deliverable ${delivId}, ${newTaskIds.length} task.${warn}`,
     };
+}
+
+/** Crea un Obiettivo (collection top-level `obiettivi`). Solo CORE admin.
+ *  Replica useObiettivi.createObiettivo (useObiettivi.ts:72-93). */
+export async function createObiettivo(
+    args: {
+        titolo?: string; descrizione?: string; periodKind?: string;
+        startDate?: string; endDate?: string; colore?: string;
+    },
+    ctx: ToolContext,
+): Promise<ToolOut> {
+    const db = admin.firestore();
+    const userEmail = normEmail(ctx.userEmail);
+    await assertCoreAdmin(db, userEmail);
+
+    const titolo = String(args?.titolo ?? '').trim();
+    if (!titolo) throw new Error('Il campo `titolo` è obbligatorio.');
+
+    const periodKind = args?.periodKind === 'quarters' ? 'quarters' : 'year';
+    const start = parseDate(args?.startDate);
+    const end = parseDate(args?.endDate);
+    const uid = await resolveCallerUid(userEmail);
+    const anno = start.ts ? start.ts.toDate().getFullYear() : new Date().getFullYear();
+
+    const ref = await db.collection('obiettivi').add({
+        titolo,
+        descrizione: String(args?.descrizione ?? ''),
+        periodKind,
+        startDate: start.ts,
+        endDate: end.ts,
+        anno,
+        stato: 'attivo',
+        colore: String(args?.colore ?? '#D4A020'),
+        createdBy: uid,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+
+    const warns: string[] = [];
+    if (start.invalid) warns.push('`startDate` non valida, ignorata');
+    if (end.invalid) warns.push('`endDate` non valida, ignorata');
+    const warn = warns.length ? `\n⚠️ ${warns.join('; ')}` : '';
+    return { text: `Obiettivo creato: ${ref.id} «${titolo}».${warn}` };
 }

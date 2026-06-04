@@ -190,6 +190,48 @@ const TOOLS = [
         },
         handler: Tools.linkProject,
     },
+    {
+        name: 'nebula_linkDeliverable',
+        description: 'Aggiunge un chip deliverable-mention CEPHEID in fondo al documento. Richiede projectId e deliverableId (un deliverable è un task con type=deliverable dentro projects/{projectId}/tasks).',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                docId: { type: 'string' },
+                projectId: { type: 'string', description: 'ID del progetto che contiene il deliverable' },
+                deliverableId: { type: 'string', description: 'ID del deliverable (da cepheid_getProject)' },
+            },
+            required: ['docId', 'projectId', 'deliverableId'],
+        },
+        handler: Tools.linkDeliverable,
+    },
+    {
+        name: 'nebula_linkMilestone',
+        description: 'Aggiunge un chip milestone-mention CEPHEID in fondo al documento. Richiede projectId e milestoneId (una milestone è un task con type=milestone dentro projects/{projectId}/tasks).',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                docId: { type: 'string' },
+                projectId: { type: 'string', description: 'ID del progetto che contiene la milestone' },
+                milestoneId: { type: 'string', description: 'ID della milestone (da cepheid_getProject)' },
+            },
+            required: ['docId', 'projectId', 'milestoneId'],
+        },
+        handler: Tools.linkMilestone,
+    },
+    {
+        name: 'nebula_linkObiettivo',
+        description: 'Aggiunge un chip obiettivo-mention CEPHEID in fondo al documento. Richiede obiettivoId (collection top-level obiettivi).',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                docId: { type: 'string' },
+                obiettivoId: { type: 'string', description: 'ID dell\'obiettivo (da cepheid_listObiettivi)' },
+                title: { type: 'string', description: 'Titolo snapshot di fallback (opzionale)' },
+            },
+            required: ['docId', 'obiettivoId'],
+        },
+        handler: Tools.linkObiettivo,
+    },
 
     // ── CEPHEID — creazione/lettura Progetti/Task/Milestone/Deliverable ──────
     {
@@ -209,6 +251,55 @@ const TOOLS = [
         description: 'Lista membri del team (email, nome, ruolo). Usalo per ottenere le email valide da passare come assignees ai task.',
         inputSchema: { type: 'object', properties: {} },
         handler: Cepheid.listTeam,
+    },
+    {
+        name: 'cepheid_getProject',
+        description: 'Dettaglio completo di un progetto: meta (avanzamento, scadenza, obiettivo) + gerarchia milestone → deliverable → task. Mostra le relazioni: ogni deliverable elenca i task collegati (deliverableTaskIds) ed è raggruppato sotto la sua milestone (milestoneId). Read-only.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                projectId: { type: 'string', description: 'ID progetto (da cepheid_listProjects)' },
+            },
+            required: ['projectId'],
+        },
+        handler: Cepheid.getProject,
+    },
+    {
+        name: 'cepheid_getTask',
+        description: 'Dettaglio di una singola entità task/milestone/deliverable (vivono tutte in projects/{projectId}/tasks/{taskId}). Risolve le relazioni: un deliverable mostra la milestone e i task collegati; una milestone mostra i deliverable collegati. Read-only.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                projectId: { type: 'string', description: 'ID progetto' },
+                taskId: { type: 'string', description: 'ID dell\'entità (task/milestone/deliverable)' },
+            },
+            required: ['projectId', 'taskId'],
+        },
+        handler: Cepheid.getTask,
+    },
+    {
+        name: 'cepheid_listObiettivi',
+        description: 'Lista obiettivi CEPHEID (collection top-level). Default esclude gli archiviati. Usalo per ottenere un obiettivoId valido.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                includeArchived: { type: 'boolean', description: 'Includi obiettivi archiviati (default false)' },
+                limit: { type: 'number', description: 'Max risultati (default 50, max 200)' },
+            },
+        },
+        handler: Cepheid.listObiettivi,
+    },
+    {
+        name: 'cepheid_getObiettivo',
+        description: 'Dettaglio di un obiettivo + elenco dei progetti collegati (projects.obiettivoId). Read-only.',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                obiettivoId: { type: 'string', description: 'ID obiettivo (da cepheid_listObiettivi)' },
+            },
+            required: ['obiettivoId'],
+        },
+        handler: Cepheid.getObiettivo,
     },
     {
         name: 'cepheid_createProject',
@@ -240,10 +331,29 @@ const TOOLS = [
                 dueDate: { type: 'string', description: 'Scadenza ISO YYYY-MM-DD (opzionale)' },
                 assignees: { type: 'array', items: { type: 'string' }, description: 'Email o nomi (risolti via /team)' },
                 type: { type: 'string', enum: ['task', 'milestone', 'deliverable'], description: 'Tipo (default task)' },
+                milestoneId: { type: ['string', 'null'], description: 'Solo per deliverable: ID della milestone a cui collegarlo' },
+                deliverableTaskIds: { type: 'array', items: { type: 'string' }, description: 'Solo per deliverable: ID dei task collegati' },
             },
             required: ['projectId', 'title'],
         },
         handler: Cepheid.createTask,
+    },
+    {
+        name: 'cepheid_createObiettivo',
+        description: 'Crea un nuovo obiettivo CEPHEID (collection top-level). Solo CORE admin. Il periodo può essere annuale (periodKind=year) o a trimestri (periodKind=quarters con startDate/endDate).',
+        inputSchema: {
+            type: 'object',
+            properties: {
+                titolo: { type: 'string', description: 'Titolo dell\'obiettivo' },
+                descrizione: { type: 'string', description: 'Descrizione (opzionale)' },
+                periodKind: { type: 'string', enum: ['year', 'quarters'], description: 'Tipo periodo (default year)' },
+                startDate: { type: 'string', description: 'Inizio periodo ISO YYYY-MM-DD (opzionale)' },
+                endDate: { type: 'string', description: 'Fine periodo ISO YYYY-MM-DD (opzionale)' },
+                colore: { type: 'string', description: 'Colore esadecimale (default #D4A020)' },
+            },
+            required: ['titolo'],
+        },
+        handler: Cepheid.createObiettivo,
     },
     {
         name: 'cepheid_createPhase',

@@ -42,6 +42,9 @@ exports.appendBlock = appendBlock;
 exports.replaceSection = replaceSection;
 exports.linkTask = linkTask;
 exports.linkProject = linkProject;
+exports.linkDeliverable = linkDeliverable;
+exports.linkMilestone = linkMilestone;
+exports.linkObiettivo = linkObiettivo;
 /**
  * MCP tools NEBULA-DOCS (F4-C3) — 8 tool implementations.
  *
@@ -523,5 +526,60 @@ async function linkProject(args, ctx) {
         docId: args.docId, content: merged,
     }, ctx.userEmail);
     return { text: `Progetto \`${args.projectId}\` collegato a **${out.title}** (rev ${out.revision}).` };
+}
+// ─────────────────────────────────────────────────────────────────────────────
+// TOOL: linkMention (helper condiviso) → linkDeliverable / linkMilestone / linkObiettivo
+// Appende un chip mention (nodo inline atom) in fondo al documento. Gli attrs
+// DEVONO combaciare con gli schema TipTap client (Milestone/Deliverable/Obiettivo
+// Mention.ts) altrimenti il nodo viene scartato dallo schema all'apertura.
+// ─────────────────────────────────────────────────────────────────────────────
+async function appendMentionParagraph(docId, mention, userEmail) {
+    var _a;
+    const db = admin.firestore();
+    const snap = await db.collection('nebulaDocs').doc(docId).get();
+    if (!snap.exists)
+        throw new Error(`Documento ${docId} non trovato`);
+    const current = snap.data();
+    if (!canWrite(current.acl, userEmail))
+        throw new Error('Permesso di scrittura negato');
+    const baseJson = await liveDocJSON(docId, current);
+    const paragraph = {
+        type: 'paragraph',
+        content: [mention, { type: 'text', text: ' ' }],
+    };
+    const merged = {
+        type: 'doc',
+        content: [...((_a = baseJson.content) !== null && _a !== void 0 ? _a : []), paragraph],
+    };
+    return saveDocCore({ docId, content: merged }, userEmail);
+}
+async function linkDeliverable(args, ctx) {
+    if (!args.docId)
+        throw new Error('docId richiesto');
+    if (!args.projectId)
+        throw new Error('projectId richiesto');
+    if (!args.deliverableId)
+        throw new Error('deliverableId richiesto');
+    const out = await appendMentionParagraph(args.docId, { type: 'deliverableMention', attrs: { deliverableId: args.deliverableId, projectId: args.projectId } }, ctx.userEmail);
+    return { text: `Deliverable \`${args.deliverableId}\` collegato a **${out.title}** (rev ${out.revision}).` };
+}
+async function linkMilestone(args, ctx) {
+    if (!args.docId)
+        throw new Error('docId richiesto');
+    if (!args.projectId)
+        throw new Error('projectId richiesto');
+    if (!args.milestoneId)
+        throw new Error('milestoneId richiesto');
+    const out = await appendMentionParagraph(args.docId, { type: 'milestoneMention', attrs: { milestoneId: args.milestoneId, projectId: args.projectId } }, ctx.userEmail);
+    return { text: `Milestone \`${args.milestoneId}\` collegata a **${out.title}** (rev ${out.revision}).` };
+}
+async function linkObiettivo(args, ctx) {
+    var _a;
+    if (!args.docId)
+        throw new Error('docId richiesto');
+    if (!args.obiettivoId)
+        throw new Error('obiettivoId richiesto');
+    const out = await appendMentionParagraph(args.docId, { type: 'obiettivoMention', attrs: { obiettivoId: args.obiettivoId, title: (_a = args.title) !== null && _a !== void 0 ? _a : '' } }, ctx.userEmail);
+    return { text: `Obiettivo \`${args.obiettivoId}\` collegato a **${out.title}** (rev ${out.revision}).` };
 }
 //# sourceMappingURL=tools.js.map

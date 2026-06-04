@@ -41,7 +41,7 @@ function onClick() {
     @click="onClick"
   >
     <span class="dm-icon">
-      <MaterialIcon name="description" :size="14" color="#7A5430" />
+      <MaterialIcon name="description" :size="14" color="#C46030" />
     </span>
     <span class="dm-label">{{ label }}</span>
   </NodeViewWrapper>
@@ -52,15 +52,15 @@ function onClick() {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 1px 8px 1px 4px;
+  padding: 1px 8px 1px 6px;
   margin: 0 2px;
-  /* Tono terracotta tenue, neutro rispetto a user (blu) / task (oro) / project (verde) */
-  background: rgba(196, 96, 48, 0.10);
-  border: 1px solid rgba(196, 96, 48, 0.30);
+  /* NEBULA (seed #C46030) — testo+icona vividi, sfondo/bordo derivati */
+  background: color-mix(in srgb, #C46030 14%, transparent);
+  border: 1px solid color-mix(in srgb, #C46030 34%, transparent);
   border-radius: 999px;
   font-size: 0.92em;
   line-height: 1.4;
-  color: #7A3D14;
+  color: #C46030;
   cursor: pointer;
   user-select: none;
   vertical-align: baseline;
@@ -70,8 +70,8 @@ function onClick() {
   overflow: hidden;
 }
 .dm-chip:hover {
-  background: rgba(196, 96, 48, 0.20);
-  border-color: rgba(196, 96, 48, 0.50);
+  background: color-mix(in srgb, #C46030 24%, transparent);
+  border-color: color-mix(in srgb, #C46030 55%, transparent);
 }
 
 .dm-icon { display: inline-flex; align-items: center; flex-shrink: 0; }
