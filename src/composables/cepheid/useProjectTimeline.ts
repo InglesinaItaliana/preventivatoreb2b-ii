@@ -236,9 +236,11 @@ export function useProjectTimeline(
     const assigned = new Set<string>()
     deliverables.value.forEach(d => d.deliverableTaskIds.forEach(id => assigned.add(id)))
     const milestoneIds = new Set(milestones.value.map(m => m.id))
-    // orfani = non completati, non in un deliverable e non agganciati a una milestone esistente
-    // (inclusi gli untimed: es. task appena smistati a livello progetto, così restano visibili)
-    const orphans = realTasks.value.filter(t => !assigned.has(t.id) && !(t.milestoneId && milestoneIds.has(t.milestoneId)) && !t.completedAt)
+    // orfani = non in un deliverable e non agganciati a una milestone esistente
+    // (inclusi gli untimed: es. task appena smistati a livello progetto, così restano visibili).
+    // I completati RESTANO visibili (barrati), come i task dentro le fasi: spuntare
+    // un task fuori fase non deve farlo sparire dalla vista progetti.
+    const orphans = realTasks.value.filter(t => !assigned.has(t.id) && !(t.milestoneId && milestoneIds.has(t.milestoneId)))
     if (!orphans.length) return null
     const windowStart = projectStart.value
     const firstEnd = phasesFlat.value[0]?.windowStart
