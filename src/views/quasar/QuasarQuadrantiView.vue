@@ -183,32 +183,33 @@ async function completeFromModal() {
 
 <template>
   <div class="qd s-scope-quasar" ref="scrollEl">
-    <!-- Header come NEBULA Documenti: barra sticky a tutta larghezza (fondo card),
-         titolo + sottotitolo + selettore tab a pillola nello slot tools. -->
-    <MdPageHeader title="Quadranti" :subtitle="subtitle" sticky borderless :hidden="headerHidden">
-      <template #tools>
-        <CepheidViewSwitcher :model-value="view" :tabs="viewTabs" @update:model-value="(v) => (view = v as ViewId)" />
-      </template>
-    </MdPageHeader>
+    <!-- Header come NEBULA Documenti, con i filtri DENTRO: barra sticky a tutta
+         larghezza (fondo card), auto-hide. Riga 1 = titolo + sottotitolo + tab;
+         riga 2 = filtro persona. -->
+    <div class="qd-header" :class="{ 'is-hidden': headerHidden }">
+      <MdPageHeader title="Quadranti" :subtitle="subtitle" borderless>
+        <template #tools>
+          <CepheidViewSwitcher :model-value="view" :tabs="viewTabs" @update:model-value="(v) => (view = v as ViewId)" />
+        </template>
+      </MdPageHeader>
+      <div class="avfilter">
+        <button class="avf all" :class="{ on: filterPerson === '' }" @click="filterPerson = ''">Tutti</button>
+        <button
+          v-for="m in members"
+          :key="m.email"
+          class="avf-pill"
+          :class="{ on: filterPerson === m.email }"
+          :style="{ background: avColors[m.email]?.bg }"
+          :title="displayName(m.email, members)"
+          @click="filterPerson = filterPerson === m.email ? '' : m.email"
+        >
+          <StarAvatar v-bind="starAvatarProps(m.email, members)" :size="32" />
+          <span class="avf-name" :style="{ color: avColors[m.email]?.name }">{{ displayName(m.email, members) }}</span>
+        </button>
+      </div>
+    </div>
 
     <div class="qd-content">
-     <!-- Filtro persona: riga sotto l'header, allineata al pannello -->
-     <div class="avfilter">
-       <button class="avf all" :class="{ on: filterPerson === '' }" @click="filterPerson = ''">Tutti</button>
-       <button
-         v-for="m in members"
-         :key="m.email"
-         class="avf-pill"
-         :class="{ on: filterPerson === m.email }"
-         :style="{ background: avColors[m.email]?.bg }"
-         :title="displayName(m.email, members)"
-         @click="filterPerson = filterPerson === m.email ? '' : m.email"
-       >
-         <StarAvatar v-bind="starAvatarProps(m.email, members)" :size="32" />
-         <span class="avf-name" :style="{ color: avColors[m.email]?.name }">{{ displayName(m.email, members) }}</span>
-       </button>
-     </div>
-
      <div class="panel">
       <h2 class="panel-title">{{ cardTitle }}</h2>
 
@@ -407,14 +408,23 @@ async function completeFromModal() {
 }
 .s-surface-dark .panel { background: #16130B; }
 @media (prefers-color-scheme: dark) { .panel { background: #16130B; } }
-/* Header come NEBULA Documenti: MdPageHeader sticky a tutta larghezza, fondo card
-   #FFF8F0; su desktop il contenuto è allineato (gutter) alla larghezza del pannello. */
-:deep(.md-page-header) { padding: 18px 16px 14px; }
-:deep(.md-page-header.is-sticky) { background: #FFF8F0; }
-.s-surface-dark :deep(.md-page-header.is-sticky) { background: #16130B; }
-@media (prefers-color-scheme: dark) { :deep(.md-page-header.is-sticky) { background: #16130B; } }
+/* Header come NEBULA Documenti, con i filtri DENTRO: barra sticky a tutta
+   larghezza, fondo card #FFF8F0, auto-hide su scroll. Il gutter orizzontale è sul
+   wrapper, così titolo, tab e filtri si allineano alla larghezza del pannello sotto. */
+.qd-header {
+  position: sticky; top: 0; z-index: 10;
+  background: #FFF8F0;
+  padding: 0 16px;
+  transition: transform var(--md-sys-motion-duration-short4, 200ms) var(--md-sys-motion-easing-emphasized-decelerate, cubic-bezier(.05,.7,.1,1));
+  will-change: transform;
+}
+.s-surface-dark .qd-header { background: #16130B; }
+@media (prefers-color-scheme: dark) { .qd-header { background: #16130B; } }
+.qd-header.is-hidden { transform: translateY(-100%); }
+.qd-header :deep(.md-page-header) { background: transparent; padding: 18px 0 6px; }
 @media (min-width: 1024px) {
-  :deep(.md-page-header) { padding: 24px max(40px, calc(50% - 500px)) 18px; }
+  .qd-header { padding: 0 max(40px, calc(50% - 500px)); }
+  .qd-header :deep(.md-page-header) { padding: 24px 0 8px; }
 }
 
 /* titolo della card = nome della tab attiva (Azioni / Risorse) */
@@ -449,8 +459,8 @@ async function completeFromModal() {
 .s-surface-dark .cursor-range::-moz-range-thumb { border-color: #16130B; }
 .cursor-scale { display: flex; justify-content: space-between; font-size: 10px; color: var(--md-sys-color-on-surface-variant); margin-top: 5px; }
 
-/* ── Filtro persona: riga sotto l'header, allineata al pannello (max-width 1000) ── */
-.avfilter { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; max-width: 1000px; margin: 0 auto 14px; }
+/* ── Filtro persona: riga DENTRO l'header, sotto al titolo/tab ── */
+.avfilter { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; padding-bottom: 14px; }
 /* "Tutti" = pillola di reset. Altezza 34px = pillola container tab (.vsw). */
 .avf.all {
   border: 2px solid transparent; border-radius: 999px; padding: 0 13px; height: 34px; cursor: pointer;
