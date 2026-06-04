@@ -849,7 +849,9 @@ function onBubbleClick(e: MouseEvent) {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 18px;
+  /* padding-top esteso dietro la status bar: la striscia di sistema resta chiara
+     (stesso surface dell'header). */
+  padding: calc(12px + env(safe-area-inset-top)) 18px 12px;
   background: var(--md-sys-color-surface);
   flex-shrink: 0;
 }
@@ -1072,7 +1074,7 @@ function onBubbleClick(e: MouseEvent) {
 .msg-bubble.is-mine :deep(.msg-hashtag),
 .msg-bubble.is-mine :deep(.msg-mention) { color: rgba(255, 255, 255, 0.95); }
 
-.msg-text { font-size: 20px; line-height: 1.4; color: var(--md-sys-color-on-surface); white-space: pre-wrap; word-break: break-word; margin: 0; }
+.msg-text { font-size: 19px; line-height: 1.4; color: var(--md-sys-color-on-surface); white-space: pre-wrap; word-break: break-word; margin: 0; }
 
 :deep(.msg-hashtag) { color: var(--md-sys-color-primary); font-weight: 600; cursor: pointer; }
 :deep(.msg-mention) { color: var(--s-nebula-on-light); font-weight: 600; }
