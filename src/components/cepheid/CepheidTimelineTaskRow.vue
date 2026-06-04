@@ -142,10 +142,14 @@ const avColors = computed<Record<string, { bg: string; name: string }>>(() => {
    in pillole (Nome Cognome) spostando il layout di conseguenza */
 .avg { display: flex; align-items: center; flex-wrap: wrap; gap: 0; flex: 0 1 auto; cursor: pointer; }
 .avg.is-open, .avg:hover { gap: 6px; }
-.av-pill { display: inline-flex; align-items: center; background: #05090F; border-radius: 999px; transition: margin-left .2s ease, padding-right .2s ease; }
+/* Il bordo avvolge l'INTERA pillola (avatar + nome): in stato espanso non deve
+   chiudersi attorno al cerchio dell'avatar. Quindi il ring lo mette la pillola
+   e l'avatar dentro lo annulla (box-shadow:none, vince per specificità sul
+   ring globale di StarAvatar). */
+.av-pill { display: inline-flex; align-items: center; background: #05090F; border-radius: 999px; border: 1px solid var(--md-sys-color-outline-variant); transition: margin-left .2s ease, padding-right .2s ease; }
 .av-pill:not(:first-child) { margin-left: -7px; }
 .avg.is-open .av-pill, .avg:hover .av-pill { margin-left: 0; padding-right: 4px; }
-.av-pill .av { border-radius: 50%; flex: 0 0 auto; }
+.av-pill .av { border-radius: 50%; flex: 0 0 auto; box-shadow: none; }
 .av-name {
   max-width: 0; overflow: hidden; white-space: nowrap; opacity: 0; padding-left: 0;
   color: #fff; font-size: 11px; font-weight: 500; line-height: 1;
