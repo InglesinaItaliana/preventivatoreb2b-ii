@@ -67,8 +67,9 @@ onUnmounted(() => {
   /* Sfondo chiaro coordinato con l'hue-firma della stella (makeStar -> bgColor,
      passato via onStar). Fallback #141b26 finche' il motore non ha montato. */
   background: v-bind(lightBg);
-  /* Anello scuro sottile: definisce il bordo del disco (silhouette leggibile)
-     sulle card chiare — su fondo chiaro un ring bianco era invisibile. */
-  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06);
+  /* Anello di definizione del disco: stesso colore/consistenza del hairline
+     beige canonico CEPHEID (1px solid #E8E5DF) usato dai deliverable e dalle
+     chip, così il bordo dell'avatar è coerente con quelli della pagina. */
+  box-shadow: 0 0 0 1px #E8E5DF;
 }
 </style>
