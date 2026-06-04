@@ -56,8 +56,17 @@ const filterEmails = computed<Set<string> | null>(() => {
   )
 })
 
-const { quadrants, counts, q1Overloaded, fireDelta } = useQuadranti(tasks, cursor, filterEmails)
+const { quadrants, counts, q1Overloaded } = useQuadranti(tasks, cursor, filterEmails)
 const { quadrants: rQuadrants, counts: rCounts } = useResourceLoad(tasks, members, cursor, filterEmails)
+
+// Pillola CURSORE temporale condensata: oggi / +3gg / +7gg / +14gg (al posto
+// della card "Ritorno al futuro" con lo slider). Va a sx delle altre pillole.
+const cursorTabs = [
+  { id: '0',  label: 'oggi',  icon: 'today' },
+  { id: '3',  label: '+3gg',  icon: 'calendar_view_week' },
+  { id: '7',  label: '+7gg',  icon: 'date_range' },
+  { id: '14', label: '+14gg', icon: 'event' },
+]
 
 // ── Metadati quadranti ────────────────────────────────────────────────────
 const QUADS: { id: QuadId; name: string; sub: string }[] = [
@@ -88,10 +97,6 @@ const subtitle = computed(() => {
   const n = counts.value.q1
   return n === 0 ? 'Nessuna azione da gestire subito' : n === 1 ? '1 azione da gestire subito' : `${n} azioni da gestire subito`
 })
-
-const cursorLabel = computed(() =>
-  cursor.value === 0 ? 'oggi' : `fra ${cursor.value} ${cursor.value === 1 ? 'giorno' : 'giorni'}`,
-)
 
 // ── Label giorni / finestra ──────────────────────────────────────────────────
 function daysLabel(eff: number | null): string {
@@ -191,6 +196,7 @@ async function completeFromModal() {
     <MdPageHeader title="Quadranti" :subtitle="subtitle" sticky borderless :hidden="headerHidden">
       <template #tools>
         <div class="qd-switchers">
+          <CepheidViewSwitcher labels :model-value="String(cursor)" :tabs="cursorTabs" @update:model-value="(v) => (cursor = Number(v))" />
           <CepheidViewSwitcher :model-value="filterSector" :tabs="sectorTabs" @update:model-value="(v) => (filterSector = v)" />
           <CepheidViewSwitcher :model-value="view" :tabs="viewTabs" @update:model-value="(v) => (view = v as ViewId)" />
         </div>
@@ -200,18 +206,6 @@ async function completeFromModal() {
     <div class="qd-content">
      <div class="panel">
       <h2 class="panel-title">{{ cardTitle }}</h2>
-
-      <!-- Cursore temporale "Ritorno al futuro" in pillola -->
-      <div class="cursor-pill">
-        <div class="cursor-lbl">
-          Ritorno al futuro <b>{{ cursorLabel }}</b>
-          <span v-if="view === 'task' && cursor > 0 && fireDelta > 0" class="cursor-delta">
-            +{{ fireDelta }} {{ fireDelta === 1 ? 'incendio' : 'incendi' }} rispetto a oggi
-          </span>
-        </div>
-        <input v-model.number="cursor" type="range" min="0" max="14" class="cursor-range" />
-        <div class="cursor-scale"><span>oggi</span><span>fra 7 gg</span><span>fra 14 gg</span></div>
-      </div>
 
       <div v-if="loading" class="qd-loading">
         <div v-for="i in 4" :key="i" class="quad-skel" />
@@ -413,32 +407,6 @@ async function completeFromModal() {
   font-family: 'Cormorant Garamond', serif; font-size: 22px; font-weight: 600; line-height: 1;
   color: var(--md-sys-color-on-surface); opacity: .9; margin: 2px 2px 14px;
 }
-
-/* ── Cursore temporale "Ritorno al futuro" (pillola, sotto il filtro) ── */
-.cursor-pill {
-  margin-bottom: 16px;
-  padding: 11px 16px 9px;
-  background: color-mix(in srgb, var(--md-sys-color-on-surface) 4%, transparent);
-  border-radius: 16px;
-}
-/* "Ritorno al futuro" + valore: stesso font/peso (marcato) dei titoli quadrante */
-.cursor-lbl { font-family: 'Cormorant Garamond', serif; font-size: 20px; font-weight: 600; line-height: 1; color: var(--md-sys-color-on-surface); opacity: .9; margin-bottom: 11px; }
-.cursor-lbl b { font-weight: 600; color: inherit; }
-.cursor-delta { font-family: 'Outfit', sans-serif; color: #C8521A; font-size: 11px; font-weight: 500; margin-left: 8px; opacity: 1; }
-.cursor-range {
-  width: 100%; -webkit-appearance: none; appearance: none;
-  height: 6px; border-radius: 3px; background: var(--md-sys-color-outline-variant); outline: none;
-}
-.cursor-range::-webkit-slider-thumb {
-  -webkit-appearance: none; width: 20px; height: 20px; border-radius: 50%;
-  background: var(--md-sys-color-primary); cursor: pointer; border: 3px solid #FFF8F0; box-shadow: 0 1px 4px rgba(0,0,0,.22);
-}
-.cursor-range::-moz-range-thumb {
-  width: 20px; height: 20px; border-radius: 50%; background: var(--md-sys-color-primary); cursor: pointer; border: 3px solid #FFF8F0;
-}
-.s-surface-dark .cursor-range::-webkit-slider-thumb { border-color: #16130B; }
-.s-surface-dark .cursor-range::-moz-range-thumb { border-color: #16130B; }
-.cursor-scale { display: flex; justify-content: space-between; font-size: 10px; color: var(--md-sys-color-on-surface-variant); margin-top: 5px; }
 
 
 /* ── Matrice ── */

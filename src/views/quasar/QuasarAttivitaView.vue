@@ -81,10 +81,11 @@ const filteredEvents = computed(() =>
   filterSystem.value ? events.value.filter(e => e.system === filterSystem.value) : events.value,
 )
 
-// Contatore eventi di OGGI (rispetta il filtro sistema attivo).
+// Contatore eventi di OGGI (rispetta il filtro sistema attivo) → nel sottotitolo.
 const todayCount = computed(() =>
   filteredEvents.value.filter(e => sameDay(e.ts, new Date())).length
 )
+const headerSubtitle = computed(() => `${todayCount.value} attività oggi`)
 
 // Raggruppa gli eventi filtrati (già ordinati desc) per etichetta-giorno.
 const grouped = computed(() => {
@@ -105,18 +106,13 @@ const grouped = computed(() => {
          Nello slot tools: pillola FILTRO sistema + contatore eventi di oggi. -->
     <MdPageHeader
       title="Registro attività"
-      subtitle="tutto ciò che accade su SIDERA e POPS, in tempo reale"
+      :subtitle="headerSubtitle"
       borderless
       sticky
       :hidden="headerHidden"
     >
       <template #tools>
-        <div class="qd-switchers">
-          <CepheidViewSwitcher :model-value="filterSystem" :tabs="systemTabs" @update:model-value="(v) => (filterSystem = v as '' | 'SIDERA' | 'POPS')" />
-          <span class="today-count" :title="'Eventi di oggi'">
-            <MIcon name="bolt" :size="13" :filled="true" />{{ todayCount }} oggi
-          </span>
-        </div>
+        <CepheidViewSwitcher :model-value="filterSystem" :tabs="systemTabs" @update:model-value="(v) => (filterSystem = v as '' | 'SIDERA' | 'POPS')" />
       </template>
     </MdPageHeader>
 
@@ -192,17 +188,6 @@ const grouped = computed(() => {
 @media (prefers-color-scheme: dark) { :deep(.md-page-header.is-sticky) { background: #16130B; } }
 @media (min-width: 1024px) {
   :deep(.md-page-header) { padding: 24px max(40px, calc(50% - 280px)) 18px; }
-}
-/* slot tools: pillola filtro sistema (sx) + contatore eventi di oggi (dx) */
-.qd-switchers { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
-
-/* contatore eventi di oggi nell'header (slot tools) */
-.today-count {
-  display: inline-flex; align-items: center; gap: 3px;
-  font-size: 11px; font-weight: 600; white-space: nowrap;
-  padding: 3px 9px; border-radius: 999px;
-  background: color-mix(in srgb, var(--md-sys-color-primary) 16%, transparent);
-  color: var(--md-sys-color-primary);
 }
 
 /* ── Feed ── */
