@@ -16,8 +16,6 @@ import CepheidViewSwitcher from '../../components/cepheid/CepheidViewSwitcher.vu
 import StarAvatar from '../../components/shared/StarAvatar.vue'
 import { useAllTasks, type Task } from '../../composables/sidera/useAllTasks'
 import { useTeamMembers, displayName, starAvatarProps } from '../../composables/sidera/useTeamMembers'
-// @ts-expect-error — starAvatar.js è vanilla senza tipi (stesso motore di StarAvatar)
-import { makeStar } from '../../lib/starAvatar.js'
 import { useQuadranti, type QuadId, type QuadTask } from '../../composables/quasar/useQuadranti'
 import { useResourceLoad } from '../../composables/quasar/useResourceLoad'
 import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
@@ -27,19 +25,6 @@ const { hidden: headerHidden } = useAutoHideHeader(scrollEl)
 
 const { tasks, loading, completeTask, updateTask } = useAllTasks()
 const { members } = useTeamMembers()
-
-// Colori pillola filtro = stesso calcolo di CepheidAssigneePills:
-//  bg = sfondo del bollino (pastello), name = colore "rinforzato" della stella.
-const avColors = computed<Record<string, { bg: string; name: string }>>(() => {
-  const out: Record<string, { bg: string; name: string }> = {}
-  for (const m of members.value) {
-    const s = makeStar(starAvatarProps(m.email, members.value))
-    const sB = Math.min(100, s.sat + 12)
-    const lB = Math.max(40, s.light - 12)
-    out[m.email] = { bg: s.bgColor, name: `hsl(${Math.round(s.hue)}, ${Math.round(sB)}%, ${Math.round(lB)}%)` }
-  }
-  return out
-})
 
 // ── Stato UI ────────────────────────────────────────────────────────────────
 type ViewId = 'task' | 'resource'
@@ -51,10 +36,28 @@ const viewTabs = [
 // Titolo della card = nome della tab attiva.
 const cardTitle = computed(() => (view.value === 'task' ? 'Azioni' : 'Risorse'))
 const cursor = ref(0)               // giorni nel futuro (0..14)
-const filterPerson = ref('')        // email assegnatario, o '' = tutti
+const filterSector = ref('')        // categoria/settore, o '' = tutti
 
-const { quadrants, counts, q1Overloaded, fireDelta } = useQuadranti(tasks, cursor, filterPerson)
-const { quadrants: rQuadrants, counts: rCounts } = useResourceLoad(tasks, members, cursor, filterPerson)
+// Pillola FILTRO per settore (estetica/funzionamento = i tab Azioni/Risorse).
+const sectorTabs = [
+  { id: '',                label: 'Tutti',           icon: 'groups' },
+  { id: 'direzione',       label: 'Direzione',       icon: 'workspace_premium' },
+  { id: 'amministrazione', label: 'Amministrazione', icon: 'account_balance' },
+  { id: 'commerciale',     label: 'Commerciale',     icon: 'handshake' },
+  { id: 'produzione',      label: 'Produzione',      icon: 'build' },
+  { id: 'logistica',       label: 'Logistica',       icon: 'local_shipping' },
+]
+
+// Email dei membri del settore selezionato (null = tutti) — usato dai composable.
+const filterEmails = computed<Set<string> | null>(() => {
+  if (!filterSector.value) return null
+  return new Set(
+    members.value.filter(m => (m.category || 'amministrazione') === filterSector.value).map(m => m.email),
+  )
+})
+
+const { quadrants, counts, q1Overloaded, fireDelta } = useQuadranti(tasks, cursor, filterEmails)
+const { quadrants: rQuadrants, counts: rCounts } = useResourceLoad(tasks, members, cursor, filterEmails)
 
 // ── Metadati quadranti ────────────────────────────────────────────────────
 const QUADS: { id: QuadId; name: string; sub: string }[] = [
@@ -183,31 +186,16 @@ async function completeFromModal() {
 
 <template>
   <div class="qd s-scope-quasar" ref="scrollEl">
-    <!-- Header come NEBULA Documenti, con i filtri DENTRO: barra sticky a tutta
-         larghezza (fondo card), auto-hide. Riga 1 = titolo + sottotitolo + tab;
-         riga 2 = filtro persona. -->
-    <div class="qd-header" :class="{ 'is-hidden': headerHidden }">
-      <MdPageHeader title="Quadranti" :subtitle="subtitle" borderless>
-        <template #tools>
+    <!-- Header stile NEBULA Documenti: barra sticky a tutta larghezza (fondo card).
+         Nello slot tools, a sx la pillola FILTRO settore, a dx la pillola TAB vista. -->
+    <MdPageHeader title="Quadranti" :subtitle="subtitle" sticky borderless :hidden="headerHidden">
+      <template #tools>
+        <div class="qd-switchers">
+          <CepheidViewSwitcher :model-value="filterSector" :tabs="sectorTabs" @update:model-value="(v) => (filterSector = v)" />
           <CepheidViewSwitcher :model-value="view" :tabs="viewTabs" @update:model-value="(v) => (view = v as ViewId)" />
-        </template>
-      </MdPageHeader>
-      <div class="avfilter">
-        <button class="avf all" :class="{ on: filterPerson === '' }" @click="filterPerson = ''">Tutti</button>
-        <button
-          v-for="m in members"
-          :key="m.email"
-          class="avf-pill"
-          :class="{ on: filterPerson === m.email }"
-          :style="{ background: avColors[m.email]?.bg }"
-          :title="displayName(m.email, members)"
-          @click="filterPerson = filterPerson === m.email ? '' : m.email"
-        >
-          <StarAvatar v-bind="starAvatarProps(m.email, members)" :size="32" />
-          <span class="avf-name" :style="{ color: avColors[m.email]?.name }">{{ displayName(m.email, members) }}</span>
-        </button>
-      </div>
-    </div>
+        </div>
+      </template>
+    </MdPageHeader>
 
     <div class="qd-content">
      <div class="panel">
@@ -408,24 +396,17 @@ async function completeFromModal() {
 }
 .s-surface-dark .panel { background: #16130B; }
 @media (prefers-color-scheme: dark) { .panel { background: #16130B; } }
-/* Header come NEBULA Documenti, con i filtri DENTRO: barra sticky a tutta
-   larghezza, fondo card #FFF8F0, auto-hide su scroll. Il gutter orizzontale è sul
-   wrapper, così titolo, tab e filtri si allineano alla larghezza del pannello sotto. */
-.qd-header {
-  position: sticky; top: 0; z-index: 10;
-  background: #FFF8F0;
-  padding: 0 16px;
-  transition: transform var(--md-sys-motion-duration-short4, 200ms) var(--md-sys-motion-easing-emphasized-decelerate, cubic-bezier(.05,.7,.1,1));
-  will-change: transform;
-}
-.s-surface-dark .qd-header { background: #16130B; }
-@media (prefers-color-scheme: dark) { .qd-header { background: #16130B; } }
-.qd-header.is-hidden { transform: translateY(-100%); }
-.qd-header :deep(.md-page-header) { background: transparent; padding: 18px 0 6px; }
+/* Header stile NEBULA Documenti: MdPageHeader sticky a tutta larghezza, fondo card
+   #FFF8F0; su desktop il contenuto è allineato (gutter) alla larghezza del pannello. */
+:deep(.md-page-header) { padding: 18px 16px 14px; }
+:deep(.md-page-header.is-sticky) { background: #FFF8F0; }
+.s-surface-dark :deep(.md-page-header.is-sticky) { background: #16130B; }
+@media (prefers-color-scheme: dark) { :deep(.md-page-header.is-sticky) { background: #16130B; } }
 @media (min-width: 1024px) {
-  .qd-header { padding: 0 max(40px, calc(50% - 500px)); }
-  .qd-header :deep(.md-page-header) { padding: 24px 0 8px; }
+  :deep(.md-page-header) { padding: 24px max(40px, calc(50% - 500px)) 18px; }
 }
+/* slot tools: pillola filtro settore (sx) + pillola tab vista (dx) */
+.qd-switchers { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 
 /* titolo della card = nome della tab attiva (Azioni / Risorse) */
 .panel-title {
@@ -459,35 +440,6 @@ async function completeFromModal() {
 .s-surface-dark .cursor-range::-moz-range-thumb { border-color: #16130B; }
 .cursor-scale { display: flex; justify-content: space-between; font-size: 10px; color: var(--md-sys-color-on-surface-variant); margin-top: 5px; }
 
-/* ── Filtro persona: riga DENTRO l'header, sotto al titolo/tab ── */
-.avfilter { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; padding-bottom: 14px; }
-/* "Tutti" = pillola di reset. Altezza 34px = pillola container tab (.vsw). */
-.avf.all {
-  border: 2px solid transparent; border-radius: 999px; padding: 0 13px; height: 34px; cursor: pointer;
-  background: var(--md-sys-color-surface-variant); color: var(--md-sys-color-on-surface-variant);
-  font-family: inherit; font-size: 11px; font-weight: 500; transition: all .15s; flex: 0 0 auto;
-}
-.avf.all.on { background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); }
-/* Pillola filtro = stesso look di CepheidAssigneePills (card azioni/task):
-   sfondo pastello dell'avatar, bordo outline-variant, nome nel colore-stella.
-   Si espande all'hover; al click resta aperta (= selezionata, bordo primary).
-   Altezza 34px = pillola container tab. */
-.avf-pill {
-  display: inline-flex; align-items: center; padding: 0; cursor: pointer; flex: 0 0 auto;
-  height: 34px; box-sizing: border-box;
-  border: 1px solid var(--md-sys-color-outline-variant); border-radius: 999px;
-  font-family: inherit; transition: padding-right .2s ease, border-color .15s ease;
-}
-.avf-pill:hover, .avf-pill.on { padding-right: 10px; }
-.avf-pill.on { border-color: var(--md-sys-color-primary); }
-/* l'anello dell'avatar è annullato: lo fornisce il bordo della pillola */
-.avf-pill :deep(.star-avatar) { box-shadow: none; flex: 0 0 auto; }
-.avf-name {
-  max-width: 0; overflow: hidden; white-space: nowrap; opacity: 0; padding-left: 0;
-  font-size: 11px; font-weight: 600; line-height: 1;
-  transition: max-width .22s ease, opacity .15s ease, padding-left .2s ease;
-}
-.avf-pill:hover .avf-name, .avf-pill.on .avf-name { max-width: 140px; opacity: 1; padding-left: 4px; }
 
 /* ── Matrice ── */
 /* dimensioni fisse (concept): q1 AGISCI top-left è più LARGO (col 1.15fr) e più
