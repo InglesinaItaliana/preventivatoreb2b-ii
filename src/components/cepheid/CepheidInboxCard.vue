@@ -18,12 +18,21 @@ const emit = defineEmits<{
   (e: 'delete'): void
 }>()
 
+// Pre-selezione (opzione B): se la task è GIÀ collocata — referenziata nel
+// deliverableTaskIds di un deliverable, oppure con una milestoneId — parti da
+// quella selezione invece di chiedere a vuoto. Resta cambiabile (le pillole sono
+// interattive). La card è keyed-by-task nel parent → si re-inizializza per ogni task.
+const preDeliverableId = props.deliverables.find(
+  d => Array.isArray(d.deliverableTaskIds) && d.deliverableTaskIds.includes(props.task.id),
+)?.id ?? ''
+const preMilestoneId = preDeliverableId ? '' : (props.task.milestoneId ?? '')
+
 const draft = reactive({
   assignees: [...props.task.assignees],
   priority: props.task.priority,
   projectId: props.task.projectId || '',
-  milestoneId: '',
-  deliverableId: '',
+  milestoneId: preMilestoneId,
+  deliverableId: preDeliverableId,
 })
 
 const isStandalone = computed(() => !props.task.projectId)
