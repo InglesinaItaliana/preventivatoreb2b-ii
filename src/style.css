@@ -415,13 +415,41 @@ input[type=number] {
   --md-sys-color-on-primary-container:  var(--md-ref-palette-nova-90);
 }
 
-/* PULSAR: la pillola bottom-nav usa lo stesso colore delle card (surface),
-   non surface-container. Regola globale (non scoped) con specificità
-   `.s-shell.s-scope-pulsar .cm-nav-pill` per battere la regola scoped del
-   componente ContextualBottomNav. Vale sia in light sia in dark (le card
-   PULSAR usano anch'esse `--md-sys-color-surface`). */
+/* PULSAR — chrome mobile piatto e chiaro (doc newUPDATE).
+   Specificità `.s-shell.s-scope-pulsar …` per battere le regole scoped dei
+   componenti shared. Tutto sotto è SOLO per lo scope PULSAR. */
+
+/* Pillola bottom-nav: colore delle card (surface) e SENZA ombra (piatta). */
 .s-shell.s-scope-pulsar .cm-nav-pill {
   background: var(--md-sys-color-surface);
+  box-shadow: none;
+}
+
+/* Header (MdPageHeader) di tutte le schede PULSAR: chiaro come la pillola (surface
+   #FFF8F0, non page-bg beige), niente bordo, ed esteso dietro la status bar
+   (safe-area-inset-top) così la striscia di sistema in alto resta dello stesso
+   chiaro. NB: `.s-shell.s-scope-pulsar` è COMPOUND (stesso elemento), non
+   discendente — il prefisso dà la specificità per battere il `:deep` delle view. */
+.s-shell.s-scope-pulsar .md-page-header,
+.s-shell.s-scope-pulsar .md-page-header.is-sticky {
+  background: var(--md-sys-color-surface);
+  border-bottom: none;
+  padding-top: calc(18px + env(safe-area-inset-top));
+}
+
+/* FAB: resta teal (primary) ma PIATTO (niente ombra) e con l'icona del colore
+   della pillola (surface) invece di bianca, della stessa dimensione (36px) delle
+   icone-pillola. */
+.s-shell.s-scope-pulsar .cm-fab {
+  color: var(--md-sys-color-surface);
+  box-shadow: none;
+}
+.s-shell.s-scope-pulsar .cm-fab:hover {
+  box-shadow: none;
+}
+.s-shell.s-scope-pulsar .cm-fab .m-icon {
+  /* MIcon imposta font-size inline → serve !important per scavalcarlo solo qui. */
+  font-size: 36px !important;
 }
 
 /* CEPHEID: header (MdPageHeader) del colore delle card (surface), senza bordo

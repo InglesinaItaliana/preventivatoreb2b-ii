@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SIDERA · Agente Construct — formula estesa</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&family=Outfit:wght@200;300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#05070d;--ink:#eef2fb;--ink-soft:#aab3c8;--ink-faint:#5d6680;--line:rgba(150,165,210,.12);--line-strong:rgba(150,165,210,.22);
+    --m1-rose:#e85c8a;--m1-teal:#3fd0c9;--gold:#e7b54e;--display:"Cormorant Garamond",serif;--body:"Outfit",sans-serif;}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:var(--body);color:var(--ink);background:var(--bg);
+    background-image:radial-gradient(60vw 50vw at 12% -8%,rgba(232,92,138,.10),transparent 60%),radial-gradient(55vw 55vw at 100% 110%,rgba(231,181,78,.08),transparent 60%);min-height:100vh;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1080px;margin:0 auto;padding:64px 28px 110px}
+  .kicker{font-weight:400;letter-spacing:.42em;text-transform:uppercase;font-size:11px;color:var(--gold);margin-bottom:16px;padding-left:.42em}
+  h1{font-family:var(--display);font-weight:500;font-size:clamp(36px,6vw,62px);line-height:1.02;letter-spacing:-.01em}
+  h1 em{font-style:italic;color:var(--gold)}
+  .lede{font-family:var(--display);font-style:italic;font-size:clamp(17px,2.3vw,21px);color:var(--ink-soft);max-width:66ch;margin-top:18px;line-height:1.5}
+  .lede b{font-style:normal;font-weight:500;color:var(--m1-teal)}
+  .axes{display:flex;gap:10px;flex-wrap:wrap;margin:26px 0 6px}
+  .axis{font-size:11px;letter-spacing:.04em;color:var(--ink-soft);border:1px solid var(--line);border-radius:999px;padding:8px 14px}
+  .axis b{color:var(--ink);font-weight:500}
+  .row{display:grid;grid-template-columns:120px 1fr 1fr 1fr;gap:16px;align-items:center;border:1px solid var(--line);border-radius:18px;padding:20px 22px;margin-top:18px;
+    background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,.005))}
+  @media(max-width:720px){.row{grid-template-columns:1fr 1fr;}.row .fn{grid-column:1/-1}}
+  .fn{font-family:var(--display);font-style:italic;font-size:22px;color:var(--ink)}
+  .fn small{display:block;font-family:var(--body);font-style:normal;font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-faint);margin-top:6px}
+  .cell{display:flex;flex-direction:column;align-items:center;gap:10px}
+  .cell .cap{font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-faint)}
+  .cell.h .cap{color:var(--m1-rose)}.cell.a .cap{color:var(--gold)}
+  canvas{display:block}
+  .strip{margin-top:30px;border:1px solid var(--line);border-radius:18px;padding:24px;background:radial-gradient(120% 100% at 50% 0%,rgba(231,181,78,.05),transparent 70%)}
+  .strip h2{font-family:var(--display);font-style:italic;font-weight:500;font-size:22px;margin-bottom:4px}
+  .strip .sub{font-size:11px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-faint);margin-bottom:20px}
+  .strip .items{display:flex;gap:26px;flex-wrap:wrap;align-items:center}
+  .strip .it{display:flex;flex-direction:column;align-items:center;gap:8px}
+  .strip .it span{font-family:var(--display);font-size:15px;color:var(--ink-soft)}
+  .note{font-size:12.5px;color:var(--ink-faint);font-weight:300;margin-top:24px;line-height:1.55;max-width:74ch}
+  .note b{color:var(--gold);font-weight:500}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="kicker">SIDERA · La formula, in tre dimensioni</div>
+  <h1>L'agente è la stella,<br><em>cristallizzata</em>.</h1>
+  <p class="lede">La stella a N punte tirata fuori dal piano diventa una <b>bipiramide a base N</b>. Stessa N = stessa funzione. Stesso colore = stesso individuo. Cambia solo la <b>materia</b>: luce diffusa per gli umani, reticolo cristallino per gli agenti.</p>
+
+  <div class="axes">
+    <div class="axis"><b>Materia</b> → genere (umano / agente)</div>
+    <div class="axis"><b>N</b> → funzione (1–6, condivisa)</div>
+    <div class="axis"><b>Colore</b> → individuo</div>
+  </div>
+
+  <div id="rows"></div>
+
+  <div class="strip">
+    <h2>Il colore distingue ancora i singoli</h2>
+    <div class="sub">quattro agenti · stessa funzione (ottaedro N=4) · individui diversi</div>
+    <div class="items" id="strip"></div>
+  </div>
+
+  <p class="note">La bipiramide a base <b>4 è l'ottaedro</b> — il marchio di Schlegel. Quindi l'agente della funzione "4" è letteralmente il logo SIDERA in movimento. Alla scala chat il cristallo si mostra fermo e di taglio: la silhouette a N punte resta leggibile come per le stelle, ma in versione vettoriale — così riconosci <b>funzione e genere</b> anche a 28px.</p>
+</div>
+
+<script>
+const hsla=(h,s,l,a)=>`hsla(${h},${s}%,${l}%,${a})`;
+function hueFromIndex(i,base=20){return (base+i*137.508)%360;}
+
+/* ---- STELLA umana (luce) ---- */
+function drawStar(ctx,S,t,{points,hue,sat,light,anim=true}){
+  const x=S/2,y=S/2,unit=S*0.92,pulse=anim?1+Math.sin(t*0.6)*0.09:1,coreR=0.058*unit*pulse,glowR=coreR*5;
+  ctx.save();ctx.globalCompositeOperation='lighter';
+  let g=ctx.createRadialGradient(x,y,0,x,y,glowR);g.addColorStop(0,hsla(hue,sat,light,0.5));g.addColorStop(0.2,hsla(hue,sat,light,0.26));g.addColorStop(0.55,hsla(hue,sat,light,0.07));g.addColorStop(1,hsla(hue,sat,light,0));
+  ctx.fillStyle=g;ctx.beginPath();ctx.arc(x,y,glowR,0,7);ctx.fill();
+  if(points>1){const spin=anim?t*0.05:0.3,len=unit*0.40*pulse,w=coreR*0.85;
+    for(let i=0;i<points;i++){const a=spin+i*6.2832/points,tx=x+Math.cos(a)*len,ty=y+Math.sin(a)*len,pa=a+Math.PI/2,bd=len*0.16,bx=x+Math.cos(a)*bd,by=y+Math.sin(a)*bd,sx=Math.cos(pa)*w,sy=Math.sin(pa)*w;
+      const lg=ctx.createLinearGradient(x,y,tx,ty);lg.addColorStop(0,hsla(hue,sat,light+20,0.7));lg.addColorStop(0.35,hsla(hue,sat,light,0.35));lg.addColorStop(1,hsla(hue,sat,light,0));
+      ctx.fillStyle=lg;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(bx+sx,by+sy);ctx.lineTo(tx,ty);ctx.lineTo(bx-sx,by-sy);ctx.closePath();ctx.fill();}}
+  const cg=ctx.createRadialGradient(x,y,0,x,y,coreR);cg.addColorStop(0,'rgba(255,255,255,.98)');cg.addColorStop(0.45,hsla(hue,sat,85,0.95));cg.addColorStop(1,hsla(hue,sat,light,0));
+  ctx.fillStyle=cg;ctx.beginPath();ctx.arc(x,y,coreR,0,7);ctx.fill();ctx.restore();
+}
+
+/* ---- bipiramide a base N (vertici + spigoli) ---- */
+function bipyramid(N){const V=[];for(let i=0;i<N;i++){const a=i*2*Math.PI/N;V.push([Math.cos(a),0,Math.sin(a)]);}V.push([0,1,0]);V.push([0,-1,0]);
+  const E=[];for(let i=0;i<N;i++){E.push([i,(i+1)%N]);E.push([i,N]);E.push([i,N+1]);}return {V,E};}
+
+/* ---- AGENTE construct (reticolo cristallino) ---- */
+function drawConstruct(ctx,S,t,{N,hue,sat,light,anim=true}){
+  const cx=S/2,cy=S/2,R=S*0.30,AY=anim?t*0.5:0.62,AX=0.52;
+  const {V,E}=bipyramid(N);
+  const P=V.map(([x,y,z])=>{let X=x*Math.cos(AY)-z*Math.sin(AY),Z=x*Math.sin(AY)+z*Math.cos(AY);let Y=y*Math.cos(AX)-Z*Math.sin(AX);Z=y*Math.sin(AX)+Z*Math.cos(AX);
+    const persp=1/(1.9-Z*0.45);return {x:cx+X*R*persp,y:cy+Y*R*persp,z:Z};});
+  ctx.save();ctx.globalCompositeOperation='lighter';
+  const g=ctx.createRadialGradient(cx,cy,0,cx,cy,R*1.55);g.addColorStop(0,hsla(hue,sat,light,0.10));g.addColorStop(1,hsla(hue,sat,light,0));ctx.fillStyle=g;ctx.beginPath();ctx.arc(cx,cy,R*1.55,0,7);ctx.fill();
+  E.forEach(([a,b])=>{const za=(P[a].z+P[b].z)/2,al=0.32+0.45*(za+1)/2;ctx.strokeStyle=hsla(hue,sat,light+10,al);ctx.lineWidth=1.4;ctx.beginPath();ctx.moveTo(P[a].x,P[a].y);ctx.lineTo(P[b].x,P[b].y);ctx.stroke();});
+  P.forEach(p=>{const al=0.5+0.5*(p.z+1)/2,r=(2+1.4*(p.z+1)/2);const vg=ctx.createRadialGradient(p.x,p.y,0,p.x,p.y,r*3);
+    vg.addColorStop(0,`rgba(255,250,240,${al})`);vg.addColorStop(0.4,hsla(hue,sat,light+14,al*0.7));vg.addColorStop(1,hsla(hue,sat,light,0));ctx.fillStyle=vg;ctx.beginPath();ctx.arc(p.x,p.y,r*3,0,7);ctx.fill();});
+  ctx.restore();
+}
+
+/* ---- montaggio ---- */
+const DPR=Math.min(window.devicePixelRatio||1,2);const reg=[];
+function mk(parent,S,fn){const cv=document.createElement('canvas');cv.style.width=S+'px';cv.style.height=S+'px';cv.width=S*DPR;cv.height=S*DPR;const ctx=cv.getContext('2d');ctx.setTransform(DPR,0,0,DPR,0,0);parent.appendChild(cv);reg.push({ctx,S,fn});return cv;}
+
+const FUNCS=[
+  {fn:'Produzione',N:3,label:'N = 3 · bipiramide triangolare',hueH:hueFromIndex(4),hueA:hueFromIndex(10)},
+  {fn:'Amministrazione',N:4,label:'N = 4 · ottaedro (logo SIDERA)',hueH:hueFromIndex(2),hueA:hueFromIndex(7)},
+  {fn:'Direzione',N:6,label:'N = 6 · bipiramide esagonale',hueH:hueFromIndex(0),hueA:hueFromIndex(5)},
+];
+const rows=document.getElementById('rows');
+FUNCS.forEach(F=>{
+  const row=document.createElement('div');row.className='row';
+  const fn=document.createElement('div');fn.className='fn';fn.innerHTML=F.fn+'<small>'+F.label+'</small>';
+  const cH=document.createElement('div');cH.className='cell h';const capH=document.createElement('div');capH.className='cap';capH.textContent='Umano · stella';
+  mk(cH,150,(ctx,S,t)=>drawStar(ctx,S,t,{points:F.N,hue:F.hueH,sat:80,light:60}));cH.appendChild(capH);
+  const cA=document.createElement('div');cA.className='cell a';const capA=document.createElement('div');capA.className='cap';capA.textContent='Agente · construct';
+  mk(cA,150,(ctx,S,t)=>drawConstruct(ctx,S,t,{N:F.N,hue:F.hueA,sat:78,light:62}));cA.appendChild(capA);
+  const cS=document.createElement('div');cS.className='cell a';const capS=document.createElement('div');capS.className='cap';capS.textContent='Agente · chat 28px';
+  mk(cS,30,(ctx,S,t)=>drawConstruct(ctx,S,t,{N:F.N,hue:F.hueA,sat:78,light:62,anim:false}));cS.appendChild(capS);
+  row.appendChild(fn);row.appendChild(cH);row.appendChild(cA);row.appendChild(cS);rows.appendChild(row);
+});
+
+const strip=document.getElementById('strip');
+['Atlas','Vesta','Ceres','Iris'].forEach((nm,i)=>{
+  const it=document.createElement('div');it.className='it';
+  mk(it,92,(ctx,S,t)=>drawConstruct(ctx,S,t,{N:4,hue:hueFromIndex(i,30),sat:78,light:62}));
+  const s=document.createElement('span');s.textContent=nm;it.appendChild(s);strip.appendChild(it);
+});
+
+let t0=performance.now();(function loop(now){const t=(now-t0)/1000;reg.forEach(r=>{r.ctx.clearRect(0,0,r.S,r.S);r.fn(r.ctx,r.S,t);});requestAnimationFrame(loop);})(t0);
+</script>
+</body>
+</html>

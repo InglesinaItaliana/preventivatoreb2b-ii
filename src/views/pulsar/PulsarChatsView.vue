@@ -5,7 +5,7 @@ import MIcon from '../../components/shared/MIcon.vue'
 import MdPageHeader from '../../components/shared/MdPageHeader.vue'
 import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
 import { useChats } from '../../composables/pulsar/useChats'
-import { useUnreadChats } from '../../composables/pulsar/usePulsarUnread'
+import { useUnreadChats, useUnreadCounts } from '../../composables/pulsar/usePulsarUnread'
 import { useTeamMembers, displayName, starAvatarProps } from '../../composables/sidera/useTeamMembers'
 import { pulsarAvatarColor } from '../../composables/pulsar/usePulsarAvatar'
 import StarAvatar from '../../components/shared/StarAvatar.vue'
@@ -17,6 +17,7 @@ const { hidden: headerHidden } = useAutoHideHeader(scrollEl)
 const router = useRouter()
 const { chats, loading, createChat, deleteChat } = useChats()
 const { unreadCount } = useUnreadChats(chats)
+const { counts: unreadCounts } = useUnreadCounts(chats)
 const { members } = useTeamMembers()
 
 const myEmail = auth.currentUser?.email ?? ''
@@ -166,7 +167,12 @@ onMounted(() => {
             <span class="chat-name">{{ chatName(chat) }}</span>
             <span class="chat-time">{{ formatTime(chat.lastMessageAt) }}</span>
           </div>
-          <div class="chat-preview">{{ chat.lastMessage || 'Nessun messaggio' }}</div>
+          <div class="chat-bottom">
+            <span class="chat-preview">{{ chat.lastMessage || 'Nessun messaggio' }}</span>
+            <span v-if="unreadCounts[chat.id]" class="chat-unread">
+              {{ unreadCounts[chat.id] > 99 ? '99+' : unreadCounts[chat.id] }}
+            </span>
+          </div>
         </div>
         <button class="delete-btn" title="Elimina chat" @click.stop="askDeleteChat(chat)">
           <MIcon name="close" :size="16" />
@@ -375,12 +381,30 @@ onMounted(() => {
 .chat-name { font-size: 14px; font-weight: 600; color: var(--md-sys-color-on-surface); }
 .chat-time { font-size: 11px; color: var(--md-sys-color-on-surface-variant); flex-shrink: 0; margin-left: 8px; }
 
+.chat-bottom { display: flex; align-items: center; gap: 8px; }
 .chat-preview {
+  flex: 1;
+  min-width: 0;
   font-size: 12px;
   color: var(--md-sys-color-on-surface-variant);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+/* Badge messaggi non letti (count reale via getCountFromServer). */
+.chat-unread {
+  flex-shrink: 0;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  box-sizing: border-box;
+  border-radius: 9px;
+  background: var(--md-sys-color-primary);
+  color: var(--md-sys-color-on-primary);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
 }
 
 .delete-btn {

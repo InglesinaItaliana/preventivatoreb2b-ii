@@ -1,4 +1,6 @@
-import { ref, computed, type Ref } from 'vue'
+import { ref, computed, watch, type Ref } from 'vue'
+import { collection, query, where, getCountFromServer, Timestamp } from 'firebase/firestore'
+import { db } from '../../firebase'
 import type { Chat } from './useChats'
 
 // Tracciamento "ultimo messaggio visto" per chat, persistito in localStorage.
@@ -43,4 +45,37 @@ export function useUnreadChats(chats: Ref<Chat[]>) {
   const unreadCount = computed(() => unreadIds.value.length)
 
   return { unreadIds, unreadCount }
+}
+
+/**
+ * Conteggio messaggi non letti PER chat (per il badge sulle card conversazione).
+ * Il tracciamento è solo "ultimo visto" (timestamp): il numero esatto si ottiene
+ * con una count-query aggregata (getCountFromServer, niente lettura dei doc) sui
+ * messaggi con createdAt > ultimo-visto. Una query solo per le chat non lette;
+ * ricalcola quando cambiano le chat (nuovo messaggio) o `seen` (apertura chat).
+ */
+export function useUnreadCounts(chats: Ref<Chat[]>) {
+  const counts = ref<Record<string, number>>({})
+  watch(
+    [chats, seen],
+    async () => {
+      const next: Record<string, number> = {}
+      await Promise.all(chats.value.map(async (c) => {
+        const last = c.lastMessageAt?.getTime() ?? 0
+        const seenAt = seen.value[c.id] ?? 0
+        if (!last || last <= seenAt) return            // letta → nessun badge
+        try {
+          const qy = query(
+            collection(db, 'chats', c.id, 'messages'),
+            where('createdAt', '>', Timestamp.fromMillis(seenAt)),
+          )
+          const n = (await getCountFromServer(qy)).data().count
+          if (n > 0) next[c.id] = n
+        } catch { /* permessi/offline: salta questa chat */ }
+      }))
+      counts.value = next
+    },
+    { immediate: true },
+  )
+  return { counts }
 }
