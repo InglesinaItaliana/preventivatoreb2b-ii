@@ -67,9 +67,9 @@ onUnmounted(() => {
   /* Sfondo chiaro coordinato con l'hue-firma della stella (makeStar -> bgColor,
      passato via onStar). Fallback #141b26 finche' il motore non ha montato. */
   background: v-bind(lightBg);
-  /* Anello di definizione del disco: stesso colore/consistenza del hairline
-     beige canonico CEPHEID (1px solid #E8E5DF) usato dai deliverable e dalle
-     chip, così il bordo dell'avatar è coerente con quelli della pagina. */
-  box-shadow: 0 0 0 1px #E8E5DF;
+  /* Anello di definizione del disco: stesso bordo delle card progetto (.dcard) —
+     token M3 outline-variant (sabbia in CEPHEID), 1px solid. Theme-aware, così
+     il bordo dell'avatar resta coerente con le card della pagina in light/dark. */
+  box-shadow: 0 0 0 1px var(--md-sys-color-outline-variant);
 }
 </style>
