@@ -168,6 +168,21 @@ const editor = useEditor({
     }),
   ],
   editable: false,                              // sbloccato quando provider 'synced' + canWrite
+  editorProps: {
+    // Apertura link: da TOUCH (mobile) o in SOLA LETTURA un tap su un link lo
+    // apre nel browser esterno del telefono. Su desktop in edit lasciamo la
+    // selezione (l'utente apre dal bubble menu "Apri"), come da scelta sopra.
+    handleClick(view, _pos, event) {
+      const a = (event.target as HTMLElement | null)?.closest?.('a[href]') as HTMLAnchorElement | null
+      if (!a) return false
+      const isTouch = typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)')?.matches
+      if (isTouch || !view.editable) {
+        window.open(a.href, '_blank', 'noopener,noreferrer')
+        return true   // consuma il click: niente posizionamento cursore
+      }
+      return false
+    },
+  },
 })
 
 const editorRef = shallowRef(editor)
