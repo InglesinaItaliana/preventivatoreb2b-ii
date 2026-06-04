@@ -11,7 +11,10 @@ const props = withDefaults(defineProps<{
   animated?: boolean
 }>(), {
   size: 40,
-  animated: true,
+  // Statici di default ovunque (resa piu' nitida + zero costo rAF nelle liste).
+  // Il path dinamico resta: passare :animated="true" dove serve (es. badge
+  // organigramma 150px in NebulaTeamView).
+  animated: false,
 })
 
 const canvasRef = ref<HTMLCanvasElement | null>(null)
@@ -64,6 +67,9 @@ onUnmounted(() => {
   /* Sfondo chiaro coordinato con l'hue-firma della stella (makeStar -> bgColor,
      passato via onStar). Fallback #141b26 finche' il motore non ha montato. */
   background: v-bind(lightBg);
-  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08);
+  /* Anello di definizione del disco: stesso bordo delle card progetto (.dcard) —
+     token M3 outline-variant (sabbia in CEPHEID), 1px solid. Theme-aware, così
+     il bordo dell'avatar resta coerente con le card della pagina in light/dark. */
+  box-shadow: 0 0 0 1px var(--md-sys-color-outline-variant);
 }
 </style>

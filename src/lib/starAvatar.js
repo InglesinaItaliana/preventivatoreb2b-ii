@@ -243,25 +243,34 @@ export function mountStarAvatar(canvas, opts) {
   const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const inst = { ctx: null, size: 0, star: null };
 
-  function size(canvas, sz) {
+  // Supersampling: in modalita' STATICA disegniamo una sola volta, quindi
+  // possiamo permetterci un backing store piu' denso (min 3x) -> punte/core
+  // anti-aliasati e nitidi anche ai formati piccoli (28-42px). In ANIMAZIONE
+  // restiamo al DPR (cap 2x) per non ridisegnare aree enormi a 60fps.
+  const SS_STATIC = 3;
+  function scaleFor(animated) {
+    return animated ? dpr : Math.max(dpr, SS_STATIC);
+  }
+
+  function size(canvas, sz, scale) {
     canvas.style.width = sz + 'px';
     canvas.style.height = sz + 'px';
-    canvas.width = Math.round(sz * dpr);
-    canvas.height = Math.round(sz * dpr);
+    canvas.width = Math.round(sz * scale);
+    canvas.height = Math.round(sz * scale);
     const ctx = canvas.getContext('2d');
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.setTransform(scale, 0, 0, scale, 0, 0);
     return ctx;
   }
 
   function apply(o) {
     inst.size = o.size ?? inst.size ?? 40;
-    inst.ctx = size(canvas, inst.size);
+    const animated = (o.animated ?? true) && !reduce;
+    inst.ctx = size(canvas, inst.size, scaleFor(animated));
     inst.star = makeStar({ seed: o.seed, category: o.category, hueIndex: o.hueIndex, hue: o.hue });
     o.onStar?.(inst.star);   // notifica il wrapper (es. per leggere star.bgColor)
-    const animated = (o.animated ?? true) && !reduce;
     _instances.delete(inst);
     if (animated) { _instances.add(inst); _start(); }
-    else { drawStar(inst.ctx, inst.size, inst.star, 0); } // statica
+    else { drawStar(inst.ctx, inst.size, inst.star, 0); } // statica (supersampled)
   }
 
   apply(opts);
