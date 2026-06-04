@@ -62,10 +62,10 @@ const { quadrants: rQuadrants, counts: rCounts } = useResourceLoad(tasks, member
 // Pillola CURSORE temporale condensata: oggi / +3gg / +7gg / +14gg (al posto
 // della card "Ritorno al futuro" con lo slider). Va a sx delle altre pillole.
 const cursorTabs = [
-  { id: '0',  label: 'oggi' },
-  { id: '3',  label: '+3gg' },
-  { id: '7',  label: '+7gg' },
-  { id: '14', label: '+14gg' },
+  { id: '0',  label: '',    icon: 'today' },   // solo icona calendario "oggi"
+  { id: '3',  label: '+3' },
+  { id: '7',  label: '+7' },
+  { id: '14', label: '+14' },
 ]
 
 // ── Metadati quadranti ────────────────────────────────────────────────────

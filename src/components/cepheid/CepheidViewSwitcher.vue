@@ -48,7 +48,7 @@ onUnmounted(() => { if (hoverTimer) clearTimeout(hoverTimer) })
       @mouseleave="!labels && onLeave()"
     >
       <MIcon v-if="t.icon" :name="t.icon" :size="18" :filled="modelValue === t.id" />
-      <span class="vlabel">{{ t.label }}</span>
+      <span v-if="t.label" class="vlabel">{{ t.label }}</span>
       <span v-if="labels && t.count != null" class="vcount">{{ t.count }}</span>
     </button>
   </div>
