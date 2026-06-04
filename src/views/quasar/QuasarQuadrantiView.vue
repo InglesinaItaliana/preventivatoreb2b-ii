@@ -16,6 +16,8 @@ import CepheidViewSwitcher from '../../components/cepheid/CepheidViewSwitcher.vu
 import StarAvatar from '../../components/shared/StarAvatar.vue'
 import { useAllTasks, type Task } from '../../composables/sidera/useAllTasks'
 import { useTeamMembers, displayName, starAvatarProps } from '../../composables/sidera/useTeamMembers'
+// @ts-expect-error — starAvatar.js è vanilla senza tipi (stesso motore di StarAvatar)
+import { makeStar } from '../../lib/starAvatar.js'
 import { useQuadranti, type QuadId, type QuadTask } from '../../composables/quasar/useQuadranti'
 import { useResourceLoad } from '../../composables/quasar/useResourceLoad'
 import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
@@ -25,6 +27,19 @@ const { hidden: headerHidden } = useAutoHideHeader(scrollEl)
 
 const { tasks, loading, completeTask, updateTask } = useAllTasks()
 const { members } = useTeamMembers()
+
+// Colori pillola filtro = stesso calcolo di CepheidAssigneePills:
+//  bg = sfondo del bollino (pastello), name = colore "rinforzato" della stella.
+const avColors = computed<Record<string, { bg: string; name: string }>>(() => {
+  const out: Record<string, { bg: string; name: string }> = {}
+  for (const m of members.value) {
+    const s = makeStar(starAvatarProps(m.email, members.value))
+    const sB = Math.min(100, s.sat + 12)
+    const lB = Math.max(40, s.light - 12)
+    out[m.email] = { bg: s.bgColor, name: `hsl(${Math.round(s.hue)}, ${Math.round(sB)}%, ${Math.round(lB)}%)` }
+  }
+  return out
+})
 
 // ── Stato UI ────────────────────────────────────────────────────────────────
 type ViewId = 'task' | 'resource'
@@ -180,11 +195,12 @@ async function completeFromModal() {
             :key="m.email"
             class="avf-pill"
             :class="{ on: filterPerson === m.email }"
+            :style="{ background: avColors[m.email]?.bg }"
             :title="displayName(m.email, members)"
             @click="filterPerson = filterPerson === m.email ? '' : m.email"
           >
             <StarAvatar v-bind="starAvatarProps(m.email, members)" :size="24" />
-            <span class="avf-name">{{ displayName(m.email, members) }}</span>
+            <span class="avf-name" :style="{ color: avColors[m.email]?.name }">{{ displayName(m.email, members) }}</span>
           </button>
         </div>
         <CepheidViewSwitcher :model-value="view" :tabs="viewTabs" @update:model-value="(v) => (view = v as ViewId)" />
@@ -424,21 +440,24 @@ async function completeFromModal() {
   font-family: inherit; font-size: 11px; font-weight: 500; transition: all .15s; flex: 0 0 auto;
 }
 .avf.all.on { background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); }
-/* avatar-pillola collassabile: cerchio; il SELEZIONATO espande il nome (stile
-   coerente con CepheidAssigneePills). */
+/* Pillola filtro = stesso look di CepheidAssigneePills (card azioni/task):
+   sfondo pastello dell'avatar, bordo outline-variant, nome nel colore-stella.
+   Si espande all'hover; al click resta aperta (= selezionata, bordo primary). */
 .avf-pill {
   display: inline-flex; align-items: center; padding: 0; cursor: pointer; flex: 0 0 auto;
-  background: transparent; border: 0; border-radius: 999px; font-family: inherit; transition: background .15s;
+  border: 1px solid var(--md-sys-color-outline-variant); border-radius: 999px;
+  font-family: inherit; transition: padding-right .2s ease, border-color .15s ease;
 }
-.avf-pill :deep(.star-avatar) { box-shadow: 0 0 0 2px transparent; transition: box-shadow .15s; }
-.avf-pill.on { background: color-mix(in srgb, var(--md-sys-color-primary) 14%, transparent); }
-.avf-pill.on :deep(.star-avatar) { box-shadow: 0 0 0 2px var(--md-sys-color-primary); }
+.avf-pill:hover, .avf-pill.on { padding-right: 10px; }
+.avf-pill.on { border-color: var(--md-sys-color-primary); }
+/* l'anello dell'avatar è annullato: lo fornisce il bordo della pillola */
+.avf-pill :deep(.star-avatar) { box-shadow: none; flex: 0 0 auto; }
 .avf-name {
-  max-width: 0; overflow: hidden; white-space: nowrap; opacity: 0; padding: 0;
-  font-size: 11px; font-weight: 600; color: var(--md-sys-color-primary);
-  transition: max-width .2s ease, opacity .15s ease, padding .2s ease;
+  max-width: 0; overflow: hidden; white-space: nowrap; opacity: 0; padding-left: 0;
+  font-size: 11px; font-weight: 600; line-height: 1;
+  transition: max-width .22s ease, opacity .15s ease, padding-left .2s ease;
 }
-.avf-pill.on .avf-name { max-width: 140px; opacity: 1; padding: 0 10px 0 6px; }
+.avf-pill:hover .avf-name, .avf-pill.on .avf-name { max-width: 140px; opacity: 1; padding-left: 4px; }
 
 /* ── Matrice ── */
 /* dimensioni fisse (concept): q1 AGISCI top-left è più LARGO (col 1.15fr) e più
