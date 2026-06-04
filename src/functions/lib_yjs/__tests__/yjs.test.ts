@@ -4,6 +4,7 @@ import { nebulaSchema, NEBULA_YJS_FIELD } from '../pmSchema'
 import {
   seedYDocFromJSON, ydocToJSON, buildYDoc, applyJSONToYDoc, extractText, encodeState,
 } from '../ydoc'
+import { markdownToProseMirror, type PMNode } from '../../lib_md/markdown'
 
 // Fixture che esercita OGNI tipo di nodo/mark dello schema NEBULA-DOCS,
 // inclusi gli 8 atomi custom con tutti i loro attrs.
@@ -133,5 +134,52 @@ describe('helper Yjs — apply MCP / restore', () => {
     expect(text).toContain('Titolo')
     expect(text).toContain('grassetto')
     expect(text.length).toBeLessThanOrEqual(10_000)
+  })
+})
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GUARD anti-drift: ogni nodo custom prodotto dal markdown DEVE avere il gemello
+// in nebulaSchema, altrimenti viene scartato al salvataggio Y.Doc (bug PR #82:
+// milestone/deliverable/obiettivo aggiunti al parser/link tool ma non allo
+// schema server → chip persi). Aggiungendo una nuova sintassi @x: aggiorna
+// ALL_MENTIONS_MD: se manca il gemello in pmSchema.ts, questi test falliscono.
+// ─────────────────────────────────────────────────────────────────────────────
+function collectNodeTypes(node: PMNode, acc: Set<string> = new Set()): Set<string> {
+  acc.add(node.type)
+  for (const c of node.content ?? []) collectNodeTypes(c, acc)
+  return acc
+}
+
+describe('guard anti-drift: markdown → nebulaSchema', () => {
+  const ALL_MENTIONS_MD = [
+    '@task:p1/t1',
+    '@project:p1',
+    '@milestone:p1/m1',
+    '@deliverable:p1/d1',
+    '@obiettivo:o1',
+    '{{embed-tasks status=todo}}',
+  ].join('\n\n')
+
+  it('ogni nodo prodotto dal markdown esiste in nebulaSchema', () => {
+    const produced = collectNodeTypes(markdownToProseMirror(ALL_MENTIONS_MD))
+    // sanity: il parser ha davvero prodotto i nodi custom attesi
+    expect([...produced]).toEqual(expect.arrayContaining([
+      'taskMention', 'projectMention', 'milestoneMention',
+      'deliverableMention', 'obiettivoMention', 'taskEmbed',
+    ]))
+    for (const t of produced) {
+      expect(
+        nebulaSchema.nodes[t],
+        `nodo "${t}" prodotto dal markdown ma assente da nebulaSchema (manca il gemello in pmSchema.ts)`,
+      ).toBeDefined()
+    }
+  })
+
+  it('i nodi mention sopravvivono al round-trip Y.Doc (non vengono scartati)', () => {
+    const back = ydocToJSON(seedYDocFromJSON(markdownToProseMirror(ALL_MENTIONS_MD) as never))
+    const survived = collectNodeTypes(back as PMNode)
+    for (const t of ['taskMention', 'projectMention', 'milestoneMention', 'deliverableMention', 'obiettivoMention']) {
+      expect(survived.has(t), `nodo "${t}" scartato dal Y.Doc (gemello schema mancante)`).toBe(true)
+    }
   })
 })
