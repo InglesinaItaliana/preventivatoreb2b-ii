@@ -5,7 +5,7 @@ import MIcon from '../../components/shared/MIcon.vue'
 import MdPageHeader from '../../components/shared/MdPageHeader.vue'
 import GoalChip from '../../components/cepheid/GoalChip.vue'
 import { useProjects, DEFAULT_STATES } from '../../composables/sidera/useProjects'
-import { useProjectTasks } from '../../composables/sidera/useProjectTasks'
+import { useProjectTasks, type ProjectTask } from '../../composables/sidera/useProjectTasks'
 import { useObiettivi } from '../../composables/sidera/useObiettivi'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
 import { useTeamMembers, displayName, starAvatarProps } from '../../composables/sidera/useTeamMembers'
@@ -215,7 +215,12 @@ onBeforeUnmount(() => { if (notesTimer) clearTimeout(notesTimer) })
 // ── Creazione (menu + modal condiviso) ─────────────────────────────────────
 const createOpen = ref(false)
 const createKind = ref<'fase' | 'deliverable' | 'milestone' | 'task'>('task')
-function openCreate(kind: 'fase' | 'deliverable' | 'milestone' | 'task') { createKind.value = kind; createOpen.value = true }
+// editTarget valorizzato → la modale condivisa va in modalità "Modifica" (matita
+// su card deliverable/milestone); null → creazione normale.
+const editTarget = ref<ProjectTask | null>(null)
+function openCreate(kind: 'fase' | 'deliverable' | 'milestone' | 'task') { editTarget.value = null; createKind.value = kind; createOpen.value = true }
+function openEdit(kind: 'deliverable' | 'milestone', task: ProjectTask) { editTarget.value = task; createKind.value = kind; createOpen.value = true }
+watch(createOpen, (v) => { if (!v) editTarget.value = null })
 
 // ── FAB del layout → crea task rapida ─────────────────────────────────────
 const newTaskTick = inject<Ref<number>>('cepheid-new-task-tick', null as any)
@@ -368,6 +373,9 @@ if (newTaskTick) {
               <div class="milestone-title" :class="{ 'is-done': m.completedAt }">{{ m.title }}</div>
               <div class="milestone-date">{{ mileDateLabel(m.id) }}</div>
             </div>
+            <button class="pd-edit-btn" title="Modifica milestone" @click.stop="openEdit('milestone', m)">
+              <MIcon name="edit" :size="16" />
+            </button>
           </div>
         </div>
       </template>
@@ -399,6 +407,9 @@ if (newTaskTick) {
                 />
                 <span class="prio-dot" :style="{ background: prioColor[d.priority] }" :title="'Priorità ' + d.priority" />
                 <div class="deliverable-title" :class="{ 'is-done': d.completedAt }">{{ d.title }}</div>
+                <button class="pd-edit-btn" title="Modifica deliverable" @click.stop="openEdit('deliverable', d)">
+                  <MIcon name="edit" :size="16" />
+                </button>
               </div>
 
               <div class="deliverable-meta">
@@ -524,6 +535,7 @@ if (newTaskTick) {
       :create-phase-bundle="createPhaseBundle"
       :update-task="updateTask"
       :project-due-iso="projectDueIso"
+      :edit-task="editTarget"
     />
   </div>
 </template>
@@ -547,6 +559,26 @@ if (newTaskTick) {
 .pd > :deep(.md-page-header) { flex-shrink: 0; padding: 18px 16px 14px; }
 .pd-subhead { flex-shrink: 0; background: var(--md-sys-color-surface); padding: 0 16px 12px; }
 .pd-subhead > * + * { margin-top: 8px; }
+
+/* Matita "Modifica" su card deliverable/milestone (apre la modale in edit). */
+.pd-edit-btn {
+  margin-left: auto;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: var(--md-sys-shape-corner-small);
+  color: var(--md-sys-color-on-surface-variant);
+  transition: background var(--md-sys-motion-duration-short3, 150ms) ease, color var(--md-sys-motion-duration-short3, 150ms) ease;
+}
+.pd-edit-btn:hover {
+  background: color-mix(in srgb, var(--md-sys-color-primary) 10%, transparent);
+  color: var(--md-sys-color-primary);
+}
 .pd-tools { display: flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; overflow-x: auto; }
 
 .pd-description {}

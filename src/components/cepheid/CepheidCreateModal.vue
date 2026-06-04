@@ -15,12 +15,16 @@ const props = defineProps<{
   createPhaseBundle: (payload: any) => Promise<void>
   updateTask: (id: string, data: any) => Promise<void>
   projectDueIso?: string   // data fine progetto: limite massimo per la scadenza fase/deliverable
+  // Modalità EDIT: se valorizzato, la modale modifica questo deliverable/milestone
+  // (pre-compila i campi e salva via updateTask) invece di crearne uno nuovo.
+  editTask?: ProjectTask | null
 }>()
 
 const open = defineModel<boolean>('open', { required: true })
 const kind = defineModel<Kind>('kind', { required: true })
 
 const saving = ref(false)
+const isEdit = computed(() => !!props.editTask)
 
 const milestones   = computed(() => props.tasks.filter(t => t.type === 'milestone'))
 const deliverables = computed(() => props.tasks.filter(t => t.type === 'deliverable'))
@@ -54,17 +58,36 @@ const f = ref({
   placement: '' as string,   // deliverableId o '' = a livello progetto
 })
 
-watch([open, kind], ([o]) => {
-  if (!o) return
-  f.value = {
-    milestoneMode: milestones.value.length ? 'existing' : 'new',
+function toIso(d: Date | null | undefined): string {
+  if (!d) return ''
+  const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), dd = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${dd}`
+}
+
+function blankForm() {
+  return {
+    milestoneMode: (milestones.value.length ? 'existing' : 'new') as 'existing' | 'new',
     milestoneId: milestones.value[0]?.id ?? '',
     mileTitle: '', mileDue: '',
     delivTitle: '', delivDue: '',
-    newTaskTitles: [''], attachedTaskIds: [],
-    taskTitle: '', taskPriority: 'media', taskDue: '',
+    newTaskTitles: [''] as string[], attachedTaskIds: [] as string[],
+    taskTitle: '', taskPriority: 'media' as 'alta' | 'media' | 'bassa', taskDue: '',
     taskAssignees: props.currentUserEmail ? [props.currentUserEmail] : [],
     placement: '',
+  }
+}
+
+watch([open, kind], ([o]) => {
+  if (!o) return
+  const base = blankForm()
+  const e = props.editTask
+  if (e && kind.value === 'deliverable') {
+    // Pre-compila dal deliverable da modificare (titolo, data, milestone).
+    f.value = { ...base, milestoneId: e.milestoneId ?? base.milestoneId, delivTitle: e.title, delivDue: toIso(e.dueDate) }
+  } else if (e && kind.value === 'milestone') {
+    f.value = { ...base, mileTitle: e.title }
+  } else {
+    f.value = base
   }
 })
 
@@ -91,18 +114,41 @@ const milestoneValid = computed(() =>
 
 const canSubmit = computed(() => {
   if (saving.value) return false
+  if (isEdit.value) {
+    // In edit non si toccano le task: bastano titolo (+ milestone per il deliverable).
+    if (kind.value === 'milestone') return !!f.value.mileTitle.trim()
+    return !!f.value.delivTitle.trim() && !!f.value.milestoneId
+  }
   if (kind.value === 'fase')        return !!f.value.delivTitle.trim() && milestoneValid.value && taskCount.value >= 1
   if (kind.value === 'deliverable') return !!f.value.delivTitle.trim() && !!f.value.milestoneId && taskCount.value >= 1
   if (kind.value === 'milestone')   return !!f.value.mileTitle.trim()
   return !!f.value.taskTitle.trim() // task
 })
 
-const title = computed(() => ({ fase: 'Nuova fase', deliverable: 'Nuovo deliverable', milestone: 'Nuova milestone', task: 'Nuova task' }[kind.value]))
+const title = computed(() => {
+  if (isEdit.value) return kind.value === 'milestone' ? 'Modifica milestone' : 'Modifica deliverable'
+  return { fase: 'Nuova fase', deliverable: 'Nuovo deliverable', milestone: 'Nuova milestone', task: 'Nuova task' }[kind.value]
+})
 
 async function submit() {
   if (!canSubmit.value) return
   saving.value = true
   try {
+    // ── EDIT: aggiorna il deliverable/milestone esistente, niente create ──
+    if (isEdit.value && props.editTask) {
+      if (kind.value === 'milestone') {
+        await props.updateTask(props.editTask.id, { title: f.value.mileTitle.trim() })
+      } else {
+        await props.updateTask(props.editTask.id, {
+          title: f.value.delivTitle.trim(),
+          dueDate: parseDate(f.value.delivDue),
+          milestoneId: f.value.milestoneId || null,
+        })
+      }
+      open.value = false
+      return
+    }
+
     if (kind.value === 'fase' || kind.value === 'deliverable') {
       const milestone = (kind.value === 'deliverable' || f.value.milestoneMode === 'existing')
         ? { existingId: f.value.milestoneId }
@@ -183,7 +229,8 @@ const PRIO = [
             <input v-model="f.delivDue" type="date" class="cm-input cm-date" :max="projectDueIso || undefined" />
             <div v-if="projectDueIso" class="cm-hint">Il progetto termina il {{ projectDueIso }}: la fase non può andare oltre.</div>
 
-            <!-- tasks -->
+            <!-- tasks: solo in creazione (in edit non si toccano le task collegate) -->
+            <template v-if="!isEdit">
             <label class="cm-label" style="margin-top:14px">Task (almeno una) *</label>
             <div v-for="(_, i) in f.newTaskTitles" :key="i" class="cm-taskrow">
               <input v-model="f.newTaskTitles[i]" class="cm-input" placeholder="Titolo task" />
@@ -199,6 +246,7 @@ const PRIO = [
               </label>
             </template>
             <div class="cm-count" :class="{ ok: taskCount >= 1 }">{{ taskCount }} task</div>
+            </template>
           </template>
 
           <!-- ===== TASK singola ===== -->
@@ -237,7 +285,9 @@ const PRIO = [
 
         <div class="cm-foot">
           <button class="cm-btn cm-ghost" @click="open = false">Annulla</button>
-          <button class="cm-btn cm-primary" :disabled="!canSubmit" @click="submit">{{ saving ? 'Creazione…' : 'Crea' }}</button>
+          <button class="cm-btn cm-primary" :disabled="!canSubmit" @click="submit">
+            {{ saving ? (isEdit ? 'Salvataggio…' : 'Creazione…') : (isEdit ? 'Salva' : 'Crea') }}
+          </button>
         </div>
       </div>
     </div>
