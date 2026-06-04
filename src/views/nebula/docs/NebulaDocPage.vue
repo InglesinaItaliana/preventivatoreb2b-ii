@@ -34,9 +34,13 @@ import { TaskEmbed } from './extensions/TaskEmbed'
 import { UserMention } from './extensions/UserMention'
 import { UniversalMention } from './extensions/UniversalMention'
 import { DocMention } from './extensions/DocMention'
+import { MilestoneMention } from './extensions/MilestoneMention'
+import { DeliverableMention } from './extensions/DeliverableMention'
+import { ObiettivoMention } from './extensions/ObiettivoMention'
 import { useTeamMembers } from '../../../composables/sidera/useTeamMembers'
 import { useAllTasks } from '../../../composables/sidera/useAllTasks'
 import { useProjects } from '../../../composables/sidera/useProjects'
+import { useObiettivi } from '../../../composables/sidera/useObiettivi'
 import { useCollabDoc } from '../../../composables/nebula/useCollabDoc'
 import { cursorColorFor } from '../../../composables/nebula/useDocPresence'
 import { useDocsLight } from '../../../composables/nebula/useDocsLight'
@@ -100,6 +104,11 @@ const { projects: allProjectsRef } = useProjects()
 const { members: allTeamRef } = useTeamMembers()
 // Lista doc light per il mention picker (F5-C2 + mention cross-doc).
 const { docs: allDocsRef } = useDocsLight()
+// Obiettivi (collection top-level) per il picker `@`. Milestone e deliverable
+// sono derivati da allTasks filtrando il type (sono task con type dedicato).
+const { obiettivi: allObiettiviRef } = useObiettivi()
+const allMilestonesRef = computed(() => allTasksRef.value.filter(t => t.type === 'milestone'))
+const allDeliverablesRef = computed(() => allTasksRef.value.filter(t => t.type === 'deliverable'))
 
 const editor = useEditor({
   extensions: [
@@ -125,7 +134,7 @@ const editor = useEditor({
       },
     }),
     Placeholder.configure({
-      placeholder: 'Digita "/" per i comandi · "@" per menzionare persone/task/progetti/documenti · "#" progetto…',
+      placeholder: 'Digita "/" per i comandi · "@" per menzionare persone/task/milestone/deliverable/progetti/obiettivi/documenti · "#" progetto…',
     }),
     // TaskList nativo: checkbox interattive nested-friendly. Lo stato `checked`
     // è persistito dentro al content del doc (data-checked attr) e ri-serializzato
@@ -143,11 +152,19 @@ const editor = useEditor({
     }),
     UserMention,
     DocMention,
+    // Nodi schema per i chip milestone/deliverable/obiettivo. Niente suggester
+    // proprio: l'inserimento via `@` passa per UniversalMention.
+    MilestoneMention,
+    DeliverableMention,
+    ObiettivoMention,
     UniversalMention.configure({
       allTeam: () => allTeamRef.value,
       allTasks: () => allTasksRef.value,
       allProjects: () => allProjectsRef.value,
       allDocs: () => allDocsRef.value,
+      allMilestones: () => allMilestonesRef.value,
+      allDeliverables: () => allDeliverablesRef.value,
+      allObiettivi: () => allObiettiviRef.value,
       currentDocId: () => docId.value,
     }),
     // Tabelle: header row di default, resizable per dare freedom su larghezza

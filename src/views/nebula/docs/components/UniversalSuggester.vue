@@ -18,7 +18,7 @@ import StarAvatar from '../../../../components/shared/StarAvatar.vue'
 import { useTeamMembers, starAvatarProps } from '../../../../composables/sidera/useTeamMembers'
 
 export interface UniversalItem {
-  kind: 'user' | 'task' | 'project' | 'doc'
+  kind: 'user' | 'task' | 'milestone' | 'deliverable' | 'project' | 'obiettivo' | 'doc'
   /** ID per dispatch (email, taskId, projectId o docId) */
   id: string
   /** Display label (nome utente, titolo task, nome progetto, titolo doc) */
@@ -78,7 +78,7 @@ defineExpose({
 })
 
 // Grouping per render con sticky headers
-type Kind = 'user' | 'task' | 'project' | 'doc'
+type Kind = 'user' | 'task' | 'milestone' | 'deliverable' | 'project' | 'obiettivo' | 'doc'
 interface Group {
   kind: Kind
   label: string
@@ -86,8 +86,18 @@ interface Group {
   items: UniversalItem[]
 }
 
+const GROUP_LABELS: Record<Kind, string> = {
+  user: 'Persone',
+  task: 'Task',
+  milestone: 'Milestone',
+  deliverable: 'Deliverable',
+  project: 'Progetti',
+  obiettivo: 'Obiettivi',
+  doc: 'Documenti',
+}
+
 const groups = computed<Group[]>(() => {
-  const order: Kind[] = ['user', 'task', 'project', 'doc']
+  const order: Kind[] = ['user', 'task', 'milestone', 'deliverable', 'project', 'obiettivo', 'doc']
   const out: Group[] = []
   let cursor = 0
   for (const kind of order) {
@@ -95,11 +105,7 @@ const groups = computed<Group[]>(() => {
     if (slice.length === 0) continue
     out.push({
       kind,
-      label:
-        kind === 'user'    ? 'Persone' :
-        kind === 'task'    ? 'Task' :
-        kind === 'project' ? 'Progetti' :
-                             'Documenti',
+      label: GROUP_LABELS[kind],
       startIdx: cursor,
       items: slice,
     })
@@ -109,16 +115,22 @@ const groups = computed<Group[]>(() => {
 })
 
 function kindAccent(kind: Kind): string {
-  if (kind === 'user')    return '#4A6B8A'      // blu admin (UserMention)
-  if (kind === 'task')    return '#8b6a14'      // oro CEPHEID
-  if (kind === 'project') return '#5B7F2E'      // verde progetto
+  if (kind === 'user')        return '#4A6B8A'  // blu admin (UserMention)
+  if (kind === 'task')        return '#8b6a14'  // oro CEPHEID
+  if (kind === 'milestone')   return '#4F46B8'  // indaco
+  if (kind === 'deliverable') return '#1f7a7a'  // teal
+  if (kind === 'project')     return '#5B7F2E'  // verde progetto
+  if (kind === 'obiettivo')   return '#B8860B'  // ocra (fallback; il colore reale è item.color)
   return '#7A3D14'                              // terracotta NEBULA-DOCS
 }
 
 function kindIcon(kind: Kind): string {
-  if (kind === 'user')    return 'person'
-  if (kind === 'task')    return 'check_circle'
-  if (kind === 'project') return 'folder'
+  if (kind === 'user')        return 'person'
+  if (kind === 'task')        return 'check_circle'
+  if (kind === 'milestone')   return 'flag'
+  if (kind === 'deliverable') return 'inventory_2'
+  if (kind === 'project')     return 'folder'
+  if (kind === 'obiettivo')   return 'track_changes'
   return 'description'
 }
 
@@ -169,8 +181,29 @@ const isEmpty = computed(() => props.items.length === 0)
               :color="kindAccent(g.kind)"
             />
             <MaterialIcon
+              v-else-if="g.kind === 'milestone'"
+              name="flag"
+              :size="16"
+              :fill="item.status === 'done' ? 1 : 0"
+              :color="kindAccent(g.kind)"
+            />
+            <MaterialIcon
+              v-else-if="g.kind === 'deliverable'"
+              name="inventory_2"
+              :size="16"
+              :fill="item.status === 'done' ? 1 : 0"
+              :color="kindAccent(g.kind)"
+            />
+            <MaterialIcon
               v-else-if="g.kind === 'project'"
               :name="item.status === 'completed' ? 'folder_special' : 'folder'"
+              :size="16"
+              :fill="item.status === 'completed' ? 1 : 0"
+              :color="item.color || kindAccent(g.kind)"
+            />
+            <MaterialIcon
+              v-else-if="g.kind === 'obiettivo'"
+              name="track_changes"
               :size="16"
               :fill="item.status === 'completed' ? 1 : 0"
               :color="item.color || kindAccent(g.kind)"

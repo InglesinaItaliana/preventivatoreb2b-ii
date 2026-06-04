@@ -356,6 +356,12 @@ function inlineToMd(nodes: PMNode[] | undefined): string {
             out += `@task:${n.attrs?.taskId ?? ''}`;
         } else if (n.type === 'projectMention') {
             out += `@project:${n.attrs?.projectId ?? ''}`;
+        } else if (n.type === 'milestoneMention') {
+            out += `@milestone:${n.attrs?.milestoneId ?? ''}`;
+        } else if (n.type === 'deliverableMention') {
+            out += `@deliverable:${n.attrs?.deliverableId ?? ''}`;
+        } else if (n.type === 'obiettivoMention') {
+            out += `@obiettivo:${n.attrs?.obiettivoId ?? ''}`;
         } else if (n.content) {
             out += inlineToMd(n.content);
         }
@@ -505,6 +511,9 @@ export function extractText(doc: PMNode): string {
         else if (n.type === 'hardBreak') out.push(' ');
         else if (n.type === 'taskMention') out.push(`[task ${n.attrs?.taskId}]`);
         else if (n.type === 'projectMention') out.push(`[project ${n.attrs?.projectId}]`);
+        else if (n.type === 'milestoneMention') out.push(`[milestone ${n.attrs?.milestoneId}]`);
+        else if (n.type === 'deliverableMention') out.push(`[deliverable ${n.attrs?.deliverableId}]`);
+        else if (n.type === 'obiettivoMention') out.push(`[obiettivo ${n.attrs?.title ?? n.attrs?.obiettivoId}]`);
         if (n.content) {
             const isBlock = ['paragraph', 'heading', 'blockquote', 'listItem', 'taskItem', 'codeBlock'].includes(n.type);
             n.content.forEach(walk);

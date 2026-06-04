@@ -26,6 +26,7 @@ export interface TaskMini {
   title: string
   status: string             // 'todo' | 'done' (binary in CEPHEID)
   projectId: string
+  type: 'task' | 'milestone' | 'deliverable'
 }
 
 export function useTaskMini(taskId: Ref<string | null> | string, projectId: Ref<string | null> | string | null = null) {
@@ -62,11 +63,13 @@ export function useTaskMini(taskId: Ref<string | null> | string, projectId: Ref<
           return
         }
         const d = snap.data() as Record<string, unknown>
+        const t = d.type as TaskMini['type']
         data.value = {
           id: snap.id,
           title: (d.title as string) ?? '(senza titolo)',
           status: (d.status as string) ?? 'todo',
           projectId: pid ?? '',
+          type: t === 'milestone' || t === 'deliverable' ? t : 'task',
         }
         notFound.value = false
         loading.value = false

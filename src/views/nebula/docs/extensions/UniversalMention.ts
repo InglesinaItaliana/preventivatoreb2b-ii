@@ -21,6 +21,7 @@ import type { Task } from '../../../../composables/sidera/useAllTasks'
 import type { Project } from '../../../../composables/sidera/useProjects'
 import type { TeamMember } from '../../../../composables/sidera/useTeamMembers'
 import type { DocLight } from '../../../../composables/nebula/useDocsLight'
+import type { Obiettivo } from '../../../../composables/sidera/useObiettivi'
 
 const UNIVERSAL_MENTION_PLUGIN_KEY = new PluginKey('nebula-universal-mention')
 
@@ -29,11 +30,42 @@ export interface UniversalMentionOptions {
   allTasks: () => Task[]
   allProjects: () => Project[]
   allDocs: () => DocLight[]
+  /** Milestone e deliverable sono task con type dedicato (vedi useAllTasks). */
+  allMilestones: () => Task[]
+  allDeliverables: () => Task[]
+  allObiettivi: () => Obiettivo[]
   /** Doc corrente: lo escludiamo dai suggerimenti (un doc non si mention da solo). */
   currentDocId?: () => string | null
 }
 
 const MAX_PER_KIND = 6      // max per categoria nel picker (totale max 18)
+
+/** Mappa task/milestone/deliverable (stessa shape) in UniversalItem. */
+function mapTaskLike(items: Task[], kind: 'task' | 'milestone' | 'deliverable', q: string): UniversalItem[] {
+  return items
+    .filter(t => !q || (t.title ?? '').toLowerCase().includes(q))
+    .map(t => ({
+      kind,
+      id: t.id,
+      label: t.title || '(senza titolo)',
+      sub: t.projectId || undefined,
+      status: t.status === 'done' ? 'done' : undefined,
+      searchKey: t.id,
+      projectId: t.projectId || undefined,
+    }))
+    .sort((a, b) => {
+      const ad = a.status === 'done' ? 1 : 0
+      const bd = b.status === 'done' ? 1 : 0
+      if (ad !== bd) return ad - bd
+      if (q) {
+        const as = a.label.toLowerCase().startsWith(q) ? 0 : 1
+        const bs = b.label.toLowerCase().startsWith(q) ? 0 : 1
+        if (as !== bs) return as - bs
+      }
+      return 0
+    })
+    .slice(0, MAX_PER_KIND)
+}
 
 function filterUniversal(
   query: string,
@@ -41,6 +73,9 @@ function filterUniversal(
   tasks: Task[],
   projects: Project[],
   docs: DocLight[],
+  milestones: Task[],
+  deliverables: Task[],
+  obiettivi: Obiettivo[],
   excludeDocId: string | null,
 ): UniversalItem[] {
   const q = query.toLowerCase().trim()
@@ -153,7 +188,39 @@ function filterUniversal(
     })
     .slice(0, MAX_PER_KIND)
 
-  return [...teamItems, ...taskItems, ...projectItems, ...docItems]
+  // MILESTONE / DELIVERABLE: stessa shape dei task, type dedicato.
+  const milestoneItems = mapTaskLike(milestones, 'milestone', q)
+  const deliverableItems = mapTaskLike(deliverables, 'deliverable', q)
+
+  // OBIETTIVI: titolo matcha. Esclude archiviati a meno che query li trovi.
+  const obiettivoItems: UniversalItem[] = obiettivi
+    .filter(o => o.stato !== 'archiviato' || (q && (o.titolo ?? '').toLowerCase().includes(q)))
+    .filter(o => !q || (o.titolo ?? '').toLowerCase().includes(q))
+    .map(o => ({
+      kind: 'obiettivo' as const,
+      id: o.id,
+      label: o.titolo || '(senza titolo)',
+      status: o.stato === 'archiviato' ? 'archived' : (o.stato === 'raggiunto' ? 'completed' : undefined),
+      searchKey: o.id,
+      color: o.colore,
+    }))
+    .sort((a, b) => {
+      const aArc = a.status === 'archived' ? 2 : (a.status === 'completed' ? 1 : 0)
+      const bArc = b.status === 'archived' ? 2 : (b.status === 'completed' ? 1 : 0)
+      if (aArc !== bArc) return aArc - bArc
+      if (q) {
+        const as = a.label.toLowerCase().startsWith(q) ? 0 : 1
+        const bs = b.label.toLowerCase().startsWith(q) ? 0 : 1
+        if (as !== bs) return as - bs
+      }
+      return 0
+    })
+    .slice(0, MAX_PER_KIND)
+
+  return [
+    ...teamItems, ...taskItems, ...milestoneItems, ...deliverableItems,
+    ...projectItems, ...obiettivoItems, ...docItems,
+  ]
 }
 
 export const UniversalMention = Extension.create<UniversalMentionOptions>({
@@ -165,6 +232,9 @@ export const UniversalMention = Extension.create<UniversalMentionOptions>({
       allTasks: () => [] as Task[],
       allProjects: () => [] as Project[],
       allDocs: () => [] as DocLight[],
+      allMilestones: () => [] as Task[],
+      allDeliverables: () => [] as Task[],
+      allObiettivi: () => [] as Obiettivo[],
       currentDocId: () => null,
     }
   },
@@ -185,6 +255,9 @@ export const UniversalMention = Extension.create<UniversalMentionOptions>({
             options.allTasks(),
             options.allProjects(),
             options.allDocs(),
+            options.allMilestones(),
+            options.allDeliverables(),
+            options.allObiettivi(),
             options.currentDocId?.() ?? null,
           ),
         command: ({ editor, range, props }: any) => {
@@ -194,8 +267,14 @@ export const UniversalMention = Extension.create<UniversalMentionOptions>({
             nodeContent = { type: 'userMention', attrs: { email: item.id } }
           } else if (item.kind === 'task') {
             nodeContent = { type: 'taskMention', attrs: { taskId: item.id, projectId: item.projectId ?? null } }
+          } else if (item.kind === 'milestone') {
+            nodeContent = { type: 'milestoneMention', attrs: { milestoneId: item.id, projectId: item.projectId ?? null } }
+          } else if (item.kind === 'deliverable') {
+            nodeContent = { type: 'deliverableMention', attrs: { deliverableId: item.id, projectId: item.projectId ?? null } }
           } else if (item.kind === 'project') {
             nodeContent = { type: 'projectMention', attrs: { projectId: item.id } }
+          } else if (item.kind === 'obiettivo') {
+            nodeContent = { type: 'obiettivoMention', attrs: { obiettivoId: item.id, title: item.label } }
           } else {
             // doc: passa anche il titolo snapshot per fallback display
             nodeContent = { type: 'docMention', attrs: { docId: item.id, title: item.label } }

@@ -30,7 +30,12 @@ const marked_1 = require("marked");
  * Pattern custom NEBULA processati PRIMA del parser markdown.
  * Sostituiamo con placeholder unico, parsing, poi re-inseriamo come nodi PM.
  */
-const TASK_MENTION_RE = /@task:([A-Za-z0-9_-]+)/g;
+// @task:taskId            -> task orfano (projectId null, vive in tasks/{id})
+// @task:projectId/taskId  -> task di progetto (vive in projects/{pid}/tasks/{id})
+// Il prefisso progetto e' opzionale; gli ID Firestore non contengono '/', quindi
+// la forma a due segmenti e' non-ambigua. Senza il progetto il resolver cercava
+// in tasks/{id} e i task di progetto risultavano "Task eliminato".
+const TASK_MENTION_RE = /@task:(?:([A-Za-z0-9_-]+)\/)?([A-Za-z0-9_-]+)/g;
 const PROJECT_MENTION_RE = /@project:([A-Za-z0-9_-]+)/g;
 const EMBED_TASK_RE = /\{\{embed-tasks([^}]*)\}\}/g;
 function generatePlaceholder(idx) {
@@ -52,14 +57,14 @@ function preprocessCustomSyntax(md) {
         });
         return `\n\n${token}\n\n`; // forza nuovo blocco
     });
-    // 2. @task:id (inline)
-    md = md.replace(TASK_MENTION_RE, (_, taskId) => {
+    // 2. @task:[projectId/]id (inline) — projectId opzionale per i task di progetto
+    md = md.replace(TASK_MENTION_RE, (_, projectId, taskId) => {
         const token = generatePlaceholder(idx++);
         placeholders.push({
             token,
             node: {
                 type: 'taskMention',
-                attrs: { taskId, projectId: null },
+                attrs: { taskId, projectId: projectId !== null && projectId !== void 0 ? projectId : null },
             },
         });
         return token;
@@ -312,7 +317,7 @@ function escapeMd(s) {
     return s.replace(/([*_`\\])/g, '\\$1');
 }
 function inlineToMd(nodes) {
-    var _a, _b, _c, _d, _e, _f, _g;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o;
     if (!nodes)
         return '';
     let out = '';
@@ -346,6 +351,15 @@ function inlineToMd(nodes) {
         }
         else if (n.type === 'projectMention') {
             out += `@project:${(_g = (_f = n.attrs) === null || _f === void 0 ? void 0 : _f.projectId) !== null && _g !== void 0 ? _g : ''}`;
+        }
+        else if (n.type === 'milestoneMention') {
+            out += `@milestone:${(_j = (_h = n.attrs) === null || _h === void 0 ? void 0 : _h.milestoneId) !== null && _j !== void 0 ? _j : ''}`;
+        }
+        else if (n.type === 'deliverableMention') {
+            out += `@deliverable:${(_l = (_k = n.attrs) === null || _k === void 0 ? void 0 : _k.deliverableId) !== null && _l !== void 0 ? _l : ''}`;
+        }
+        else if (n.type === 'obiettivoMention') {
+            out += `@obiettivo:${(_o = (_m = n.attrs) === null || _m === void 0 ? void 0 : _m.obiettivoId) !== null && _o !== void 0 ? _o : ''}`;
         }
         else if (n.content) {
             out += inlineToMd(n.content);
@@ -500,7 +514,7 @@ function extractText(doc) {
         return '';
     const out = [];
     function walk(n) {
-        var _a, _b, _c;
+        var _a, _b, _c, _d, _e, _f, _g, _h;
         if (n.type === 'text')
             out.push((_a = n.text) !== null && _a !== void 0 ? _a : '');
         else if (n.type === 'hardBreak')
@@ -509,6 +523,12 @@ function extractText(doc) {
             out.push(`[task ${(_b = n.attrs) === null || _b === void 0 ? void 0 : _b.taskId}]`);
         else if (n.type === 'projectMention')
             out.push(`[project ${(_c = n.attrs) === null || _c === void 0 ? void 0 : _c.projectId}]`);
+        else if (n.type === 'milestoneMention')
+            out.push(`[milestone ${(_d = n.attrs) === null || _d === void 0 ? void 0 : _d.milestoneId}]`);
+        else if (n.type === 'deliverableMention')
+            out.push(`[deliverable ${(_e = n.attrs) === null || _e === void 0 ? void 0 : _e.deliverableId}]`);
+        else if (n.type === 'obiettivoMention')
+            out.push(`[obiettivo ${(_g = (_f = n.attrs) === null || _f === void 0 ? void 0 : _f.title) !== null && _g !== void 0 ? _g : (_h = n.attrs) === null || _h === void 0 ? void 0 : _h.obiettivoId}]`);
         if (n.content) {
             const isBlock = ['paragraph', 'heading', 'blockquote', 'listItem', 'taskItem', 'codeBlock'].includes(n.type);
             n.content.forEach(walk);
