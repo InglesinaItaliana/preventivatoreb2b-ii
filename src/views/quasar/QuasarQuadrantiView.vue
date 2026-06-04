@@ -196,7 +196,7 @@ async function completeFromModal() {
     <MdPageHeader title="Quadranti" :subtitle="subtitle" sticky borderless :hidden="headerHidden">
       <template #tools>
         <div class="qd-switchers">
-          <CepheidViewSwitcher labels :model-value="String(cursor)" :tabs="cursorTabs" @update:model-value="(v) => (cursor = Number(v))" />
+          <CepheidViewSwitcher labels class="cursor-switcher" :model-value="String(cursor)" :tabs="cursorTabs" @update:model-value="(v) => (cursor = Number(v))" />
           <CepheidViewSwitcher :model-value="filterSector" :tabs="sectorTabs" @update:model-value="(v) => (filterSector = v)" />
           <CepheidViewSwitcher :model-value="view" :tabs="viewTabs" @update:model-value="(v) => (view = v as ViewId)" />
         </div>
@@ -401,6 +401,9 @@ async function completeFromModal() {
 }
 /* slot tools: pillola filtro settore (sx) + pillola tab vista (dx) */
 .qd-switchers { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+/* pillola giorni (labels): bottoni compatti come i "quadratini" icona delle
+   pillole a fianco (padding come la variante non-labels). */
+.cursor-switcher :deep(.vbtn) { padding: 0 5px; }
 
 /* titolo della card = nome della tab attiva (Azioni / Risorse) */
 .panel-title {
