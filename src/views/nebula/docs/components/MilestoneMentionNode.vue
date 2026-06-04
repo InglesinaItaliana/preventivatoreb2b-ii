@@ -51,7 +51,7 @@ function onClick() {
   >
     <span v-if="loading" class="ms-icon"><MaterialIcon name="hourglass_top" :size="14" /></span>
     <span v-else-if="notFound" class="ms-icon"><MaterialIcon name="link_off" :size="14" /></span>
-    <span v-else class="ms-icon"><MaterialIcon name="flag" :size="14" :fill="isDone ? 1 : 0" color="#4F46B8" /></span>
+    <span v-else class="ms-icon"><MaterialIcon name="flag" :size="14" :fill="isDone ? 1 : 0" color="#D4A020" /></span>
     <span class="ms-label">
       <template v-if="loading">…</template>
       <template v-else-if="notFound">[Milestone eliminata]</template>
@@ -67,13 +67,13 @@ function onClick() {
   gap: 4px;
   padding: 1px 8px 1px 6px;
   margin: 0 2px;
-  /* Indaco — distinto da task (oro) / deliverable (teal) / project (verde) */
-  background: rgba(79, 70, 184, 0.12);
-  border: 1px solid rgba(79, 70, 184, 0.30);
+  /* CEPHEID (seed #D4A020) — testo+icona vividi; l'icona flag distingue il tipo */
+  background: rgba(212, 160, 32, 0.14);
+  border: 1px solid rgba(212, 160, 32, 0.34);
   border-radius: 999px;
   font-size: 0.92em;
   line-height: 1.4;
-  color: #423a99;
+  color: #D4A020;
   cursor: pointer;
   user-select: none;
   vertical-align: baseline;
@@ -82,8 +82,8 @@ function onClick() {
   max-width: 100%;
 }
 .ms-chip:hover {
-  background: rgba(79, 70, 184, 0.20);
-  border-color: rgba(79, 70, 184, 0.50);
+  background: rgba(212, 160, 32, 0.20);
+  border-color: rgba(212, 160, 32, 0.50);
 }
 .ms-icon { display: inline-flex; align-items: center; flex-shrink: 0; }
 .ms-label { overflow-wrap: anywhere; }
@@ -91,7 +91,7 @@ function onClick() {
 .ms-done {
   opacity: 0.55;
   text-decoration: line-through;
-  text-decoration-color: rgba(66, 58, 153, 0.45);
+  text-decoration-color: rgba(139, 106, 20, 0.45);
 }
 .ms-loading {
   background: rgba(0,0,0,0.04);

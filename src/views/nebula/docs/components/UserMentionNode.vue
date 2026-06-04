@@ -11,8 +11,7 @@
 import { computed, toRef } from 'vue'
 import { NodeViewWrapper } from '@tiptap/vue-3'
 import { useUserMini } from '../../../../composables/nebula/useUserMini'
-import { useTeamMembers, starAvatarProps } from '../../../../composables/sidera/useTeamMembers'
-import StarAvatar from '../../../../components/shared/StarAvatar.vue'
+import MaterialIcon from './MaterialIcon.vue'
 
 const props = defineProps<{
   node: {
@@ -24,12 +23,11 @@ const props = defineProps<{
 
 const emailRef = toRef(() => props.node.attrs.email)
 const { data: user, loading, notFound } = useUserMini(emailRef)
-const { members } = useTeamMembers()
 
 const displayLabel = computed(() => {
-  if (loading.value) return '@…'
-  if (notFound.value) return `@${props.node.attrs.email ?? '?'}`
-  return `@${user.value?.displayName ?? props.node.attrs.email ?? '?'}`
+  if (loading.value) return '…'
+  if (notFound.value) return props.node.attrs.email ?? '?'
+  return user.value?.displayName ?? props.node.attrs.email ?? '?'
 })
 
 function onClick() {
@@ -53,13 +51,8 @@ function onClick() {
     contenteditable="false"
     @click="notFound ? null : onClick()"
   >
-    <span class="um-avatar">
-      <StarAvatar
-        v-if="user"
-        v-bind="starAvatarProps(user.email, members)"
-        :size="14"
-      />
-      <span v-else class="um-avatar-fallback">·</span>
+    <span class="um-icon">
+      <MaterialIcon name="person" :size="14" color="#C46030" />
     </span>
     <span class="um-label">{{ displayLabel }}</span>
   </NodeViewWrapper>
@@ -70,14 +63,15 @@ function onClick() {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 1px 8px 1px 3px;
+  padding: 1px 8px 1px 6px;
   margin: 0 2px;
-  background: rgba(74, 107, 138, 0.12);   /* blu amministrazione, neutro */
-  border: 1px solid rgba(74, 107, 138, 0.30);
+  /* NEBULA (seed #C46030) — testo+icona vividi, sfondo/bordo derivati */
+  background: color-mix(in srgb, #C46030 14%, transparent);
+  border: 1px solid color-mix(in srgb, #C46030 34%, transparent);
   border-radius: 999px;
   font-size: 0.92em;
   line-height: 1.4;
-  color: #2F4F6F;
+  color: #C46030;
   cursor: pointer;
   user-select: none;
   vertical-align: baseline;
@@ -87,26 +81,14 @@ function onClick() {
   overflow: hidden;
 }
 .um-chip:hover {
-  background: rgba(74, 107, 138, 0.22);
-  border-color: rgba(74, 107, 138, 0.50);
+  background: color-mix(in srgb, #C46030 24%, transparent);
+  border-color: color-mix(in srgb, #C46030 55%, transparent);
 }
 
-.um-avatar {
+.um-icon {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
   flex-shrink: 0;
-}
-.um-avatar-fallback {
-  display: inline-flex;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: rgba(0,0,0,0.10);
-  color: #888;
-  align-items: center;
-  justify-content: center;
-  font-size: 10px;
 }
 
 .um-label {

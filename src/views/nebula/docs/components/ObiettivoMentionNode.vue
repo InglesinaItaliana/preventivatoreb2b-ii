@@ -3,9 +3,11 @@
  * ObiettivoMentionNode — NodeView Vue per il nodo TipTap `obiettivoMention`.
  *
  * Riceve i node attrs `{ obiettivoId, title }`. Sottoscrive live all'obiettivo
- * via useObiettivoMini → il chip prende il colore dell'obiettivo (come
- * ProjectMention col campo color) e il titolo aggiornato. `title` è uno
- * snapshot di fallback per quando l'obiettivo non è risolvibile (eliminato).
+ * via useObiettivoMini per il titolo aggiornato. `title` è uno snapshot di
+ * fallback per quando l'obiettivo non è risolvibile (eliminato).
+ *
+ * Colore = QUASAR (seed #98C0D0) in stile M3 tonale: gli obiettivi sono
+ * concettualmente vicini a QUASAR (probabile migrazione futura).
  *
  * Deep-link: /cepheid/goal/{obiettivoId} (nuova tab).
  *
@@ -29,7 +31,8 @@ const props = defineProps<{
 const idRef = toRef(() => props.node.attrs.obiettivoId)
 const { data: obiettivo, loading, notFound } = useObiettivoMini(idRef)
 
-const color = computed(() => obiettivo.value?.colore || '#D4A020')
+// QUASAR: colore vivo #98C0D0 su testo+icona; sfondo/bordo derivati.
+const QUASAR_ICON = '#98C0D0'
 const isDone = computed(() => obiettivo.value?.stato === 'raggiunto')
 const isArchived = computed(() => obiettivo.value?.stato === 'archiviato')
 const label = computed(() => {
@@ -50,14 +53,13 @@ function onClick() {
     as="span"
     class="ob-chip"
     :class="{ 'ob-loading': loading, 'ob-deleted': notFound, 'ob-done': isDone, 'ob-archived': isArchived }"
-    :style="{ '--ob-color': color }"
     :title="label"
     contenteditable="false"
     @click="onClick"
   >
     <span v-if="loading" class="ob-icon"><MaterialIcon name="hourglass_top" :size="14" /></span>
     <span v-else-if="notFound" class="ob-icon"><MaterialIcon name="link_off" :size="14" /></span>
-    <span v-else class="ob-icon"><MaterialIcon name="track_changes" :size="14" :fill="isDone ? 1 : 0" :color="color" /></span>
+    <span v-else class="ob-icon"><MaterialIcon name="track_changes" :size="14" :fill="isDone ? 1 : 0" :color="QUASAR_ICON" /></span>
     <span class="ob-label">{{ label }}</span>
   </NodeViewWrapper>
 </template>
@@ -69,13 +71,13 @@ function onClick() {
   gap: 4px;
   padding: 1px 8px 1px 6px;
   margin: 0 2px;
-  /* Colore dinamico dall'obiettivo (come ProjectMention col campo color) */
-  background: color-mix(in srgb, var(--ob-color) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--ob-color) 32%, transparent);
+  /* QUASAR (seed #98C0D0) — testo+icona vividi, sfondo/bordo derivati */
+  background: color-mix(in srgb, #98C0D0 18%, transparent);
+  border: 1px solid color-mix(in srgb, #98C0D0 45%, transparent);
   border-radius: 999px;
   font-size: 0.92em;
   line-height: 1.4;
-  color: color-mix(in srgb, var(--ob-color) 75%, #1a1a1a);
+  color: #98C0D0;
   cursor: pointer;
   user-select: none;
   vertical-align: baseline;
@@ -84,8 +86,8 @@ function onClick() {
   max-width: 100%;
 }
 .ob-chip:hover {
-  background: color-mix(in srgb, var(--ob-color) 22%, transparent);
-  border-color: color-mix(in srgb, var(--ob-color) 52%, transparent);
+  background: color-mix(in srgb, #98C0D0 30%, transparent);
+  border-color: color-mix(in srgb, #98C0D0 65%, transparent);
 }
 .ob-icon { display: inline-flex; align-items: center; flex-shrink: 0; }
 .ob-label { overflow-wrap: anywhere; }

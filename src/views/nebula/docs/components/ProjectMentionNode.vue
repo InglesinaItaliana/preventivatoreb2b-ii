@@ -36,7 +36,8 @@ const progressLabel = computed(() => {
   return `${doneCount}/${taskCount}`
 })
 
-const projectColor = computed(() => project.value?.color ?? '#5B7F2E')
+// CEPHEID: oro di modulo (prima usava il colore proprio del progetto).
+const projectColor = computed(() => '#D4A020')
 
 function onClick() {
   if (!project.value) return
@@ -95,7 +96,7 @@ function onClick() {
   border-radius: 999px;
   font-size: 0.92em;
   line-height: 1.4;
-  color: color-mix(in srgb, var(--pm-color, #5B7F2E) 85%, #1a1a1a);
+  color: var(--pm-color, #D4A020);
   cursor: pointer;
   user-select: none;
   vertical-align: baseline;

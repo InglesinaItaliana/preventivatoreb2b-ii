@@ -50,7 +50,7 @@ function onClick() {
   >
     <span v-if="loading" class="dl-icon"><MaterialIcon name="hourglass_top" :size="14" /></span>
     <span v-else-if="notFound" class="dl-icon"><MaterialIcon name="link_off" :size="14" /></span>
-    <span v-else class="dl-icon"><MaterialIcon name="inventory_2" :size="14" :fill="isDone ? 1 : 0" color="#1f7a7a" /></span>
+    <span v-else class="dl-icon"><MaterialIcon name="inventory_2" :size="14" :fill="isDone ? 1 : 0" color="#D4A020" /></span>
     <span class="dl-label">
       <template v-if="loading">…</template>
       <template v-else-if="notFound">[Deliverable eliminato]</template>
@@ -66,13 +66,13 @@ function onClick() {
   gap: 4px;
   padding: 1px 8px 1px 6px;
   margin: 0 2px;
-  /* Teal — distinto da task (oro) / milestone (indaco) / project (verde) */
-  background: rgba(31, 122, 122, 0.12);
-  border: 1px solid rgba(31, 122, 122, 0.30);
+  /* CEPHEID (seed #D4A020) — testo+icona vividi; l'icona inventory distingue il tipo */
+  background: rgba(212, 160, 32, 0.14);
+  border: 1px solid rgba(212, 160, 32, 0.34);
   border-radius: 999px;
   font-size: 0.92em;
   line-height: 1.4;
-  color: #18605f;
+  color: #D4A020;
   cursor: pointer;
   user-select: none;
   vertical-align: baseline;
@@ -81,8 +81,8 @@ function onClick() {
   max-width: 100%;
 }
 .dl-chip:hover {
-  background: rgba(31, 122, 122, 0.20);
-  border-color: rgba(31, 122, 122, 0.50);
+  background: rgba(212, 160, 32, 0.20);
+  border-color: rgba(212, 160, 32, 0.50);
 }
 .dl-icon { display: inline-flex; align-items: center; flex-shrink: 0; }
 .dl-label { overflow-wrap: anywhere; }
@@ -90,7 +90,7 @@ function onClick() {
 .dl-done {
   opacity: 0.55;
   text-decoration: line-through;
-  text-decoration-color: rgba(24, 96, 95, 0.45);
+  text-decoration-color: rgba(139, 106, 20, 0.45);
 }
 .dl-loading {
   background: rgba(0,0,0,0.04);

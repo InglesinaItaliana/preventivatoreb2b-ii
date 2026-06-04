@@ -84,12 +84,13 @@ function onClick() {
   gap: 4px;
   padding: 1px 8px 1px 6px;
   margin: 0 2px;
-  background: rgba(212, 160, 32, 0.12);  /* CEPHEID oro */
-  border: 1px solid rgba(212, 160, 32, 0.30);
+  /* CEPHEID (seed #D4A020) — testo+icona vividi, sfondo/bordo derivati */
+  background: rgba(212, 160, 32, 0.14);
+  border: 1px solid rgba(212, 160, 32, 0.34);
   border-radius: 999px;
   font-size: 0.92em;
   line-height: 1.4;
-  color: #8b6a14;
+  color: #D4A020;
   cursor: pointer;
   user-select: none;
   vertical-align: baseline;

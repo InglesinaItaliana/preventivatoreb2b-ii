@@ -114,14 +114,16 @@ const groups = computed<Group[]>(() => {
   return out
 })
 
+// Colore vivo = identità di modulo (M3). NEBULA #C46030 (persone+doc),
+// CEPHEID #D4A020 (task/milestone/deliverable/progetti), QUASAR #98C0D0 (obiettivi).
 function kindAccent(kind: Kind): string {
-  if (kind === 'user')        return '#4A6B8A'  // blu admin (UserMention)
-  if (kind === 'task')        return '#8b6a14'  // oro CEPHEID
-  if (kind === 'milestone')   return '#4F46B8'  // indaco
-  if (kind === 'deliverable') return '#1f7a7a'  // teal
-  if (kind === 'project')     return '#5B7F2E'  // verde progetto
-  if (kind === 'obiettivo')   return '#B8860B'  // ocra (fallback; il colore reale è item.color)
-  return '#7A3D14'                              // terracotta NEBULA-DOCS
+  if (kind === 'user')        return '#C46030'  // NEBULA
+  if (kind === 'task')        return '#D4A020'  // CEPHEID oro
+  if (kind === 'milestone')   return '#D4A020'  // CEPHEID oro
+  if (kind === 'deliverable') return '#D4A020'  // CEPHEID oro
+  if (kind === 'project')     return '#D4A020'  // CEPHEID oro
+  if (kind === 'obiettivo')   return '#98C0D0'  // QUASAR azzurro
+  return '#C46030'                              // NEBULA (documenti)
 }
 
 function kindIcon(kind: Kind): string {
@@ -206,7 +208,7 @@ const isEmpty = computed(() => props.items.length === 0)
               name="track_changes"
               :size="16"
               :fill="item.status === 'completed' ? 1 : 0"
-              :color="item.color || kindAccent(g.kind)"
+              :color="kindAccent(g.kind)"
             />
             <MaterialIcon
               v-else
