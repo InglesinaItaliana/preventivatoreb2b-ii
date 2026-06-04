@@ -510,6 +510,18 @@ export async function linkTask(
 
     if (!canWrite(current.acl, ctx.userEmail)) throw new Error('Permesso di scrittura negato');
 
+    // Verifica esistenza del task al path corretto: senza projectId si cerca in
+    // tasks/{id} (task sciolti); i task di PROGETTO vivono in projects/{pid}/tasks/{id}.
+    // Senza il match il chip renderizzerebbe "[Task eliminato]" → meglio errore esplicito.
+    const taskRef = args.projectId
+        ? db.doc(`projects/${args.projectId}/tasks/${args.taskId}`)
+        : db.doc(`tasks/${args.taskId}`);
+    if (!(await taskRef.get()).exists) {
+        throw new Error(args.projectId
+            ? `Task ${args.taskId} non trovato in projects/${args.projectId}/tasks. Verifica projectId/taskId con cepheid_getProject.`
+            : `Task ${args.taskId} non trovato in tasks/${args.taskId}. Se è un task di PROGETTO devi passare projectId (vedi cepheid_getProject), altrimenti il chip risulterebbe "[Task eliminato]".`);
+    }
+
     const baseJson = await liveDocJSON(args.docId, current);
     const taskParagraph: PMNode = {
         type: 'paragraph',
@@ -614,6 +626,9 @@ export async function linkDeliverable(
     if (!args.docId) throw new Error('docId richiesto');
     if (!args.projectId) throw new Error('projectId richiesto');
     if (!args.deliverableId) throw new Error('deliverableId richiesto');
+    const dSnap = await admin.firestore().doc(`projects/${args.projectId}/tasks/${args.deliverableId}`).get();
+    if (!dSnap.exists) throw new Error(`Deliverable ${args.deliverableId} non trovato in projects/${args.projectId}/tasks. Verifica projectId/deliverableId con cepheid_getProject.`);
+    if (dSnap.data()?.type !== 'deliverable') throw new Error(`L'entità ${args.deliverableId} non è un deliverable (type=${dSnap.data()?.type}). Usa nebula_linkTask o nebula_linkMilestone secondo il tipo.`);
     const out = await appendMentionParagraph(
         args.docId,
         { type: 'deliverableMention', attrs: { deliverableId: args.deliverableId, projectId: args.projectId } },
@@ -629,6 +644,9 @@ export async function linkMilestone(
     if (!args.docId) throw new Error('docId richiesto');
     if (!args.projectId) throw new Error('projectId richiesto');
     if (!args.milestoneId) throw new Error('milestoneId richiesto');
+    const mSnap = await admin.firestore().doc(`projects/${args.projectId}/tasks/${args.milestoneId}`).get();
+    if (!mSnap.exists) throw new Error(`Milestone ${args.milestoneId} non trovata in projects/${args.projectId}/tasks. Verifica projectId/milestoneId con cepheid_getProject.`);
+    if (mSnap.data()?.type !== 'milestone') throw new Error(`L'entità ${args.milestoneId} non è una milestone (type=${mSnap.data()?.type}). Usa nebula_linkTask o nebula_linkDeliverable secondo il tipo.`);
     const out = await appendMentionParagraph(
         args.docId,
         { type: 'milestoneMention', attrs: { milestoneId: args.milestoneId, projectId: args.projectId } },
@@ -643,9 +661,11 @@ export async function linkObiettivo(
 ) {
     if (!args.docId) throw new Error('docId richiesto');
     if (!args.obiettivoId) throw new Error('obiettivoId richiesto');
+    const oSnap = await admin.firestore().doc(`obiettivi/${args.obiettivoId}`).get();
+    if (!oSnap.exists) throw new Error(`Obiettivo ${args.obiettivoId} non trovato in obiettivi/. Verifica l'id con cepheid_listObiettivi.`);
     const out = await appendMentionParagraph(
         args.docId,
-        { type: 'obiettivoMention', attrs: { obiettivoId: args.obiettivoId, title: args.title ?? '' } },
+        { type: 'obiettivoMention', attrs: { obiettivoId: args.obiettivoId, title: args.title || (oSnap.data()?.titolo as string) || '' } },
         ctx.userEmail,
     );
     return { text: `Obiettivo \`${args.obiettivoId}\` collegato a **${out.title}** (rev ${out.revision}).` };

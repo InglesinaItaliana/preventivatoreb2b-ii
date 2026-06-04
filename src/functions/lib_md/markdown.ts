@@ -45,6 +45,12 @@ export interface PMNode {
 // in tasks/{id} e i task di progetto risultavano "Task eliminato".
 const TASK_MENTION_RE = /@task:(?:([A-Za-z0-9_-]+)\/)?([A-Za-z0-9_-]+)/g;
 const PROJECT_MENTION_RE = /@project:([A-Za-z0-9_-]+)/g;
+// Milestone e deliverable sono task con type dedicato in projects/{pid}/tasks/{id}:
+// come @task, il prefisso progetto è opzionale ma necessario per risolvere il chip.
+const MILESTONE_MENTION_RE = /@milestone:(?:([A-Za-z0-9_-]+)\/)?([A-Za-z0-9_-]+)/g;
+const DELIVERABLE_MENTION_RE = /@deliverable:(?:([A-Za-z0-9_-]+)\/)?([A-Za-z0-9_-]+)/g;
+// Obiettivo: collection top-level obiettivi/{id}, nessun progetto.
+const OBIETTIVO_MENTION_RE = /@obiettivo:([A-Za-z0-9_-]+)/g;
 const EMBED_TASK_RE = /\{\{embed-tasks([^}]*)\}\}/g;
 
 interface CustomPlaceholder {
@@ -96,6 +102,36 @@ function preprocessCustomSyntax(md: string): { md: string; placeholders: CustomP
                 type: 'projectMention',
                 attrs: { projectId },
             },
+        });
+        return token;
+    });
+
+    // 4. @milestone:[projectId/]id (inline)
+    md = md.replace(MILESTONE_MENTION_RE, (_, projectId: string | undefined, milestoneId: string) => {
+        const token = generatePlaceholder(idx++);
+        placeholders.push({
+            token,
+            node: { type: 'milestoneMention', attrs: { milestoneId, projectId: projectId ?? null } },
+        });
+        return token;
+    });
+
+    // 5. @deliverable:[projectId/]id (inline)
+    md = md.replace(DELIVERABLE_MENTION_RE, (_, projectId: string | undefined, deliverableId: string) => {
+        const token = generatePlaceholder(idx++);
+        placeholders.push({
+            token,
+            node: { type: 'deliverableMention', attrs: { deliverableId, projectId: projectId ?? null } },
+        });
+        return token;
+    });
+
+    // 6. @obiettivo:id (inline)
+    md = md.replace(OBIETTIVO_MENTION_RE, (_, obiettivoId: string) => {
+        const token = generatePlaceholder(idx++);
+        placeholders.push({
+            token,
+            node: { type: 'obiettivoMention', attrs: { obiettivoId, title: '' } },
         });
         return token;
     });
@@ -353,13 +389,16 @@ function inlineToMd(nodes: PMNode[] | undefined): string {
         } else if (n.type === 'hardBreak') {
             out += '  \n';
         } else if (n.type === 'taskMention') {
-            out += `@task:${n.attrs?.taskId ?? ''}`;
+            const pid = n.attrs?.projectId;
+            out += pid ? `@task:${pid}/${n.attrs?.taskId ?? ''}` : `@task:${n.attrs?.taskId ?? ''}`;
         } else if (n.type === 'projectMention') {
             out += `@project:${n.attrs?.projectId ?? ''}`;
         } else if (n.type === 'milestoneMention') {
-            out += `@milestone:${n.attrs?.milestoneId ?? ''}`;
+            const pid = n.attrs?.projectId;
+            out += pid ? `@milestone:${pid}/${n.attrs?.milestoneId ?? ''}` : `@milestone:${n.attrs?.milestoneId ?? ''}`;
         } else if (n.type === 'deliverableMention') {
-            out += `@deliverable:${n.attrs?.deliverableId ?? ''}`;
+            const pid = n.attrs?.projectId;
+            out += pid ? `@deliverable:${pid}/${n.attrs?.deliverableId ?? ''}` : `@deliverable:${n.attrs?.deliverableId ?? ''}`;
         } else if (n.type === 'obiettivoMention') {
             out += `@obiettivo:${n.attrs?.obiettivoId ?? ''}`;
         } else if (n.content) {

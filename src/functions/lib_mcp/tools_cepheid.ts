@@ -259,7 +259,17 @@ export async function getProject(args: { projectId?: string }, _ctx: ToolContext
     if (!freeTasks.length) lines.push('_(nessuno)_');
     for (const t of freeTasks) lines.push(`- task ${fmtEntity(t)}`);
 
-    return { text: `${head.join('\n')}\n${lines.join('\n')}` };
+    // Istruzioni di link: i task/milestone/deliverable vivono in
+    // projects/{projectId}/tasks → SERVE projectId, altrimenti il chip risulta
+    // "[Task eliminato]". Forniamo le chiamate pronte con projectId già valorizzato.
+    const hint = `\n\n— Per citare questi elementi in un doc NEBULA usa (projectId="${projectId}"):\n`
+        + `· task → nebula_linkTask(docId, taskId, projectId="${projectId}")\n`
+        + `· milestone → nebula_linkMilestone(docId, projectId="${projectId}", milestoneId)\n`
+        + `· deliverable → nebula_linkDeliverable(docId, projectId="${projectId}", deliverableId)\n`
+        + `· progetto → nebula_linkProject(docId, projectId="${projectId}")\n`
+        + `In markdown (createDoc/appendBlock): @task:${projectId}/<id>, @milestone:${projectId}/<id>, @deliverable:${projectId}/<id>, @project:${projectId}. NON usare @task:<id> senza projectId.`;
+
+    return { text: `${head.join('\n')}\n${lines.join('\n')}${hint}` };
 }
 
 /**
@@ -305,6 +315,9 @@ export async function getTask(args: { projectId?: string; taskId?: string }, _ct
         if (!dSnap.size) out.push('_(nessuno)_');
         dSnap.forEach((d) => out.push(`- ${fmtEntity({ id: d.id, ...(d.data() as Record<string, unknown>) })}`));
     }
+
+    const linkTool = type === 'milestone' ? 'nebula_linkMilestone' : type === 'deliverable' ? 'nebula_linkDeliverable' : 'nebula_linkTask';
+    out.push(`\n— Per citarlo in un doc NEBULA: ${linkTool}(docId, projectId="${projectId}", ${type === 'task' ? 'taskId' : type + 'Id'}="${taskId}"). Passa SEMPRE projectId, altrimenti il chip risulta "[Task eliminato]".`);
 
     return { text: out.join('\n') };
 }
