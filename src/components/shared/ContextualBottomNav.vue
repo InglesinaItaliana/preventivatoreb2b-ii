@@ -73,10 +73,9 @@ const items = computed(() =>
           class="cm-pill-icon"
         />
         <span
-          v-if="item.path === '/cepheid/smistamento'"
-          class="lyra-star cm-triage-indicator"
-          :class="(triageCount ?? 0) > 0 ? 'lyra-star--busy' : 'lyra-star--quiet'"
-          :aria-label="(triageCount ?? 0) > 0 ? 'Task da smistare' : 'Tutto smistato'"
+          v-if="item.path === '/cepheid/smistamento' && (triageCount ?? 0) > 0"
+          class="lyra-star cm-triage-indicator lyra-star--busy"
+          aria-label="Task da smistare"
         />
       </button>
     </div>
@@ -106,10 +105,10 @@ const items = computed(() =>
   display: flex;
   align-items: center;
   gap: 4px;
-  background: var(--md-sys-color-surface-container);
+  /* Pillola piatta (doc newUPDATE): colore card (surface #FFF8F0), niente ombra. */
+  background: var(--md-sys-color-surface);
   border-radius: var(--md-sys-shape-corner-full);
   padding: 9px 12px;
-  box-shadow: var(--md-sys-elevation-level-1);
 }
 
 /* PULSAR: il contenitore pillole usa lo stesso colore delle card (surface),
