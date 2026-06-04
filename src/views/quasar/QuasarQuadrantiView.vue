@@ -168,26 +168,26 @@ async function completeFromModal() {
   <div class="qd s-scope-quasar" ref="scrollEl">
     <div class="qd-content">
      <div class="panel">
-      <MdPageHeader title="Quadranti" :subtitle="subtitle" borderless sticky :hidden="headerHidden">
-        <template #tools>
-          <CepheidViewSwitcher :model-value="view" :tabs="viewTabs" @update:model-value="(v) => (view = v as ViewId)" />
-        </template>
-      </MdPageHeader>
+      <MdPageHeader title="Quadranti" :subtitle="subtitle" borderless sticky :hidden="headerHidden" />
 
-      <!-- Filtro persona (entrambe le viste) -->
-      <div class="avfilter">
-        <button class="avf all" :class="{ on: filterPerson === '' }" @click="filterPerson = ''">Tutti</button>
-        <button
-          v-for="m in members"
-          :key="m.email"
-          class="avf"
-          :class="{ on: filterPerson === m.email }"
-          :title="displayName(m.email, members)"
-          @click="filterPerson = m.email"
-        >
-          <StarAvatar v-bind="starAvatarProps(m.email, members)" :size="24" />
-        </button>
-        <span class="filterlbl">filtra per persona</span>
+      <!-- Toolbar: filtro persona (pillole collassabili, il selezionato mostra il
+           nome) sulla STESSA riga del selettore tab a pillola. -->
+      <div class="qd-toolbar">
+        <div class="avfilter">
+          <button class="avf all" :class="{ on: filterPerson === '' }" @click="filterPerson = ''">Tutti</button>
+          <button
+            v-for="m in members"
+            :key="m.email"
+            class="avf-pill"
+            :class="{ on: filterPerson === m.email }"
+            :title="displayName(m.email, members)"
+            @click="filterPerson = filterPerson === m.email ? '' : m.email"
+          >
+            <StarAvatar v-bind="starAvatarProps(m.email, members)" :size="24" />
+            <span class="avf-name">{{ displayName(m.email, members) }}</span>
+          </button>
+        </div>
+        <CepheidViewSwitcher :model-value="view" :tabs="viewTabs" @update:model-value="(v) => (view = v as ViewId)" />
       </div>
 
       <!-- Cursore temporale "Ritorno al futuro" in pillola -->
@@ -414,18 +414,31 @@ async function completeFromModal() {
 .s-surface-dark .cursor-range::-moz-range-thumb { border-color: #16130B; }
 .cursor-scale { display: flex; justify-content: space-between; font-size: 10px; color: var(--md-sys-color-on-surface-variant); margin-top: 5px; }
 
-/* ── Filtro persona ── */
-.avfilter { display: flex; gap: 8px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
-.avf {
-  width: 36px; height: 36px; border-radius: 50%; padding: 0; cursor: pointer;
-  display: flex; align-items: center; justify-content: center; flex: 0 0 auto;
+/* ── Toolbar: filtro persona + selettore tab sulla stessa riga ── */
+.qd-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; flex-wrap: wrap; }
+.avfilter { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; flex: 1 1 auto; min-width: 0; }
+/* "Tutti" = pillola di reset */
+.avf.all {
+  border: 2px solid transparent; border-radius: 999px; padding: 0 13px; height: 32px; cursor: pointer;
   background: var(--md-sys-color-surface-variant); color: var(--md-sys-color-on-surface-variant);
-  border: 2px solid transparent; font-family: inherit; font-size: 11px; font-weight: 500; transition: all .15s;
+  font-family: inherit; font-size: 11px; font-weight: 500; transition: all .15s; flex: 0 0 auto;
 }
-.avf.on { border-color: var(--md-sys-color-primary); }
-.avf.all { width: auto; border-radius: 999px; padding: 0 13px; height: 32px; font-size: 11px; }
 .avf.all.on { background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary); }
-.filterlbl { font-size: 10px; color: var(--md-sys-color-on-surface-variant); margin-left: 2px; }
+/* avatar-pillola collassabile: cerchio; il SELEZIONATO espande il nome (stile
+   coerente con CepheidAssigneePills). */
+.avf-pill {
+  display: inline-flex; align-items: center; padding: 0; cursor: pointer; flex: 0 0 auto;
+  background: transparent; border: 0; border-radius: 999px; font-family: inherit; transition: background .15s;
+}
+.avf-pill :deep(.star-avatar) { box-shadow: 0 0 0 2px transparent; transition: box-shadow .15s; }
+.avf-pill.on { background: color-mix(in srgb, var(--md-sys-color-primary) 14%, transparent); }
+.avf-pill.on :deep(.star-avatar) { box-shadow: 0 0 0 2px var(--md-sys-color-primary); }
+.avf-name {
+  max-width: 0; overflow: hidden; white-space: nowrap; opacity: 0; padding: 0;
+  font-size: 11px; font-weight: 600; color: var(--md-sys-color-primary);
+  transition: max-width .2s ease, opacity .15s ease, padding .2s ease;
+}
+.avf-pill.on .avf-name { max-width: 140px; opacity: 1; padding: 0 10px 0 6px; }
 
 /* ── Matrice ── */
 /* dimensioni fisse (concept): q1 AGISCI top-left è più LARGO (col 1.15fr) e più
