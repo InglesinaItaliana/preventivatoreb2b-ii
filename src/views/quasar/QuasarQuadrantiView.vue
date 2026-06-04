@@ -20,8 +20,10 @@ import { useTeamMembers, displayName, starAvatarProps } from '../../composables/
 import { makeStar } from '../../lib/starAvatar.js'
 import { useQuadranti, type QuadId, type QuadTask } from '../../composables/quasar/useQuadranti'
 import { useResourceLoad } from '../../composables/quasar/useResourceLoad'
+import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
 
 const scrollEl = ref<HTMLElement | null>(null)
+const { hidden: headerHidden } = useAutoHideHeader(scrollEl)
 
 const { tasks, loading, completeTask, updateTask } = useAllTasks()
 const { members } = useTeamMembers()
@@ -181,30 +183,30 @@ async function completeFromModal() {
 
 <template>
   <div class="qd s-scope-quasar" ref="scrollEl">
-    <div class="qd-content">
-     <!-- Header di pagina (FUORI dalla card, su fondo crema): titolo + sottotitolo
-          + toolbar con filtro persona e selettore tab a pillola. -->
-     <div class="qd-pagehead">
-      <MdPageHeader title="Quadranti" :subtitle="subtitle" borderless />
-
-      <div class="qd-toolbar">
-        <div class="avfilter">
-          <button class="avf all" :class="{ on: filterPerson === '' }" @click="filterPerson = ''">Tutti</button>
-          <button
-            v-for="m in members"
-            :key="m.email"
-            class="avf-pill"
-            :class="{ on: filterPerson === m.email }"
-            :style="{ background: avColors[m.email]?.bg }"
-            :title="displayName(m.email, members)"
-            @click="filterPerson = filterPerson === m.email ? '' : m.email"
-          >
-            <StarAvatar v-bind="starAvatarProps(m.email, members)" :size="32" />
-            <span class="avf-name" :style="{ color: avColors[m.email]?.name }">{{ displayName(m.email, members) }}</span>
-          </button>
-        </div>
+    <!-- Header come NEBULA Documenti: barra sticky a tutta larghezza (fondo card),
+         titolo + sottotitolo + selettore tab a pillola nello slot tools. -->
+    <MdPageHeader title="Quadranti" :subtitle="subtitle" sticky borderless :hidden="headerHidden">
+      <template #tools>
         <CepheidViewSwitcher :model-value="view" :tabs="viewTabs" @update:model-value="(v) => (view = v as ViewId)" />
-      </div>
+      </template>
+    </MdPageHeader>
+
+    <div class="qd-content">
+     <!-- Filtro persona: riga sotto l'header, allineata al pannello -->
+     <div class="avfilter">
+       <button class="avf all" :class="{ on: filterPerson === '' }" @click="filterPerson = ''">Tutti</button>
+       <button
+         v-for="m in members"
+         :key="m.email"
+         class="avf-pill"
+         :class="{ on: filterPerson === m.email }"
+         :style="{ background: avColors[m.email]?.bg }"
+         :title="displayName(m.email, members)"
+         @click="filterPerson = filterPerson === m.email ? '' : m.email"
+       >
+         <StarAvatar v-bind="starAvatarProps(m.email, members)" :size="32" />
+         <span class="avf-name" :style="{ color: avColors[m.email]?.name }">{{ displayName(m.email, members) }}</span>
+       </button>
      </div>
 
      <div class="panel">
@@ -405,14 +407,15 @@ async function completeFromModal() {
 }
 .s-surface-dark .panel { background: #16130B; }
 @media (prefers-color-scheme: dark) { .panel { background: #16130B; } }
-/* header di pagina (superficie #FFF8F0 a sé, staccata dalla card): titolo + sottotitolo + toolbar */
-.qd-pagehead {
-  max-width: 1000px; margin: 0 auto 14px;
-  background: #FFF8F0; border-radius: 16px; padding: 12px 16px 14px;
+/* Header come NEBULA Documenti: MdPageHeader sticky a tutta larghezza, fondo card
+   #FFF8F0; su desktop il contenuto è allineato (gutter) alla larghezza del pannello. */
+:deep(.md-page-header) { padding: 18px 16px 14px; }
+:deep(.md-page-header.is-sticky) { background: #FFF8F0; }
+.s-surface-dark :deep(.md-page-header.is-sticky) { background: #16130B; }
+@media (prefers-color-scheme: dark) { :deep(.md-page-header.is-sticky) { background: #16130B; } }
+@media (min-width: 1024px) {
+  :deep(.md-page-header) { padding: 24px max(40px, calc(50% - 500px)) 18px; }
 }
-.s-surface-dark .qd-pagehead { background: #16130B; }
-@media (prefers-color-scheme: dark) { .qd-pagehead { background: #16130B; } }
-.qd-pagehead :deep(.md-page-header) { background: transparent; padding: 2px 0 10px; }
 
 /* titolo della card = nome della tab attiva (Azioni / Risorse) */
 .panel-title {
@@ -446,9 +449,8 @@ async function completeFromModal() {
 .s-surface-dark .cursor-range::-moz-range-thumb { border-color: #16130B; }
 .cursor-scale { display: flex; justify-content: space-between; font-size: 10px; color: var(--md-sys-color-on-surface-variant); margin-top: 5px; }
 
-/* ── Toolbar: filtro persona + selettore tab sulla stessa riga ── */
-.qd-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 0; flex-wrap: wrap; }
-.avfilter { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; flex: 1 1 auto; min-width: 0; }
+/* ── Filtro persona: riga sotto l'header, allineata al pannello (max-width 1000) ── */
+.avfilter { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; max-width: 1000px; margin: 0 auto 14px; }
 /* "Tutti" = pillola di reset. Altezza 34px = pillola container tab (.vsw). */
 .avf.all {
   border: 2px solid transparent; border-radius: 999px; padding: 0 13px; height: 34px; cursor: pointer;
