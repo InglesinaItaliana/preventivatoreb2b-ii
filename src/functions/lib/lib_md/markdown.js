@@ -37,6 +37,12 @@ const marked_1 = require("marked");
 // in tasks/{id} e i task di progetto risultavano "Task eliminato".
 const TASK_MENTION_RE = /@task:(?:([A-Za-z0-9_-]+)\/)?([A-Za-z0-9_-]+)/g;
 const PROJECT_MENTION_RE = /@project:([A-Za-z0-9_-]+)/g;
+// Milestone e deliverable sono task con type dedicato in projects/{pid}/tasks/{id}:
+// come @task, il prefisso progetto è opzionale ma necessario per risolvere il chip.
+const MILESTONE_MENTION_RE = /@milestone:(?:([A-Za-z0-9_-]+)\/)?([A-Za-z0-9_-]+)/g;
+const DELIVERABLE_MENTION_RE = /@deliverable:(?:([A-Za-z0-9_-]+)\/)?([A-Za-z0-9_-]+)/g;
+// Obiettivo: collection top-level obiettivi/{id}, nessun progetto.
+const OBIETTIVO_MENTION_RE = /@obiettivo:([A-Za-z0-9_-]+)/g;
 const EMBED_TASK_RE = /\{\{embed-tasks([^}]*)\}\}/g;
 function generatePlaceholder(idx) {
     return `NEBULA_${idx}_NEBULA`;
@@ -78,6 +84,33 @@ function preprocessCustomSyntax(md) {
                 type: 'projectMention',
                 attrs: { projectId },
             },
+        });
+        return token;
+    });
+    // 4. @milestone:[projectId/]id (inline)
+    md = md.replace(MILESTONE_MENTION_RE, (_, projectId, milestoneId) => {
+        const token = generatePlaceholder(idx++);
+        placeholders.push({
+            token,
+            node: { type: 'milestoneMention', attrs: { milestoneId, projectId: projectId !== null && projectId !== void 0 ? projectId : null } },
+        });
+        return token;
+    });
+    // 5. @deliverable:[projectId/]id (inline)
+    md = md.replace(DELIVERABLE_MENTION_RE, (_, projectId, deliverableId) => {
+        const token = generatePlaceholder(idx++);
+        placeholders.push({
+            token,
+            node: { type: 'deliverableMention', attrs: { deliverableId, projectId: projectId !== null && projectId !== void 0 ? projectId : null } },
+        });
+        return token;
+    });
+    // 6. @obiettivo:id (inline)
+    md = md.replace(OBIETTIVO_MENTION_RE, (_, obiettivoId) => {
+        const token = generatePlaceholder(idx++);
+        placeholders.push({
+            token,
+            node: { type: 'obiettivoMention', attrs: { obiettivoId, title: '' } },
         });
         return token;
     });
@@ -317,7 +350,7 @@ function escapeMd(s) {
     return s.replace(/([*_`\\])/g, '\\$1');
 }
 function inlineToMd(nodes) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x;
     if (!nodes)
         return '';
     let out = '';
@@ -347,19 +380,22 @@ function inlineToMd(nodes) {
             out += '  \n';
         }
         else if (n.type === 'taskMention') {
-            out += `@task:${(_e = (_d = n.attrs) === null || _d === void 0 ? void 0 : _d.taskId) !== null && _e !== void 0 ? _e : ''}`;
+            const pid = (_d = n.attrs) === null || _d === void 0 ? void 0 : _d.projectId;
+            out += pid ? `@task:${pid}/${(_f = (_e = n.attrs) === null || _e === void 0 ? void 0 : _e.taskId) !== null && _f !== void 0 ? _f : ''}` : `@task:${(_h = (_g = n.attrs) === null || _g === void 0 ? void 0 : _g.taskId) !== null && _h !== void 0 ? _h : ''}`;
         }
         else if (n.type === 'projectMention') {
-            out += `@project:${(_g = (_f = n.attrs) === null || _f === void 0 ? void 0 : _f.projectId) !== null && _g !== void 0 ? _g : ''}`;
+            out += `@project:${(_k = (_j = n.attrs) === null || _j === void 0 ? void 0 : _j.projectId) !== null && _k !== void 0 ? _k : ''}`;
         }
         else if (n.type === 'milestoneMention') {
-            out += `@milestone:${(_j = (_h = n.attrs) === null || _h === void 0 ? void 0 : _h.milestoneId) !== null && _j !== void 0 ? _j : ''}`;
+            const pid = (_l = n.attrs) === null || _l === void 0 ? void 0 : _l.projectId;
+            out += pid ? `@milestone:${pid}/${(_o = (_m = n.attrs) === null || _m === void 0 ? void 0 : _m.milestoneId) !== null && _o !== void 0 ? _o : ''}` : `@milestone:${(_q = (_p = n.attrs) === null || _p === void 0 ? void 0 : _p.milestoneId) !== null && _q !== void 0 ? _q : ''}`;
         }
         else if (n.type === 'deliverableMention') {
-            out += `@deliverable:${(_l = (_k = n.attrs) === null || _k === void 0 ? void 0 : _k.deliverableId) !== null && _l !== void 0 ? _l : ''}`;
+            const pid = (_r = n.attrs) === null || _r === void 0 ? void 0 : _r.projectId;
+            out += pid ? `@deliverable:${pid}/${(_t = (_s = n.attrs) === null || _s === void 0 ? void 0 : _s.deliverableId) !== null && _t !== void 0 ? _t : ''}` : `@deliverable:${(_v = (_u = n.attrs) === null || _u === void 0 ? void 0 : _u.deliverableId) !== null && _v !== void 0 ? _v : ''}`;
         }
         else if (n.type === 'obiettivoMention') {
-            out += `@obiettivo:${(_o = (_m = n.attrs) === null || _m === void 0 ? void 0 : _m.obiettivoId) !== null && _o !== void 0 ? _o : ''}`;
+            out += `@obiettivo:${(_x = (_w = n.attrs) === null || _w === void 0 ? void 0 : _w.obiettivoId) !== null && _x !== void 0 ? _x : ''}`;
         }
         else if (n.content) {
             out += inlineToMd(n.content);

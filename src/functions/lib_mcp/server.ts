@@ -120,7 +120,7 @@ const TOOLS = [
             properties: {
                 title: { type: 'string', description: 'Titolo del documento' },
                 parentId: { type: ['string', 'null'], description: 'Parent doc id opzionale' },
-                content: { type: 'string', description: 'Contenuto markdown iniziale. Supporta: heading (#/##/###), **bold**, *italic*, `code`, ~~strike~~, [testo](href), bullet/ordered list, blockquote (>), code block fenced, hr (---), tabelle GFM (`| a | b |`), **checkbox** (`- [ ]` / `- [x]`), @task:id, @project:id, {{embed-tasks ...}}' },
+                content: { type: 'string', description: 'Contenuto markdown iniziale. Supporta: heading (#/##/###), **bold**, *italic*, `code`, ~~strike~~, [testo](href), bullet/ordered list, blockquote (>), code block fenced, hr (---), tabelle GFM (`| a | b |`), **checkbox** (`- [ ]` / `- [x]`), @task:projectId/id, @milestone:projectId/id, @deliverable:projectId/id, @project:id, @obiettivo:id, {{embed-tasks ...}}. Per task/milestone/deliverable di progetto includi SEMPRE il projectId (@task:projectId/id), altrimenti il chip risulta "[Task eliminato]".' },
                 icon: {
                     type: 'object',
                     description: 'Icona Material Symbols (es. { set: "material", name: "rocket_launch" })',
@@ -138,7 +138,7 @@ const TOOLS = [
     },
     {
         name: 'nebula_appendBlock',
-        description: 'Aggiunge blocchi markdown in fondo a un documento esistente. Supporta: heading, bold, italic, code, strike, [testo](href), liste, blockquote, code block, hr, tabelle GFM (`| a | b |`), **checkbox** (`- [ ]` / `- [x]`), @task:id, @project:id, {{embed-tasks ...}}.',
+        description: 'Aggiunge blocchi markdown in fondo a un documento esistente. Supporta: heading, bold, italic, code, strike, [testo](href), liste, blockquote, code block, hr, tabelle GFM (`| a | b |`), **checkbox** (`- [ ]` / `- [x]`), @task:projectId/id, @milestone:projectId/id, @deliverable:projectId/id, @project:id, @obiettivo:id, {{embed-tasks ...}}. Per task/milestone/deliverable di progetto includi SEMPRE il projectId.',
         inputSchema: {
             type: 'object',
             properties: {
@@ -165,13 +165,13 @@ const TOOLS = [
     },
     {
         name: 'nebula_linkTask',
-        description: 'Aggiunge un chip task-mention CEPHEID in fondo al documento.',
+        description: 'Aggiunge un chip task-mention CEPHEID in fondo al documento. IMPORTANTE: per i task di PROGETTO passa SEMPRE projectId (vivono in projects/{projectId}/tasks); ottienilo da cepheid_getProject/cepheid_getTask. Ometti projectId SOLO per i task sciolti (collection top-level tasks). Senza il projectId corretto il chip risulta "[Task eliminato]". Per milestone/deliverable usa nebula_linkMilestone/nebula_linkDeliverable.',
         inputSchema: {
             type: 'object',
             properties: {
                 docId: { type: 'string' },
                 taskId: { type: 'string', description: 'ID del task CEPHEID' },
-                projectId: { type: ['string', 'null'], description: 'Project parent se applicabile' },
+                projectId: { type: ['string', 'null'], description: 'ID del progetto che contiene il task (OBBLIGATORIO per task di progetto; null solo per task sciolti)' },
             },
             required: ['docId', 'taskId'],
         },
