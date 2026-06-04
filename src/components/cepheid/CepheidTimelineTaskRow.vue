@@ -147,8 +147,8 @@ const avColors = computed<Record<string, { bg: string; name: string }>>(() => {
    e l'avatar dentro lo annulla (box-shadow:none, vince per specificità sul
    ring globale di StarAvatar). */
 .av-pill { display: inline-flex; align-items: center; background: #05090F; border-radius: 999px; border: 1px solid var(--md-sys-color-outline-variant); transition: margin-left .2s ease, padding-right .2s ease; }
-.av-pill:not(:first-child) { margin-left: -7px; }
-.avg.is-open .av-pill, .avg:hover .av-pill { margin-left: 0; padding-right: 4px; }
+.av-pill:not(:first-child) { margin-left: 4px; }
+.avg.is-open .av-pill, .avg:hover .av-pill { padding-right: 10px; }
 .av-pill .av { border-radius: 50%; flex: 0 0 auto; box-shadow: none; }
 .av-name {
   max-width: 0; overflow: hidden; white-space: nowrap; opacity: 0; padding-left: 0;
