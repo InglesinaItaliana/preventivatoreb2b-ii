@@ -690,10 +690,9 @@ const roleLabel: Record<string, string> = {
                   />
                   {{ item.label }}
                   <span
-                    v-if="item.path === '/cepheid/smistamento'"
-                    class="lyra-star s-triage-indicator"
-                    :class="triageCount > 0 ? 'lyra-star--busy' : 'lyra-star--quiet'"
-                    :aria-label="triageCount > 0 ? 'Task da smistare' : 'Tutto smistato'"
+                    v-if="item.path === '/cepheid/smistamento' && triageCount > 0"
+                    class="lyra-star s-triage-indicator lyra-star--busy"
+                    aria-label="Task da smistare"
                   />
                 </RouterLink>
               </template>

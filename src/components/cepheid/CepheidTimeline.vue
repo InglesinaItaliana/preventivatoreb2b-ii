@@ -240,7 +240,7 @@ defineExpose({ expanded })
     <!-- obiettivo collegato: sotto al titolo, icona flag NERA allineata alla
          colonna delle icone meta (calendario/checklist/clessidra) sotto -->
     <div v-if="obiettivo" class="cph-goal">
-      <span class="hicon hicon--goal"><MIcon name="flag" :filled="true" :size="18" /></span>
+      <span class="hicon hicon--goal"><MIcon name="flag" :filled="false" :size="18" /></span>
       <span class="cph-goal-name">{{ obiettivo.titolo }}</span>
     </div>
 
@@ -410,9 +410,11 @@ defineExpose({ expanded })
 
 /* obiettivo collegato sotto al titolo: stessa colonna icone della topbar (48px),
    ma icona NERA (on-surface) per distinguerla dalle meta tenui sotto. */
-.cph-goal { display: flex; align-items: center; gap: 8px; margin: 0 0 12px; min-width: 0; }
+/* margin-bottom 4px: con il padding-top 8px del .topbar sotto, il gap obiettivo→data
+   (4+8=12) eguaglia il gap data→task (.prange margin-bottom 12). */
+.cph-goal { display: flex; align-items: center; gap: 8px; margin: 0 0 4px; min-width: 0; }
 .cph-goal .hicon--goal { color: var(--md-sys-color-on-surface); }
-.cph-goal-name { font-size: 13px; font-weight: 500; color: var(--md-sys-color-on-surface); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cph-goal-name { font-size: 13px; font-weight: 400; color: var(--md-sys-color-on-surface); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* In modalità card la topbar (date + barre) NON deve avere un fondo opaco proprio:
    trasparente -> eredita lo sfondo della card e si colora insieme ad essa all'hover. */

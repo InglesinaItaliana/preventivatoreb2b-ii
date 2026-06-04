@@ -33,7 +33,7 @@ function onClick() {
     :aria-label="config.fab.ariaLabel"
     @click="onClick"
   >
-    <MIcon :name="config.fab.icon" filled :size="28" />
+    <MIcon :name="config.fab.icon" filled :size="36" />
   </button>
 </template>
 
@@ -45,19 +45,18 @@ function onClick() {
   width: 66px;
   height: 66px;
   border-radius: var(--md-sys-shape-corner-large);
+  /* Piatto + "invertito" rispetto alla pillola (doc newUPDATE): sfondo brand
+     (primary), icona color surface (#FFF8F0), niente ombra/bordo. */
   background: var(--md-sys-color-primary);
-  color: var(--md-sys-color-on-primary);
+  color: var(--md-sys-color-surface);
   border: none;
   cursor: pointer;
-  box-shadow: var(--md-sys-elevation-level-3);
   transition: transform   var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
-              box-shadow  var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard),
               background  var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
   flex-shrink: 0;
 }
 .cm-fab:hover {
   background: var(--md-sys-color-primary-hover);
-  box-shadow: var(--md-sys-elevation-level-4);
 }
 .cm-fab:active { transform: scale(0.96); }
 </style>
