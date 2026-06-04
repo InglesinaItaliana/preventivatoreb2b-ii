@@ -380,9 +380,7 @@ async function completeFromModal() {
   max-width: 1000px;
   margin: 0 auto;
   background: #FFF8F0;
-  border: 1px solid var(--md-sys-color-outline-variant);
   border-radius: 16px;
-  box-shadow: var(--md-sys-elevation-level-1);
   padding: 14px 16px 18px;
 }
 .s-surface-dark .panel { background: #16130B; }
@@ -479,7 +477,7 @@ async function completeFromModal() {
 /* ── Card azione ── */
 .acard {
   position: relative;
-  background: #FFF8F0; border: 1px solid var(--md-sys-color-outline-variant); border-radius: 9px;
+  background: #FFF8F0; border-radius: 9px;
   padding: 7px 9px; display: flex; align-items: center; gap: 8px;
 }
 .s-surface-dark .acard { background: #16130B; }
@@ -512,7 +510,7 @@ async function completeFromModal() {
 .sched-in { position: absolute; opacity: 0; pointer-events: none; width: 1px; height: 1px; }
 
 /* ── Card risorsa ── */
-.rcard { background: #FFF8F0; border: 1px solid var(--md-sys-color-outline-variant); border-radius: 9px; padding: 9px 11px; display: flex; align-items: center; gap: 10px; }
+.rcard { background: #FFF8F0; border-radius: 9px; padding: 9px 11px; display: flex; align-items: center; gap: 10px; }
 .s-surface-dark .rcard { background: #16130B; }
 .ravatar { flex: 0 0 auto; border-radius: 50%; }
 .rcard.forecast .ravatar { animation: firepulse 2s ease infinite; }

@@ -69,6 +69,11 @@ function relTime(d: Date): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
+// Contatore eventi di OGGI (mostrato nell'header).
+const todayCount = computed(() =>
+  events.value.filter(e => sameDay(e.ts, new Date())).length
+)
+
 // Raggruppa gli eventi (già ordinati desc) per etichetta-giorno.
 const grouped = computed(() => {
   const out: { label: string; items: ActivityEvent[] }[] = []
@@ -92,7 +97,13 @@ const grouped = computed(() => {
           borderless
           sticky
           :hidden="headerHidden"
-        />
+        >
+          <template #tools>
+            <span class="today-count" :title="'Eventi di oggi'">
+              <MIcon name="bolt" :size="13" :filled="true" />{{ todayCount }} oggi
+            </span>
+          </template>
+        </MdPageHeader>
 
         <div v-if="loading" class="lg-loading">
           <div v-for="i in 5" :key="i" class="lg-skel" />
@@ -151,14 +162,21 @@ const grouped = computed(() => {
   max-width: 560px;
   margin: 0 auto;
   background: #FFF8F0;
-  border: 1px solid var(--md-sys-color-outline-variant);
   border-radius: 16px;
-  box-shadow: var(--md-sys-elevation-level-1);
   padding: 14px 16px 22px;
 }
 .s-surface-dark .panel { background: #16130B; }
 @media (prefers-color-scheme: dark) { .panel { background: #16130B; } }
 .panel :deep(.md-page-header) { background: transparent; padding: 4px 2px 12px; }
+
+/* contatore eventi di oggi nell'header (slot tools) */
+.today-count {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 11px; font-weight: 600; white-space: nowrap;
+  padding: 3px 9px; border-radius: 999px;
+  background: color-mix(in srgb, var(--md-sys-color-primary) 16%, transparent);
+  color: var(--md-sys-color-primary);
+}
 
 /* ── Feed ── */
 .feed { position: relative; }
