@@ -13,7 +13,7 @@ import MIcon from '../shared/MIcon.vue'
 
 defineProps<{
   modelValue: string
-  tabs: { id: string; label: string; icon: string; count?: number }[]
+  tabs: { id: string; label: string; icon?: string; count?: number }[]
   /** label sempre visibili + badge count (per le tab di dettaglio) */
   labels?: boolean
 }>()
@@ -47,7 +47,7 @@ onUnmounted(() => { if (hoverTimer) clearTimeout(hoverTimer) })
       @mouseenter="!labels && onEnter(t.id)"
       @mouseleave="!labels && onLeave()"
     >
-      <MIcon :name="t.icon" :size="18" :filled="modelValue === t.id" />
+      <MIcon v-if="t.icon" :name="t.icon" :size="18" :filled="modelValue === t.id" />
       <span class="vlabel">{{ t.label }}</span>
       <span v-if="labels && t.count != null" class="vcount">{{ t.count }}</span>
     </button>
