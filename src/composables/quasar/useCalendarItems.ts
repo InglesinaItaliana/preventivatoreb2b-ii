@@ -11,7 +11,7 @@
  * diverso. I writer/CRUD degli appuntamenti arrivano in B3. Vedi docs/ATLAS (calendario).
  */
 import { computed } from 'vue'
-import { useAllTasks } from '../sidera/useAllTasks'
+import { useAllTasks, type AppointmentLink } from '../sidera/useAllTasks'
 import { useProjects } from '../sidera/useProjects'
 
 export type CalendarKind = 'task' | 'deliverable' | 'appointment'
@@ -30,6 +30,7 @@ export interface CalendarItem {
   assignees: string[]    // uid (migrazione assignees→uid completata)
   location: string       // solo appuntamenti
   notes: string          // solo appuntamenti
+  links: AppointmentLink[]  // solo appuntamenti: collegamenti task/progetto/doc
   link: string           // deep-link al modulo d'origine
 }
 
@@ -65,7 +66,7 @@ export function useCalendarItems() {
           id: t.id, kind: 'appointment', title: t.title,
           start: t.startAt, end: t.endAt, allDay: false, done: !!t.completedAt,
           color: COLOR.appointment, projectId: t.projectId, projectName: pn, assignees: t.assignees,
-          location: t.location, notes: t.notes,
+          location: t.location, notes: t.notes, links: t.links,
           link: `/quasar/calendario`,   // gli appuntamenti si aprono nella modale (B3)
         })
       } else if (t.type === 'deliverable') {
@@ -73,7 +74,7 @@ export function useCalendarItems() {
         out.push({
           id: t.id, kind: 'deliverable', title: t.title,
           start: t.dueDate, end: null, allDay: true, done: !!t.completedAt,
-          color: COLOR.cepheid, projectId: t.projectId, projectName: pn, assignees: t.assignees, location: '', notes: '',
+          color: COLOR.cepheid, projectId: t.projectId, projectName: pn, assignees: t.assignees, location: '', notes: '', links: [],
           link: t.projectId ? `/cepheid/project/${t.projectId}` : '/cepheid',
         })
       } else if (!t.type || t.type === 'task') {
@@ -81,7 +82,7 @@ export function useCalendarItems() {
         out.push({
           id: t.id, kind: 'task', title: t.title,
           start: t.dueDate, end: null, allDay: true, done: !!t.completedAt,
-          color: COLOR.cepheid, projectId: t.projectId, projectName: pn, assignees: t.assignees, location: '', notes: '',
+          color: COLOR.cepheid, projectId: t.projectId, projectName: pn, assignees: t.assignees, location: '', notes: '', links: [],
           link: t.projectId ? `/cepheid/project/${t.projectId}` : '/cepheid/azioni',
         })
       }

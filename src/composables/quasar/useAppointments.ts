@@ -9,6 +9,7 @@
  */
 import { collection, addDoc, doc, updateDoc, deleteDoc, serverTimestamp } from 'firebase/firestore'
 import { db, auth } from '../../firebase'
+import type { AppointmentLink } from '../sidera/useAllTasks'
 
 export interface AppointmentInput {
   title: string
@@ -17,6 +18,7 @@ export interface AppointmentInput {
   assignees: string[]   // uid
   location?: string
   notes?: string
+  links?: AppointmentLink[]
 }
 
 export async function createAppointment(data: AppointmentInput): Promise<string> {
@@ -31,6 +33,7 @@ export async function createAppointment(data: AppointmentInput): Promise<string>
     assignees:       data.assignees,
     location:        data.location ?? '',
     notes:           data.notes ?? '',
+    links:           data.links ?? [],
     projectId:       null,
     deliverableTaskIds: [],
     milestoneId:     null,
@@ -52,6 +55,7 @@ export async function updateAppointment(id: string, data: Partial<AppointmentInp
   if (data.assignees !== undefined) payload.assignees = data.assignees
   if (data.location !== undefined)  payload.location = data.location
   if (data.notes !== undefined)     payload.notes = data.notes
+  if (data.links !== undefined)     payload.links = data.links
   await updateDoc(doc(db, 'tasks', id), payload)
 }
 
