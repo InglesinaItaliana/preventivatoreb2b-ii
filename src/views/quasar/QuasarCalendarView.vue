@@ -194,7 +194,7 @@ function agendaLabel(d: Date): string {
     >
       <template #tools>
         <div class="cal-tools">
-          <CepheidViewSwitcher labels :model-value="view" :tabs="viewTabs" @update:model-value="(v) => (view = v as CalView)" />
+          <CepheidViewSwitcher :model-value="view" :tabs="viewTabs" @update:model-value="(v) => (view = v as CalView)" />
           <div class="cal-nav">
             <template v-if="view !== 'agenda'">
               <button class="cal-navbtn" aria-label="Precedente" @click="prev"><MIcon name="chevron_left" :size="20" /></button>
@@ -264,7 +264,7 @@ function agendaLabel(d: Date): string {
         </div>
         <div class="cal-tg-body" :style="gridColsStyle">
           <div class="cal-tg-gutter">
-            <div v-for="h in hours" :key="h" class="cal-tg-hr"><span>{{ h }}:00</span></div>
+            <div v-for="h in hours" :key="h" class="cal-tg-hr"><span v-if="h > HOUR_START">{{ h }}:00</span></div>
           </div>
           <div v-for="d in tgDays" :key="d.key" class="cal-tg-col" :class="{ 'is-today': d.today }">
             <div v-for="h in hours" :key="h" class="cal-tg-slot" @click="newAtSlot(d.date, h)" />
@@ -335,6 +335,9 @@ function agendaLabel(d: Date): string {
 @media (prefers-color-scheme: dark) { .cal { --page-bg: #0E0C07; } }
 
 :deep(.md-page-header) { padding: 18px 16px 14px; }
+:deep(.md-page-header.is-sticky) { background: #FFF8F0; }
+.s-surface-dark :deep(.md-page-header.is-sticky) { background: #16130B; }
+@media (prefers-color-scheme: dark) { :deep(.md-page-header.is-sticky) { background: #16130B; } }
 @media (min-width: 1024px) { :deep(.md-page-header) { padding: 24px max(40px, calc(50% - 540px)) 18px; } }
 
 .cal-nav { display: flex; align-items: center; gap: 6px; }
@@ -387,10 +390,11 @@ function agendaLabel(d: Date): string {
 .cal-tg-adcol { border-left: 1px solid var(--md-sys-color-outline-variant); padding: 3px; display: flex; flex-direction: column; gap: 3px; min-height: 26px; }
 .cal-tg-body { position: relative; }
 .cal-tg-hr { height: 44px; position: relative; }
-.cal-tg-hr span { position: absolute; top: -6px; right: 6px; font-size: 10px; color: var(--md-sys-color-on-surface-variant); }
+.cal-tg-hr span { position: absolute; top: -7px; right: 6px; font-size: 10px; color: var(--md-sys-color-on-surface-variant); }
 .cal-tg-col { position: relative; border-left: 1px solid var(--md-sys-color-outline-variant); }
 .cal-tg-col.is-today { background: color-mix(in srgb, var(--md-sys-color-primary) 4%, transparent); }
-.cal-tg-slot { height: 44px; box-sizing: border-box; border-bottom: 1px solid color-mix(in srgb, var(--md-sys-color-outline-variant) 55%, transparent); cursor: pointer; }
+.cal-tg-slot { height: 44px; box-sizing: border-box; border-top: 1px solid color-mix(in srgb, var(--md-sys-color-outline-variant) 55%, transparent); cursor: pointer; }
+.cal-tg-slot:first-child { border-top: none; }
 .cal-tg-slot:hover { background: color-mix(in srgb, var(--md-sys-color-primary) 6%, transparent); }
 .cal-tg-ev {
   position: absolute; left: 2px; right: 2px; z-index: 1;

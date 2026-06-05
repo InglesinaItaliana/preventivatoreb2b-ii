@@ -59,7 +59,7 @@ function doEdit() { if (props.item) emit('edit', props.item) }
           <div v-if="item.location" class="id-row"><MIcon name="place" :size="16" class="id-row-ic" /><span>{{ item.location }}</span></div>
 
           <div v-if="item.assignees.length" class="id-block">
-            <span class="id-label">Partecipanti</span>
+            <span class="id-label">{{ isAppt ? 'Partecipanti' : 'Assegnatari' }}</span>
             <div class="id-people">
               <span v-for="a in item.assignees" :key="a" class="id-person">
                 <StarAvatar v-bind="starAvatarProps(a, members)" :size="20" /> {{ displayName(a, members) }}
