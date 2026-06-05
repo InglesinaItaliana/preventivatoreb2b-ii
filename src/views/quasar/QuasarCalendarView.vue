@@ -194,7 +194,6 @@ function agendaLabel(d: Date): string {
     >
       <template #tools>
         <div class="cal-tools">
-          <CepheidViewSwitcher :model-value="view" :tabs="viewTabs" @update:model-value="(v) => (view = v as CalView)" />
           <div class="cal-nav">
             <template v-if="view !== 'agenda'">
               <button class="cal-navbtn" aria-label="Precedente" @click="prev"><MIcon name="chevron_left" :size="20" /></button>
@@ -202,8 +201,9 @@ function agendaLabel(d: Date): string {
               <button class="cal-navbtn" aria-label="Successivo" @click="next"><MIcon name="chevron_right" :size="20" /></button>
               <button class="cal-today" @click="goToday">Oggi</button>
             </template>
-            <button class="cal-new" @click="newAppointment()"><MIcon name="add" :size="16" /> Appuntamento</button>
           </div>
+          <CepheidViewSwitcher :model-value="view" :tabs="viewTabs" @update:model-value="(v) => (view = v as CalView)" />
+          <button class="cal-new" @click="newAppointment()"><MIcon name="add" :size="16" /> Appuntamento</button>
         </div>
       </template>
     </MdPageHeader>
@@ -348,11 +348,11 @@ function agendaLabel(d: Date): string {
   color: var(--md-sys-color-on-surface); font-family: inherit;
 }
 .cal-navbtn { width: 32px; height: 32px; }
-.cal-today { height: 32px; padding: 0 12px; font-size: 13px; font-weight: 600; }
+.cal-today { height: 32px; padding: 0 14px; font-size: 13px; font-weight: 600; border-radius: var(--md-sys-shape-corner-small); }
 .cal-navbtn:hover, .cal-today:hover { background: color-mix(in srgb, var(--md-sys-color-primary) 8%, transparent); }
 .cal-new {
-  display: inline-flex; align-items: center; gap: 4px; height: 32px; padding: 0 12px;
-  border: none; border-radius: var(--md-sys-shape-corner-full); cursor: pointer;
+  display: inline-flex; align-items: center; gap: 4px; height: 32px; padding: 0 14px;
+  border: none; border-radius: var(--md-sys-shape-corner-small); cursor: pointer;
   background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary);
   font-family: inherit; font-size: 13px; font-weight: 600;
 }
