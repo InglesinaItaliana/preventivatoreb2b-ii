@@ -9,7 +9,7 @@ import { useProjects } from '../../composables/sidera/useProjects'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
 import { useCan } from '../../composables/sidera/useCan'
 import { isOwnTask, canEditTask, canCompleteTask } from '../../router/permissions'
-import { useTeamMembers, displayName, starAvatarProps } from '../../composables/sidera/useTeamMembers'
+import { useTeamMembers, displayName, starAvatarProps, toUids, toEmails } from '../../composables/sidera/useTeamMembers'
 import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
 
 const scrollEl = ref<HTMLElement | null>(null)
@@ -211,7 +211,7 @@ function openEditTaskModal(t: TaskLike) {
     projectId: t.projectId ?? '',
     priority:  t.priority,
     dueDate:   t.dueDate ? t.dueDate.toISOString().split('T')[0] : '',
-    assignees: [...t.assignees],
+    assignees: toEmails(t.assignees, members.value),   // uid→email per le chip (post-backfill)
   }
   showTaskModal.value = true
 }
@@ -238,7 +238,7 @@ async function submitTask() {
         title:     taskForm.value.title.trim(),
         priority:  taskForm.value.priority,
         dueDate,
-        assignees: taskForm.value.assignees,
+        assignees: toUids(taskForm.value.assignees, members.value),
       })
     } else {
       if (!canCreate.value) { taskSaving.value = false; return }
@@ -247,7 +247,7 @@ async function submitTask() {
         projectId: taskForm.value.projectId || null,
         priority:  taskForm.value.priority,
         dueDate,
-        assignees: taskForm.value.assignees,
+        assignees: toUids(taskForm.value.assignees, members.value),
       })
     }
     showTaskModal.value = false

@@ -2,7 +2,7 @@
 import { ref, computed, watch } from 'vue'
 import MIcon from '../shared/MIcon.vue'
 import StarAvatar from '../shared/StarAvatar.vue'
-import { starAvatarProps, displayName, type TeamMember } from '../../composables/sidera/useTeamMembers'
+import { starAvatarProps, displayName, toUids, type TeamMember } from '../../composables/sidera/useTeamMembers'
 import type { ProjectTask } from '../../composables/sidera/useProjectTasks'
 
 type Kind = 'fase' | 'deliverable' | 'milestone' | 'task'
@@ -164,7 +164,7 @@ async function submit() {
     } else {
       const id = await props.createTask({
         title: f.value.taskTitle.trim(), type: 'task', status: 'todo',
-        priority: f.value.taskPriority, dueDate: parseDate(f.value.taskDue), assignees: f.value.taskAssignees,
+        priority: f.value.taskPriority, dueDate: parseDate(f.value.taskDue), assignees: toUids(f.value.taskAssignees, props.members),
         triaged: true,   // task configurato dal modal completo: non passa dall'inbox
       })
       if (f.value.placement) {

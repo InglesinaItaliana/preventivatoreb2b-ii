@@ -98,6 +98,19 @@ export function resolveMember(members: TeamMember[] | undefined, idOrEmail: stri
     ?? members.find(x => x.email === idOrEmail)
 }
 
+/** Normalizza una lista di assignee (email o uid) a **UID** dove risolvibile (al
+ *  SALVATAGGIO). Le voci non risolvibili (esterni/ignoti) restano com'erano. */
+export function toUids(assignees: string[] | undefined, members: TeamMember[]): string[] {
+  return (assignees ?? []).map(a => resolveMember(members, a)?.uid ?? a)
+}
+
+/** Inverso di toUids: normalizza a **email** (al CARICAMENTO di una task esistente
+ *  in un modale), così le chip-selezione (per email) restano corrette anche quando
+ *  i dati sono già uid. Voci non risolvibili restano com'erano. */
+export function toEmails(assignees: string[] | undefined, members: TeamMember[]): string[] {
+  return (assignees ?? []).map(a => resolveMember(members, a)?.email ?? a)
+}
+
 /** Mappa un uid/email -> props per <StarAvatar>. Fallback per voci esterne/sconosciute. */
 export function starAvatarProps(
   idOrEmail: string,

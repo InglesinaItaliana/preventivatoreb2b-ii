@@ -9,8 +9,8 @@
  *  - L'Admin SDK BYPASSA le firestore.rules: il gate `isAdmin()` delle rules NON
  *    si applica qui. Ogni tool di SCRITTURA deve chiamare assertCoreAdmin().
  *  - STELLA-GRAFO: identità canonica = Auth UID. `createdBy` usa l'UID del
- *    chiamante (via admin.auth().getUserByEmail); gli `assignees` restano EMAIL
- *    (le rules controllano request.auth.token.email in assignees).
+ *    chiamante (via admin.auth().getUserByEmail); anche gli `assignees` sono UID
+ *    (resolveAssignees risolve nome/email → uid; migrazione assignees email→uid).
  *  - SOLO import leggeri (firebase-admin). MAI importare da src/composables/**:
  *    dipendono da vue/firebase client → crash al cold-start di TUTTE le function.
  */
@@ -63,10 +63,11 @@ async function resolveCallerUid(userEmail: string): Promise<string> {
     }
 }
 
-/** Risolve nomi/email passati da Claude in EMAIL valide presenti in /team
- *  (uid-keyed, campo `email`, active !== false). Match per email se contiene
- *  '@', altrimenti per nome. Gli input non risolti finiscono in `unmatched`
- *  e NON fanno fallire la creazione. */
+/** Risolve nomi/email passati da Claude in **UID** validi presenti in /team
+ *  (uid-keyed: la chiave del doc È l'uid; campo `email`, active !== false). Match
+ *  per email se contiene '@', altrimenti per nome. Gli input non risolti finiscono
+ *  in `unmatched` e NON fanno fallire la creazione. (Migrazione assignees email→uid:
+ *  le rules accettano email O uid, ma i nuovi write usano uid.) */
 async function resolveAssignees(
     db: admin.firestore.Firestore,
     raw: unknown,
@@ -75,14 +76,14 @@ async function resolveAssignees(
     if (!clean.length) return { resolved: [], unmatched: [] };
 
     const snap = await db.collection('team').get();
-    const byEmail = new Map<string, string>();   // emailLower → email canonica
-    const byName = new Map<string, string>();     // nomeLower  → email
+    const byEmail = new Map<string, string>();   // emailLower → uid
+    const byName = new Map<string, string>();     // nomeLower  → uid
     snap.forEach((docSnap) => {
         const d = docSnap.data() as Record<string, unknown>;
         if (d.active === false) return;
+        const uid = docSnap.id;                   // /team è uid-keyed → l'id è l'uid
         const email = normEmail(d.email);
-        if (!email) return;
-        byEmail.set(email, email);
+        if (email) byEmail.set(email, uid);
         const names = [
             d.name,
             [d.firstName, d.lastName].filter(Boolean).join(' '),
@@ -90,7 +91,7 @@ async function resolveAssignees(
         ];
         for (const n of names) {
             const key = String(n ?? '').toLowerCase().trim();
-            if (key) byName.set(key, email);
+            if (key) byName.set(key, uid);
         }
     });
 

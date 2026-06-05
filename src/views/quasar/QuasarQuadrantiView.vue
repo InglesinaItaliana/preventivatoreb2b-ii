@@ -15,7 +15,7 @@ import MdPageHeader from '../../components/shared/MdPageHeader.vue'
 import CepheidViewSwitcher from '../../components/cepheid/CepheidViewSwitcher.vue'
 import StarAvatar from '../../components/shared/StarAvatar.vue'
 import { useAllTasks, type Task } from '../../composables/sidera/useAllTasks'
-import { useTeamMembers, displayName, starAvatarProps } from '../../composables/sidera/useTeamMembers'
+import { useTeamMembers, displayName, starAvatarProps, toUids, toEmails } from '../../composables/sidera/useTeamMembers'
 import { useQuadranti, type QuadId, type QuadTask } from '../../composables/quasar/useQuadranti'
 import { useResourceLoad } from '../../composables/quasar/useResourceLoad'
 import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
@@ -160,7 +160,7 @@ function openModal(t: Task) {
     title: t.title,
     priority: t.priority,
     dueDate: t.dueDate ? t.dueDate.toISOString().split('T')[0]! : '',
-    assignees: [...t.assignees],
+    assignees: toEmails(t.assignees, members.value),   // uid→email per le chip (post-backfill)
   }
   showModal.value = true
 }
@@ -178,7 +178,7 @@ async function submit() {
       title: form.value.title.trim(),
       priority: form.value.priority,
       dueDate: form.value.dueDate ? new Date(y!, m! - 1, d!) : null,
-      assignees: form.value.assignees,
+      assignees: toUids(form.value.assignees, members.value),
     })
     showModal.value = false
   } catch (e) {
