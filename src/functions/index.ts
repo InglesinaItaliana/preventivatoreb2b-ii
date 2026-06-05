@@ -759,6 +759,79 @@ export const auditAssigneeUids = functions
     };
   });
 
+/**
+ * A3 — Backfill assignees email→UID (migrazione Strada B). Converte ogni assignee
+ * email (con uid noto in /team) in uid, su tutte le task (collectionGroup: root
+ * tasks e projects/{id}/tasks). Idempotente: riscrive SOLO gli array effettivamente
+ * cambiati; voci già uid o non risolvibili (orfani esterni) restano invariate.
+ * `dryRun` (default true): conta cosa cambierebbe SENZA scrivere.
+ */
+export const backfillAssigneeUids = functions
+  .region('europe-west1')
+  .https.onCall(async (data, context) => {
+    const callerEmail = (context.auth?.token?.email || '').toLowerCase().trim();
+    const callerRole = context.auth?.token?.role;
+    const isAdminCaller = callerRole === 'ADMIN' || callerEmail === 'info@inglesinaitaliana.it';
+    if (!context.auth || !isAdminCaller) {
+      throw new functions.https.HttpsError('permission-denied', 'Riservato agli amministratori.');
+    }
+    const dryRun = data?.dryRun !== false;   // default: anteprima senza scrivere
+
+    const db = admin.firestore();
+
+    // Mappa email→uid da /team (uid-keyed).
+    const teamSnap = await db.collection('team').get();
+    const emailToUid = new Map<string, string>();
+    teamSnap.forEach((d) => {
+      const email = String(d.data()?.email || '').toLowerCase().trim();
+      if (email) emailToUid.set(email, d.id);
+    });
+
+    const tasksSnap = await db.collectionGroup('tasks').get();
+
+    let tasksScanned = 0, tasksChanged = 0, refsConverted = 0, refsUnresolved = 0;
+    const unresolvedSamples = new Set<string>();
+    let batch = db.batch();
+    let pending = 0;
+    const commits: Promise<unknown>[] = [];
+
+    for (const taskDoc of tasksSnap.docs) {
+      tasksScanned++;
+      const a = taskDoc.data()?.assignees;
+      if (!Array.isArray(a) || a.length === 0) continue;
+      let changed = false;
+      const next = a.map((raw: unknown) => {
+        if (typeof raw !== 'string' || !raw) return raw;
+        const v = raw.toLowerCase().trim();
+        if (v.includes('@')) {
+          const uid = emailToUid.get(v);
+          if (uid) { changed = true; refsConverted++; return uid; }
+          refsUnresolved++; unresolvedSamples.add(v); return raw;   // orfano: resta email
+        }
+        return raw;   // già uid (o stringa non-email)
+      });
+      if (changed) {
+        tasksChanged++;
+        if (!dryRun) {
+          batch.update(taskDoc.ref, { assignees: next });
+          pending++;
+          if (pending >= 400) { commits.push(batch.commit()); batch = db.batch(); pending = 0; }
+        }
+      }
+    }
+    if (!dryRun && pending > 0) commits.push(batch.commit());
+    await Promise.all(commits);
+
+    return {
+      dryRun,
+      tasksScanned,
+      tasksChanged,
+      refsConverted,
+      refsUnresolved,
+      unresolvedSamples: [...unresolvedSamples].slice(0, 50),
+    };
+  });
+
 // --- FUNZIONE RINNOVO TOKEN (ACCESS TOKEN MANAGER) ---
 async function getValidFicToken(): Promise<string> {
     const db = admin.firestore();

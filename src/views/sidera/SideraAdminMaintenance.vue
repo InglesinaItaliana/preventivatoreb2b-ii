@@ -73,6 +73,37 @@ async function runAssigneeAudit() {
   }
 }
 
+// A3 — Backfill assignees email→UID (dry-run default)
+interface BackfillAssigneeResult {
+  dryRun: boolean
+  tasksScanned: number
+  tasksChanged: number
+  refsConverted: number
+  refsUnresolved: number
+  unresolvedSamples: string[]
+}
+const bfRunning = ref(false)
+const bfResult = ref<BackfillAssigneeResult | null>(null)
+const bfError = ref<string>('')
+
+async function runAssigneeBackfill(dryRun: boolean) {
+  if (bfRunning.value) return
+  if (!dryRun && !confirm('Applicare il backfill? Riscrive gli assignees email→UID su tutte le task. Operazione idempotente, ma scrive sui dati.')) return
+  bfRunning.value = true
+  bfResult.value = null
+  bfError.value = ''
+  try {
+    const fn = httpsCallable<{ dryRun: boolean }, BackfillAssigneeResult>(functions, 'backfillAssigneeUids')
+    const res = await fn({ dryRun })
+    bfResult.value = res.data
+  } catch (e: any) {
+    console.error('[backfillAssigneeUids]', e)
+    bfError.value = e?.message || 'Errore sconosciuto. Vedi console.'
+  } finally {
+    bfRunning.value = false
+  }
+}
+
 async function runCleanup() {
   if (running.value) return
   if (!confirm('Eseguire cleanup delle pendenze orfane? L\'operazione può richiedere fino a 9 minuti su workspace grandi.')) return
@@ -207,6 +238,38 @@ async function runAvatarBackfill() {
         <strong>Errore:</strong> {{ auditError }}
       </div>
     </div>
+
+    <div v-if="isAdmin" class="m-task">
+      <h3 class="m-task-title">Backfill assignees → UID (A3)</h3>
+      <p class="m-task-desc">
+        Converte gli <code>assignees</code> email→UID su tutte le task (dove l'uid è
+        noto). <strong>Anteprima (dry-run)</strong> conta cosa cambierebbe senza scrivere;
+        <strong>Applica</strong> scrive. Idempotente: gli orfani e i già-uid restano.
+        Esegui prima l'audit, poi l'anteprima, poi applica.
+      </p>
+
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <button class="m-btn m-btn--ghost" :disabled="bfRunning" @click="runAssigneeBackfill(true)">
+          {{ bfRunning ? 'In esecuzione…' : 'Anteprima (dry-run)' }}
+        </button>
+        <button class="m-btn" :disabled="bfRunning" @click="runAssigneeBackfill(false)">
+          {{ bfRunning ? 'In esecuzione…' : 'Applica backfill' }}
+        </button>
+      </div>
+
+      <div v-if="bfResult" class="m-result">
+        <h4>Risultato — {{ bfResult.dryRun ? 'ANTEPRIMA (nessuna scrittura)' : 'APPLICATO' }}</h4>
+        <ul>
+          <li><strong>{{ bfResult.tasksChanged }}</strong> task {{ bfResult.dryRun ? 'da convertire' : 'convertite' }} (su {{ bfResult.tasksScanned }} scansionate)</li>
+          <li><strong>{{ bfResult.refsConverted }}</strong> riferimenti email→uid</li>
+          <li><strong>{{ bfResult.refsUnresolved }}</strong> non risolti (restano email)<template v-if="bfResult.unresolvedSamples.length">: <code>{{ bfResult.unresolvedSamples.join(', ') }}</code></template></li>
+        </ul>
+      </div>
+
+      <div v-if="bfError" class="m-error">
+        <strong>Errore:</strong> {{ bfError }}
+      </div>
+    </div>
   </div>
 </template>
 
@@ -257,6 +320,12 @@ async function runAvatarBackfill() {
 }
 .m-btn:hover:not(:disabled) { background: var(--md-sys-color-primary-hover, #B0A580); }
 .m-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.m-btn--ghost {
+  background: transparent;
+  color: var(--md-sys-color-on-surface, #1A1917);
+  border: 1px solid var(--md-sys-color-outline-variant, #CEC6B4);
+}
+.m-btn--ghost:hover:not(:disabled) { background: var(--md-sys-color-surface-container, #F5EDDF); }
 
 .m-result {
   margin-top: 20px; padding: 16px;
