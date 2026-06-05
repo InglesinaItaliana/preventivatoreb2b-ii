@@ -14,6 +14,7 @@ import { useCalendarItems, type CalendarItem } from '../../composables/quasar/us
 import { useTeamMembers } from '../../composables/sidera/useTeamMembers'
 import CepheidViewSwitcher from '../../components/cepheid/CepheidViewSwitcher.vue'
 import QuasarAppointmentModal from '../../components/quasar/QuasarAppointmentModal.vue'
+import QuasarItemDetail from '../../components/quasar/QuasarItemDetail.vue'
 
 const router = useRouter()
 const scrollEl = ref<HTMLElement | null>(null)
@@ -110,9 +111,15 @@ function itemsOf(key: string): CalendarItem[] { return byDay.value.get(key) ?? [
 function timeOf(d: Date): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
-function openItem(it: CalendarItem) {
-  if (it.kind === 'appointment') editAppointment(it)   // appuntamento → modale edit
-  else router.push(it.link)                            // task/deliverable → CEPHEID
+// Click su un item → popup di DETTAGLIO (read-only). Da lì: "Modifica" (appuntamento
+// → modale edit) o "Apri in CEPHEID" (task/deliverable).
+const detailOpen = ref(false)
+const detailItem = ref<CalendarItem | null>(null)
+function openItem(it: CalendarItem) { detailItem.value = it; detailOpen.value = true }
+function onDetailEdit(it: CalendarItem) {
+  detailOpen.value = false
+  if (it.kind === 'appointment') editAppointment(it)
+  else router.push(it.link)
 }
 function iconOf(kind: CalendarItem['kind']): string {
   // CEPHEID distinto per icona: check = azioni/task, scatola = deliverable.
@@ -298,6 +305,13 @@ function agendaLabel(d: Date): string {
         <span class="cal-leg"><MIcon name="inventory_2" :size="15" style="color: #D4A020" />Deliverable</span>
       </div>
     </div>
+
+    <QuasarItemDetail
+      v-model:open="detailOpen"
+      :item="detailItem"
+      :members="members"
+      @edit="onDetailEdit"
+    />
 
     <QuasarAppointmentModal
       v-model:open="apptOpen"
