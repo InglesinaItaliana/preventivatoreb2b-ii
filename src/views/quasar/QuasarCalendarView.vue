@@ -12,6 +12,7 @@ import MdPageHeader from '../../components/shared/MdPageHeader.vue'
 import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
 import { useCalendarItems, type CalendarItem } from '../../composables/quasar/useCalendarItems'
 import { useTeamMembers } from '../../composables/sidera/useTeamMembers'
+import CepheidViewSwitcher from '../../components/cepheid/CepheidViewSwitcher.vue'
 import QuasarAppointmentModal from '../../components/quasar/QuasarAppointmentModal.vue'
 
 const router = useRouter()
@@ -28,14 +29,35 @@ const apptDate = ref<Date | null>(null)
 function newAppointment(date?: Date) { apptEdit.value = null; apptDate.value = date ?? null; apptOpen.value = true }
 function editAppointment(it: CalendarItem) { apptEdit.value = it; apptDate.value = null; apptOpen.value = true }
 
-// cursore = giorno qualsiasi nel mese mostrato
+// vista corrente + cursore (giorno di riferimento)
+type CalView = 'mese' | 'settimana' | 'giorno'
+const view = ref<CalView>('mese')
+const viewTabs = [
+  { id: 'mese',      label: 'Mese',      icon: 'calendar_month' },
+  { id: 'settimana', label: 'Settimana', icon: 'calendar_view_week' },
+  { id: 'giorno',    label: 'Giorno',    icon: 'calendar_view_day' },
+]
 const cursor = ref(new Date())
-const monthLabel = computed(() =>
-  cursor.value.toLocaleDateString('it-IT', { month: 'long', year: 'numeric' }))
 
-function prevMonth() { cursor.value = new Date(cursor.value.getFullYear(), cursor.value.getMonth() - 1, 1) }
-function nextMonth() { cursor.value = new Date(cursor.value.getFullYear(), cursor.value.getMonth() + 1, 1) }
-function goToday()   { cursor.value = new Date() }
+function addDays(d: Date, n: number): Date { return new Date(d.getFullYear(), d.getMonth(), d.getDate() + n) }
+function startOfWeek(d: Date): Date { return addDays(d, -((d.getDay() + 6) % 7)) }   // lunedì
+
+function prev() {
+  if (view.value === 'mese') cursor.value = new Date(cursor.value.getFullYear(), cursor.value.getMonth() - 1, 1)
+  else cursor.value = addDays(cursor.value, view.value === 'settimana' ? -7 : -1)
+}
+function next() {
+  if (view.value === 'mese') cursor.value = new Date(cursor.value.getFullYear(), cursor.value.getMonth() + 1, 1)
+  else cursor.value = addDays(cursor.value, view.value === 'settimana' ? 7 : 1)
+}
+function goToday() { cursor.value = new Date() }
+
+const periodLabel = computed(() => {
+  if (view.value === 'mese') return cursor.value.toLocaleDateString('it-IT', { month: 'long', year: 'numeric' })
+  if (view.value === 'giorno') return cursor.value.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })
+  const s = startOfWeek(cursor.value), e = addDays(s, 6)
+  return `${s.getDate()} – ${e.getDate()} ${e.toLocaleDateString('it-IT', { month: 'short' })}`
+})
 
 const WEEKDAYS = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom']
 
@@ -56,6 +78,17 @@ const gridDays = computed(() => {
   }
   return out
 })
+
+// Settimana: 7 giorni dal lunedì che contiene il cursore.
+const weekDays = computed(() => {
+  const start = startOfWeek(cursor.value)
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = addDays(start, i)
+    return { date: d, inMonth: true, today: d.getTime() === today.getTime(), key: dayKey(d) }
+  })
+})
+const cursorKey = computed(() => dayKey(cursor.value))
 
 // Mappa giorno → items (costruita una volta per render).
 const byDay = computed(() => {
@@ -84,58 +117,92 @@ function iconOf(kind: CalendarItem['kind']): string {
   return kind === 'deliverable' ? 'inventory_2' : kind === 'appointment' ? 'event' : 'check_circle'
 }
 
-const totalThisMonth = computed(() =>
-  gridDays.value.filter(g => g.inMonth).reduce((n, g) => n + itemsOf(g.key).length, 0))
+const periodTotal = computed(() => {
+  if (view.value === 'giorno') return itemsOf(cursorKey.value).length
+  const days = view.value === 'settimana' ? weekDays.value : gridDays.value.filter(g => g.inMonth)
+  return days.reduce((n, g) => n + itemsOf(g.key).length, 0)
+})
+const periodNoun = computed(() => view.value === 'giorno' ? 'oggi' : view.value === 'settimana' ? 'questa settimana' : 'questo mese')
+const dayTitle = computed(() => cursor.value.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))
+
+// griglia Mese (42 celle) o Settimana (7); la vista Giorno è una lista a parte.
+const displayDays = computed(() => view.value === 'settimana' ? weekDays.value : gridDays.value)
+const cellMax = computed(() => view.value === 'settimana' ? 8 : 3)
 </script>
 
 <template>
   <div class="cal s-scope-quasar" ref="scrollEl">
     <MdPageHeader
       title="Calendario"
-      :subtitle="loading ? 'Caricamento…' : `${totalThisMonth} elementi questo mese`"
+      :subtitle="loading ? 'Caricamento…' : `${periodTotal} elementi ${periodNoun}`"
       sticky borderless :hidden="headerHidden"
     >
       <template #tools>
-        <div class="cal-nav">
-          <button class="cal-navbtn" aria-label="Mese precedente" @click="prevMonth"><MIcon name="chevron_left" :size="20" /></button>
-          <span class="cal-month">{{ monthLabel }}</span>
-          <button class="cal-navbtn" aria-label="Mese successivo" @click="nextMonth"><MIcon name="chevron_right" :size="20" /></button>
-          <button class="cal-today" @click="goToday">Oggi</button>
-          <button class="cal-new" @click="newAppointment()"><MIcon name="add" :size="16" /> Appuntamento</button>
+        <div class="cal-tools">
+          <CepheidViewSwitcher labels :model-value="view" :tabs="viewTabs" @update:model-value="(v) => (view = v as CalView)" />
+          <div class="cal-nav">
+            <button class="cal-navbtn" aria-label="Precedente" @click="prev"><MIcon name="chevron_left" :size="20" /></button>
+            <span class="cal-month">{{ periodLabel }}</span>
+            <button class="cal-navbtn" aria-label="Successivo" @click="next"><MIcon name="chevron_right" :size="20" /></button>
+            <button class="cal-today" @click="goToday">Oggi</button>
+            <button class="cal-new" @click="newAppointment()"><MIcon name="add" :size="16" /> Appuntamento</button>
+          </div>
         </div>
       </template>
     </MdPageHeader>
 
     <div class="cal-content">
-      <div class="cal-grid cal-weekhead">
-        <div v-for="w in WEEKDAYS" :key="w" class="cal-wd">{{ w }}</div>
-      </div>
-      <div class="cal-grid cal-body">
-        <div
-          v-for="g in gridDays"
-          :key="g.key"
-          class="cal-cell"
-          :class="{ 'is-out': !g.inMonth, 'is-today': g.today }"
-          @click="newAppointment(g.date)"
-        >
-          <span class="cal-daynum">{{ g.date.getDate() }}</span>
-          <div class="cal-items">
-            <button
-              v-for="it in itemsOf(g.key).slice(0, 3)"
-              :key="it.id"
-              class="cal-chip"
-              :class="{ 'is-done': it.done }"
-              :style="{ '--c': it.color }"
-              :title="it.projectName ? it.title + ' · ' + it.projectName : it.title"
-              @click.stop="openItem(it)"
-            >
-              <MIcon :name="iconOf(it.kind)" :size="12" class="cal-chip-ic" />
-              <span v-if="!it.allDay" class="cal-chip-time">{{ timeOf(it.start) }}</span>
-              <span class="cal-chip-text"><span class="cal-chip-title">{{ it.title }}</span><span v-if="it.projectName" class="cal-chip-proj"> · {{ it.projectName }}</span></span>
-            </button>
-            <span v-if="itemsOf(g.key).length > 3" class="cal-more" @click.stop>+{{ itemsOf(g.key).length - 3 }}</span>
+      <!-- ── MESE / SETTIMANA: griglia ── -->
+      <template v-if="view !== 'giorno'">
+        <div class="cal-grid cal-weekhead">
+          <div v-for="w in WEEKDAYS" :key="w" class="cal-wd">{{ w }}</div>
+        </div>
+        <div class="cal-grid cal-body" :class="{ 'is-week': view === 'settimana' }">
+          <div
+            v-for="g in displayDays"
+            :key="g.key"
+            class="cal-cell"
+            :class="{ 'is-out': !g.inMonth, 'is-today': g.today }"
+            @click="newAppointment(g.date)"
+          >
+            <span class="cal-daynum">{{ g.date.getDate() }}</span>
+            <div class="cal-items">
+              <button
+                v-for="it in itemsOf(g.key).slice(0, cellMax)"
+                :key="it.id"
+                class="cal-chip"
+                :class="{ 'is-done': it.done }"
+                :style="{ '--c': it.color }"
+                :title="it.projectName ? it.title + ' · ' + it.projectName : it.title"
+                @click.stop="openItem(it)"
+              >
+                <MIcon :name="iconOf(it.kind)" :size="12" class="cal-chip-ic" />
+                <span v-if="!it.allDay" class="cal-chip-time">{{ timeOf(it.start) }}</span>
+                <span class="cal-chip-text"><span class="cal-chip-title">{{ it.title }}</span><span v-if="it.projectName" class="cal-chip-proj"> · {{ it.projectName }}</span></span>
+              </button>
+              <span v-if="itemsOf(g.key).length > cellMax" class="cal-more" @click.stop>+{{ itemsOf(g.key).length - cellMax }}</span>
+            </div>
           </div>
         </div>
+      </template>
+
+      <!-- ── GIORNO: lista ── -->
+      <div v-else class="cal-day">
+        <div class="cal-day-head">{{ dayTitle }}</div>
+        <div v-if="!itemsOf(cursorKey).length" class="cal-day-empty">Nessun impegno. <button class="cal-day-add" @click="newAppointment(cursor)">+ Aggiungi appuntamento</button></div>
+        <button
+          v-for="it in itemsOf(cursorKey)"
+          :key="it.id"
+          class="cal-day-item"
+          :class="{ 'is-done': it.done }"
+          :style="{ '--c': it.color }"
+          @click="openItem(it)"
+        >
+          <MIcon :name="iconOf(it.kind)" :size="18" class="cal-di-ic" />
+          <span class="cal-di-time">{{ it.allDay ? 'Tutto il giorno' : (timeOf(it.start) + (it.end ? '–' + timeOf(it.end) : '')) }}</span>
+          <span class="cal-di-title">{{ it.title }}</span>
+          <span v-if="it.projectName" class="cal-di-proj">{{ it.projectName }}</span>
+        </button>
       </div>
 
       <!-- Legenda sorgenti (CEPHEID = oro, distinto per icona) -->
@@ -187,6 +254,24 @@ const totalThisMonth = computed(() =>
   font-family: inherit; font-size: 13px; font-weight: 600;
 }
 .cal-new:hover { background: var(--md-sys-color-primary-hover, var(--md-sys-color-primary)); }
+.cal-tools { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+/* Settimana: celle più alte (più item visibili) */
+.cal-body.is-week .cal-cell { min-height: 180px; }
+
+/* Vista Giorno */
+.cal-day { max-width: 720px; background: var(--md-sys-color-surface); border-radius: 14px; padding: 14px 16px; }
+.s-surface-dark .cal-day { background: #16130B; }
+.cal-day-head { font-size: 15px; font-weight: 700; text-transform: capitalize; margin-bottom: 12px; }
+.cal-day-empty { color: var(--md-sys-color-on-surface-variant); font-size: 14px; padding: 12px 0; display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.cal-day-add { background: none; border: 1px solid var(--md-sys-color-outline-variant); border-radius: var(--md-sys-shape-corner-full); padding: 6px 12px; font-family: inherit; font-size: 13px; cursor: pointer; color: var(--md-sys-color-primary); }
+.cal-day-item { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; background: color-mix(in srgb, var(--c) 10%, transparent); border: none; border-left: 4px solid var(--c); border-radius: 8px; padding: 10px 12px; margin-bottom: 6px; cursor: pointer; font-family: inherit; font-size: 14px; color: var(--md-sys-color-on-surface); }
+.cal-day-item:hover { background: color-mix(in srgb, var(--c) 20%, transparent); }
+.cal-day-item.is-done { opacity: 0.5; text-decoration: line-through; }
+.cal-di-ic { color: var(--c); flex: 0 0 auto; }
+.cal-di-time { font-weight: 700; font-size: 12px; min-width: 96px; flex: 0 0 auto; }
+.cal-di-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-di-proj { font-size: 12px; color: var(--md-sys-color-on-surface-variant); flex: 0 0 auto; }
 .cal-month { min-width: 130px; text-align: center; font-weight: 600; font-size: 14px; text-transform: capitalize; }
 
 .cal-content { max-width: 1100px; margin: 0 auto; padding: 12px 16px 28px; }
