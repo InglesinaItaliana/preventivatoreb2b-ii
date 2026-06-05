@@ -50,9 +50,12 @@ watch(open, (o) => {
       notes: e.notes,
     }
   } else {
+    const dd = props.defaultDate ?? new Date()
+    const hasTime = dd.getHours() !== 0 || dd.getMinutes() !== 0   // click su una fascia oraria
     f.value = {
-      title: '', date: isoDate(props.defaultDate ?? new Date()),
-      startTime: '09:00', endTime: '10:00',
+      title: '', date: isoDate(dd),
+      startTime: hasTime ? hhmm(dd) : '09:00',
+      endTime: hasTime ? hhmm(new Date(dd.getTime() + 3600_000)) : '10:00',
       assignees: currentUser.value?.email ? [currentUser.value.email] : [],
       location: '', notes: '',
     }

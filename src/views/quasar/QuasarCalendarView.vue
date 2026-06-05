@@ -30,12 +30,13 @@ function newAppointment(date?: Date) { apptEdit.value = null; apptDate.value = d
 function editAppointment(it: CalendarItem) { apptEdit.value = it; apptDate.value = null; apptOpen.value = true }
 
 // vista corrente + cursore (giorno di riferimento)
-type CalView = 'mese' | 'settimana' | 'giorno'
+type CalView = 'mese' | 'settimana' | 'giorno' | 'agenda'
 const view = ref<CalView>('mese')
 const viewTabs = [
   { id: 'mese',      label: 'Mese',      icon: 'calendar_month' },
   { id: 'settimana', label: 'Settimana', icon: 'calendar_view_week' },
   { id: 'giorno',    label: 'Giorno',    icon: 'calendar_view_day' },
+  { id: 'agenda',    label: 'Agenda',    icon: 'view_agenda' },
 ]
 const cursor = ref(new Date())
 
@@ -55,6 +56,7 @@ function goToday() { cursor.value = new Date() }
 const periodLabel = computed(() => {
   if (view.value === 'mese') return cursor.value.toLocaleDateString('it-IT', { month: 'long', year: 'numeric' })
   if (view.value === 'giorno') return cursor.value.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })
+  if (view.value === 'agenda') return 'Prossimi impegni'
   const s = startOfWeek(cursor.value), e = addDays(s, 6)
   return `${s.getDate()} – ${e.getDate()} ${e.toLocaleDateString('it-IT', { month: 'short' })}`
 })
@@ -118,16 +120,62 @@ function iconOf(kind: CalendarItem['kind']): string {
 }
 
 const periodTotal = computed(() => {
+  if (view.value === 'agenda') return agendaDays.value.reduce((n, g) => n + g.items.length, 0)
   if (view.value === 'giorno') return itemsOf(cursorKey.value).length
   const days = view.value === 'settimana' ? weekDays.value : gridDays.value.filter(g => g.inMonth)
   return days.reduce((n, g) => n + itemsOf(g.key).length, 0)
 })
-const periodNoun = computed(() => view.value === 'giorno' ? 'oggi' : view.value === 'settimana' ? 'questa settimana' : 'questo mese')
+const periodNoun = computed(() =>
+  view.value === 'agenda' ? 'in arrivo' : view.value === 'giorno' ? 'oggi' : view.value === 'settimana' ? 'questa settimana' : 'questo mese')
 const dayTitle = computed(() => cursor.value.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }))
 
-// griglia Mese (42 celle) o Settimana (7); la vista Giorno è una lista a parte.
-const displayDays = computed(() => view.value === 'settimana' ? weekDays.value : gridDays.value)
-const cellMax = computed(() => view.value === 'settimana' ? 8 : 3)
+// ── Griglia a fasce orarie (Settimana / Giorno) ─────────────────────────────
+const HOUR_START = 7, HOUR_END = 22, HOUR_H = 44   // px per ora
+const hours = computed(() => Array.from({ length: HOUR_END - HOUR_START }, (_, i) => HOUR_START + i))
+const tgDays = computed(() => {
+  if (view.value === 'giorno') {
+    const t = new Date(); t.setHours(0, 0, 0, 0)
+    const d = new Date(cursor.value.getFullYear(), cursor.value.getMonth(), cursor.value.getDate())
+    return [{ date: d, today: d.getTime() === t.getTime(), key: dayKey(d) }]
+  }
+  return weekDays.value
+})
+const gridColsStyle = computed(() => ({ gridTemplateColumns: `54px repeat(${tgDays.value.length}, minmax(0, 1fr))` }))
+function allDayOf(key: string) { return itemsOf(key).filter(i => i.allDay) }
+function timedOf(key: string) { return itemsOf(key).filter(i => !i.allDay) }
+function eventStyle(it: CalendarItem) {
+  const startMin = it.start.getHours() * 60 + it.start.getMinutes()
+  const endMin = it.end ? it.end.getHours() * 60 + it.end.getMinutes() : startMin + 60
+  const top = Math.max(0, (startMin - HOUR_START * 60) / 60 * HOUR_H)
+  const height = Math.max(20, (Math.max(endMin, startMin + 30) - startMin) / 60 * HOUR_H)
+  return { top: `${top}px`, height: `${height}px` }
+}
+function newAtSlot(date: Date, hour: number) {
+  newAppointment(new Date(date.getFullYear(), date.getMonth(), date.getDate(), hour, 0))
+}
+
+// ── Agenda: impegni da oggi in poi, raggruppati per giorno ───────────────────
+const agendaDays = computed(() => {
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const groups = new Map<string, { date: Date; key: string; items: CalendarItem[] }>()
+  for (const it of items.value) {
+    const d = new Date(it.start.getFullYear(), it.start.getMonth(), it.start.getDate())
+    if (d.getTime() < today.getTime()) continue
+    const k = dayKey(d)
+    const g = groups.get(k)
+    if (g) g.items.push(it); else groups.set(k, { date: d, key: k, items: [it] })
+  }
+  const arr = [...groups.values()].sort((a, b) => a.date.getTime() - b.date.getTime())
+  for (const g of arr) g.items.sort((a, b) => (a.allDay === b.allDay ? a.start.getTime() - b.start.getTime() : a.allDay ? 1 : -1))
+  return arr
+})
+function agendaLabel(d: Date): string {
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  const diff = Math.round((d.getTime() - today.getTime()) / 86400000)
+  if (diff === 0) return 'Oggi'
+  if (diff === 1) return 'Domani'
+  return d.toLocaleDateString('it-IT', { weekday: 'long', day: 'numeric', month: 'long' })
+}
 </script>
 
 <template>
@@ -141,10 +189,12 @@ const cellMax = computed(() => view.value === 'settimana' ? 8 : 3)
         <div class="cal-tools">
           <CepheidViewSwitcher labels :model-value="view" :tabs="viewTabs" @update:model-value="(v) => (view = v as CalView)" />
           <div class="cal-nav">
-            <button class="cal-navbtn" aria-label="Precedente" @click="prev"><MIcon name="chevron_left" :size="20" /></button>
-            <span class="cal-month">{{ periodLabel }}</span>
-            <button class="cal-navbtn" aria-label="Successivo" @click="next"><MIcon name="chevron_right" :size="20" /></button>
-            <button class="cal-today" @click="goToday">Oggi</button>
+            <template v-if="view !== 'agenda'">
+              <button class="cal-navbtn" aria-label="Precedente" @click="prev"><MIcon name="chevron_left" :size="20" /></button>
+              <span class="cal-month">{{ periodLabel }}</span>
+              <button class="cal-navbtn" aria-label="Successivo" @click="next"><MIcon name="chevron_right" :size="20" /></button>
+              <button class="cal-today" @click="goToday">Oggi</button>
+            </template>
             <button class="cal-new" @click="newAppointment()"><MIcon name="add" :size="16" /> Appuntamento</button>
           </div>
         </div>
@@ -152,14 +202,14 @@ const cellMax = computed(() => view.value === 'settimana' ? 8 : 3)
     </MdPageHeader>
 
     <div class="cal-content">
-      <!-- ── MESE / SETTIMANA: griglia ── -->
-      <template v-if="view !== 'giorno'">
+      <!-- ── MESE: griglia mensile ── -->
+      <template v-if="view === 'mese'">
         <div class="cal-grid cal-weekhead">
           <div v-for="w in WEEKDAYS" :key="w" class="cal-wd">{{ w }}</div>
         </div>
-        <div class="cal-grid cal-body" :class="{ 'is-week': view === 'settimana' }">
+        <div class="cal-grid cal-body">
           <div
-            v-for="g in displayDays"
+            v-for="g in gridDays"
             :key="g.key"
             class="cal-cell"
             :class="{ 'is-out': !g.inMonth, 'is-today': g.today }"
@@ -168,7 +218,7 @@ const cellMax = computed(() => view.value === 'settimana' ? 8 : 3)
             <span class="cal-daynum">{{ g.date.getDate() }}</span>
             <div class="cal-items">
               <button
-                v-for="it in itemsOf(g.key).slice(0, cellMax)"
+                v-for="it in itemsOf(g.key).slice(0, 3)"
                 :key="it.id"
                 class="cal-chip"
                 :class="{ 'is-done': it.done }"
@@ -180,29 +230,65 @@ const cellMax = computed(() => view.value === 'settimana' ? 8 : 3)
                 <span v-if="!it.allDay" class="cal-chip-time">{{ timeOf(it.start) }}</span>
                 <span class="cal-chip-text"><span class="cal-chip-title">{{ it.title }}</span><span v-if="it.projectName" class="cal-chip-proj"> · {{ it.projectName }}</span></span>
               </button>
-              <span v-if="itemsOf(g.key).length > cellMax" class="cal-more" @click.stop>+{{ itemsOf(g.key).length - cellMax }}</span>
+              <span v-if="itemsOf(g.key).length > 3" class="cal-more" @click.stop>+{{ itemsOf(g.key).length - 3 }}</span>
             </div>
           </div>
         </div>
       </template>
 
-      <!-- ── GIORNO: lista ── -->
-      <div v-else class="cal-day">
-        <div class="cal-day-head">{{ dayTitle }}</div>
-        <div v-if="!itemsOf(cursorKey).length" class="cal-day-empty">Nessun impegno. <button class="cal-day-add" @click="newAppointment(cursor)">+ Aggiungi appuntamento</button></div>
-        <button
-          v-for="it in itemsOf(cursorKey)"
-          :key="it.id"
-          class="cal-day-item"
-          :class="{ 'is-done': it.done }"
-          :style="{ '--c': it.color }"
-          @click="openItem(it)"
-        >
-          <MIcon :name="iconOf(it.kind)" :size="18" class="cal-di-ic" />
-          <span class="cal-di-time">{{ it.allDay ? 'Tutto il giorno' : (timeOf(it.start) + (it.end ? '–' + timeOf(it.end) : '')) }}</span>
-          <span class="cal-di-title">{{ it.title }}</span>
-          <span v-if="it.projectName" class="cal-di-proj">{{ it.projectName }}</span>
-        </button>
+      <!-- ── SETTIMANA / GIORNO: griglia a fasce orarie ── -->
+      <div v-else-if="view === 'settimana' || view === 'giorno'" class="cal-tg" :class="{ 'is-day': view === 'giorno' }">
+        <div class="cal-tg-head" :style="gridColsStyle">
+          <div class="cal-tg-gutter" />
+          <div v-for="d in tgDays" :key="d.key" class="cal-tg-dh" :class="{ 'is-today': d.today }">
+            <span class="cal-tg-dh-wd">{{ d.date.toLocaleDateString('it-IT', { weekday: 'short' }) }}</span>
+            <span class="cal-tg-dh-num">{{ d.date.getDate() }}</span>
+          </div>
+        </div>
+        <div class="cal-tg-allday" :style="gridColsStyle">
+          <div class="cal-tg-gutter cal-tg-adlabel">giorno</div>
+          <div v-for="d in tgDays" :key="d.key" class="cal-tg-adcol">
+            <button v-for="it in allDayOf(d.key)" :key="it.id" class="cal-chip" :class="{ 'is-done': it.done }" :style="{ '--c': it.color }"
+              :title="it.projectName ? it.title + ' · ' + it.projectName : it.title" @click="openItem(it)">
+              <MIcon :name="iconOf(it.kind)" :size="12" class="cal-chip-ic" />
+              <span class="cal-chip-text">{{ it.title }}</span>
+            </button>
+          </div>
+        </div>
+        <div class="cal-tg-body" :style="gridColsStyle">
+          <div class="cal-tg-gutter">
+            <div v-for="h in hours" :key="h" class="cal-tg-hr"><span>{{ h }}:00</span></div>
+          </div>
+          <div v-for="d in tgDays" :key="d.key" class="cal-tg-col" :class="{ 'is-today': d.today }">
+            <div v-for="h in hours" :key="h" class="cal-tg-slot" @click="newAtSlot(d.date, h)" />
+            <button v-for="it in timedOf(d.key)" :key="it.id" class="cal-tg-ev" :class="{ 'is-done': it.done }"
+              :style="{ ...eventStyle(it), '--c': it.color }" :title="it.title" @click.stop="openItem(it)">
+              <span class="cal-tg-ev-t">{{ timeOf(it.start) }}<template v-if="it.end">–{{ timeOf(it.end) }}</template></span>
+              <span class="cal-tg-ev-title">{{ it.title }}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── AGENDA: prossimi impegni ── -->
+      <div v-else class="cal-agenda">
+        <div v-if="!agendaDays.length" class="cal-day-empty">Nessun impegno in arrivo. <button class="cal-day-add" @click="newAppointment()">+ Aggiungi appuntamento</button></div>
+        <div v-for="g in agendaDays" :key="g.key" class="cal-ag-group">
+          <div class="cal-ag-date">{{ agendaLabel(g.date) }}</div>
+          <button
+            v-for="it in g.items"
+            :key="it.id"
+            class="cal-day-item"
+            :class="{ 'is-done': it.done }"
+            :style="{ '--c': it.color }"
+            @click="openItem(it)"
+          >
+            <MIcon :name="iconOf(it.kind)" :size="18" class="cal-di-ic" />
+            <span class="cal-di-time">{{ it.allDay ? 'Tutto il giorno' : (timeOf(it.start) + (it.end ? '–' + timeOf(it.end) : '')) }}</span>
+            <span class="cal-di-title">{{ it.title }}</span>
+            <span v-if="it.projectName" class="cal-di-proj">{{ it.projectName }}</span>
+          </button>
+        </div>
       </div>
 
       <!-- Legenda sorgenti (CEPHEID = oro, distinto per icona) -->
@@ -272,6 +358,43 @@ const cellMax = computed(() => view.value === 'settimana' ? 8 : 3)
 .cal-di-time { font-weight: 700; font-size: 12px; min-width: 96px; flex: 0 0 auto; }
 .cal-di-title { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .cal-di-proj { font-size: 12px; color: var(--md-sys-color-on-surface-variant); flex: 0 0 auto; }
+
+/* ── Griglia a fasce orarie (Settimana / Giorno) ── */
+.cal-tg { background: var(--md-sys-color-surface); border-radius: 14px; overflow: hidden; }
+.s-surface-dark .cal-tg { background: #16130B; }
+.cal-tg-head, .cal-tg-allday, .cal-tg-body { display: grid; }
+.cal-tg-head { border-bottom: 1px solid var(--md-sys-color-outline-variant); }
+.cal-tg-dh { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 8px 0; border-left: 1px solid var(--md-sys-color-outline-variant); }
+.cal-tg-dh-wd { font-size: 10px; text-transform: uppercase; letter-spacing: .05em; color: var(--md-sys-color-on-surface-variant); }
+.cal-tg-dh-num { font-size: 16px; font-weight: 700; }
+.cal-tg-dh.is-today .cal-tg-dh-num { color: var(--md-sys-color-primary); }
+.cal-tg-allday { border-bottom: 1px solid var(--md-sys-color-outline-variant); }
+.cal-tg-adlabel { font-size: 9px; text-transform: uppercase; color: var(--md-sys-color-on-surface-variant); display: flex; align-items: center; justify-content: center; }
+.cal-tg-adcol { border-left: 1px solid var(--md-sys-color-outline-variant); padding: 3px; display: flex; flex-direction: column; gap: 3px; min-height: 26px; }
+.cal-tg-body { position: relative; }
+.cal-tg-hr { height: 44px; position: relative; }
+.cal-tg-hr span { position: absolute; top: -6px; right: 6px; font-size: 10px; color: var(--md-sys-color-on-surface-variant); }
+.cal-tg-col { position: relative; border-left: 1px solid var(--md-sys-color-outline-variant); }
+.cal-tg-col.is-today { background: color-mix(in srgb, var(--md-sys-color-primary) 4%, transparent); }
+.cal-tg-slot { height: 44px; box-sizing: border-box; border-bottom: 1px solid color-mix(in srgb, var(--md-sys-color-outline-variant) 55%, transparent); cursor: pointer; }
+.cal-tg-slot:hover { background: color-mix(in srgb, var(--md-sys-color-primary) 6%, transparent); }
+.cal-tg-ev {
+  position: absolute; left: 2px; right: 2px; z-index: 1;
+  background: color-mix(in srgb, var(--c) 22%, var(--md-sys-color-surface));
+  border: none; border-left: 3px solid var(--c); border-radius: 5px;
+  padding: 2px 6px; cursor: pointer; overflow: hidden;
+  display: flex; flex-direction: column; gap: 1px; text-align: left;
+  font-family: inherit; color: var(--md-sys-color-on-surface);
+}
+.cal-tg-ev:hover { background: color-mix(in srgb, var(--c) 34%, var(--md-sys-color-surface)); }
+.cal-tg-ev.is-done { opacity: .55; text-decoration: line-through; }
+.cal-tg-ev-t { font-size: 10px; font-weight: 700; }
+.cal-tg-ev-title { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ── Agenda ── */
+.cal-agenda { max-width: 720px; }
+.cal-ag-group { margin-bottom: 16px; }
+.cal-ag-date { font-size: 13px; font-weight: 700; text-transform: capitalize; color: var(--md-sys-color-primary); margin: 0 4px 8px; }
 .cal-month { min-width: 130px; text-align: center; font-weight: 600; font-size: 14px; text-transform: capitalize; }
 
 .cal-content { max-width: 1100px; margin: 0 auto; padding: 12px 16px 28px; }
