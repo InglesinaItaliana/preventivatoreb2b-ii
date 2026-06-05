@@ -34,7 +34,6 @@ async function doComplete(t: { id: string; projectId: string }) {
 
 // Bucket per scadenza
 const buckets = computed(() => {
-  const myEmail = currentUser.value?.email ?? ''
   const myUid   = currentUser.value?.uid ?? ''
 
   const now = new Date()
@@ -53,7 +52,7 @@ const buckets = computed(() => {
     if (t.completedAt || pendingDone.value.has(t.id)) continue
     if (!t.dueDate) continue
     // Mostro solo task mie (assegnatario o creatore)
-    if (!t.assignees.includes(myEmail) && !t.assignees.includes(myUid) && t.createdBy !== myUid) continue
+    if (!t.assignees.includes(myUid) && t.createdBy !== myUid) continue
 
     if (t.dueDate < today) overdue.push(t)
     else if (t.dueDate < tomorrow) todayList.push(t)

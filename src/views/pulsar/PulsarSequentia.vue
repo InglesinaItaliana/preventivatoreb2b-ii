@@ -37,7 +37,7 @@ const myTasks = computed(() =>
   tasks.value.filter(t =>
     !t.completedAt &&
     !pendingDone.value.has(t.id) &&
-    (t.assignees.includes(currentUser.value?.email ?? '') || t.assignees.includes(currentUser.value?.uid ?? ''))
+    t.assignees.includes(currentUser.value?.uid ?? '')
   )
 )
 
