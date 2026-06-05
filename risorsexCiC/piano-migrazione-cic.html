@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>POPS · Migrazione Fatture in Cloud → Contabilità in Cloud</title>
+<style>
+  /* ── SIDERA Design Tokens ───────────────────────────────────────── */
+  :root{
+    --s-bg:#ECEAE5; --s-sidebar:#F2F0EB; --s-surface:#FFFFFF; --s-surface-up:#F8F7F3;
+    --s-border:#E0DDD7; --s-border-mid:#D0CCC5;
+    --s-text:#1A1815; --s-text-mid:#6A6560; --s-text-dim:#B4B0AA;
+    --s-green:#2F6B4A; --s-green-light:#3D8B60; --s-green-text:#245A3C;
+    --s-green-glow:rgba(47,107,74,0.07); --s-green-border:rgba(47,107,74,0.20);
+    --s-pops:#C8821A; --s-pops-glow:rgba(200,130,26,0.08); --s-pops-border:rgba(200,130,26,0.28);
+    --s-prio-alta:#C8521A; --s-prio-media:#2F6B4A; --s-prio-bassa:#7A8FA6;
+    --s-nebula:#B85425; --s-quasar:#5A8497; --s-sidera:#9E9067;
+    --s-red:#B23B2E; --s-red-glow:rgba(178,59,46,0.07); --s-red-border:rgba(178,59,46,0.22);
+    --s-amber-glow:rgba(200,130,26,0.10);
+    --shadow-1:0 1px 2px rgba(26,24,21,.06),0 1px 3px rgba(26,24,21,.05);
+    --shadow-2:0 2px 6px rgba(26,24,21,.08),0 4px 12px rgba(26,24,21,.06);
+    --radius:14px; --radius-sm:9px;
+    --mono:'SF Mono',ui-monospace,'JetBrains Mono',Menlo,Consolas,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,'Segoe UI',Inter,Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{scroll-behavior:smooth}
+  body{font-family:var(--sans);background:var(--s-bg);color:var(--s-text);line-height:1.62;
+    font-size:15.5px;-webkit-font-smoothing:antialiased;}
+  ::selection{background:var(--s-pops-glow);}
+
+  /* ── Layout ──────────────────────────────────────────────────────── */
+  .wrap{display:grid;grid-template-columns:268px 1fr;max-width:1400px;margin:0 auto;}
+  nav.toc{position:sticky;top:0;align-self:start;height:100vh;overflow-y:auto;
+    background:var(--s-sidebar);border-right:1px solid var(--s-border);padding:28px 18px 60px;}
+  nav.toc .brand{display:flex;align-items:center;gap:10px;margin-bottom:6px;}
+  nav.toc .brand .dot{width:11px;height:11px;border-radius:50%;background:var(--s-pops);
+    box-shadow:0 0 0 4px var(--s-pops-glow);}
+  nav.toc .brand strong{font-size:14px;letter-spacing:.04em;}
+  nav.toc .sub{font-size:11.5px;color:var(--s-text-dim);margin-bottom:24px;padding-left:21px;
+    text-transform:uppercase;letter-spacing:.08em;}
+  nav.toc a{display:block;text-decoration:none;color:var(--s-text-mid);font-size:13.5px;
+    padding:7px 12px;border-radius:8px;margin-bottom:1px;transition:.13s;border-left:2px solid transparent;}
+  nav.toc a:hover{background:var(--s-surface);color:var(--s-text);}
+  nav.toc a.num::before{content:attr(data-n);color:var(--s-pops);font-variant-numeric:tabular-nums;
+    font-weight:600;margin-right:9px;font-size:12px;}
+  nav.toc a.active{background:var(--s-surface);color:var(--s-text);border-left-color:var(--s-pops);font-weight:600;}
+  nav.toc .grp{font-size:10.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--s-text-dim);
+    margin:20px 12px 8px;}
+
+  main{padding:54px clamp(28px,5vw,76px) 120px;min-width:0;}
+  section{margin-bottom:62px;scroll-margin-top:24px;}
+  section.lead{margin-bottom:46px;}
+
+  /* ── Typography ──────────────────────────────────────────────────── */
+  h1{font-size:33px;line-height:1.18;letter-spacing:-0.015em;font-weight:700;margin-bottom:14px;}
+  h2{font-size:23px;font-weight:680;letter-spacing:-0.01em;margin-bottom:18px;padding-bottom:12px;
+    border-bottom:1px solid var(--s-border);display:flex;align-items:baseline;gap:13px;}
+  h2 .kick{font-size:12px;font-weight:700;color:var(--s-pops);font-variant-numeric:tabular-nums;
+    background:var(--s-pops-glow);border:1px solid var(--s-pops-border);padding:3px 9px;border-radius:7px;
+    letter-spacing:.02em;flex-shrink:0;}
+  h3{font-size:17px;font-weight:660;margin:30px 0 12px;letter-spacing:-0.005em;}
+  h4{font-size:14px;font-weight:680;margin:20px 0 8px;color:var(--s-text);}
+  p{margin-bottom:13px;color:var(--s-text);}
+  p.muted,.muted{color:var(--s-text-mid);}
+  a{color:var(--s-green-text);}
+  strong{font-weight:660;}
+  code{font-family:var(--mono);font-size:12.5px;background:var(--s-surface-up);
+    border:1px solid var(--s-border);padding:1.5px 6px;border-radius:6px;color:var(--s-nebula);}
+  ul,ol{margin:0 0 14px 4px;padding-left:22px;}
+  li{margin-bottom:7px;}
+  li::marker{color:var(--s-text-dim);}
+
+  /* ── Hero ────────────────────────────────────────────────────────── */
+  .hero{background:linear-gradient(135deg,#fff 0%,var(--s-surface-up) 100%);
+    border:1px solid var(--s-border);border-radius:var(--radius);padding:34px 36px;
+    box-shadow:var(--shadow-1);margin-bottom:30px;position:relative;overflow:hidden;}
+  .hero::after{content:"";position:absolute;right:-60px;top:-60px;width:220px;height:220px;
+    border-radius:50%;background:radial-gradient(circle,var(--s-amber-glow),transparent 70%);}
+  .hero .eyebrow{font-size:11.5px;text-transform:uppercase;letter-spacing:.13em;color:var(--s-pops);
+    font-weight:700;margin-bottom:14px;}
+  .hero .flow{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:20px;font-size:13.5px;}
+  .hero .biz{display:flex;flex-direction:column;gap:3px;padding:11px 16px;border-radius:10px;
+    background:var(--s-surface);border:1px solid var(--s-border);min-width:190px;}
+  .hero .biz .lbl{font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--s-text-dim);}
+  .hero .biz .nm{font-weight:660;font-size:14px;}
+  .hero .biz .sys{font-size:12px;color:var(--s-text-mid);font-family:var(--mono);}
+  .hero .biz.old{border-left:3px solid var(--s-text-dim);}
+  .hero .biz.new{border-left:3px solid var(--s-green);}
+  .hero .arr{color:var(--s-pops);font-size:24px;font-weight:300;}
+
+  /* ── Callout boxes ───────────────────────────────────────────────── */
+  .box{border-radius:var(--radius-sm);padding:15px 18px 15px 17px;margin:18px 0;
+    border:1px solid var(--s-border);background:var(--s-surface);position:relative;
+    border-left-width:3px;font-size:14.5px;}
+  .box .bt{font-weight:680;font-size:11px;text-transform:uppercase;letter-spacing:.09em;
+    display:flex;align-items:center;gap:8px;margin-bottom:7px;}
+  .box p:last-child,.box ul:last-child,.box li:last-child{margin-bottom:0;}
+  .box.insight{border-left-color:var(--s-green);background:var(--s-green-glow);}
+  .box.insight .bt{color:var(--s-green-text);}
+  .box.risk{border-left-color:var(--s-red);background:var(--s-red-glow);}
+  .box.risk .bt{color:var(--s-red);}
+  .box.action{border-left-color:var(--s-pops);background:var(--s-pops-glow);}
+  .box.action .bt{color:var(--s-pops);}
+  .box.verify{border-left-color:var(--s-quasar);background:rgba(90,132,151,.06);}
+  .box.verify .bt{color:var(--s-quasar);}
+
+  /* ── Tables ──────────────────────────────────────────────────────── */
+  .tbl-wrap{border:1px solid var(--s-border);border-radius:var(--radius-sm);overflow:hidden;
+    margin:18px 0;box-shadow:var(--shadow-1);}
+  table{width:100%;border-collapse:collapse;font-size:13.5px;background:var(--s-surface);}
+  thead th{background:var(--s-surface-up);text-align:left;padding:11px 14px;font-weight:680;
+    font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--s-text-mid);
+    border-bottom:1px solid var(--s-border-mid);}
+  tbody td{padding:11px 14px;border-bottom:1px solid var(--s-border);vertical-align:top;}
+  tbody tr:last-child td{border-bottom:none;}
+  tbody tr:hover{background:var(--s-surface-up);}
+  td code,th code{font-size:11.5px;}
+  .feas{display:inline-flex;align-items:center;gap:5px;font-weight:660;font-size:12px;white-space:nowrap;}
+  .feas.yes{color:var(--s-green-text);}
+  .feas.warn{color:var(--s-pops);}
+  .feas.rw{color:var(--s-nebula);}
+  .pill{display:inline-block;font-size:11px;font-weight:660;padding:2px 8px;border-radius:20px;
+    font-family:var(--mono);letter-spacing:.01em;}
+  .pill.fic{background:rgba(184,84,37,.10);color:var(--s-nebula);border:1px solid rgba(184,84,37,.22);}
+  .pill.cic{background:var(--s-green-glow);color:var(--s-green-text);border:1px solid var(--s-green-border);}
+
+  /* ── Phases timeline ─────────────────────────────────────────────── */
+  .phase{display:grid;grid-template-columns:54px 1fr;gap:20px;position:relative;padding-bottom:8px;}
+  .phase::before{content:"";position:absolute;left:26px;top:46px;bottom:-18px;width:2px;
+    background:var(--s-border-mid);}
+  .phase:last-child::before{display:none;}
+  .phase .mark{width:52px;height:52px;border-radius:13px;background:var(--s-surface);
+    border:1.5px solid var(--s-pops-border);display:flex;align-items:center;justify-content:center;
+    font-weight:700;font-size:18px;color:var(--s-pops);box-shadow:var(--shadow-1);z-index:1;
+    font-variant-numeric:tabular-nums;}
+  .phase.cut .mark{background:var(--s-pops);color:#fff;border-color:var(--s-pops);
+    box-shadow:0 0 0 5px var(--s-pops-glow);}
+  .phase .body{padding-bottom:28px;}
+  .phase .body h3{margin-top:4px;display:flex;align-items:center;gap:11px;flex-wrap:wrap;}
+  .phase .when{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
+    color:var(--s-text-dim);background:var(--s-surface-up);border:1px solid var(--s-border);
+    padding:2px 9px;border-radius:6px;}
+  .phase .when.now{color:var(--s-green-text);background:var(--s-green-glow);border-color:var(--s-green-border);}
+  .phase .when.d20{color:#fff;background:var(--s-pops);border-color:var(--s-pops);}
+  .card{background:var(--s-surface);border:1px solid var(--s-border);border-radius:var(--radius-sm);
+    padding:16px 18px;box-shadow:var(--shadow-1);}
+
+  /* ── Two-col compare ─────────────────────────────────────────────── */
+  .cmp{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:18px 0;}
+  .cmp .col{border:1px solid var(--s-border);border-radius:var(--radius-sm);padding:16px 18px;
+    background:var(--s-surface);box-shadow:var(--shadow-1);}
+  .cmp .col.fic{border-top:3px solid var(--s-nebula);}
+  .cmp .col.cic{border-top:3px solid var(--s-green);}
+  .cmp .col h4{margin-top:0;display:flex;align-items:center;gap:8px;}
+  pre{background:#211E1A;color:#E8E4DC;border-radius:var(--radius-sm);padding:15px 17px;overflow-x:auto;
+    font-family:var(--mono);font-size:12px;line-height:1.6;margin:14px 0;}
+  pre .c{color:#8A857C;} pre .k{color:#D4A574;} pre .s{color:#9CB380;} pre .n{color:#C98A6B;}
+
+  /* ── Checklist ───────────────────────────────────────────────────── */
+  .chk{list-style:none;padding:0;margin:16px 0;}
+  .chk li{display:flex;gap:12px;padding:12px 0;border-bottom:1px solid var(--s-border);align-items:flex-start;}
+  .chk li:last-child{border-bottom:none;}
+  .chk .ic{flex-shrink:0;width:22px;height:22px;border-radius:7px;display:flex;align-items:center;
+    justify-content:center;font-size:13px;font-weight:700;margin-top:1px;}
+  .chk .ic.alert{background:var(--s-red-glow);color:var(--s-red);border:1px solid var(--s-red-border);}
+  .chk .ic.must{background:var(--s-pops-glow);color:var(--s-pops);border:1px solid var(--s-pops-border);}
+  .chk .ic.info{background:rgba(90,132,151,.08);color:var(--s-quasar);border:1px solid rgba(90,132,151,.22);}
+  .chk .tx strong{display:block;margin-bottom:2px;}
+  .chk .tx span{font-size:13.5px;color:var(--s-text-mid);}
+
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  .statbar{display:flex;gap:14px;flex-wrap:wrap;margin:22px 0 6px;}
+  .stat{flex:1;min-width:140px;background:var(--s-surface);border:1px solid var(--s-border);
+    border-radius:var(--radius-sm);padding:16px 18px;box-shadow:var(--shadow-1);}
+  .stat .v{font-size:28px;font-weight:720;letter-spacing:-0.02em;color:var(--s-pops);
+    font-variant-numeric:tabular-nums;}
+  .stat .l{font-size:12px;color:var(--s-text-mid);margin-top:2px;}
+  .footer{margin-top:50px;padding-top:24px;border-top:1px solid var(--s-border);
+    font-size:12.5px;color:var(--s-text-dim);}
+
+  @media(max-width:980px){
+    .wrap{grid-template-columns:1fr;} nav.toc{display:none;}
+    .cmp,.grid2{grid-template-columns:1fr;}
+    main{padding:34px 22px 90px;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<!-- ════ NAV ════ -->
+<nav class="toc">
+  <div class="brand"><span class="dot"></span><strong>POPS · MIGRAZIONE</strong></div>
+  <div class="sub">FiC → CiC</div>
+  <a href="#sintesi" class="active">Sintesi esecutiva</a>
+  <a href="#rischi">I 5 nodi critici</a>
+  <div class="grp">Analisi</div>
+  <a href="#inventario" class="num" data-n="1">Inventario connessioni</a>
+  <a href="#mapping" class="num" data-n="2">Mapping FiC → CiC</a>
+  <a href="#totali" class="num" data-n="3">Il problema dei totali</a>
+  <a href="#architettura" class="num" data-n="4">Differenze architetturali</a>
+  <a href="#datamodel" class="num" data-n="5">Modello dati & config</a>
+  <div class="grp">Esecuzione</div>
+  <a href="#piano" class="num" data-n="6">Piano a fasi</a>
+  <a href="#dimentichi" class="num" data-n="7">Cosa stai dimenticando</a>
+  <a href="#verifiche" class="num" data-n="8">Da verificare prima</a>
+  <a href="#decisioni" class="num" data-n="9">Decisioni da prendere</a>
+</nav>
+
+<!-- ════ MAIN ════ -->
+<main>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="eyebrow">Piano di migrazione · documento di lavoro</div>
+  <h1>Da Fatture in Cloud a Contabilità in Cloud</h1>
+  <p class="muted" style="max-width:62ch;font-size:16px;">
+    Tracciamento completo di ogni interazione di POPS con la fatturazione, valutazione di
+    fattibilità su CiC (API Reviso), e piano operativo per il passaggio del <strong>20 giugno</strong>
+    — quando l'azienda diventa doppia e l'amministrazione si sdoppia tra due sistemi.
+  </p>
+  <div class="flow">
+    <div class="biz old">
+      <span class="lbl">Fino al 20/6 · poi solo chiusure</span>
+      <span class="nm">Inglesina Italiana (vecchia)</span>
+      <span class="sys">Fatture in Cloud · OAuth2</span>
+    </div>
+    <span class="arr">→</span>
+    <div class="biz new">
+      <span class="lbl">Dal 20/6 · nuovi ordini</span>
+      <span class="nm">Nuova azienda (nuova P.IVA)</span>
+      <span class="sys">Contabilità in Cloud · Reviso REST</span>
+    </div>
+  </div>
+</div>
+
+<!-- ════ SINTESI ════ -->
+<section id="sintesi" class="lead">
+  <h2><span class="kick">TL;DR</span>Sintesi esecutiva</h2>
+  <p>
+    Tutte le connessioni a Fatture in Cloud sono <strong>replicabili su Contabilità in Cloud</strong>:
+    Reviso espone gli stessi concetti (clienti, prodotti, ordini, DDT, fatture) con API REST.
+    Due differenze cambiano il gioco — una a nostro <strong>favore</strong>, una da <strong>gestire</strong>:
+  </p>
+  <div class="grid2">
+    <div class="box insight" style="margin:6px 0;">
+      <div class="bt">▲ A favore · il problema totali si risolve</div>
+      <p style="margin:0;">CiC <strong>accetta i totali già calcolati</strong> (per riga e per documento).
+      POPS diventa la fonte di verità: la cifra che il cliente vede sarà <em>esattamente</em> quella del
+      documento fiscale. Sparisce il "balletto del retry su 422" di FiC.</p>
+    </div>
+    <div class="box risk" style="margin:6px 0;">
+      <div class="bt">▼ Da gestire · doppio backend convivente</div>
+      <p style="margin:0;">Il 20/6 <strong>non è un interruttore secco</strong>. Gli ordini già aperti su FiC
+      vanno <em>chiusi</em> su FiC (vecchia P.IVA); i nuovi nascono su CiC. POPS deve parlare con
+      <strong>entrambi i sistemi insieme</strong> finché il backlog vecchio non si svuota.</p>
+    </div>
+  </div>
+  <div class="statbar">
+    <div class="stat"><div class="v">10</div><div class="l">funzioni/punti che toccano FiC</div></div>
+    <div class="stat"><div class="v">9</div><div class="l">su 10 portabili 1:1 su CiC</div></div>
+    <div class="stat"><div class="v">~6</div><div class="l">campi Firestore <code>fic_*</code> da affiancare</div></div>
+    <div class="stat"><div class="v">8</div><div class="l">fasi di lavoro (Fase 0 → 7)</div></div>
+  </div>
+  <div class="box action">
+    <div class="bt">◆ La mossa chiave</div>
+    <p style="margin:0;">Non riscrivere "a mano" il codice FiC in CiC. <strong>Astrai un layer
+    <code>BillingProvider</code></strong> con due implementazioni (<code>FicProvider</code> = codice attuale,
+    <code>CicProvider</code> = nuovo). La scelta del backend si decide <strong>una volta sola</strong>, alla
+    creazione del documento, e resta congelata sull'ordine. Così il doppio-sistema diventa una semplice
+    selezione di provider, e il rollback è un flag.</p>
+  </div>
+</section>
+
+<!-- ════ RISCHI ════ -->
+<section id="rischi">
+  <h2><span class="kick">!</span>I 5 nodi critici da non sbagliare</h2>
+  <ul class="chk">
+    <li><span class="ic alert">1</span><span class="tx"><strong>Coerenza dei totali documento</strong>
+      <span>La cifra mostrata al cliente deve coincidere al centesimo con la fattura. Su CiC va definito
+      <em>un solo</em> algoritmo di arrotondamento (per-riga → somma documento), usato sia a video sia nel payload. → §3</span></span></li>
+    <li><span class="ic alert">2</span><span class="tx"><strong>Il cutover è graduale, non secco</strong>
+      <span>Ordini vecchi → si chiudono su FiC; nuovi → su CiC. Ogni preventivo deve sapere "a chi appartiene"
+      (<code>billingBackend</code>). Niente ordini creati per sbaglio su entrambi. → §4, §6</span></span></li>
+    <li><span class="ic must">3</span><span class="tx"><strong>Anagrafiche e prodotti partono da zero</strong>
+      <span>La nuova azienda CiC ha registro clienti e catalogo prodotti <em>vuoti</em>. Vanno pre-caricati
+      (o creati al volo) con il mapping <code>cicCustomerNumber</code> / <code>productNumber</code>. → §5, §6</span></span></li>
+    <li><span class="ic must">4</span><span class="tx"><strong>Il link al PDF potrebbe non essere pubblico</strong>
+      <span>FiC restituiva URL aperti, condivisibili col cliente. Il link PDF di Reviso potrebbe richiedere
+      i token segreti → da verificare; se non pubblico, serve un proxy. → §2, §8</span></span></li>
+    <li><span class="ic info">5</span><span class="tx"><strong>Errori oggi silenziosi</strong>
+      <span>Oggi <code>generaOrdineFIC</code> in caso di errore <em>logga e basta</em>: l'ordine resta senza
+      documento e nessuno se ne accorge. Al cutover serve uno stato d'errore visibile + notifica admin. → §7</span></span></li>
+  </ul>
+</section>
+
+<!-- ════ 1 · INVENTARIO ════ -->
+<section id="inventario">
+  <h2><span class="kick">01</span>Inventario completo delle connessioni FiC</h2>
+  <p>Tutte le scritture/letture verso Fatture in Cloud vivono in
+  <code>src/functions/index.ts</code> (Cloud Functions). Il frontend non chiama mai FiC direttamente:
+  passa sempre per queste funzioni o legge i campi <code>fic_*</code> salvati su Firestore.</p>
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th>Funzione</th><th>Tipo / Trigger</th><th>Endpoint FiC usato</th><th>Cosa fa</th></tr></thead>
+    <tbody>
+      <tr><td><code>generaOrdineFIC</code></td><td>Firestore <code>onWrite</code> su <code>preventivi/*</code> quando lo stato → <code>WAITING_FAST/SIGN</code></td>
+        <td><code>GET/POST /entities/clients</code><br><code>POST /issued_documents</code> (type <code>order</code>)</td>
+        <td><strong>Cuore del sistema.</strong> Cerca/crea il cliente per P.IVA, costruisce le righe, crea l'ordine. Gestisce sconto globale + retry-su-422 per i totali.</td></tr>
+      <tr><td><code>creaDdtCumulativo</code></td><td><code>onCall</code> (Admin)</td>
+        <td><code>GET /issued_documents/join</code><br><code>POST /issued_documents</code> (type <code>delivery_note</code>)</td>
+        <td>Unisce più ordini in <strong>un solo DDT</strong>, unifica le righe di spedizione (tariffa più alta), aggiunge colli/peso/corriere.</td></tr>
+      <tr><td><code>cancelOrder</code></td><td><code>onCall</code></td><td><code>DELETE /issued_documents/{id}</code></td>
+        <td>Annulla l'ordine (stato → <code>REJECTED</code>) ed elimina il documento su FiC. Bloccato se già READY/spedito.</td></tr>
+      <tr><td><code>resetOrderState</code></td><td><code>onCall</code></td><td><code>DELETE /issued_documents/{id}</code></td>
+        <td>Sblocca un ordine: elimina il doc FiC e riporta lo stato a <code>DRAFT</code>.</td></tr>
+      <tr><td><code>getFreshFicUrl</code></td><td><code>onCall</code></td><td><code>GET /issued_documents/{id}</code></td>
+        <td>Rigenera l'URL "fresco" del documento (FiC scade i link). Usato da Admin e dal Cruscotto cliente per aprire ordine/DDT.</td></tr>
+      <tr><td><code>syncProductsWithFic</code></td><td><code>onCall</code></td><td><code>GET /products</code></td>
+        <td>Scarica il catalogo prodotti FiC nella collection <code>products</code> (mappa <code>code → id_FiC</code>, prezzi, IVA).</td></tr>
+      <tr><td><code>syncAddressesFromFiC</code></td><td><code>onCall</code> (una-tantum)</td><td><code>GET /entities/clients?q=vat</code></td>
+        <td>Riempie indirizzo/CAP/città mancanti negli utenti pescandoli da FiC.</td></tr>
+      <tr><td><code>importClientsFromFiC</code></td><td><code>onCall</code></td><td><code>GET /entities/clients</code></td>
+        <td>Crea anagrafiche utente "dormienti" da FiC (per P.IVA), pronte per l'invito.</td></tr>
+      <tr><td><code>getValidFicToken</code></td><td>helper interno</td><td><code>POST /oauth/token</code></td>
+        <td>Gestione token OAuth2: legge <code>config/fic</code>, rinnova col refresh token, salva la nuova scadenza.</td></tr>
+      <tr><td><code>sendInvitesToClients</code></td><td><code>onCall</code></td><td>— (solo email)</td>
+        <td>Non tocca FiC: abilita l'account e manda le credenziali. Riportato per completezza del flusso.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="box verify">
+    <div class="bt">◇ Lato frontend — dove "si vede" FiC</div>
+    <p style="margin:0 0 6px;">I file che leggono i campi FiC o invocano le callable (nessuna logica fiscale, solo UI):</p>
+    <ul style="margin:0;">
+      <li><code>AdminView.vue</code> — annulla ordine, crea DDT, apre documenti, raggruppa per DDT</li>
+      <li><code>BuilderView.vue</code> — sblocca ordine (<code>resetOrderState</code>), mostra <code>fic_order_url</code>, calcola <code>totaleImponibile</code>/<code>totaleScontato</code></li>
+      <li><code>ClientDashboard.vue</code> — apre DDT col link fresco, mostra "VEDI DDT"</li>
+      <li><code>AdminSettings.vue</code> — importa clienti, invia inviti</li>
+      <li><code>OrderModals.vue</code> / <code>ArchiveModal.vue</code> — link documento + totale ordine</li>
+      <li><code>DeliveryView.vue</code> / <code>useNovaSpedizioni.ts</code> — raggruppa per <code>fic_ddt_id</code>, mostra <code>fic_ddt_number</code></li>
+      <li><code>types.ts</code> — interfacce <code>FicProduct</code>, <code>PreventivoDocumento</code> (campi totali), state machine <code>StatoPreventivo</code></li>
+    </ul>
+  </div>
+</section>
+
+<!-- ════ 2 · MAPPING ════ -->
+<section id="mapping">
+  <h2><span class="kick">02</span>Mapping FiC → CiC · si può fare? come?</h2>
+  <p>Risposta breve: <strong>sì, 9 su 10 in modo diretto</strong>. La differenza concettuale: FiC ha
+  <em>un solo</em> endpoint <code>issued_documents</code> con un campo <code>type</code>; Reviso ha
+  <strong>entità separate</strong> (<code>/orders</code>, <code>/delivery-notes/sales</code>,
+  <code>/v2/invoices</code>). Tabella di corrispondenza:</p>
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th>Funzione POPS</th><th>FiC</th><th>CiC / Reviso</th><th>Fattibile</th><th>Note di porting</th></tr></thead>
+    <tbody>
+      <tr><td><code>generaOrdineFIC</code></td>
+        <td><code>POST /issued_documents</code><br>type=order</td>
+        <td><code>POST /orders</code></td>
+        <td><span class="feas yes">● Sì</span></td>
+        <td>Righe in <code>lines[]</code>. Inviare i <strong>totali pre-calcolati</strong> → niente retry. → §3</td></tr>
+      <tr><td>lookup/crea cliente</td>
+        <td><code>GET/POST /entities/clients</code><br>q=<code>vat_number</code></td>
+        <td><code>GET /customers?filter=vatNumber$eq:..</code><br><code>POST /customers</code></td>
+        <td><span class="feas yes">● Sì</span></td>
+        <td>Chiave = <code>customerNumber</code> (non la P.IVA). Salvare <code>cicCustomerNumber</code> su <code>users</code>.</td></tr>
+      <tr><td><code>creaDdtCumulativo</code></td>
+        <td><code>GET /issued_documents/join</code> + <code>POST</code> delivery_note</td>
+        <td><code>POST /delivery-notes/sales</code><br>(assemblato da Firestore)</td>
+        <td><span class="feas rw">◐ Riscrittura</span></td>
+        <td><strong>Reviso non ha il "join" ordini→DDT.</strong> Ma POPS ha già tutte le righe in Firestore: si costruisce un unico DDT direttamente. Più semplice e robusto. → §4</td></tr>
+      <tr><td><code>cancelOrder</code> / <code>resetOrderState</code></td>
+        <td><code>DELETE /issued_documents/{id}</code></td>
+        <td><code>DELETE /orders/{n}</code><br><code>DELETE /delivery-notes/sales/{id}</code></td>
+        <td><span class="feas yes">● Sì</span></td>
+        <td>Attenzione: una fattura <em>booked</em> su Reviso non si cancella (serve nota di credito). Le regole di annullamento si irrigidiscono.</td></tr>
+      <tr><td><code>getFreshFicUrl</code></td>
+        <td><code>GET /issued_documents/{id}</code> → <code>url</code></td>
+        <td><code>GET /orders/{n}</code> → <code>pdf.download</code></td>
+        <td><span class="feas warn">▲ Verifica</span></td>
+        <td>Il link PDF Reviso <strong>potrebbe richiedere i token</strong> (non pubblico). Se così, serve un proxy che streami il PDF. → §8</td></tr>
+      <tr><td><code>syncProductsWithFic</code></td>
+        <td><code>GET /products</code></td>
+        <td><code>GET /products</code></td>
+        <td><span class="feas yes">● Sì</span></td>
+        <td>Reviso: prezzo = <code>salesPrice</code>, codice = <code>productNumber</code>. <strong>L'IVA non sta sul prodotto</strong>, va per riga via <code>vatCode</code>.</td></tr>
+      <tr><td><code>syncAddressesFromFiC</code></td>
+        <td><code>GET /entities/clients?q=vat</code></td>
+        <td><code>GET /customers?filter=vatNumber</code></td>
+        <td><span class="feas yes">● Sì</span></td>
+        <td>Una-tantum, già eseguita. Riproporla solo se serve ribilanciare gli indirizzi.</td></tr>
+      <tr><td><code>importClientsFromFiC</code></td>
+        <td><code>GET /entities/clients</code></td>
+        <td><code>GET /customers</code></td>
+        <td><span class="feas yes">● Sì</span></td>
+        <td>Su CiC l'inverso: <strong>esportare</strong> i clienti attivi nella nuova azienda (registro vuoto). → §6</td></tr>
+      <tr><td><code>getValidFicToken</code></td>
+        <td><code>POST /oauth/token</code> + rotazione refresh</td>
+        <td>2 header statici:<br><code>X-AppSecretToken</code> + <code>X-AgreementGrantToken</code></td>
+        <td><span class="feas yes">● Semplificazione</span></td>
+        <td>Niente OAuth, niente refresh, niente <code>config/fic</code> token. Solo 2 segreti. Il grant-token è <strong>per-azienda</strong> → perfetto per il doppio-azienda.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="box insight">
+    <div class="bt">▲ Insight · l'auth Reviso è più semplice e fatta apposta per il doppio-azienda</div>
+    <p style="margin:0;">Un <code>X-AgreementGrantToken</code> = una contabilità. Per parlare con la vecchia
+    azienda (se mai servisse via Reviso) o la nuova basta cambiare quel token, tenendo lo stesso
+    <code>X-AppSecretToken</code>. Nessun token che scade ogni 24h da rinnovare.</p>
+  </div>
+</section>
+
+<!-- ════ 3 · TOTALI ════ -->
+<section id="totali">
+  <h2><span class="kick">03</span>Il problema dei totali — il punto più delicato</h2>
+  <p>Su FiC i totali ti hanno dato "un sacco di problemi". Vale la pena capire <em>perché</em>, perché
+  su CiC il problema <strong>si può eliminare alla radice</strong> — ma solo se lo gestiamo con metodo.</p>
+
+  <h3>Perché FiC dava problemi</h3>
+  <p>POPS calcola lo sconto come <strong>percentuale sul totale globale</strong>
+  (<code>totaleImponibile → totaleScontato</code>). FiC invece calcola <strong>riga per riga</strong>, poi
+  somma, con i suoi arrotondamenti. I due metodi divergono di qualche centesimo. Il codice attuale tampona con due
+  trucchi:</p>
+  <ul>
+    <li>Una <strong>riga "SCONTO" correttiva</strong> (<code>net_price</code> negativo) per riallineare il netto;</li>
+    <li>Il <strong>retry su errore 422</strong>: quando FiC rifiuta, POPS legge il totale che FiC stesso
+      ha calcolato (<code>extra.totals.amount_gross</code>) e lo reinserisce forzato in <code>payments_list</code>.</li>
+  </ul>
+  <p class="muted">È un workaround: stai inseguendo i numeri di FiC invece di imporre i tuoi.</p>
+
+  <h3>Su CiC il rapporto si inverte</h3>
+  <div class="cmp">
+    <div class="col fic"><h4><span class="pill fic">FiC</span> il server comanda</h4>
+      <p class="muted" style="margin:0;font-size:13.5px;">Invii le righe, FiC ricalcola i totali a modo suo.
+      Se non coincidono → 422. Tu rincorri.</p>
+    </div>
+    <div class="col cic"><h4><span class="pill cic">CiC</span> tu comandi</h4>
+      <p class="muted" style="margin:0;font-size:13.5px;">Reviso accetta i totali <strong>già calcolati</strong>,
+      sia per riga (<code>totalNetAmount/Vat/Gross</code>) sia per documento (<code>netAmount/vatAmount/grossAmount</code>).
+      La cifra che mandi è la cifra del documento.</p>
+    </div>
+  </div>
+  <div class="box insight">
+    <div class="bt">▲ La soluzione · POPS fonte di verità unica</div>
+    <p style="margin:0 0 8px;">POPS già <em>mostra al cliente</em> il totale. Quel numero deve diventare
+    l'unico vero. Strategia:</p>
+    <ol style="margin:0 0 0 4px;">
+      <li>Definire <strong>un solo algoritmo di arrotondamento</strong> in POPS: per ogni riga calcola
+        netto → IVA (arrotonda al centesimo) → lordo; poi somma le righe per il totale documento.</li>
+      <li>Usare lo <strong>stesso algoritmo</strong> sia per ciò che si mostra a video sia per il payload CiC.</li>
+      <li>Inviare a Reviso <strong>i totali espliciti</strong> (riga + documento) + il <code>vatCode</code> (es. <code>V022</code>).</li>
+      <li>Lo sconto globale: applicarlo come <code>discountPercentage</code> uniforme su ogni riga
+        <em>oppure</em> mantenere la riga "SCONTO" — purché il totale finale combaci col mostrato.</li>
+    </ol>
+  </div>
+  <div class="box verify">
+    <div class="bt">◇ Da verificare nello spike (§8)</div>
+    <p style="margin:0;">La collection Postman non contiene risposte salvate: va <strong>confermato su una
+    chiamata reale</strong> che Reviso <em>accetti</em> i totali inviati senza ricalcolarli/sovrascriverli.
+    Esiste un endpoint draft "senza totali" in cui il server li calcola: se servisse quello, la logica si
+    sposta ma il principio (un solo algoritmo, riconciliazione) resta. Test su ≥10 preventivi reali, incluso
+    qualcuno con sconto e con righe a virgola.</p>
+  </div>
+
+  <h4>IVA — cambio di modello</h4>
+  <p>FiC: IVA hardcoded <code>VAT_ID=0, VAT_VALUE=22</code> sulla riga. CiC: l'IVA è un
+  <code>vatCode</code> (es. <code>V022</code> per il 22%) preso dal catalogo <code>/vat-accounts</code> della
+  <strong>nuova</strong> azienda — i codici sono diversi da quelli di FiC e vanno letti una volta e mappati.</p>
+</section>
+
+<!-- ════ 4 · ARCHITETTURA ════ -->
+<section id="architettura">
+  <h2><span class="kick">04</span>Differenze architetturali da assorbire</h2>
+  <div class="grid2">
+    <div class="card">
+      <h4>① Autenticazione</h4>
+      <p class="muted" style="margin:0;font-size:13.5px;">OAuth2 + refresh rotante (<code>config/fic</code>,
+      <code>getValidFicToken</code>) → <strong>2 header statici</strong>. Si elimina tutta la macchina del token.</p>
+    </div>
+    <div class="card">
+      <h4>② Modello documenti</h4>
+      <p class="muted" style="margin:0;font-size:13.5px;"><code>issued_documents</code> unico con
+      <code>type</code> → entità separate <code>/orders</code>, <code>/delivery-notes/sales</code>,
+      <code>/v2/invoices</code>. Ogni passo del flusso ha il suo endpoint.</p>
+    </div>
+    <div class="card">
+      <h4>③ DDT cumulativo</h4>
+      <p class="muted" style="margin:0;font-size:13.5px;">Niente "join" ordini→DDT su Reviso. POPS ha già le
+      righe in Firestore → <strong>assembla un unico DDT</strong> da sé. (Reviso aggrega solo DDT→fattura via
+      <code>create-invoices-from-delivery-notes</code>.)</p>
+    </div>
+    <div class="card">
+      <h4>④ Prerequisiti di config</h4>
+      <p class="muted" style="margin:0;font-size:13.5px;">Reviso richiede <code>numberSeries</code>,
+      <code>vatCode</code>, <code>units</code>, <code>paymentTerms</code> già configurati nella nuova azienda.
+      Sono ID diversi: vanno letti e mappati prima del primo documento.</p>
+    </div>
+    <div class="card">
+      <h4>⑤ Identità documenti</h4>
+      <p class="muted" style="margin:0;font-size:13.5px;">FiC: <code>id</code> + <code>url</code> pubblico.
+      Reviso: <code>number</code>/<code>id</code> + <code>pdf.download</code> (forse non pubblico → proxy).
+      La numerazione fatture <strong>riparte da zero</strong> (nuova entità): normale, ma l'amministrazione deve saperlo.</p>
+    </div>
+    <div class="card">
+      <h4>⑥ Pagamenti</h4>
+      <p class="muted" style="margin:0;font-size:13.5px;">FiC: <code>default_payment_method</code> +
+      <code>payments_list</code>. Reviso: <code>paymentTerms</code>/<code>paymentType</code> sul cliente.
+      Mapping da definire (può restare semplice se non serve scadenzario dettagliato).</p>
+    </div>
+  </div>
+  <div class="box action">
+    <div class="bt">◆ Il pattern di codice · BillingProvider</div>
+    <p style="margin:0 0 8px;">Tutte queste differenze si nascondono dietro un'interfaccia comune. Sul branch
+    di feature si introduce:</p>
+<pre><span class="c">// interfaccia unica — il resto di POPS non sa quale backend gira sotto</span>
+<span class="k">interface</span> BillingProvider {
+  findOrCreateCustomer(piva, dati): Promise&lt;CustomerRef&gt;
+  createOrder(preventivo, customer): Promise&lt;{ id, docUrl }&gt;
+  createDeliveryNote(ordini[], spedizione): Promise&lt;{ id, number, docUrl }&gt;
+  deleteDocument(ref): Promise&lt;void&gt;
+  getFreshDocUrl(ref): Promise&lt;string&gt;
+  syncProducts(codes[]): Promise&lt;SyncResult&gt;
+}
+<span class="c">// due implementazioni — selezione runtime</span>
+<span class="k">const</span> provider = backend === <span class="s">'cic'</span> ? <span class="n">cicProvider</span> : <span class="n">ficProvider</span></pre>
+    <p style="margin:8px 0 0;">Il <code>FicProvider</code> incapsula il codice attuale <em>senza distruggerlo</em>
+    (così resta vivo per chiudere il backlog). Il backend si sceglie da
+    <code>config/billing.activeBackend</code> e si <strong>congela</strong> sul preventivo alla creazione del
+    primo documento.</p>
+  </div>
+</section>
+
+<!-- ════ 5 · DATA MODEL ════ -->
+<section id="datamodel">
+  <h2><span class="kick">05</span>Modello dati & configurazione</h2>
+  <h3>Campi nuovi sui documenti <code>preventivi/*</code></h3>
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th>Campo</th><th>Tipo</th><th>Scopo</th></tr></thead>
+    <tbody>
+      <tr><td><code>billingBackend</code></td><td><code>'fic' | 'cic'</code></td><td><strong>Discriminante.</strong> Deciso e congelato alla creazione del primo documento. Tutte le operazioni successive (DDT, annullo, link) seguono questo valore.</td></tr>
+      <tr><td><code>cic_order_id</code> / <code>cic_order_number</code></td><td>string/number</td><td>Riferimento ordine Reviso (affianca <code>fic_order_id</code>).</td></tr>
+      <tr><td><code>cic_order_url</code></td><td>string</td><td>Link PDF ordine (o riferimento per il proxy).</td></tr>
+      <tr><td><code>cic_ddt_id</code> / <code>cic_ddt_number</code> / <code>cic_ddt_url</code></td><td>string/number</td><td>Riferimenti DDT Reviso (affiancano i <code>fic_ddt_*</code>).</td></tr>
+      <tr><td><code>billingError</code></td><td>string | null</td><td><strong>Nuovo.</strong> Messaggio se la creazione documento fallisce → reso visibile in Admin + notifica. Risolve il "fallimento silenzioso".</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <div class="box insight" style="margin-top:8px;">
+    <div class="bt">▲ Non rinominare, affiancare</div>
+    <p style="margin:0;">I campi <code>fic_*</code> <strong>restano</strong>: servono a leggere/chiudere il
+    backlog vecchio e a mostrare i documenti storici per sempre. Si <em>aggiungono</em> i <code>cic_*</code>.
+    Il frontend mostra l'uno o l'altro in base a <code>billingBackend</code> (un piccolo helper unificante).</p>
+  </div>
+
+  <h3>Config & segreti</h3>
+  <ul>
+    <li><code>config/cic</code> (o secret env) — <code>X-AppSecretToken</code>, <code>X-AgreementGrantToken</code> della nuova azienda, più gli ID mappati: <code>vatCode22</code>, <code>numberSeries</code>, <code>unit</code> di default.</li>
+    <li><code>config/billing</code> — <code>{ activeBackend: 'fic' | 'cic' }</code>: il flag del cutover + <strong>kill-switch</strong> per tornare a FiC se CiC va in crisi il giorno 1 (stesso pattern di <code>core/nebula.collabEnabled</code>).</li>
+    <li><code>config/fic</code> — resta, in <strong>sola lettura</strong>, per il backlog e lo storico.</li>
+    <li>Mapping prodotti: aggiungere <code>cicProductId</code>/<code>productNumber</code> ai doc <code>products/*</code> (l'<code>id</code> attuale è l'ID FiC).</li>
+    <li>Mapping clienti: aggiungere <code>cicCustomerNumber</code> ai doc <code>users/*</code> (oggi c'è <code>ficId</code>).</li>
+  </ul>
+</section>
+
+<!-- ════ 6 · PIANO ════ -->
+<section id="piano">
+  <h2><span class="kick">06</span>Piano di lavoro a fasi</h2>
+  <p>Il filo conduttore: <strong>preparare tutto a freddo prima del 20/6</strong>, validare i totali su dati
+  reali, e fare un cutover <em>reversibile</em>. Il backlog FiC si smaltisce in parallelo.</p>
+
+  <div class="phase">
+    <div class="mark">0</div>
+    <div class="body">
+      <h3>Setup & accessi <span class="when now">subito</span></h3>
+      <div class="card">
+        <ul style="margin:0;">
+          <li>Ottenere da Reviso/CiC: <code>X-AppSecretToken</code> (app) e <code>X-AgreementGrantToken</code> (nuova azienda). <strong>Chiedere se esiste un agreement di TEST</strong> per non lavorare sui libri veri.</li>
+          <li>Configurare nella nuova azienda: <code>vat-accounts</code> (V022), <code>number-series</code>, <code>units</code>, <code>payment-terms</code>, <code>product-groups</code>.</li>
+          <li>Leggere e annotare gli ID risultanti (serviranno nel payload).</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="phase">
+    <div class="mark">1</div>
+    <div class="body">
+      <h3>Spike tecnico — il nodo totali <span class="when">pre-codice</span></h3>
+      <div class="card">
+        <ul style="margin:0;">
+          <li>Creare via API <strong>1 ordine di prova</strong> con sconto e righe a virgola.</li>
+          <li><strong>Verificare che i totali restituiti == totali inviati</strong> (il punto §3). Decidere: invio totali espliciti o draft con calcolo server.</li>
+          <li>Verificare se il <strong>link PDF è pubblico</strong> o richiede i token (decide se serve un proxy).</li>
+          <li>Verificare i rate limit Reviso (i loop di sync hanno pause da ritarare).</li>
+        </ul>
+        <div class="box risk" style="margin:12px 0 0;"><div class="bt">▼ Gate</div><p style="margin:0;">Senza questo spike risolto, <strong>non si scrive una riga del CicProvider</strong>. È il de-risking del progetto.</p></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="phase">
+    <div class="mark">2</div>
+    <div class="body">
+      <h3>Astrazione <code>BillingProvider</code> <span class="when">branch feature</span></h3>
+      <div class="card">
+        <ul style="margin:0;">
+          <li>Estrarre l'interfaccia comune; avvolgere il codice FiC esistente in <code>FicProvider</code> (refactor <em>senza</em> cambio di comportamento).</li>
+          <li>Selezione provider via <code>config/billing.activeBackend</code> + campo <code>billingBackend</code> sul preventivo.</li>
+          <li>Aggiungere i campi <code>cic_*</code>, <code>billingError</code> e l'helper frontend che mostra l'uno o l'altro. → §5</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="phase">
+    <div class="mark">3</div>
+    <div class="body">
+      <h3>Implementare <code>CicProvider</code> <span class="when">branch feature</span></h3>
+      <div class="card">
+        <ul style="margin:0;">
+          <li><code>createOrder</code> (POST /orders, totali espliciti), <code>findOrCreateCustomer</code> (customers), <code>createDeliveryNote</code> (assemblato da Firestore), <code>deleteDocument</code>, <code>getFreshDocUrl</code>, <code>syncProducts</code>.</li>
+          <li>Mappare lo sconto globale e l'unificazione spedizioni (logica già esistente, solo ri-targettata).</li>
+          <li>Gestione errori <strong>visibile</strong>: su fallimento scrivere <code>billingError</code> + notifica admin.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="phase">
+    <div class="mark">4</div>
+    <div class="body">
+      <h3>Migrazione anagrafiche & catalogo <span class="when">pre 20/6</span></h3>
+      <div class="card">
+        <ul style="margin:0;">
+          <li><strong>Clienti</strong>: esportare gli attivi → creare in CiC → salvare <code>cicCustomerNumber</code>. (Fallback: creazione al volo al primo ordine, già supportata dalla logica.)</li>
+          <li><strong>Prodotti</strong>: ricreare il catalogo in CiC (<code>productNumber=code</code>, <code>salesPrice</code>) → mappare su <code>products/*</code>.</li>
+          <li>Riconciliazione: confrontare conteggi e prezzi FiC vs CiC.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="phase">
+    <div class="mark">5</div>
+    <div class="body">
+      <h3>Test parallelo su dati reali <span class="when">pre 20/6</span></h3>
+      <div class="card">
+        <ul style="margin:0;">
+          <li>Su agreement di test (o con <code>activeBackend</code> ancora FiC ma chiamando CiC in shadow), creare ordini/DDT reali in CiC.</li>
+          <li><strong>Confronto cifra-per-cifra</strong> con quanto avrebbe prodotto FiC e con il totale mostrato al cliente. Far validare all'amministrazione.</li>
+          <li>Provare i casi limite: sconto globale, consegna diretta vs corriere, DDT cumulativo multi-ordine, annullo.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="phase cut">
+    <div class="mark">6</div>
+    <div class="body">
+      <h3>Cutover <span class="when d20">20 GIUGNO</span></h3>
+      <div class="card">
+        <ul style="margin:0;">
+          <li>Flip <code>config/billing.activeBackend = 'cic'</code>: <strong>i nuovi ordini nascono su CiC</strong>.</li>
+          <li>Gli ordini esistenti restano <code>billingBackend:'fic'</code> → DDT, annulli e link continuano su FiC (vecchia P.IVA).</li>
+          <li>Monitoraggio attivo: dashboard degli errori + notifica admin su ogni <code>billingError</code>.</li>
+          <li><strong>Kill-switch pronto</strong>: se CiC va in crisi, rimettere <code>'fic'</code> e i nuovi ordini tornano sul vecchio sistema (finché la vecchia azienda può ancora emettere).</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <div class="phase">
+    <div class="mark">7</div>
+    <div class="body">
+      <h3>Drain del backlog + consolidamento <span class="when">dopo 20/6</span></h3>
+      <div class="card">
+        <ul style="margin:0;">
+          <li>Smaltire gli ordini vecchi: spedizioni/DDT/fatture su FiC finché la coda <code>billingBackend:'fic'</code> attiva è vuota.</li>
+          <li>Quando il backlog = 0: FiC passa a <strong>sola lettura</strong> (link storici restano per sempre).</li>
+          <li>Documentare in <code>docs/ATLAS.md</code>; congelare/rimuovere il <em>path di scrittura</em> FiC (lasciare la lettura).</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ════ 7 · DIMENTICHI ════ -->
+<section id="dimentichi">
+  <h2><span class="kick">07</span>Cosa stai (forse) dimenticando</h2>
+  <p>Le cose che non sono "scrivere codice" ma che fanno fallire una migrazione fiscale se trascurate:</p>
+  <ul class="chk">
+    <li><span class="ic alert">A</span><span class="tx"><strong>I documenti storici NON si migrano</strong>
+      <span>Fatture e DDT già emessi restano su FiC per la vecchia azienda (conservazione fiscale). POPS deve poterli ancora <em>mostrare</em> a tempo indeterminato → tenere vive le credenziali FiC in lettura.</span></span></li>
+    <li><span class="ic alert">B</span><span class="tx"><strong>"A chi appartiene" un ordine a cavallo del 20/6</strong>
+      <span>Ordine richiesto il 19, confermato il 21? Regola netta: il backend si decide e si congela <em>quando si crea il primo documento fiscale</em> — non per data di richiesta. Una sola fonte di verità: <code>billingBackend</code>.</span></span></li>
+    <li><span class="ic must">C</span><span class="tx"><strong>Configurazione fiscale della nuova azienda</strong>
+      <span>Regime, split payment, eventuale esigibilità IVA, serie di numerazione: possono differire dalla vecchia. Da allineare con il commercialista <em>prima</em> del primo documento.</span></span></li>
+    <li><span class="ic must">D</span><span class="tx"><strong>Doppio-write accidentale</strong>
+      <span>Mantenere il guard di idempotenza (oggi: <code>if newData.fic_order_id return</code>) anche per CiC, e impedire che un ordine finisca in entrambi i sistemi.</span></span></li>
+    <li><span class="ic must">E</span><span class="tx"><strong>Link PDF verso il cliente</strong>
+      <span>Se Reviso non dà link pubblici, il Cruscotto cliente e "VEDI DDT" si rompono. Serve un proxy che autentichi e streami il PDF. Da decidere nello spike (§8).</span></span></li>
+    <li><span class="ic must">F</span><span class="tx"><strong>Metodi/termini di pagamento</strong>
+      <span>FiC li usava in <code>payments_list</code>. Su Reviso stanno sul cliente (<code>paymentTerms</code>). Se servono scadenze in fattura, mappare; altrimenti default semplice.</span></span></li>
+    <li><span class="ic info">G</span><span class="tx"><strong>Errori non più silenziosi</strong>
+      <span>Oggi un fallimento FiC lascia l'ordine senza documento e nessuno lo sa. Introdurre <code>billingError</code> visibile + notifica: al cutover è vitale accorgersi subito.</span></span></li>
+    <li><span class="ic info">H</span><span class="tx"><strong>Rate limit & paginazione Reviso</strong>
+      <span>Sintassi filtri e pagine diversa (<code>?filter=campo$eq:..</code>, <code>?pagesize</code>/<code>?skippages</code>). Le pause anti-rate-limit (200/100ms) vanno ritarate sui limiti Reviso.</span></span></li>
+    <li><span class="ic info">I</span><span class="tx"><strong>Deploy delle Functions = tutto-o-niente</strong>
+      <span><code>index.ts</code> è un unico bundle: un errore di sintassi blocca il deploy di <em>tutte</em> le funzioni (POPS live). Solo blocchi additivi, <code>tsc</code> exit 0 verificato, attenzione ai <code>*/</code> nei commenti.</span></span></li>
+    <li><span class="ic info">J</span><span class="tx"><strong>Formazione amministrazione + run di prova</strong>
+      <span>Far girare qualche ordine vero in CiC con l'ufficio prima del 20/6: numerazione nuova, layout fattura nuovo, abitudini diverse. Il rischio non è solo tecnico.</span></span></li>
+  </ul>
+</section>
+
+<!-- ════ 8 · VERIFICHE ════ -->
+<section id="verifiche">
+  <h2><span class="kick">08</span>Da verificare PRIMA di scrivere codice</h2>
+  <p>Domande aperte la cui risposta cambia l'implementazione. Sono il contenuto dello spike (Fase 1):</p>
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th>Domanda</th><th>Perché conta</th><th>Come rispondere</th></tr></thead>
+    <tbody>
+      <tr><td><strong>Reviso accetta i totali che invio senza ricalcolarli?</strong></td>
+        <td>È la garanzia "stessa cifra per il cliente". Decide tutta la strategia §3.</td>
+        <td>POST /orders con totali espliciti su agreement di test → confronta response.</td></tr>
+      <tr><td><strong>Il link <code>pdf.download</code> è pubblico?</strong></td>
+        <td>Decide se "VEDI DDT" / Cruscotto cliente funzionano diretti o serve un proxy.</td>
+        <td>Aprire il link senza header in incognito.</td></tr>
+      <tr><td><strong>Esiste un agreement / ambiente di TEST?</strong></td>
+        <td>Non si testano ordini veri sui libri della nuova azienda.</td>
+        <td>Chiedere a Reviso/commercialista.</td></tr>
+      <tr><td><strong>Quali <code>vatCode</code> / <code>numberSeries</code> / <code>unit</code> nella nuova azienda?</strong></td>
+        <td>Servono ID precisi nel payload; sono diversi da FiC.</td>
+        <td>GET /vat-accounts, /number-series, /units.</td></tr>
+      <tr><td><strong>Lo sconto: <code>discountPercentage</code> di riga o riga "SCONTO"?</strong></td>
+        <td>Determina come riprodurre <code>totaleScontato</code> al centesimo.</td>
+        <td>Provare entrambi nello spike, scegliere quello che riconcilia.</td></tr>
+      <tr><td><strong>Rate limit Reviso?</strong></td>
+        <td>I loop di sync prodotti/clienti possono sforare.</td>
+        <td>Doc Reviso + test di carico leggero.</td></tr>
+    </tbody>
+  </table>
+  </div>
+  <p class="muted">Risorse: <a href="https://api-docs.reviso.com/#tl-dr">api-docs.reviso.com</a> ·
+  <a href="https://help.reviso.com/it/articles/61597-rest-api">help.reviso.com — REST API</a> ·
+  collection Postman in <code>risorsexCiC/</code>.</p>
+</section>
+
+<!-- ════ 9 · DECISIONI ════ -->
+<section id="decisioni">
+  <h2><span class="kick">09</span>Decisioni che servono da te</h2>
+  <p>Quattro scelte che sbloccano l'avanzamento e che non posso prendere io:</p>
+  <div class="grid2">
+    <div class="box action" style="margin:6px 0;"><div class="bt">◆ 1 · Quando inizia il pre-lavoro</div>
+      <p style="margin:0;">Le Fasi 0-5 vanno completate <strong>prima</strong> del 20/6. Quanti giorni-uomo
+      hai da qui ad allora? Definisce se il piano è comodo o teso.</p></div>
+    <div class="box action" style="margin:6px 0;"><div class="bt">◆ 2 · Pre-carico o creazione al volo dei clienti</div>
+      <p style="margin:0;">Pre-caricare tutti i clienti attivi in CiC (più pulito) o lasciarli creare al primo
+      ordine (più lento ma incrementale)? Consiglio: pre-carico + fallback al volo.</p></div>
+    <div class="box action" style="margin:6px 0;"><div class="bt">◆ 3 · Ambiente di test Reviso</div>
+      <p style="margin:0;">C'è un agreement di test disponibile? Senza, lo spike va fatto con cautela su
+      documenti-bozza cancellabili nella nuova azienda.</p></div>
+    <div class="box action" style="margin:6px 0;"><div class="bt">◆ 4 · Numerazione & layout fattura</div>
+      <p style="margin:0;">Confermare con il commercialista serie di numerazione e layout della nuova
+      azienda prima del primo documento emesso.</p></div>
+  </div>
+  <div class="box insight" style="margin-top:20px;">
+    <div class="bt">▲ In una frase</div>
+    <p style="margin:0;">Tecnicamente è fattibile e <strong>più pulito</strong> di FiC (totali sotto il tuo
+    controllo, auth più semplice). Il rischio vero non è il codice: è il <strong>doppio-azienda convivente</strong>
+    e la <strong>coerenza al centesimo</strong>. Li domini con un layer <code>BillingProvider</code>, un flag di
+    cutover reversibile, e uno spike che valida i totali su dati reali <em>prima</em> di costruire.</p>
+  </div>
+</section>
+
+<div class="footer">
+  POPS · Piano di migrazione Fatture in Cloud → Contabilità in Cloud (Reviso) · documento di lavoro generato
+  da analisi del codice (<code>src/functions/index.ts</code>) e della collection API Reviso.
+  Nessun codice di produzione è stato modificato.
+</div>
+
+</main>
+</div>
+
+<script>
+  // Scroll-spy per la TOC
+  const links = [...document.querySelectorAll('nav.toc a')];
+  const map = new Map(links.map(a => [a.getAttribute('href').slice(1), a]));
+  const obs = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        links.forEach(l => l.classList.remove('active'));
+        const a = map.get(e.target.id);
+        if (a) a.classList.add('active');
+      }
+    });
+  }, { rootMargin: '-15% 0px -75% 0px', threshold: 0 });
+  document.querySelectorAll('section[id]').forEach(s => obs.observe(s));
+</script>
+</body>
+</html>

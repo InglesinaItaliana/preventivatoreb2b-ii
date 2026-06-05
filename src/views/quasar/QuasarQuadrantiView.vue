@@ -51,8 +51,13 @@ const sectorTabs = [
 // Email dei membri del settore selezionato (null = tutti) — usato dai composable.
 const filterEmails = computed<Set<string> | null>(() => {
   if (!filterSector.value) return null
+  // Set dual-key (email + uid) per la dual-tolleranza migrazione assignees:
+  // i task possono avere assignees per email (legacy) o uid (nuovo). shownMembers
+  // filtra i membri per m.email (sempre presente), quindi resta corretto.
   return new Set(
-    members.value.filter(m => (m.category || 'amministrazione') === filterSector.value).map(m => m.email),
+    members.value
+      .filter(m => (m.category || 'amministrazione') === filterSector.value)
+      .flatMap(m => (m.uid ? [m.email, m.uid] : [m.email])),
   )
 })
 

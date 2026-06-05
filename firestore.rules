@@ -105,10 +105,11 @@ service cloud.firestore {
       match /tasks/{tid} {
         allow read: if request.auth != null;
         allow create: if isAdmin();
-        // Hardening (Az.11): admin o proprietario (assegnatario per EMAIL o creatore per UID).
+        // Hardening (Az.11): admin o proprietario. Dual-tolleranza migrazione
+        // assignees email→uid: assegnatario per EMAIL (legacy) o UID (nuovo), creatore per UID.
         allow update: if request.auth != null && (
           isAdmin()
-          || (resource.data.assignees is list && request.auth.token.email in resource.data.assignees)
+          || (resource.data.assignees is list && (request.auth.token.email in resource.data.assignees || request.auth.uid in resource.data.assignees))
           || resource.data.createdBy == request.auth.uid
         );
         allow delete: if isAdmin();
@@ -126,12 +127,12 @@ service cloud.firestore {
       allow read: if request.auth != null;
       allow create: if request.auth != null
                     && request.resource.data.createdBy == request.auth.uid;
-      // Hardening S1 (Az.11): non più "qualunque loggato". Admin o proprietario
-      // (assegnatario per EMAIL o creatore per UID). Il gating fine per-ruolo
-      // (es. LOGISTICA solo "eseguito") resta lato client.
+      // Hardening S1 (Az.11): non più "qualunque loggato". Admin o proprietario.
+      // Dual-tolleranza migrazione assignees email→uid: assegnatario per EMAIL
+      // (legacy) o UID (nuovo), creatore per UID. Gating fine per-ruolo resta lato client.
       allow update: if request.auth != null && (
         isAdmin()
-        || (resource.data.assignees is list && request.auth.token.email in resource.data.assignees)
+        || (resource.data.assignees is list && (request.auth.token.email in resource.data.assignees || request.auth.uid in resource.data.assignees))
         || resource.data.createdBy == request.auth.uid
       );
       allow delete: if isAdmin() || (resource.data.createdBy == request.auth.uid);
