@@ -5,7 +5,9 @@ import {
 } from 'firebase/firestore'
 import { db, auth } from '../../firebase'
 
-export type TaskType = 'task' | 'milestone' | 'deliverable'
+// 'appointment' = evento del calendario (EPHEMERIS): una task con orario preciso
+// (startAt/endAt) e durata. Escluso da Smistamento/Azioni (filtrano type==='task').
+export type TaskType = 'task' | 'milestone' | 'deliverable' | 'appointment'
 
 export interface Task {
   id: string
@@ -14,6 +16,9 @@ export interface Task {
   priority: 'alta' | 'media' | 'bassa'
   assignees: string[]
   dueDate: Date | null
+  /** Calendario (type==='appointment'): inizio/fine con orario. null per le altre. */
+  startAt: Date | null
+  endAt: Date | null
   projectId: string
   type: TaskType
   deliverableTaskIds: string[]
@@ -53,6 +58,8 @@ export function useAllTasks() {
         priority:           data.priority ?? 'media',
         assignees:          data.assignees ?? (data.assignee ? [data.assignee] : []),
         dueDate:            toDate(data.dueDate),
+        startAt:            toDate(data.startAt),
+        endAt:              toDate(data.endAt),
         // projectId dal PATH reale (parent del doc), non dal campo (che può mancare/essere errato):
         // projects/{pid}/tasks/{tid} -> pid ; tasks/{tid} (sciolto) -> ''
         projectId:          d.ref.parent.parent?.id ?? '',
