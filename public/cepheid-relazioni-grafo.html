@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CEPHEID — Grafo relazioni (dati reali)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..48,400,0..1,0" rel="stylesheet" />
+<style>
+  :root{
+    --quasar:#98C0D0; --quasar-on:#234C59;
+    --cepheid:#D4A020; --cepheid-on:#8b6a14;
+    --bg:#F3EEE6; --panel:#FFFCF7; --ink:#2a2722; --muted:#8a8175; --line:#d8cfc0;
+  }
+  *{box-sizing:border-box}
+  body{margin:0; font-family:'Outfit',system-ui,sans-serif; color:var(--ink);
+    background:radial-gradient(1200px 600px at 70% -10%, #fff8ec 0%, var(--bg) 60%);
+    min-height:100vh; padding:28px 24px 60px;}
+  h1{font-size:20px; font-weight:700; margin:0 0 2px}
+  .sub{color:var(--muted); font-size:13px; margin:0 0 16px}
+  .legend{display:flex; gap:18px; flex-wrap:wrap; margin:0 0 18px; font-size:12.5px}
+  .legend .l{display:inline-flex; align-items:center; gap:6px; color:var(--muted)}
+  .dot{width:12px;height:12px;border-radius:50%}
+  .ms{font-family:'Material Symbols Rounded'; font-size:18px; line-height:1; vertical-align:middle}
+
+  #status{padding:14px 16px; border-radius:12px; background:var(--panel); border:1px solid var(--line);
+    font-size:14px; max-width:560px}
+  #status.err{border-color:#d99; background:#fff3f3; color:#8a2a2a}
+  .spin{display:inline-block;width:14px;height:14px;border:2px solid #ccc;border-top-color:var(--cepheid);
+    border-radius:50%;animation:s .7s linear infinite;vertical-align:-2px;margin-right:8px}
+  @keyframes s{to{transform:rotate(360deg)}}
+
+  .stage{position:relative; overflow:auto; padding-bottom:10px}
+  svg.edges{position:absolute; top:0; left:0; pointer-events:none; z-index:0}
+  .flow{position:relative; z-index:1; display:flex; gap:70px; align-items:flex-start; min-width:max-content}
+  .col{display:flex; flex-direction:column; gap:14px; flex:0 0 200px}
+  .col-h{display:flex; align-items:center; gap:7px; font-size:11px; font-weight:700;
+    text-transform:uppercase; letter-spacing:.06em; color:var(--muted); padding:0 2px 2px}
+  .col-h .n{margin-left:auto; background:#0000000d; border-radius:999px; padding:0 7px; font-size:10.5px}
+
+  .node{position:relative; background:var(--panel); border:1px solid var(--line);
+    border-left:4px solid var(--accent); border-radius:12px; padding:9px 12px;
+    box-shadow:0 1px 2px rgba(0,0,0,.05);
+    transition:transform .12s ease, box-shadow .12s ease, opacity .12s ease, border-color .12s ease;}
+  .node:hover{transform:translateY(-1px); box-shadow:0 6px 16px rgba(0,0,0,.10)}
+  .node .t{display:flex; align-items:center; gap:8px}
+  .node .t .ms{color:var(--accent); flex:0 0 auto}
+  .node .ttl{font-size:13px; font-weight:600; line-height:1.25}
+  .node .meta{font-size:10.5px; color:var(--muted); margin-top:3px; padding-left:26px}
+  .node.done .ttl{text-decoration:line-through; opacity:.6}
+
+  .stage.has-hover .node{opacity:.28}
+  .stage.has-hover .node.hot{opacity:1; border-color:var(--accent)}
+  .edge{fill:none; stroke:var(--line); stroke-width:2; transition:opacity .12s ease}
+  .stage.has-hover .edge{opacity:.08}
+  .stage.has-hover .edge.hot{opacity:1; stroke:var(--cepheid)}
+
+  .footer{margin-top:22px; font-size:12px; color:var(--muted)}
+  code{background:#0001; padding:1px 5px; border-radius:5px; font-size:11.5px}
+</style>
+</head>
+<body>
+  <h1>CEPHEID · Grafo delle relazioni <span style="font-size:12px;font-weight:500;color:var(--muted)">· dati reali</span></h1>
+  <p class="sub">Obiettivo → Progetto → Milestone → Deliverable → Task. Passa il mouse su un nodo per evidenziare la sua catena (a monte e a valle).</p>
+
+  <div class="legend">
+    <span class="l"><span class="dot" style="background:#98C0D0"></span> Obiettivo <span style="color:#aaa">(QUASAR)</span></span>
+    <span class="l"><span class="dot" style="background:#D4A020"></span> Progetto / Milestone / Deliverable / Task <span style="color:#aaa">(CEPHEID)</span></span>
+  </div>
+
+  <div id="status"><span class="spin"></span> Connessione a Firestore…</div>
+
+  <div class="stage" id="stage" style="display:none">
+    <svg class="edges" id="edges"><g id="edges-g"></g></svg>
+    <div class="flow" id="flow"></div>
+  </div>
+
+  <p class="footer">Relazioni reali: <code>project.obiettivoId</code>, <code>task.type</code> (milestone/deliverable/task), <code>deliverable.milestoneId</code>, <code>deliverable.deliverableTaskIds</code>. Mostrati solo i progetti non archiviati.</p>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getFirestore, collection, collectionGroup, getDocs } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyA_OLy75pTT5XAzeyjh9e89ff1psPQAPFQ",
+  authDomain: "preventivatoreb2b-ii.firebaseapp.com",
+  projectId: "preventivatoreb2b-ii",
+  storageBucket: "preventivatoreb2b-ii.firebasestorage.app",
+  messagingSenderId: "574612046430",
+  appId: "1:574612046430:web:e9fc63b07f76c8a43aeacf",
+};
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+const statusEl = document.getElementById('status');
+const setStatus = (html, err=false) => { statusEl.innerHTML = html; statusEl.className = err ? 'err' : ''; statusEl.style.display='block'; };
+
+const QUASAR = { accent:'#98C0D0', on:'#234C59' };
+const CEPHEID = { accent:'#D4A020', on:'#8b6a14' };
+const COLUMNS = [
+  { key:'obiettivi',    label:'Obiettivi',   icon:'track_changes', theme:QUASAR },
+  { key:'projects',     label:'Progetti',    icon:'folder',        theme:CEPHEID },
+  { key:'milestones',   label:'Milestone',   icon:'flag',          theme:CEPHEID },
+  { key:'deliverables', label:'Deliverable', icon:'inventory_2',   theme:CEPHEID },
+  { key:'tasks',        label:'Task',        icon:'check_circle',  theme:CEPHEID },
+];
+
+onAuthStateChanged(auth, async (user) => {
+  if (!user) {
+    setStatus('Non risulti loggato in questo browser. Apri prima l\'app (<code>/cepheid</code> o <code>/</code>) e fai login, poi ricarica questa pagina.', true);
+    return;
+  }
+  try {
+    setStatus(`<span class="spin"></span> Carico i dati di CEPHEID come <b>${user.email||user.uid}</b>…`);
+    const [obSnap, prSnap, tkSnap] = await Promise.all([
+      getDocs(collection(db, 'obiettivi')),
+      getDocs(collection(db, 'projects')),
+      getDocs(collectionGroup(db, 'tasks')),
+    ]);
+
+    const obiettivi = obSnap.docs.map(d => ({ id:d.id, titolo:d.data().titolo || '(senza titolo)', stato:d.data().stato }));
+    const projects = prSnap.docs.map(d => ({ id:d.id, ...d.data() }))
+      .filter(p => p.archived !== true)
+      .map(p => ({ id:p.id, name:p.name||'(senza nome)', obiettivoId:p.obiettivoId||null }));
+    const projIds = new Set(projects.map(p => p.id));
+
+    const allTasks = tkSnap.docs.map(d => {
+      const pid = d.ref.parent.parent ? d.ref.parent.parent.id : null;
+      const x = d.data();
+      return { id:d.id, projectId:pid, type:x.type||'task', title:x.title||'(senza titolo)',
+               status:x.status, milestoneId:x.milestoneId||null,
+               deliverableTaskIds:Array.isArray(x.deliverableTaskIds)?x.deliverableTaskIds:[] };
+    }).filter(t => t.projectId && projIds.has(t.projectId));
+
+    const milestones   = allTasks.filter(t => t.type === 'milestone');
+    const deliverables = allTasks.filter(t => t.type === 'deliverable');
+    const tasks        = allTasks.filter(t => t.type === 'task');
+
+    if (!projects.length && !obiettivi.length) {
+      setStatus('Nessun progetto/obiettivo trovato (o permessi insufficienti).', true);
+      return;
+    }
+    render({ obiettivi, projects, milestones, deliverables, tasks });
+    statusEl.style.display = 'none';
+  } catch (e) {
+    console.error(e);
+    setStatus('Errore lettura Firestore: ' + (e?.message || e), true);
+  }
+});
+
+// ── Render ───────────────────────────────────────────────────────────────────
+const flow = document.getElementById('flow');
+const stage = document.getElementById('stage');
+const svg = document.getElementById('edges');
+const g = document.getElementById('edges-g');
+
+function render(D) {
+  stage.style.display = 'block';
+  flow.innerHTML = '';
+  const titleOf = (key, item) => key === 'obiettivi' ? item.titolo : (item.title || item.name);
+
+  for (const col of COLUMNS) {
+    const items = D[col.key];
+    const colEl = document.createElement('div');
+    colEl.className = 'col';
+    colEl.innerHTML = `<div class="col-h" style="color:${col.theme.on}">
+      <span class="ms" style="font-size:15px">${col.icon}</span>${col.label}<span class="n">${items.length}</span></div>`;
+    for (const item of items) {
+      const n = document.createElement('div');
+      const isDone = (col.key==='tasks'||col.key==='deliverables'||col.key==='milestones') && item.status === 'done';
+      n.className = 'node' + (isDone ? ' done' : '');
+      n.id = 'node-' + item.id;
+      n.style.setProperty('--accent', col.theme.accent);
+      n.style.setProperty('--accent-on', col.theme.on);
+      let meta = '';
+      if (col.key === 'deliverables' && item.deliverableTaskIds.length) meta = `<div class="meta">${item.deliverableTaskIds.length} task</div>`;
+      if (col.key === 'projects' && item.obiettivoId) meta = `<div class="meta">↗ obiettivo</div>`;
+      n.innerHTML = `<div class="t"><span class="ms">${isDone?'check_circle':col.icon}</span><span class="ttl">${esc(titleOf(col.key,item))}</span></div>${meta}`;
+      colEl.appendChild(n);
+    }
+    if (!items.length) colEl.innerHTML += `<div class="node" style="--accent:#ccc;color:#aaa;border-left-color:#ddd">— nessuno —</div>`;
+    flow.appendChild(colEl);
+  }
+
+  // Archi diretti
+  const obIds = new Set(D.obiettivi.map(o=>o.id));
+  const msIds = new Set(D.milestones.map(m=>m.id));
+  const referencedTaskIds = new Set();
+  D.deliverables.forEach(d => d.deliverableTaskIds.forEach(t => referencedTaskIds.add(t)));
+
+  EDGES.length = 0;
+  D.projects.forEach(p => { if (p.obiettivoId && obIds.has(p.obiettivoId)) EDGES.push([p.obiettivoId, p.id]); });
+  D.milestones.forEach(m => EDGES.push([m.projectId, m.id]));
+  D.deliverables.forEach(d => {
+    if (d.milestoneId && msIds.has(d.milestoneId)) EDGES.push([d.milestoneId, d.id]);
+    else EDGES.push([d.projectId, d.id]); // deliverable senza milestone → dal progetto
+    d.deliverableTaskIds.forEach(t => EDGES.push([d.id, t]));
+  });
+  // task liberi (non in alcun deliverable) → collegati direttamente al progetto
+  D.tasks.forEach(t => { if (!referencedTaskIds.has(t.id)) EDGES.push([t.projectId, t.id]); });
+
+  buildAdjacency();
+  bindHover();
+  requestAnimationFrame(draw);
+  // Le icone Material Symbols cambiano l'altezza dei nodi al load del font →
+  // ridisegna quando i font sono pronti e poco dopo, così le linee restano allineate.
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => requestAnimationFrame(draw));
+  setTimeout(() => requestAnimationFrame(draw), 350);
+}
+
+function esc(s){ return String(s).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])); }
+
+// ── Archi SVG ────────────────────────────────────────────────────────────────
+const EDGES = [];
+function draw() {
+  const base = stage.getBoundingClientRect();
+  // CSS size DEVE combaciare con lo spazio coordinate, altrimenti l'SVG scala e
+  // le linee si disallineano dai nodi.
+  const W = stage.scrollWidth, H = stage.scrollHeight;
+  svg.setAttribute('width', W);  svg.setAttribute('height', H);
+  svg.style.width = W + 'px';    svg.style.height = H + 'px';
+  g.innerHTML = '';
+  for (const [from, to] of EDGES) {
+    const a = document.getElementById('node-'+from), b = document.getElementById('node-'+to);
+    if (!a || !b) continue;
+    const ra = a.getBoundingClientRect(), rb = b.getBoundingClientRect();
+    const x1 = ra.right - base.left + stage.scrollLeft, y1 = ra.top - base.top + ra.height/2 + stage.scrollTop;
+    const x2 = rb.left  - base.left + stage.scrollLeft, y2 = rb.top - base.top + rb.height/2 + stage.scrollTop;
+    const dx = Math.max(36, (x2 - x1) * 0.5);
+    const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path.setAttribute('d', `M ${x1} ${y1} C ${x1+dx} ${y1}, ${x2-dx} ${y2}, ${x2} ${y2}`);
+    path.setAttribute('class', 'edge');
+    path.dataset.from = from; path.dataset.to = to;
+    g.appendChild(path);
+  }
+}
+
+// ── Hover: catena DIRETTA (antenati a monte + discendenti a valle) ────────────
+let parents = {}, children = {};
+function buildAdjacency(){
+  parents = {}; children = {};
+  for (const [f,t] of EDGES){ (children[f] ||= []).push(t); (parents[t] ||= []).push(f); }
+}
+function chainOf(id){
+  const set = new Set([id]);
+  let st=[id]; while(st.length){ const c=st.pop(); for(const p of (parents[c]||[])) if(!set.has(p)){set.add(p);st.push(p);} }   // a monte
+  st=[id];     while(st.length){ const c=st.pop(); for(const ch of (children[c]||[])) if(!set.has(ch)){set.add(ch);st.push(ch);} } // a valle
+  return set;
+}
+function bindHover(){
+  document.querySelectorAll('.node[id]').forEach(node => {
+    node.addEventListener('mouseenter', () => {
+      const id = node.id.replace('node-','');
+      const set = chainOf(id);
+      stage.classList.add('has-hover');
+      document.querySelectorAll('.node[id]').forEach(n => n.classList.toggle('hot', set.has(n.id.replace('node-',''))));
+      g.querySelectorAll('.edge').forEach(e => e.classList.toggle('hot', set.has(e.dataset.from) && set.has(e.dataset.to)));
+    });
+    node.addEventListener('mouseleave', () => {
+      stage.classList.remove('has-hover');
+      document.querySelectorAll('.node.hot').forEach(n => n.classList.remove('hot'));
+      g.querySelectorAll('.edge.hot').forEach(e => e.classList.remove('hot'));
+    });
+  });
+}
+window.addEventListener('resize', () => requestAnimationFrame(draw));
+</script>
+</body>
+</html>
