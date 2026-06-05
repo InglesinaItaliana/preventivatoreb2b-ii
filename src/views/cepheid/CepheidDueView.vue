@@ -6,7 +6,7 @@ import { useAllTasks, createStandaloneTask } from '../../composables/sidera/useA
 import CepheidActionCard from '../../components/cepheid/CepheidActionCard.vue'
 import { useProjects } from '../../composables/sidera/useProjects'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
-import { useTeamMembers, displayName, starAvatarProps } from '../../composables/sidera/useTeamMembers'
+import { useTeamMembers, displayName, starAvatarProps, toUids } from '../../composables/sidera/useTeamMembers'
 import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
 
 const scrollEl = ref<HTMLElement | null>(null)
@@ -125,7 +125,7 @@ async function submitTask() {
       projectId: taskForm.value.projectId || null,
       priority:  taskForm.value.priority,
       dueDate,
-      assignees: taskForm.value.assignees,
+      assignees: toUids(taskForm.value.assignees, members.value),
     })
     showTaskModal.value = false
   } catch (e) {

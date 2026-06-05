@@ -9,7 +9,7 @@
 import { ref, watch } from 'vue'
 import MIcon from '../shared/MIcon.vue'
 import StarAvatar from '../shared/StarAvatar.vue'
-import { displayName, starAvatarProps, type TeamMember } from '../../composables/sidera/useTeamMembers'
+import { displayName, starAvatarProps, toUids, type TeamMember } from '../../composables/sidera/useTeamMembers'
 import { createStandaloneTask } from '../../composables/sidera/useAllTasks'
 import type { Project } from '../../composables/sidera/useProjects'
 
@@ -80,7 +80,7 @@ async function submit() {
       projectId: form.value.projectId || null,
       priority:  form.value.priority,
       dueDate,
-      assignees: form.value.assignees,
+      assignees: toUids(form.value.assignees, props.members),
       source:    { chatId: props.message.chatId, messageId: props.message.id },
     })
     emit('created', taskId)

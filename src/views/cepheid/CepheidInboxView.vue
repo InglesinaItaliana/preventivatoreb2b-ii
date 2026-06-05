@@ -5,7 +5,7 @@ import MdPageHeader from '../../components/shared/MdPageHeader.vue'
 import CepheidInboxCard from '../../components/cepheid/CepheidInboxCard.vue'
 import { useAllTasks, type Task } from '../../composables/sidera/useAllTasks'
 import { useProjects } from '../../composables/sidera/useProjects'
-import { useTeamMembers } from '../../composables/sidera/useTeamMembers'
+import { useTeamMembers, toUids } from '../../composables/sidera/useTeamMembers'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
 import { useCan } from '../../composables/sidera/useCan'
 import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
@@ -40,12 +40,13 @@ const peek = computed(() => inbox.value[1] ?? null)
 
 async function onSmista(task: Task, d: { assignees: string[]; priority: 'alta' | 'media' | 'bassa'; projectId: string; milestoneId: string; deliverableId: string }) {
   try {
+    const assignees = toUids(d.assignees, members.value)   // scrivi uid (A2)
     if (!task.projectId && d.projectId) {
-      await fileStandaloneTask(task, d.projectId, d.deliverableId || null, d.milestoneId || null, { assignees: d.assignees, priority: d.priority })
+      await fileStandaloneTask(task, d.projectId, d.deliverableId || null, d.milestoneId || null, { assignees, priority: d.priority })
     } else if (!task.projectId) {
-      await updateTask(null, task.id, { assignees: d.assignees, priority: d.priority, triaged: true })
+      await updateTask(null, task.id, { assignees, priority: d.priority, triaged: true })
     } else {
-      await updateTask(task.projectId, task.id, { assignees: d.assignees, priority: d.priority, triaged: true, milestoneId: d.deliverableId ? null : (d.milestoneId || null) })
+      await updateTask(task.projectId, task.id, { assignees, priority: d.priority, triaged: true, milestoneId: d.deliverableId ? null : (d.milestoneId || null) })
       if (d.deliverableId) await attachToDeliverable(task.projectId, d.deliverableId, task.id)
     }
   } catch (e) { console.error('[SMISTAMENTO] errore smista', e) }

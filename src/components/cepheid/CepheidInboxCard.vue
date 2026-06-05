@@ -2,7 +2,7 @@
 import { reactive, ref, computed } from 'vue'
 import MIcon from '../shared/MIcon.vue'
 import StarAvatar from '../shared/StarAvatar.vue'
-import { starAvatarProps, displayName, type TeamMember } from '../../composables/sidera/useTeamMembers'
+import { starAvatarProps, displayName, toEmails, type TeamMember } from '../../composables/sidera/useTeamMembers'
 import type { Task } from '../../composables/sidera/useAllTasks'
 
 const props = defineProps<{
@@ -28,7 +28,7 @@ const preDeliverableId = props.deliverables.find(
 const preMilestoneId = preDeliverableId ? '' : (props.task.milestoneId ?? '')
 
 const draft = reactive({
-  assignees: [...props.task.assignees],
+  assignees: toEmails(props.task.assignees, props.members),   // uid→email per le chip (post-backfill)
   priority: props.task.priority,
   projectId: props.task.projectId || '',
   milestoneId: preMilestoneId,
