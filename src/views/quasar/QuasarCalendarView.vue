@@ -66,6 +66,10 @@ function timeOf(d: Date): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 function openItem(it: CalendarItem) { router.push(it.link) }
+function iconOf(kind: CalendarItem['kind']): string {
+  // CEPHEID distinto per icona: check = azioni/task, scatola = deliverable.
+  return kind === 'deliverable' ? 'inventory_2' : kind === 'appointment' ? 'event' : 'check_circle'
+}
 
 const totalThisMonth = computed(() =>
   gridDays.value.filter(g => g.inMonth).reduce((n, g) => n + itemsOf(g.key).length, 0))
@@ -107,22 +111,23 @@ const totalThisMonth = computed(() =>
               class="cal-chip"
               :class="{ 'is-done': it.done }"
               :style="{ '--c': it.color }"
-              :title="it.title"
+              :title="it.projectName ? it.title + ' · ' + it.projectName : it.title"
               @click="openItem(it)"
             >
+              <MIcon :name="iconOf(it.kind)" :size="12" class="cal-chip-ic" />
               <span v-if="!it.allDay" class="cal-chip-time">{{ timeOf(it.start) }}</span>
-              <span class="cal-chip-title">{{ it.title }}</span>
+              <span class="cal-chip-text"><span class="cal-chip-title">{{ it.title }}</span><span v-if="it.projectName" class="cal-chip-proj"> · {{ it.projectName }}</span></span>
             </button>
             <span v-if="itemsOf(g.key).length > 3" class="cal-more">+{{ itemsOf(g.key).length - 3 }}</span>
           </div>
         </div>
       </div>
 
-      <!-- Legenda sorgenti -->
+      <!-- Legenda sorgenti (CEPHEID = oro, distinto per icona) -->
       <div class="cal-legend">
-        <span class="cal-leg"><i style="background: var(--md-sys-color-primary)" />Appuntamenti</span>
-        <span class="cal-leg"><i style="background: #C46030" />Azioni</span>
-        <span class="cal-leg"><i style="background: #D4A020" />Deliverable</span>
+        <span class="cal-leg"><MIcon name="event" :size="15" style="color: var(--md-sys-color-primary)" />Appuntamenti</span>
+        <span class="cal-leg"><MIcon name="check_circle" :size="15" style="color: #D4A020" />Azioni</span>
+        <span class="cal-leg"><MIcon name="inventory_2" :size="15" style="color: #D4A020" />Deliverable</span>
       </div>
     </div>
   </div>
@@ -180,8 +185,10 @@ const totalThisMonth = computed(() =>
 }
 .cal-chip:hover { background: color-mix(in srgb, var(--c) 28%, transparent); }
 .cal-chip.is-done { opacity: 0.5; text-decoration: line-through; }
+.cal-chip-ic { flex: 0 0 auto; color: var(--c); }
 .cal-chip-time { font-weight: 700; flex: 0 0 auto; }
-.cal-chip-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-chip-text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-chip-proj { color: var(--md-sys-color-on-surface-variant); opacity: 0.75; }
 .cal-more { font-size: 10px; font-weight: 600; color: var(--md-sys-color-on-surface-variant); padding-left: 4px; }
 
 .cal-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 16px; padding: 0 4px; }

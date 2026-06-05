@@ -12,6 +12,7 @@
  */
 import { computed } from 'vue'
 import { useAllTasks } from '../sidera/useAllTasks'
+import { useProjects } from '../sidera/useProjects'
 
 export type CalendarKind = 'task' | 'deliverable' | 'appointment'
 
@@ -25,16 +26,16 @@ export interface CalendarItem {
   done: boolean
   color: string
   projectId: string
+  projectName: string    // nome progetto (per dare contesto ai task); '' se nessuno
   assignees: string[]    // uid (migrazione assignees→uid completata)
   link: string           // deep-link al modulo d'origine
 }
 
-// Colori per sorgente: appuntamento = accent QUASAR (scope-aware), task/deliverable
-// = palette CEPHEID (ruggine/oro), così la provenienza è leggibile a colpo d'occhio.
+// Colori per sorgente: appuntamento = accent QUASAR (scope-aware); tutto ciò che è
+// CEPHEID (task E deliverable) = ORO CEPHEID — si distinguono per ICONA, non colore.
 const COLOR = {
   appointment: 'var(--md-sys-color-primary)',
-  task:        '#C46030',
-  deliverable: '#D4A020',
+  cepheid:     '#D4A020',
 } as const
 
 function dayKey(d: Date): string {
@@ -43,16 +44,25 @@ function dayKey(d: Date): string {
 
 export function useCalendarItems() {
   const { tasks, loading } = useAllTasks()
+  const { projects } = useProjects()
+
+  const projName = computed(() => {
+    const m = new Map<string, string>()
+    for (const p of projects.value) m.set(p.id, p.name)
+    return m
+  })
 
   const items = computed<CalendarItem[]>(() => {
     const out: CalendarItem[] = []
+    const names = projName.value
     for (const t of tasks.value) {
+      const pn = t.projectId ? (names.get(t.projectId) ?? '') : ''
       if (t.type === 'appointment') {
         if (!t.startAt) continue
         out.push({
           id: t.id, kind: 'appointment', title: t.title,
           start: t.startAt, end: t.endAt, allDay: false, done: !!t.completedAt,
-          color: COLOR.appointment, projectId: t.projectId, assignees: t.assignees,
+          color: COLOR.appointment, projectId: t.projectId, projectName: pn, assignees: t.assignees,
           link: `/quasar/calendario`,   // dettaglio appuntamento in-app (B3)
         })
       } else if (t.type === 'deliverable') {
@@ -60,7 +70,7 @@ export function useCalendarItems() {
         out.push({
           id: t.id, kind: 'deliverable', title: t.title,
           start: t.dueDate, end: null, allDay: true, done: !!t.completedAt,
-          color: COLOR.deliverable, projectId: t.projectId, assignees: t.assignees,
+          color: COLOR.cepheid, projectId: t.projectId, projectName: pn, assignees: t.assignees,
           link: t.projectId ? `/cepheid/project/${t.projectId}` : '/cepheid',
         })
       } else if (!t.type || t.type === 'task') {
@@ -68,7 +78,7 @@ export function useCalendarItems() {
         out.push({
           id: t.id, kind: 'task', title: t.title,
           start: t.dueDate, end: null, allDay: true, done: !!t.completedAt,
-          color: COLOR.task, projectId: t.projectId, assignees: t.assignees,
+          color: COLOR.cepheid, projectId: t.projectId, projectName: pn, assignees: t.assignees,
           link: t.projectId ? `/cepheid/project/${t.projectId}` : '/cepheid/azioni',
         })
       }
