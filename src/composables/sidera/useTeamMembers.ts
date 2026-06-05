@@ -87,12 +87,23 @@ export function isHiddenTeamEmail(email: string): boolean {
   return HIDDEN_TEAM_EMAILS.has((email ?? '').toLowerCase().trim())
 }
 
-/** Mappa un'email -> props per <StarAvatar>. Fallback per email esterne/sconosciute. */
+/**
+ * Risolve un membro per UID (preferito) o email. Dual-tolleranza della migrazione
+ * `assignees` email→uid (STELLA-GRAFO): durante la coesistenza una voce può essere
+ * un uid (nuovo) o un'email (legacy). Da semplificare ad A5 (solo uid).
+ */
+export function resolveMember(members: TeamMember[] | undefined, idOrEmail: string): TeamMember | undefined {
+  if (!members || !idOrEmail) return undefined
+  return members.find(x => x.uid === idOrEmail)
+    ?? members.find(x => x.email === idOrEmail)
+}
+
+/** Mappa un uid/email -> props per <StarAvatar>. Fallback per voci esterne/sconosciute. */
 export function starAvatarProps(
-  email: string,
+  idOrEmail: string,
   members?: TeamMember[],
 ): { seed: string; category: string; hueIndex: number | undefined } {
-  const m = members?.find(x => x.email === email)
+  const m = resolveMember(members, idOrEmail)
   if (m) {
     return {
       seed: m.uid || m.email,                 // uid preferito; email come fallback stabile
@@ -100,7 +111,7 @@ export function starAvatarProps(
       hueIndex: m.hueIndex,                    // undefined -> il motore deriva l'hue dal seed
     }
   }
-  return { seed: email, category: DEFAULT_CATEGORY, hueIndex: undefined }
+  return { seed: idOrEmail, category: DEFAULT_CATEGORY, hueIndex: undefined }
 }
 
 const AVATAR_COLORS = ['#2F6B4A', '#4A6B8A', '#C8821A', '#8A4A6B', '#6B4A8A', '#4A7A6B']
@@ -110,9 +121,9 @@ export function avatarColor(email: string): string {
   return AVATAR_COLORS[hash % AVATAR_COLORS.length] ?? AVATAR_COLORS[0]!
 }
 
-export function avatarInitial(email: string, members?: TeamMember[]): string {
+export function avatarInitial(idOrEmail: string, members?: TeamMember[]): string {
   if (members) {
-    const m = members.find(x => x.email === email)
+    const m = resolveMember(members, idOrEmail)
     if (m?.firstName && m?.lastName) {
       return (m.firstName.charAt(0) + m.lastName.charAt(0)).toUpperCase()
     }
@@ -125,17 +136,20 @@ export function avatarInitial(email: string, members?: TeamMember[]): string {
     }
     if (m?.firstName) return m.firstName.charAt(0).toUpperCase()
   }
-  return (email.charAt(0) || '?').toUpperCase()
+  return (idOrEmail.charAt(0) || '?').toUpperCase()
 }
 
-export function displayName(email: string, members: TeamMember[]): string {
-  const m = members.find(m => m.email === email)
+export function displayName(idOrEmail: string, members: TeamMember[]): string {
+  const m = resolveMember(members, idOrEmail)
   if (m) {
     const full = `${m.firstName ?? ''} ${m.lastName ?? ''}`.trim()
     if (full) return full
     if (m.name) return m.name
   }
-  const local = email.split('@')[0] ?? email
+  // Fallback: se è un'email mostra il local-part "umanizzato"; se è un uid ignoto
+  // (caso che non dovrebbe capitare per i membri noti) lo restituisce com'è.
+  if (!idOrEmail.includes('@')) return idOrEmail
+  const local = idOrEmail.split('@')[0] ?? idOrEmail
   return local.split(/[._-]/).map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' ')
 }
 

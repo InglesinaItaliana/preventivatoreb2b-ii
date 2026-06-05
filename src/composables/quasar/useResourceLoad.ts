@@ -46,7 +46,7 @@ export function useResourceLoad(
   const quadrants = computed<Record<QuadId, ResourceLoad[]>>(() => {
     const out: Record<QuadId, ResourceLoad[]> = { q1: [], q2: [], q3: [], q4: [] }
     for (const m of shownMembers.value) {
-      const ts = active.value.filter(t => t.assignees.includes(m.email))
+      const ts = active.value.filter(t => t.assignees.includes(m.email) || (m.uid != null && t.assignees.includes(m.uid)))
       const total = ts.length
       const urg = ts.filter(t => {
         const e = effDays(t, cursor.value)

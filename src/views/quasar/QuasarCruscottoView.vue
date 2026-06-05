@@ -85,7 +85,7 @@ const azioniOggi = computed(() => {
     !t.completedAt &&
     !pendingDone.value.has(t.id) &&
     t.dueDate && t.dueDate >= start && t.dueDate <= end &&
-    (t.assignees.includes(currentUser.value?.email ?? '') || t.createdBy === currentUser.value?.uid)
+    (t.assignees.includes(currentUser.value?.email ?? '') || t.assignees.includes(currentUser.value?.uid ?? '') || t.createdBy === currentUser.value?.uid)
   )
 })
 

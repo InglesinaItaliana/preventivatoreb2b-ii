@@ -111,10 +111,14 @@ export function roleForCategory(category?: string | null): Role {
 // --- Predicati task-level (puri) per il gating CEPHEID ---
 interface TaskLike { assignees?: string[]; createdBy?: string }
 
-/** True se la task è "propria": assegnata a me (email) o creata da me (uid). */
+/** True se la task è "propria": assegnata a me (email O uid) o creata da me (uid).
+ *  Dual-tolleranza migrazione assignees email→uid: il match assignee accetta
+ *  entrambe le forme finché il backfill non ha convertito tutto (poi solo uid). */
 export function isOwnTask(task: TaskLike, myEmail?: string | null, myUid?: string | null): boolean {
   const email = (myEmail ?? '').toLowerCase().trim()
-  if (email && (task.assignees ?? []).some(a => (a ?? '').toLowerCase().trim() === email)) return true
+  const assignees = task.assignees ?? []
+  if (email && assignees.some(a => (a ?? '').toLowerCase().trim() === email)) return true
+  if (myUid && assignees.includes(myUid)) return true
   if (myUid && task.createdBy === myUid) return true
   return false
 }
