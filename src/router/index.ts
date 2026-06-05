@@ -221,6 +221,7 @@ const router = createRouter({
         { path: 'cruscotto', name: 'quasar-cruscotto', component: () => import('../views/quasar/QuasarCruscottoView.vue') },
         { path: 'quadranti', name: 'quasar-quadranti', component: () => import('../views/quasar/QuasarQuadrantiView.vue') },
         { path: 'attivita',  name: 'quasar-attivita',  component: () => import('../views/quasar/QuasarAttivitaView.vue') },
+        { path: 'calendario', name: 'quasar-calendario', component: () => import('../views/quasar/QuasarCalendarView.vue') },
       ]
     }
   ]
