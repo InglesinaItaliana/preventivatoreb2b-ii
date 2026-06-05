@@ -38,6 +38,41 @@ const backfillRunning = ref(false)
 const backfillResult = ref<BackfillResult | null>(null)
 const backfillError = ref<string>('')
 
+// A0 — Audit assignees email→UID (read-only)
+interface AssigneeAuditResult {
+  teamMembers: number
+  taskCount: number
+  tasksWithAssignees: number
+  assigneeRefs: number
+  emailMappable: number
+  emailOrphan: number
+  alreadyUid: number
+  unknownNonEmail: number
+  orphanEmails: string[]
+  unknownRefs: string[]
+  readyForBackfill: boolean
+}
+const auditRunning = ref(false)
+const auditResult = ref<AssigneeAuditResult | null>(null)
+const auditError = ref<string>('')
+
+async function runAssigneeAudit() {
+  if (auditRunning.value) return
+  auditRunning.value = true
+  auditResult.value = null
+  auditError.value = ''
+  try {
+    const fn = httpsCallable<Record<string, never>, AssigneeAuditResult>(functions, 'auditAssigneeUids')
+    const res = await fn({})
+    auditResult.value = res.data
+  } catch (e: any) {
+    console.error('[auditAssigneeUids]', e)
+    auditError.value = e?.message || 'Errore sconosciuto. Vedi console.'
+  } finally {
+    auditRunning.value = false
+  }
+}
+
 async function runCleanup() {
   if (running.value) return
   if (!confirm('Eseguire cleanup delle pendenze orfane? L\'operazione può richiedere fino a 9 minuti su workspace grandi.')) return
@@ -140,6 +175,36 @@ async function runAvatarBackfill() {
 
       <div v-if="backfillError" class="m-error">
         <strong>Errore:</strong> {{ backfillError }}
+      </div>
+    </div>
+
+    <div v-if="isAdmin" class="m-task">
+      <h3 class="m-task-title">Audit assignees → UID (A0)</h3>
+      <p class="m-task-desc">
+        <strong>Sola lettura.</strong> Scansiona tutte le task e classifica ogni
+        <code>assignee</code>: email migrabile (uid noto), email orfana (esterni/ex-staff),
+        già uid, o anomalia. Serve a vedere il quadro <em>prima</em> della migrazione
+        Strada B (STELLA-GRAFO). Nessuna scrittura.
+      </p>
+
+      <button class="m-btn" :disabled="auditRunning" @click="runAssigneeAudit">
+        {{ auditRunning ? 'In esecuzione…' : 'Esegui audit' }}
+      </button>
+
+      <div v-if="auditResult" class="m-result">
+        <h4>Risultato</h4>
+        <ul>
+          <li><strong>{{ auditResult.assigneeRefs }}</strong> riferimenti assignee in {{ auditResult.tasksWithAssignees }} task (su {{ auditResult.taskCount }} totali · {{ auditResult.teamMembers }} membri)</li>
+          <li><strong>{{ auditResult.emailMappable }}</strong> email migrabili (uid noto)</li>
+          <li><strong>{{ auditResult.emailOrphan }}</strong> email orfane (resteranno email) <template v-if="auditResult.orphanEmails.length">→ <code>{{ auditResult.orphanEmails.join(', ') }}</code></template></li>
+          <li><strong>{{ auditResult.alreadyUid }}</strong> già uid</li>
+          <li><strong>{{ auditResult.unknownNonEmail }}</strong> anomalie (né email né uid noto)<template v-if="auditResult.unknownRefs.length">: <code>{{ auditResult.unknownRefs.join(', ') }}</code></template></li>
+          <li>Pronto per il backfill: <strong>{{ auditResult.readyForBackfill ? 'SÌ' : 'NO (risolvi le anomalie)' }}</strong></li>
+        </ul>
+      </div>
+
+      <div v-if="auditError" class="m-error">
+        <strong>Errore:</strong> {{ auditError }}
       </div>
     </div>
   </div>
