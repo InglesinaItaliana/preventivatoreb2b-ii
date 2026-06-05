@@ -19,6 +19,9 @@ export interface Task {
   /** Calendario (type==='appointment'): inizio/fine con orario. null per le altre. */
   startAt: Date | null
   endAt: Date | null
+  /** Solo appuntamenti: luogo + note libere. '' per le altre task. */
+  location: string
+  notes: string
   projectId: string
   type: TaskType
   deliverableTaskIds: string[]
@@ -60,6 +63,8 @@ export function useAllTasks() {
         dueDate:            toDate(data.dueDate),
         startAt:            toDate(data.startAt),
         endAt:              toDate(data.endAt),
+        location:           data.location ?? '',
+        notes:              data.notes ?? '',
         // projectId dal PATH reale (parent del doc), non dal campo (che può mancare/essere errato):
         // projects/{pid}/tasks/{tid} -> pid ; tasks/{tid} (sciolto) -> ''
         projectId:          d.ref.parent.parent?.id ?? '',

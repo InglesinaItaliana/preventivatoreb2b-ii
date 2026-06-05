@@ -11,12 +11,22 @@ import MIcon from '../../components/shared/MIcon.vue'
 import MdPageHeader from '../../components/shared/MdPageHeader.vue'
 import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
 import { useCalendarItems, type CalendarItem } from '../../composables/quasar/useCalendarItems'
+import { useTeamMembers } from '../../composables/sidera/useTeamMembers'
+import QuasarAppointmentModal from '../../components/quasar/QuasarAppointmentModal.vue'
 
 const router = useRouter()
 const scrollEl = ref<HTMLElement | null>(null)
 const { hidden: headerHidden } = useAutoHideHeader(scrollEl)
 
 const { items, loading } = useCalendarItems()
+const { members } = useTeamMembers()
+
+// ── CRUD appuntamenti (B3) ───────────────────────────────────────────────────
+const apptOpen = ref(false)
+const apptEdit = ref<CalendarItem | null>(null)
+const apptDate = ref<Date | null>(null)
+function newAppointment(date?: Date) { apptEdit.value = null; apptDate.value = date ?? null; apptOpen.value = true }
+function editAppointment(it: CalendarItem) { apptEdit.value = it; apptDate.value = null; apptOpen.value = true }
 
 // cursore = giorno qualsiasi nel mese mostrato
 const cursor = ref(new Date())
@@ -65,7 +75,10 @@ function itemsOf(key: string): CalendarItem[] { return byDay.value.get(key) ?? [
 function timeOf(d: Date): string {
   return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
-function openItem(it: CalendarItem) { router.push(it.link) }
+function openItem(it: CalendarItem) {
+  if (it.kind === 'appointment') editAppointment(it)   // appuntamento → modale edit
+  else router.push(it.link)                            // task/deliverable → CEPHEID
+}
 function iconOf(kind: CalendarItem['kind']): string {
   // CEPHEID distinto per icona: check = azioni/task, scatola = deliverable.
   return kind === 'deliverable' ? 'inventory_2' : kind === 'appointment' ? 'event' : 'check_circle'
@@ -88,6 +101,7 @@ const totalThisMonth = computed(() =>
           <span class="cal-month">{{ monthLabel }}</span>
           <button class="cal-navbtn" aria-label="Mese successivo" @click="nextMonth"><MIcon name="chevron_right" :size="20" /></button>
           <button class="cal-today" @click="goToday">Oggi</button>
+          <button class="cal-new" @click="newAppointment()"><MIcon name="add" :size="16" /> Appuntamento</button>
         </div>
       </template>
     </MdPageHeader>
@@ -102,6 +116,7 @@ const totalThisMonth = computed(() =>
           :key="g.key"
           class="cal-cell"
           :class="{ 'is-out': !g.inMonth, 'is-today': g.today }"
+          @click="newAppointment(g.date)"
         >
           <span class="cal-daynum">{{ g.date.getDate() }}</span>
           <div class="cal-items">
@@ -112,13 +127,13 @@ const totalThisMonth = computed(() =>
               :class="{ 'is-done': it.done }"
               :style="{ '--c': it.color }"
               :title="it.projectName ? it.title + ' · ' + it.projectName : it.title"
-              @click="openItem(it)"
+              @click.stop="openItem(it)"
             >
               <MIcon :name="iconOf(it.kind)" :size="12" class="cal-chip-ic" />
               <span v-if="!it.allDay" class="cal-chip-time">{{ timeOf(it.start) }}</span>
               <span class="cal-chip-text"><span class="cal-chip-title">{{ it.title }}</span><span v-if="it.projectName" class="cal-chip-proj"> · {{ it.projectName }}</span></span>
             </button>
-            <span v-if="itemsOf(g.key).length > 3" class="cal-more">+{{ itemsOf(g.key).length - 3 }}</span>
+            <span v-if="itemsOf(g.key).length > 3" class="cal-more" @click.stop>+{{ itemsOf(g.key).length - 3 }}</span>
           </div>
         </div>
       </div>
@@ -130,6 +145,13 @@ const totalThisMonth = computed(() =>
         <span class="cal-leg"><MIcon name="inventory_2" :size="15" style="color: #D4A020" />Deliverable</span>
       </div>
     </div>
+
+    <QuasarAppointmentModal
+      v-model:open="apptOpen"
+      :members="members"
+      :edit-item="apptEdit"
+      :default-date="apptDate"
+    />
   </div>
 </template>
 
@@ -158,6 +180,13 @@ const totalThisMonth = computed(() =>
 .cal-navbtn { width: 32px; height: 32px; }
 .cal-today { height: 32px; padding: 0 12px; font-size: 13px; font-weight: 600; }
 .cal-navbtn:hover, .cal-today:hover { background: color-mix(in srgb, var(--md-sys-color-primary) 8%, transparent); }
+.cal-new {
+  display: inline-flex; align-items: center; gap: 4px; height: 32px; padding: 0 12px;
+  border: none; border-radius: var(--md-sys-shape-corner-full); cursor: pointer;
+  background: var(--md-sys-color-primary); color: var(--md-sys-color-on-primary);
+  font-family: inherit; font-size: 13px; font-weight: 600;
+}
+.cal-new:hover { background: var(--md-sys-color-primary-hover, var(--md-sys-color-primary)); }
 .cal-month { min-width: 130px; text-align: center; font-weight: 600; font-size: 14px; text-transform: capitalize; }
 
 .cal-content { max-width: 1100px; margin: 0 auto; padding: 12px 16px 28px; }
@@ -168,7 +197,9 @@ const totalThisMonth = computed(() =>
 .cal-cell {
   min-height: 96px; background: var(--md-sys-color-surface);
   border-radius: 12px; padding: 6px; display: flex; flex-direction: column; gap: 4px; overflow: hidden;
+  cursor: pointer;   /* click su area vuota → nuovo appuntamento in quel giorno */
 }
+.cal-cell:hover { background: color-mix(in srgb, var(--md-sys-color-primary) 4%, var(--md-sys-color-surface)); }
 .s-surface-dark .cal-cell { background: #16130B; }
 .cal-cell.is-out { opacity: 0.45; }
 .cal-cell.is-today { outline: 2px solid var(--md-sys-color-primary); }

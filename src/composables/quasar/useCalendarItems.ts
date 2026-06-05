@@ -28,6 +28,8 @@ export interface CalendarItem {
   projectId: string
   projectName: string    // nome progetto (per dare contesto ai task); '' se nessuno
   assignees: string[]    // uid (migrazione assignees→uid completata)
+  location: string       // solo appuntamenti
+  notes: string          // solo appuntamenti
   link: string           // deep-link al modulo d'origine
 }
 
@@ -63,14 +65,15 @@ export function useCalendarItems() {
           id: t.id, kind: 'appointment', title: t.title,
           start: t.startAt, end: t.endAt, allDay: false, done: !!t.completedAt,
           color: COLOR.appointment, projectId: t.projectId, projectName: pn, assignees: t.assignees,
-          link: `/quasar/calendario`,   // dettaglio appuntamento in-app (B3)
+          location: t.location, notes: t.notes,
+          link: `/quasar/calendario`,   // gli appuntamenti si aprono nella modale (B3)
         })
       } else if (t.type === 'deliverable') {
         if (!t.dueDate) continue
         out.push({
           id: t.id, kind: 'deliverable', title: t.title,
           start: t.dueDate, end: null, allDay: true, done: !!t.completedAt,
-          color: COLOR.cepheid, projectId: t.projectId, projectName: pn, assignees: t.assignees,
+          color: COLOR.cepheid, projectId: t.projectId, projectName: pn, assignees: t.assignees, location: '', notes: '',
           link: t.projectId ? `/cepheid/project/${t.projectId}` : '/cepheid',
         })
       } else if (!t.type || t.type === 'task') {
@@ -78,7 +81,7 @@ export function useCalendarItems() {
         out.push({
           id: t.id, kind: 'task', title: t.title,
           start: t.dueDate, end: null, allDay: true, done: !!t.completedAt,
-          color: COLOR.cepheid, projectId: t.projectId, projectName: pn, assignees: t.assignees,
+          color: COLOR.cepheid, projectId: t.projectId, projectName: pn, assignees: t.assignees, location: '', notes: '',
           link: t.projectId ? `/cepheid/project/${t.projectId}` : '/cepheid/azioni',
         })
       }
