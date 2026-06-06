@@ -23,6 +23,18 @@ const { hidden: headerHidden } = useAutoHideHeader(scrollEl)
 const { items, loading } = useCalendarItems()
 const { members } = useTeamMembers()
 
+// ── Filtro per sorgente: Tutto / QUASAR (appuntamenti+obiettivi) / CEPHEID (azioni+deliverable)
+type SourceFilter = 'all' | 'quasar' | 'cepheid'
+const sourceFilter = ref<SourceFilter>('all')
+const filterTabs = [
+  { id: 'all',     label: 'Tutto',   icon: 'apps' },
+  { id: 'quasar',  label: 'QUASAR',  icon: 'event' },
+  { id: 'cepheid', label: 'CEPHEID', icon: 'check_circle' },
+]
+const visibleItems = computed(() =>
+  sourceFilter.value === 'all' ? items.value : items.value.filter(i => i.source === sourceFilter.value),
+)
+
 // ── CRUD appuntamenti (B3) ───────────────────────────────────────────────────
 const apptOpen = ref(false)
 const apptEdit = ref<CalendarItem | null>(null)
@@ -96,7 +108,7 @@ const cursorKey = computed(() => dayKey(cursor.value))
 // Mappa giorno → items (costruita una volta per render).
 const byDay = computed(() => {
   const map = new Map<string, CalendarItem[]>()
-  for (const it of items.value) {
+  for (const it of visibleItems.value) {
     const k = dayKey(it.start)
     const arr = map.get(k); if (arr) arr.push(it); else map.set(k, [it])
   }
@@ -123,7 +135,8 @@ function onDetailEdit(it: CalendarItem) {
 }
 function iconOf(kind: CalendarItem['kind']): string {
   // CEPHEID distinto per icona: check = azioni/task, scatola = deliverable.
-  return kind === 'deliverable' ? 'inventory_2' : kind === 'appointment' ? 'event' : 'check_circle'
+  // QUASAR: event = appuntamento, flag = obiettivo.
+  return kind === 'deliverable' ? 'inventory_2' : kind === 'appointment' ? 'event' : kind === 'goal' ? 'flag' : 'check_circle'
 }
 
 const periodTotal = computed(() => {
@@ -165,7 +178,7 @@ function newAtSlot(date: Date, hour: number) {
 const agendaDays = computed(() => {
   const today = new Date(); today.setHours(0, 0, 0, 0)
   const groups = new Map<string, { date: Date; key: string; items: CalendarItem[] }>()
-  for (const it of items.value) {
+  for (const it of visibleItems.value) {
     const d = new Date(it.start.getFullYear(), it.start.getMonth(), it.start.getDate())
     if (d.getTime() < today.getTime()) continue
     const k = dayKey(d)
@@ -202,6 +215,7 @@ function agendaLabel(d: Date): string {
               <button class="cal-today" @click="goToday">Oggi</button>
             </template>
           </div>
+          <CepheidViewSwitcher :model-value="sourceFilter" :tabs="filterTabs" @update:model-value="(v) => (sourceFilter = v as SourceFilter)" />
           <CepheidViewSwitcher :model-value="view" :tabs="viewTabs" @update:model-value="(v) => (view = v as CalView)" />
           <button class="cal-new" @click="newAppointment()"><MIcon name="add" :size="16" /> Appuntamento</button>
         </div>
@@ -233,7 +247,7 @@ function agendaLabel(d: Date): string {
                 :title="it.projectName ? it.title + ' · ' + it.projectName : it.title"
                 @click.stop="openItem(it)"
               >
-                <MIcon :name="iconOf(it.kind)" :size="12" class="cal-chip-ic" />
+                <MIcon :name="iconOf(it.kind)" :size="12" filled class="cal-chip-ic" />
                 <span v-if="!it.allDay" class="cal-chip-time">{{ timeOf(it.start) }}</span>
                 <span class="cal-chip-text"><span class="cal-chip-title">{{ it.title }}</span><span v-if="it.projectName" class="cal-chip-proj"> · {{ it.projectName }}</span></span>
               </button>
@@ -257,7 +271,7 @@ function agendaLabel(d: Date): string {
           <div v-for="d in tgDays" :key="d.key" class="cal-tg-adcol">
             <button v-for="it in allDayOf(d.key)" :key="it.id" class="cal-chip" :class="{ 'is-done': it.done }" :style="{ '--c': it.color }"
               :title="it.projectName ? it.title + ' · ' + it.projectName : it.title" @click="openItem(it)">
-              <MIcon :name="iconOf(it.kind)" :size="12" class="cal-chip-ic" />
+              <MIcon :name="iconOf(it.kind)" :size="12" filled class="cal-chip-ic" />
               <span class="cal-chip-text">{{ it.title }}</span>
             </button>
           </div>
@@ -290,7 +304,7 @@ function agendaLabel(d: Date): string {
             :style="{ '--c': it.color }"
             @click="openItem(it)"
           >
-            <MIcon :name="iconOf(it.kind)" :size="18" class="cal-di-ic" />
+            <MIcon :name="iconOf(it.kind)" :size="18" filled class="cal-di-ic" />
             <span class="cal-di-time">{{ it.allDay ? 'Tutto il giorno' : (timeOf(it.start) + (it.end ? '–' + timeOf(it.end) : '')) }}</span>
             <span class="cal-di-title">{{ it.title }}</span>
             <span v-if="it.projectName" class="cal-di-proj">{{ it.projectName }}</span>
@@ -298,11 +312,12 @@ function agendaLabel(d: Date): string {
         </div>
       </div>
 
-      <!-- Legenda sorgenti (CEPHEID = oro, distinto per icona) -->
+      <!-- Legenda sorgenti (QUASAR = primary, CEPHEID = oro; distinte per icona) -->
       <div class="cal-legend">
-        <span class="cal-leg"><MIcon name="event" :size="15" style="color: var(--md-sys-color-primary)" />Appuntamenti</span>
-        <span class="cal-leg"><MIcon name="check_circle" :size="15" style="color: #D4A020" />Azioni</span>
-        <span class="cal-leg"><MIcon name="inventory_2" :size="15" style="color: #D4A020" />Deliverable</span>
+        <span class="cal-leg"><MIcon name="event" :size="15" filled style="color: var(--md-sys-color-primary)" />Appuntamenti</span>
+        <span class="cal-leg"><MIcon name="flag" :size="15" filled style="color: var(--md-sys-color-primary)" />Obiettivi</span>
+        <span class="cal-leg"><MIcon name="check_circle" :size="15" filled style="color: #D4A020" />Azioni</span>
+        <span class="cal-leg"><MIcon name="inventory_2" :size="15" filled style="color: #D4A020" />Deliverable</span>
       </div>
     </div>
 

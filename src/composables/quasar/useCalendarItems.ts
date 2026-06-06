@@ -13,14 +13,20 @@
 import { computed } from 'vue'
 import { useAllTasks, type AppointmentLink } from '../sidera/useAllTasks'
 import { useProjects } from '../sidera/useProjects'
+import { useObiettivi } from '../sidera/useObiettivi'
 
-export type CalendarKind = 'task' | 'deliverable' | 'appointment'
+export type CalendarKind = 'task' | 'deliverable' | 'appointment' | 'goal'
+// Identità "modulo di appartenenza", usata dal filtro del calendario.
+// QUASAR = appuntamenti + obiettivi (gli obiettivi migreranno da CEPHEID a QUASAR);
+// CEPHEID = azioni/task + deliverable.
+export type CalendarSource = 'quasar' | 'cepheid'
 
 export interface CalendarItem {
   id: string
   kind: CalendarKind
+  source: CalendarSource
   title: string
-  start: Date            // appointment: startAt; altrimenti dueDate (all-day)
+  start: Date            // appointment: startAt; altrimenti dueDate/endDate (all-day)
   end: Date | null       // appointment: endAt
   allDay: boolean
   done: boolean
@@ -29,13 +35,13 @@ export interface CalendarItem {
   projectName: string    // nome progetto (per dare contesto ai task); '' se nessuno
   assignees: string[]    // uid (migrazione assignees→uid completata)
   location: string       // solo appuntamenti
-  notes: string          // solo appuntamenti
+  notes: string          // appuntamenti (descrizione obiettivo per i goal)
   links: AppointmentLink[]  // solo appuntamenti: collegamenti task/progetto/doc
   link: string           // deep-link al modulo d'origine
 }
 
-// Colori per sorgente: appuntamento = accent QUASAR (scope-aware); tutto ciò che è
-// CEPHEID (task E deliverable) = ORO CEPHEID — si distinguono per ICONA, non colore.
+// Colori per sorgente: appuntamento E obiettivo = accent QUASAR (scope-aware); tutto
+// ciò che è CEPHEID (task E deliverable) = ORO CEPHEID — distinti per ICONA, non colore.
 const COLOR = {
   appointment: 'var(--md-sys-color-primary)',
   cepheid:     '#D4A020',
@@ -48,6 +54,7 @@ function dayKey(d: Date): string {
 export function useCalendarItems() {
   const { tasks, loading } = useAllTasks()
   const { projects } = useProjects()
+  const { obiettiviAttivi } = useObiettivi()
 
   const projName = computed(() => {
     const m = new Map<string, string>()
@@ -63,7 +70,7 @@ export function useCalendarItems() {
       if (t.type === 'appointment') {
         if (!t.startAt) continue
         out.push({
-          id: t.id, kind: 'appointment', title: t.title,
+          id: t.id, kind: 'appointment', source: 'quasar', title: t.title,
           start: t.startAt, end: t.endAt, allDay: false, done: !!t.completedAt,
           color: COLOR.appointment, projectId: t.projectId, projectName: pn, assignees: t.assignees,
           location: t.location, notes: t.notes, links: t.links,
@@ -72,7 +79,7 @@ export function useCalendarItems() {
       } else if (t.type === 'deliverable') {
         if (!t.dueDate) continue
         out.push({
-          id: t.id, kind: 'deliverable', title: t.title,
+          id: t.id, kind: 'deliverable', source: 'cepheid', title: t.title,
           start: t.dueDate, end: null, allDay: true, done: !!t.completedAt,
           color: COLOR.cepheid, projectId: t.projectId, projectName: pn, assignees: t.assignees, location: '', notes: '', links: [],
           link: t.projectId ? `/cepheid/project/${t.projectId}` : '/cepheid',
@@ -80,13 +87,25 @@ export function useCalendarItems() {
       } else if (!t.type || t.type === 'task') {
         if (!t.dueDate) continue
         out.push({
-          id: t.id, kind: 'task', title: t.title,
+          id: t.id, kind: 'task', source: 'cepheid', title: t.title,
           start: t.dueDate, end: null, allDay: true, done: !!t.completedAt,
           color: COLOR.cepheid, projectId: t.projectId, projectName: pn, assignees: t.assignees, location: '', notes: '', links: [],
           link: t.projectId ? `/cepheid/project/${t.projectId}` : '/cepheid/azioni',
         })
       }
       // milestone: data derivata dai deliverable → omessa in B1.
+    }
+    // Obiettivi: proiettati come all-day sulla loro data di fine (la "scadenza" del
+    // periodo). Colore appuntamento (QUASAR) perché migreranno qui da CEPHEID.
+    for (const o of obiettiviAttivi.value) {
+      if (!o.endDate) continue
+      out.push({
+        id: o.id, kind: 'goal', source: 'quasar', title: o.titolo,
+        start: o.endDate, end: null, allDay: true, done: o.stato === 'raggiunto',
+        color: COLOR.appointment, projectId: '', projectName: '', assignees: [],
+        location: '', notes: o.descrizione, links: [],
+        link: `/cepheid/goal/${o.id}`,
+      })
     }
     return out
   })

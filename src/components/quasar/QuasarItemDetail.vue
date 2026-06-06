@@ -24,8 +24,8 @@ const emit = defineEmits<{ (e: 'edit', it: CalendarItem): void }>()
 const router = useRouter()
 const isAppt = computed(() => props.item?.kind === 'appointment')
 
-function kindLabel(k: CalendarItem['kind']) { return k === 'appointment' ? 'Appuntamento' : k === 'deliverable' ? 'Deliverable' : 'Azione' }
-function kindIcon(k: CalendarItem['kind']) { return k === 'appointment' ? 'event' : k === 'deliverable' ? 'inventory_2' : 'check_circle' }
+function kindLabel(k: CalendarItem['kind']) { return k === 'appointment' ? 'Appuntamento' : k === 'deliverable' ? 'Deliverable' : k === 'goal' ? 'Obiettivo' : 'Azione' }
+function kindIcon(k: CalendarItem['kind']) { return k === 'appointment' ? 'event' : k === 'deliverable' ? 'inventory_2' : k === 'goal' ? 'flag' : 'check_circle' }
 function linkIcon(k: AppointmentLink['kind']) { return k === 'project' ? 'folder' : k === 'doc' ? 'description' : 'check_circle' }
 
 const whenText = computed(() => {
@@ -45,7 +45,7 @@ function doEdit() { if (props.item) emit('edit', props.item) }
     <div v-if="open && item" class="id-backdrop s-scope-quasar" @click.self="open = false">
       <div class="id-dialog">
         <div class="id-head" :style="{ '--c': item.color }">
-          <span class="id-ic"><MIcon :name="kindIcon(item.kind)" :size="18" /></span>
+          <span class="id-ic"><MIcon :name="kindIcon(item.kind)" :size="18" filled /></span>
           <div class="id-head-txt">
             <span class="id-kind">{{ kindLabel(item.kind) }}</span>
             <span class="id-title" :class="{ 'is-done': item.done }">{{ item.title }}</span>

@@ -3469,3 +3469,195 @@ exports.unarchiveNebulaDoc = functions
         if (!docId) throw new functions.https.HttpsError('invalid-argument', 'docId mancante');
         return setArchivedFlag(docId, userEmail, false);
     });
+
+// ============================================================================
+// QUASAR · Calendario EPHEMERIS — notifiche appuntamenti (push FCM data-only)
+// Un appuntamento E' una task con type==='appointment' standalone in tasks/{id}.
+// Clone del pattern notifyOnMention:
+//   - team doc fcmTokens map { tokenStr: { ts, scope, ua? } | Timestamp legacy }
+//   - filtro scope 'sidera' (audience QUASAR/desktop; il root SW serve quasar+sidera)
+//   - payload data-only scope='quasar' url='/quasar/calendario'
+//   - assignees ora sono UID -> risoluzione UID->team doc tollerante al re-key /team
+// Notifiche FISSE per ora (impostazioni utente in CORE = step successivo).
+// v1 ammette piu' trigger indipendenti sullo stesso path (vedi logTaskActivityStandalone).
+// ============================================================================
+
+const APPT_LEADS = [
+    { key: 'd1', ms: 24 * 60 * 60 * 1000 },
+    { key: 'h1', ms: 60 * 60 * 1000 },
+];
+
+// Risolve i team doc di un UID (tollerante docs/STELLA-GRAFO.md): un partecipante puo'
+// avere doc uid-keyed (id===uid) o email-keyed con campo uid. Raccoglie da entrambi.
+async function teamRefsForUid(uid: string): Promise<admin.firestore.DocumentSnapshot[]> {
+    const db = admin.firestore();
+    const out: admin.firestore.DocumentSnapshot[] = [];
+    try {
+        const direct = await db.collection('team').doc(uid).get();
+        if (direct.exists) out.push(direct);
+    } catch (_) { /* ignore */ }
+    try {
+        const byField = await db.collection('team').where('uid', '==', uid).get();
+        byField.docs.forEach(d => out.push(d));
+    } catch (_) { /* ignore */ }
+    return out;
+}
+
+// UID partecipanti -> token FCM scope 'sidera' (dedup per doc e per token).
+async function collectAppointmentTokens(uids: string[]): Promise<string[]> {
+    const clean = Array.from(new Set((uids ?? []).filter(Boolean)));
+    if (!clean.length) return [];
+    const perUid = await Promise.all(clean.map(teamRefsForUid));
+    const seenDoc = new Set<string>();
+    const rawTokens: string[] = [];
+    for (const snap of perUid.flat()) {
+        if (!snap.exists || seenDoc.has(snap.ref.path)) continue;
+        seenDoc.add(snap.ref.path);
+        const tokensMap = (snap.data()?.fcmTokens ?? {}) as Record<string, unknown>;
+        for (const [tk, val] of Object.entries(tokensMap)) {
+            if (val && typeof val === 'object' && 'scope' in (val as Record<string, unknown>)) {
+                if ((val as { scope?: string }).scope === 'sidera') rawTokens.push(tk);
+            }
+            // legacy timestamp nudo = default 'pulsar' -> skip (calendario non rilevante)
+        }
+    }
+    return Array.from(new Set(rawTokens));
+}
+
+// Orario leggibile in italiano (timezone Europe/Rome).
+function apptWhen(startAt: admin.firestore.Timestamp | undefined): string {
+    if (!startAt) return '';
+    return startAt.toDate().toLocaleString('it-IT', {
+        weekday: 'long', day: 'numeric', month: 'long',
+        hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome',
+    });
+}
+
+// Invio multicast + cleanup token invalidi (best-effort, per-uid tollerante).
+async function sendAppointmentPush(uids: string[], title: string, body: string, messageId: string): Promise<void> {
+    const tokens = await collectAppointmentTokens(uids);
+    if (!tokens.length) { console.log('[appt push] 0 token scope=sidera'); return; }
+    const res = await admin.messaging().sendEachForMulticast({
+        tokens,
+        data: { messageId, scope: 'quasar', title, body, url: '/quasar/calendario' },
+    });
+    const invalid: string[] = [];
+    res.responses.forEach((r, i) => {
+        if (!r.success) {
+            const code = r.error?.code ?? '';
+            if (code === 'messaging/invalid-registration-token' ||
+                code === 'messaging/registration-token-not-registered') invalid.push(tokens[i]);
+        }
+    });
+    if (invalid.length) {
+        const updates: Record<string, unknown> = {};
+        invalid.forEach(tk => { updates[`fcmTokens.${tk}`] = admin.firestore.FieldValue.delete(); });
+        await Promise.all(Array.from(new Set(uids.filter(Boolean))).map(async (uid) => {
+            try {
+                const refs = (await teamRefsForUid(uid)).map(s => s.ref);
+                await Promise.all(refs.map(r => r.update(updates).catch(() => undefined)));
+            } catch (_) { /* ignore */ }
+        }));
+    }
+    console.log(`[appt push] target uids ${uids.length}, tokens ${tokens.length}, success ${res.successCount}`);
+}
+
+// Trigger onWrite: invito (create), riprogrammazione (cambio startAt/endAt), annullamento (delete).
+// Reagisce SOLO alle task type==='appointment'; gli altri update task (incl. remindersSent
+// scritto dallo scheduler) non producono push.
+exports.notifyOnAppointment = functions
+    .region('europe-west1')
+    .firestore.document('tasks/{taskId}')
+    .onWrite(async (change, context) => {
+        const before = change.before.exists ? change.before.data() : null;
+        const after = change.after.exists ? change.after.data() : null;
+        const isAppt = (after?.type === 'appointment') || (before?.type === 'appointment');
+        if (!isAppt) return null;
+
+        const taskId = context.params.taskId as string;
+        const data = (after ?? before) as FirebaseFirestore.DocumentData;
+        const title: string = data.title || 'Appuntamento';
+        const creator: string = data.createdBy || '';
+        const participants: string[] = Array.isArray(data.assignees) ? data.assignees.filter(Boolean) : [];
+        // Notifica gli ALTRI partecipanti: l'autore della modifica e' tipicamente il creatore.
+        const targets = participants.filter(u => u && u !== creator);
+        if (!targets.length) return null;
+
+        let pushTitle = '';
+        let pushBody = '';
+
+        if (!before && after) {
+            pushTitle = 'Nuovo appuntamento';
+            pushBody = `${title}${after.startAt ? ' · ' + apptWhen(after.startAt) : ''}`;
+        } else if (before && !after) {
+            pushTitle = 'Appuntamento annullato';
+            pushBody = `${title}${before.startAt ? ' · ' + apptWhen(before.startAt) : ''}`;
+        } else if (before && after) {
+            const bs = before.startAt?.toMillis?.() ?? 0;
+            const as = after.startAt?.toMillis?.() ?? 0;
+            const be = before.endAt?.toMillis?.() ?? 0;
+            const ae = after.endAt?.toMillis?.() ?? 0;
+            if (bs === as && be === ae) return null;   // update non-orario -> niente push
+            pushTitle = 'Appuntamento riprogrammato';
+            pushBody = `${title}${after.startAt ? ' · ' + apptWhen(after.startAt) : ''}`;
+        } else {
+            return null;
+        }
+
+        await sendAppointmentPush(targets, pushTitle, pushBody, `appt-${taskId}-${Date.now()}`);
+        return null;
+    });
+
+// Scheduler: promemoria FISSI 1 giorno e 1 ora prima. Scan ogni 15 min, idempotente
+// via task.remindersSent[] (aggiornarlo NON ri-triggera notifyOnAppointment: reagisce
+// solo a create/delete/cambio orario). Range su startAt = indice single-field automatico.
+exports.appointmentReminders = functions
+    .region('europe-west1')
+    .pubsub.schedule('every 15 minutes')
+    .timeZone('Europe/Rome')
+    .onRun(async () => {
+        const db = admin.firestore();
+        const now = Date.now();
+        const GRACE = 30 * 60 * 1000;
+        const fromTs = admin.firestore.Timestamp.fromMillis(now);
+        const toTs = admin.firestore.Timestamp.fromMillis(now + 25 * 60 * 60 * 1000);
+        const snap = await db.collection('tasks')
+            .where('startAt', '>', fromTs).where('startAt', '<', toTs).get();
+        let sentCount = 0;
+        for (const docSnap of snap.docs) {
+            const t = docSnap.data();
+            if (t.type !== 'appointment') continue;
+            const startAt = t.startAt as admin.firestore.Timestamp | undefined;
+            if (!startAt) continue;
+            const start = startAt.toMillis();
+            if (start <= now) continue;
+            const title: string = t.title || 'Appuntamento';
+            const creator: string = t.createdBy || '';
+            const participants: string[] = Array.isArray(t.assignees) ? t.assignees.filter(Boolean) : [];
+            // Promemoria: include anche il creatore (deve ricordarsi del proprio impegno).
+            const targets = Array.from(new Set(participants.length ? participants : (creator ? [creator] : [])));
+            if (!targets.length) continue;
+            const sent = new Set<string>(Array.isArray(t.remindersSent) ? t.remindersSent : []);
+            let changed = false;
+            for (const lead of APPT_LEADS) {
+                const fireAt = start - lead.ms;
+                if (now >= fireAt && !sent.has(lead.key)) {
+                    if (now <= fireAt + GRACE) {
+                        const when = apptWhen(startAt);
+                        const head = lead.key === 'd1' ? 'Domani' : "Tra un'ora";
+                        await sendAppointmentPush(
+                            targets, 'Promemoria appuntamento',
+                            `${head} · ${title}${when ? ' (' + when + ')' : ''}`,
+                            `appt-rem-${docSnap.id}-${lead.key}`,
+                        );
+                        sentCount++;
+                    }
+                    sent.add(lead.key);   // marca comunque per non spammare reminder in ritardo
+                    changed = true;
+                }
+            }
+            if (changed) await docSnap.ref.update({ remindersSent: Array.from(sent) }).catch(() => undefined);
+        }
+        console.log(`[appointmentReminders] scanned ${snap.size}, reminders sent ${sentCount}`);
+        return null;
+    });
