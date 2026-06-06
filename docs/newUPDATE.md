@@ -13,7 +13,10 @@ QUASAR
 - [x] in CRUSCOTTO mettici il "Buon pomeriggio, Gionata. Giovedì 4 giugno 2026 · 0 azioni per oggi"
 - [x]in cruscotto i progetti attivi devono vedersi tutti scorrendo
 [x] su mobile la pillola container in basso e fab: togli ombre bordi e glow. sfondo tab fff8f0 e il fab deve essere uguale ma invertito con l'icona fff8f0
-
+[x] per una questione di leggibilità nel calendario le icone le mettiamo filled
+[] aggiungiamo le notifiche per gli appuntamenti che per il momento sono fisse. Alla creazione deve essere inviata una notifica a tutti i partecipanti. Poi hai altre idee per implementarle? Mettiamo le impostazioni in CORE?
+[x] voglio si visualizzino gli obiettivi sul calendario (stesso colore degli appuntamenti perchè in un secondo momento li sposteremo da CEPHEID a QUASAR)
+[x] mettere i filtri in alto a sx del container tab, lo fai uguale ma con i filtri TUTTO, per solo cose QUASAR o solo CEPHEID (per il momento)
 
 CEPHEID
 [x] nei progetti metti l'icona e scritta disattiva e apri dettaglio nel menu 3 pallini
