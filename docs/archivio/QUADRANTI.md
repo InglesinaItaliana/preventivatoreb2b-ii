@@ -1,5 +1,11 @@
 # QUADRANTI — Vista Eisenhower per QUASAR
 
+> 📦 **ARCHIVIATO il 2026-06-07** — piano di implementazione **concluso**. La feature è
+> live: route `/quasar/quadranti`, `src/composables/quasar/useQuadranti.ts`,
+> `src/views/quasar/QuasarQuadrantiView.vue`. Questo file resta come riferimento di
+> design (logica matrice, soglie, forecast); per il comportamento attuale fa fede il
+> codice. Vedi anche `docs/archivio/README.md`.
+
 > Piano di implementazione. Sorgente del prototipo: `risorseesterneperclaude/cepheid-actions_8.html`.
 > Stato: **IMPLEMENTATO (v1)** sul branch `feature/cepheid-completamento-smistamento` — 2026-05-22.
 > Route live: `/quasar/quadranti`. Type-check + build verdi. Non ancora testato a runtime in browser.
