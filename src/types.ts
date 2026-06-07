@@ -89,6 +89,7 @@ export interface PreventivoDocumento {
   totaleImponibile: number;
   scontoPercentuale: number; // Nuovo campo Admin
   totaleScontato: number;    // Totale finale
+  netCanonico?: number;      // Netto canonico (regola CiC half-up), salvato sempre — per il check ordine CiC
 
   // Riepilogo
   sommarioPreventivo?: RiepilogoRiga[];

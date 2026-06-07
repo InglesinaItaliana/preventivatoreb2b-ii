@@ -221,6 +221,7 @@ export function drawBillingDocument(doc: any, data: PdfDocData, logoDataUrl?: st
 
   // ── TOTALI (solo se priced) ───────────────────────────────────────────────
   if (priced) {
+    if (y + 30 > 283) { doc.addPage(); y = 18; } // i totali non devono finire sotto il footer
     y += 8;
     const boxX = 124;
     const simpleRow = (label: string, val: string) => {
@@ -242,10 +243,12 @@ export function drawBillingDocument(doc: any, data: PdfDocData, logoDataUrl?: st
 
   // ── NOTE ───────────────────────────────────────────────────────────────────
   if (data.notes) {
+    const noteLines = doc.splitTextToSize(data.notes, RIGHT - M);
+    if (y + 9 + noteLines.length * 4 > 283) { doc.addPage(); y = 18; }
     y += 4;
     doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); setText(DIM); doc.text('NOTE', M, y);
     y += 4.5; doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); setText(MID);
-    doc.text(doc.splitTextToSize(data.notes, RIGHT - M), M, y);
+    doc.text(noteLines, M, y);
   }
 
   // ── FOOTER ───────────────────────────────────────────────────────────────────

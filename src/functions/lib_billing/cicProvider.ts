@@ -94,6 +94,12 @@ export class CicProvider implements BillingProvider {
     };
 
     const res = await this.client.post(path, payload);
+    // Anti-orfano: se Reviso non restituisce un id valido, lancia PRIMA che il
+    // chiamante persista cic_order_id (evita ordini orfani / ri-trigger).
+    if (res?.errorCode || res?.id == null) {
+      const msg = res?.errors?.[0]?.message || res?.message || res?.errorCode || 'risposta senza id';
+      throw new Error(`Creazione documento CiC fallita (${path}): ${msg}`);
+    }
     return this.toSalesResult(res);
   }
 

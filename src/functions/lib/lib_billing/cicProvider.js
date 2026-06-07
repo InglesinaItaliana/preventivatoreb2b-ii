@@ -52,6 +52,7 @@ class CicProvider {
         return { productNumber: pn, self: `${this.cfg.baseUrl}/products/${encodeURIComponent(pn)}` };
     }
     async createSalesDoc(path, doc) {
+        var _a, _b;
         // Non inviamo i totali doc: Reviso li calcola con la stessa regola di
         // rounding.ts (provato nello spike → combaciano). La validazione "cifra ==
         // quella vista dal cliente" la fa il chiamante (generaOrdineCiC) contro
@@ -66,6 +67,12 @@ class CicProvider {
                 vatInfo: { vatAccount: { vatCode: this.cfg.vatCode } },
             })) });
         const res = await this.client.post(path, payload);
+        // Anti-orfano: se Reviso non restituisce un id valido, lancia PRIMA che il
+        // chiamante persista cic_order_id (evita ordini orfani / ri-trigger).
+        if ((res === null || res === void 0 ? void 0 : res.errorCode) || (res === null || res === void 0 ? void 0 : res.id) == null) {
+            const msg = ((_b = (_a = res === null || res === void 0 ? void 0 : res.errors) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.message) || (res === null || res === void 0 ? void 0 : res.message) || (res === null || res === void 0 ? void 0 : res.errorCode) || 'risposta senza id';
+            throw new Error(`Creazione documento CiC fallita (${path}): ${msg}`);
+        }
         return this.toSalesResult(res);
     }
     toSalesResult(res) {

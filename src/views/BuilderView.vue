@@ -835,6 +835,13 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
       totaleImponibile: totaleImponibile.value,
       scontoPercentuale: scontoApplicato.value,
       totaleScontato: totaleFinale.value,
+      // Netto canonico (regola CiC, half-up per riga) salvato SEMPRE, a prescindere
+      // dal flag UI: è la cifra contro cui il backend valida l'ordine CiC, così non
+      // ci sono falsi billingError per doc salvati prima del cutover.
+      netCanonico: computeTotals(
+        preventivo.value.map((i) => ({ qty: (i as any).quantita || 1, unitNetPrice: (i as any).prezzo_unitario || 0 })),
+        scontoApplicato.value, 22,
+      ).net,
       stato: nuovoStato,
       noteCliente: noteCliente.value,
       allegati: listaAllegati.value,

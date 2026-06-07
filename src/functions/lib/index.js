@@ -123,6 +123,7 @@ exports.cancelOrder = functions
             fic_order_url: admin.firestore.FieldValue.delete(),
             cic_order_id: admin.firestore.FieldValue.delete(),
             cic_order_url: admin.firestore.FieldValue.delete(),
+            billingBackend: admin.firestore.FieldValue.delete(),
             // Manteniamo traccia di chi ha annullato
             annullatoDa: context.auth.token.email || context.auth.uid,
             dataAnnullamento: admin.firestore.FieldValue.serverTimestamp()
@@ -1088,10 +1089,11 @@ exports.generaOrdineFIC = functions
 // --- Risoluzione backend di fatturazione (frozen sul preventivo, default FiC) ---
 // Se l'ordine ha già billingBackend → si rispetta (scelta congelata). Altrimenti
 // si legge config/billing.activeBackend. Qualunque errore → 'fic' (mai rompere il flusso).
-async function resolveBillingBackend(newData) {
-    if (newData.billingBackend === 'cic' || newData.billingBackend === 'fic') {
-        return newData.billingBackend;
-    }
+async function resolveBillingBackend(_newData) {
+    // Il routing dei NUOVI documenti dipende SOLO dal flag globale config/billing,
+    // NON dal campo billingBackend del preventivo (scrivibile dal client → potrebbe
+    // forzare il ramo CiC bypassando la dormienza). Gli ordini già creati non
+    // ri-arrivano qui (guard fic_order_id/cic_order_id nel trigger).
     try {
         return await (0, lib_billing_1.getActiveBackend)();
     }
@@ -1152,10 +1154,14 @@ async function generaOrdineCiC(change, newData, clienteUID) {
             billingBackend: 'cic',
             billingError: admin.firestore.FieldValue.delete(),
         });
-        // validazione totali NON bloccante: la cifra cliente deve combaciare al centesimo
-        const expectedNet = (typeof newData.totaleScontato === 'number')
-            ? newData.totaleScontato
-            : (newData.totaleImponibile || 0);
+        // validazione totali NON bloccante: la cifra cliente deve combaciare al centesimo.
+        // Confronto contro netCanonico (regola CiC, salvato sempre) → metodologia coerente,
+        // niente falsi errori per doc salvati prima del cutover. Fallback per doc vecchi.
+        const expectedNet = (typeof newData.netCanonico === 'number')
+            ? newData.netCanonico
+            : (typeof newData.totaleScontato === 'number')
+                ? newData.totaleScontato
+                : (newData.totaleImponibile || 0);
         if (Math.abs((result.netAmount || 0) - expectedNet) > 0.01) {
             await change.after.ref.update({
                 billingError: `Totale CiC ${result.netAmount} ≠ atteso POPS ${expectedNet}`,
@@ -1276,10 +1282,16 @@ exports.creaDdtCumulativo = functions
     }
     try {
         const db = admin.firestore();
-        // --- SELETTORE BACKEND: se gli ordini sono su CiC, usa il path CiC ---
-        const firstSnap = await db.collection('preventivi').doc(orderIds[0]).get();
-        const firstData = firstSnap.data();
-        if (firstData && (firstData.billingBackend === 'cic' || firstData.cic_order_id)) {
+        // --- SELETTORE BACKEND: tutti gli ordini devono stare sullo stesso backend ---
+        const allSnaps = await Promise.all(orderIds.map((id) => db.collection('preventivi').doc(id).get()));
+        const backends = allSnaps.map((s) => {
+            const dd = s.data();
+            return dd && (dd.billingBackend === 'cic' || dd.cic_order_id) ? 'cic' : 'fic';
+        });
+        if (backends.includes('cic') && backends.includes('fic')) {
+            return { success: false, message: 'Ordini di backend diversi (FiC/CiC) nello stesso DDT.' };
+        }
+        if (backends[0] === 'cic') {
             return await creaDdtCumulativoCiC(orderIds, data);
         }
         const accessToken = await getValidFicToken();
@@ -1809,6 +1821,7 @@ exports.resetOrderState = functions
             cic_ddt_id: admin.firestore.FieldValue.delete(),
             cic_ddt_url: admin.firestore.FieldValue.delete(),
             cic_ddt_number: admin.firestore.FieldValue.delete(),
+            billingBackend: admin.firestore.FieldValue.delete(),
             billingError: admin.firestore.FieldValue.delete(),
             dataConferma: admin.firestore.FieldValue.delete(),
             metodoConferma: admin.firestore.FieldValue.delete(),

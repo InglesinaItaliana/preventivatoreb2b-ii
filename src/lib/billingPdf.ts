@@ -62,19 +62,21 @@ export function buildPdfData(p: PreventivoLike, kind: PdfKind): PdfDocData {
     if (e.categoria !== 'EXTRA' && (e.base_mm > 0 || e.altezza_mm > 0)) {
       desc += `  ·  ${e.base_mm}×${e.altezza_mm} mm${e.infoCanalino ? ` · ${e.infoCanalino}` : ''}`;
     }
-    return {
-      code: e.codice || '',
-      description: desc,
-      qty: Number(e.quantita) || 1,
-      unitNetPrice: Number(e.prezzo_unitario) || 0,
-      discountPct: sconto || undefined,
-      totalNet: totals.lineNets[i],
-    };
+    // Il DDT non porta prezzi: solo merce + quantità.
+    const base: PdfLine = { code: e.codice || '', description: desc, qty: Number(e.quantita) || 1 };
+    if (!isDdt) {
+      base.unitNetPrice = Number(e.prezzo_unitario) || 0;
+      base.discountPct = sconto || undefined;
+      base.totalNet = totals.lineNets[i];
+    }
+    return base;
   });
   return {
     kind,
-    number: p.codice,
-    date: fmtDate(p.dataConferma || p.dataCreazione),
+    number: isDdt ? (p.cic_ddt_number ?? p.fic_ddt_number ?? p.codice) : p.codice,
+    date: fmtDate(isDdt
+      ? (p.dataSpedizione || p.dataConsegnaPrevista || p.dataConferma || p.dataCreazione)
+      : (p.dataConferma || p.dataCreazione)),
     customer: {
       name: p.cliente || p.ragioneSociale || '—',
       piva: p.clientePiva || p.piva,
@@ -86,10 +88,10 @@ export function buildPdfData(p: PreventivoLike, kind: PdfKind): PdfDocData {
     reference: p.commessa || p.codice,
     lines,
     showPrices: !isDdt,
-    net: totals.net,
-    vat: totals.vat,
-    gross: totals.gross,
-    vatRate: VAT_RATE,
+    net: isDdt ? undefined : totals.net,
+    vat: isDdt ? undefined : totals.vat,
+    gross: isDdt ? undefined : totals.gross,
+    vatRate: isDdt ? undefined : VAT_RATE,
     notes: p.noteCliente || undefined,
     transport: isDdt ? {
       causale: 'VENDITA',
@@ -105,12 +107,21 @@ export function buildPdfData(p: PreventivoLike, kind: PdfKind): PdfDocData {
 
 /** Costruisce e apre il PDF in una nuova scheda. */
 export async function openBillingPdf(p: PreventivoLike, kind: PdfKind): Promise<void> {
-  const data = buildPdfData(p, kind);
-  const logo = await loadLogoPng();
-  const doc = new jsPDF({ unit: 'mm', format: 'a4' });
-  drawBillingDocument(doc, data, logo);
-  const blobUrl = doc.output('bloburl');
-  window.open(blobUrl, '_blank');
+  // Apri la scheda SUBITO, dentro il gesto utente (altrimenti il popup-blocker
+  // la blocca perché window.open arriverebbe dopo l'await del logo).
+  const win = window.open('', '_blank');
+  try {
+    const data = buildPdfData(p, kind);
+    const logo = await loadLogoPng();
+    const doc = new jsPDF({ unit: 'mm', format: 'a4' });
+    drawBillingDocument(doc, data, logo);
+    const blobUrl = doc.output('bloburl');
+    if (win) win.location.href = blobUrl;
+    else window.open(blobUrl, '_blank');
+  } catch (e) {
+    if (win) win.close();
+    throw e;
+  }
 }
 
 export const openOrderPdf = (p: PreventivoLike) => openBillingPdf(p, 'order');
@@ -120,6 +131,11 @@ export const openQuotationPdf = (p: PreventivoLike) => openBillingPdf(p, 'quotat
 export function openDdtPdf(p: PreventivoLike | PreventivoLike[]): Promise<void> {
   const arr = Array.isArray(p) ? p : [p];
   const first: PreventivoLike = arr[0] || {};
+  // Difensivo: un DDT cumulativo deve raggruppare ordini dello STESSO DDT.
+  const ddtKey = (x: PreventivoLike) => (x.cic_ddt_id ?? x.fic_ddt_id ?? null);
+  if (arr.length > 1 && arr.some((x) => ddtKey(x) !== ddtKey(first))) {
+    console.warn('[billingPdf] DDT cumulativo: ordini con ddt_id diversi', arr.map(ddtKey));
+  }
   const merged: PreventivoLike = {
     ...first,
     elementi: arr.flatMap((x) => (Array.isArray(x.elementi) ? x.elementi : [])),
