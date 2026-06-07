@@ -3147,6 +3147,7 @@ exports.listNebulaApiKeys = functions
 // ============================================================================
 const server_1 = require("./lib_mcp/server");
 const oauth_1 = require("./lib_mcp/oauth");
+const rateLimit_1 = require("./lib_mcp/rateLimit");
 // Handler HTTP condiviso. Esposto come due function:
 //   mcpSidera — endpoint canonico (serve l'intera suite: NEBULA-docs + CEPHEID)
 //   mcpNebula — alias di compatibilità per i client già connessi all'URL legacy.
@@ -3156,6 +3157,19 @@ const mcpHttpHandler = functions
     .region('europe-west1')
     .runWith({ memory: '256MB', timeoutSeconds: 60 })
     .https.onRequest(async (req, res) => {
+    // (N4) Rate-limit per IP sugli endpoint pubblici. Bucket separati:
+    // i path OAuth sensibili (/token, /register, /authorize) hanno un tetto
+    // più stretto contro il brute-force su code/token; le chiamate MCP
+    // (autenticate via Bearer) hanno un tetto più generoso.
+    const ip = (0, rateLimit_1.clientIpFromHeaders)(req.headers, req.ip || 'unknown');
+    const p = (req.path || '').toLowerCase();
+    const sensitive = p.includes('/token') || p.includes('/register') || p.includes('/authorize');
+    const rl = await (0, rateLimit_1.checkRateLimit)(`mcp:${sensitive ? 'oauth' : 'rpc'}:${ip}`, sensitive ? 20 : 120, 60);
+    if (!rl.allowed) {
+        res.set('Retry-After', String(rl.retryAfterSec));
+        res.status(429).json({ error: 'rate_limited', error_description: 'Troppe richieste, riprova più tardi.' });
+        return;
+    }
     const result = await (0, server_1.handleMcpRequest)({
         headers: req.headers,
         method: req.method,
@@ -3243,6 +3257,22 @@ exports.oauthCleanup = functions
     .onRun(async () => {
     const r = await (0, oauth_1.cleanupOAuthStale)();
     console.log(`[oauthCleanup] deleted requests=${r.requests} codes=${r.codes} tokens=${r.tokens}`);
+    // (N4) purge dei contatori rate-limit con finestra scaduta da >1 giorno
+    // (1 doc per IP: crescita minima, ma teniamo pulito).
+    try {
+        const db = admin.firestore();
+        const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+        const stale = await db.collection('rateLimits').where('windowStart', '<', cutoff).limit(500).get();
+        if (!stale.empty) {
+            const batch = db.batch();
+            stale.docs.forEach((d) => batch.delete(d.ref));
+            await batch.commit();
+            console.log(`[oauthCleanup] purged ${stale.size} stale rateLimits`);
+        }
+    }
+    catch (e) {
+        console.error('[oauthCleanup] rateLimits purge failed', e);
+    }
     return null;
 });
 // ============================================================================
