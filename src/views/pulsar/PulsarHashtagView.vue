@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, onUnmounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { collectionGroup, query, where, orderBy, onSnapshot, getDoc, doc, setDoc, deleteDoc } from 'firebase/firestore'
-import { db } from '../../firebase'
+import { collectionGroup, query, where, orderBy, limit, onSnapshot, getDoc } from 'firebase/firestore'
+import { db, auth } from '../../firebase'
 import { displayName, useTeamMembers, starAvatarProps } from '../../composables/sidera/useTeamMembers'
 import StarAvatar from '../../components/shared/StarAvatar.vue'
 import MIcon from '../../components/shared/MIcon.vue'
@@ -39,10 +39,19 @@ function toDate(raw: unknown): Date | null {
   return null
 }
 
+// (N2) Sicurezza: la query collectionGroup è vincolata ai messaggi delle chat
+// di cui sono membro (`members array-contains` la mia email) — così le rules
+// possono concederla senza esporre le chat altrui. Il filtro per hashtag non
+// può stare nella stessa query (Firestore vieta due `array-contains`), quindi
+// si applica lato client sotto.
+// Email GREZZA (non minuscolizzata): `array-contains` richiede match esatto e
+// i `members` sono memorizzati come `request.auth.token.email` (= currentUser.email).
+const myEmail = auth.currentUser?.email ?? ''
 const q = query(
   collectionGroup(db, 'messages'),
-  where('hashtags', 'array-contains', tagName),
+  where('members', 'array-contains', myEmail),
   orderBy('createdAt', 'desc'),
+  limit(500),
 )
 
 const unsubscribe = onSnapshot(q, async (snap) => {
@@ -53,6 +62,7 @@ const unsubscribe = onSnapshot(q, async (snap) => {
   const results: TagMessage[] = []
   for (const d of snap.docs) {
     const data     = d.data()
+    if (!(data.hashtags ?? []).includes(tagName)) continue   // filtro hashtag lato client
     const chatRef  = d.ref.parent.parent
     const chatId   = chatRef?.id ?? ''
     let   chatName = ''
@@ -76,12 +86,9 @@ const unsubscribe = onSnapshot(q, async (snap) => {
   }
   tagMessages.value = results
   loading.value = false
-  // Riallinea il contatore denormalizzato al numero reale di messaggi.
-  if (results.length === 0) {
-    deleteDoc(doc(db, 'chatHashtags', tagName)).catch(() => {})
-  } else {
-    setDoc(doc(db, 'chatHashtags', tagName), { name: tagName, count: results.length }, { merge: true }).catch(() => {})
-  }
+  // Nota (N2): il contatore `chatHashtags` non viene più riconciliato qui — con
+  // la vista filtrata per-membro `results.length` è il MIO conteggio, non quello
+  // globale. Il counter resta approssimato (incrementato all'invio).
 }, (err) => {
   console.error('[PulsarHashtagView]', err)
   loading.value = false

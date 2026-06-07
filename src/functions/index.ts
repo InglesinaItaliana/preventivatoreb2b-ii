@@ -850,6 +850,64 @@ export const backfillAssigneeUids = functions
     };
   });
 
+/**
+ * (N2) Backfill `members` sui messaggi esistenti.
+ * La regola del collectionGroup `messages` concede la read solo a chi è in
+ * `resource.data.members`. I messaggi creati prima del fix non hanno il campo →
+ * questo backfill lo copia dai `members` della chat di origine (parent path),
+ * con cache per-chat per evitare letture ripetute.
+ * Admin-only. Default dryRun. Idempotente (scrive solo dove manca/diverge).
+ */
+export const backfillMessageMembers = functions
+  .region('europe-west1')
+  .https.onCall(async (data, context) => {
+    const callerEmail = (context.auth?.token?.email || '').toLowerCase().trim();
+    const callerRole = context.auth?.token?.role;
+    const isAdminCaller = callerRole === 'ADMIN' || callerEmail === 'info@inglesinaitaliana.it';
+    if (!context.auth || !isAdminCaller) {
+      throw new functions.https.HttpsError('permission-denied', 'Riservato agli amministratori.');
+    }
+    const dryRun = data?.dryRun !== false;   // default: anteprima senza scrivere
+
+    const db = admin.firestore();
+    const chatMembersCache = new Map<string, string[]>();
+    const msgsSnap = await db.collectionGroup('messages').get();
+
+    let scanned = 0, changed = 0, skippedNoParent = 0, skippedNoMembers = 0;
+    let batch = db.batch();
+    let pending = 0;
+    const commits: Promise<unknown>[] = [];
+
+    const sameSet = (a: string[], b: string[]) =>
+      a.length === b.length && a.every((x) => b.includes(x));
+
+    for (const msgDoc of msgsSnap.docs) {
+      scanned++;
+      const chatRef = msgDoc.ref.parent.parent;   // chats/{chatId}
+      if (!chatRef) { skippedNoParent++; continue; }
+      let members = chatMembersCache.get(chatRef.id);
+      if (members === undefined) {
+        const chatSnap = await chatRef.get();
+        const m = chatSnap.data()?.members;
+        members = Array.isArray(m) ? m : [];
+        chatMembersCache.set(chatRef.id, members);
+      }
+      if (members.length === 0) { skippedNoMembers++; continue; }
+      const current = msgDoc.data()?.members;
+      if (Array.isArray(current) && sameSet(current, members)) continue;   // già allineato
+      changed++;
+      if (!dryRun) {
+        batch.update(msgDoc.ref, { members });
+        pending++;
+        if (pending >= 400) { commits.push(batch.commit()); batch = db.batch(); pending = 0; }
+      }
+    }
+    if (!dryRun && pending > 0) commits.push(batch.commit());
+    await Promise.all(commits);
+
+    return { dryRun, scanned, changed, skippedNoParent, skippedNoMembers, chatsRead: chatMembersCache.size };
+  });
+
 // --- FUNZIONE RINNOVO TOKEN (ACCESS TOKEN MANAGER) ---
 async function getValidFicToken(): Promise<string> {
     const db = admin.firestore();

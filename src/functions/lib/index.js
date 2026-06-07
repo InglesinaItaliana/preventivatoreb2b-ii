@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.autoDeliveredAfter7Days = exports.backfillAssigneeUids = exports.auditAssigneeUids = exports.changeTeamMemberEmail = exports.createTeamMember = void 0;
+exports.autoDeliveredAfter7Days = exports.backfillMessageMembers = exports.backfillAssigneeUids = exports.auditAssigneeUids = exports.changeTeamMemberEmail = exports.createTeamMember = void 0;
 const dotenv = __importStar(require("dotenv")); // <--- AGGIUNGI QUESTO
 dotenv.config(); // <--- E QUESTO (Carica subito il file .env)
 const functions = __importStar(require("firebase-functions/v1"));
@@ -824,6 +824,70 @@ exports.backfillAssigneeUids = functions
         refsUnresolved,
         unresolvedSamples: [...unresolvedSamples].slice(0, 50),
     };
+});
+/**
+ * (N2) Backfill `members` sui messaggi esistenti.
+ * La regola del collectionGroup `messages` concede la read solo a chi è in
+ * `resource.data.members`. I messaggi creati prima del fix non hanno il campo →
+ * questo backfill lo copia dai `members` della chat di origine (parent path),
+ * con cache per-chat per evitare letture ripetute.
+ * Admin-only. Default dryRun. Idempotente (scrive solo dove manca/diverge).
+ */
+exports.backfillMessageMembers = functions
+    .region('europe-west1')
+    .https.onCall(async (data, context) => {
+    var _a, _b, _c, _d, _e, _f;
+    const callerEmail = (((_b = (_a = context.auth) === null || _a === void 0 ? void 0 : _a.token) === null || _b === void 0 ? void 0 : _b.email) || '').toLowerCase().trim();
+    const callerRole = (_d = (_c = context.auth) === null || _c === void 0 ? void 0 : _c.token) === null || _d === void 0 ? void 0 : _d.role;
+    const isAdminCaller = callerRole === 'ADMIN' || callerEmail === 'info@inglesinaitaliana.it';
+    if (!context.auth || !isAdminCaller) {
+        throw new functions.https.HttpsError('permission-denied', 'Riservato agli amministratori.');
+    }
+    const dryRun = (data === null || data === void 0 ? void 0 : data.dryRun) !== false; // default: anteprima senza scrivere
+    const db = admin.firestore();
+    const chatMembersCache = new Map();
+    const msgsSnap = await db.collectionGroup('messages').get();
+    let scanned = 0, changed = 0, skippedNoParent = 0, skippedNoMembers = 0;
+    let batch = db.batch();
+    let pending = 0;
+    const commits = [];
+    const sameSet = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
+    for (const msgDoc of msgsSnap.docs) {
+        scanned++;
+        const chatRef = msgDoc.ref.parent.parent; // chats/{chatId}
+        if (!chatRef) {
+            skippedNoParent++;
+            continue;
+        }
+        let members = chatMembersCache.get(chatRef.id);
+        if (members === undefined) {
+            const chatSnap = await chatRef.get();
+            const m = (_e = chatSnap.data()) === null || _e === void 0 ? void 0 : _e.members;
+            members = Array.isArray(m) ? m : [];
+            chatMembersCache.set(chatRef.id, members);
+        }
+        if (members.length === 0) {
+            skippedNoMembers++;
+            continue;
+        }
+        const current = (_f = msgDoc.data()) === null || _f === void 0 ? void 0 : _f.members;
+        if (Array.isArray(current) && sameSet(current, members))
+            continue; // già allineato
+        changed++;
+        if (!dryRun) {
+            batch.update(msgDoc.ref, { members });
+            pending++;
+            if (pending >= 400) {
+                commits.push(batch.commit());
+                batch = db.batch();
+                pending = 0;
+            }
+        }
+    }
+    if (!dryRun && pending > 0)
+        commits.push(batch.commit());
+    await Promise.all(commits);
+    return { dryRun, scanned, changed, skippedNoParent, skippedNoMembers, chatsRead: chatMembersCache.size };
 });
 // --- FUNZIONE RINNOVO TOKEN (ACCESS TOKEN MANAGER) ---
 async function getValidFicToken() {

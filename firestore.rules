@@ -155,13 +155,27 @@ service cloud.firestore {
         (request.auth.token.email == resource.data.createdBy || isAdmin());
 
       match /messages/{msgId} {
-        allow read: if request.auth != null;
+        // (N2) Lettura in-chat ristretta ai membri (path diretto). Il chatId è
+        // fissato dal path → un solo get(chat) per la query, niente problema
+        // "rules≠filtri" (vale per tutti i messaggi della chat in blocco).
+        allow read: if request.auth != null
+          && request.auth.token.email in
+               get(/databases/$(database)/documents/chats/$(chatId)).data.members;
         // (N3 hardening) `from` deve essere il chiamante e il chiamante deve
         // essere membro della chat → niente messaggi firmati a nome altrui.
+        // (N2) inoltre il campo `members` denormalizzato — usato dalle rules del
+        // collectionGroup — deve essere un SOTTOINSIEME dei membri reali della
+        // chat: impedisce di iniettare un messaggio nella ricerca/pendenze di un
+        // non-membro scrivendo `members:[vittima]`. Campo assente: tollerato.
         allow create: if request.auth != null
           && request.resource.data.from == request.auth.token.email
           && request.auth.token.email in
-               get(/databases/$(database)/documents/chats/$(chatId)).data.members;
+               get(/databases/$(database)/documents/chats/$(chatId)).data.members
+          && (
+            !('members' in request.resource.data)
+            || request.resource.data.members.hasOnly(
+                 get(/databases/$(database)/documents/chats/$(chatId)).data.members)
+          );
         // L'autore può modificare il proprio messaggio. I membri della chat
         // possono inoltre aggiornare ESCLUSIVAMENTE answeredAt, taskId o
         // rejectedAt (marcare risposta, linkare task creato altrove, o
@@ -176,18 +190,17 @@ service cloud.firestore {
       }
     }
 
-    // Necessario per collectionGroup('messages') usato in PulsarHashtagView e
-    // PulsarPendingView (query globali per hashtag/flags).
-    // ⚠️ FINDING N2 APERTO (privacy): questa read è aperta a qualunque loggato →
-    // bypassa il member-gating di /chats (chiunque legge i messaggi di tutte le
-    // chat). NON si chiude con una sola regola: le due view fanno query globali
-    // non vincolate ai membri e Firestore (rules≠filtri) rifiuterebbe l'intera
-    // query; inoltre non si può combinare `members array-contains` con
-    // `hashtags/flags array-contains`. Fix = redesign delle due view (filtro
-    // membri + hashtag/flag lato client) oppure ricerca server-side (callable).
-    // Pianificato separatamente.
+    // (N2) collectionGroup('messages') usato da PulsarHashtagView e
+    // PulsarPendingView. La read è concessa solo se il chiamante è tra i
+    // `members` denormalizzati sul messaggio. Le due view DEVONO interrogare con
+    // `where('members','array-contains', <miaEmail>)` (rules≠filtri): la query
+    // si auto-vincola ai messaggi leggibili, e il filtro hashtag/flags avviene
+    // lato client (Firestore vieta due operatori su array nella stessa query).
+    // I messaggi nuovi scrivono `members` all'invio; gli esistenti via backfill
+    // (Cloud Function backfillMessageMembers).
     match /{path=**}/messages/{msgId} {
-      allow read: if request.auth != null;
+      allow read: if request.auth != null
+        && request.auth.token.email in resource.data.members;
     }
 
     match /chatHashtags/{tag} {
