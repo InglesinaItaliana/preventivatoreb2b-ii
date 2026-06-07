@@ -22,6 +22,9 @@ const { members } = useTeamMembers()
 const { projects } = useProjects()
 const { chats } = useChats()
 const myEmail = (auth.currentUser?.email ?? '').toLowerCase().trim()
+// Email GREZZA per la query collectionGroup: `array-contains` esige match esatto
+// coi `members` (= request.auth.token.email), non minuscolizzati.
+const myEmailRaw = auth.currentUser?.email ?? ''
 
 // Mappa chatId -> {name, isGroup, members} popolata dallo snapshot di useChats.
 // Permette di leggere chatName/chatIsGroup senza fare getDoc per ogni messaggio (elimina N+1).
@@ -52,6 +55,7 @@ interface PendingMsg {
   taskId: string | null
   answeredAt: Date | null
   rejectedAt: Date | null
+  members: string[]   // (N2) membri della chat, riusati per la reply
 }
 
 interface ChatGroup {
@@ -105,9 +109,14 @@ function resolveChat(chatId: string, chatRef: any): Promise<ChatInfo | null> {
 let unsubscribe: (() => void) | null = null
 function subscribe() {
   unsubscribe?.()
+  // (N2) Sicurezza: la query è vincolata ai messaggi delle MIE chat
+  // (`members array-contains` la mia email) → le rules la concedono senza
+  // esporre le chat altrui. Il filtro per flags (question/task) non può stare
+  // nella stessa query (Firestore vieta due operatori su array), quindi si
+  // applica lato client sotto.
   const q = query(
     collectionGroup(db, 'messages'),
-    where('flags', 'array-contains-any', ['question', 'task']),
+    where('members', 'array-contains', myEmailRaw),
     orderBy('createdAt', 'desc'),
     limit(limitN.value),
   )
@@ -122,8 +131,13 @@ function subscribe() {
     return
   }
   const results: PendingMsg[] = []
+  // Filtro flags lato client (question/task): la query filtra per membership.
+  const flaggedDocs = snap.docs.filter((d) => {
+    const f = d.data().flags
+    return Array.isArray(f) && (f.includes('question') || f.includes('task'))
+  })
   // Eseguo le resolveChat in PARALLELO invece che sequenziale (era N+1 bloccante)
-  const enriched = await Promise.all(snap.docs.map(async (d) => {
+  const enriched = await Promise.all(flaggedDocs.map(async (d) => {
     const data    = d.data()
     const chatRef = d.ref.parent.parent
     const chatId  = chatRef?.id ?? ''
@@ -142,6 +156,7 @@ function subscribe() {
       taskId:      data.taskId    ?? null,
       answeredAt:  toDate(data.answeredAt),
       rejectedAt:  toDate(data.rejectedAt),
+      members:     Array.isArray(data.members) ? data.members : (chatInfo?.members ?? []),
     } as PendingMsg
   }))
   results.push(...enriched)
@@ -241,16 +256,24 @@ async function submitInlineReply(msg: PendingMsg) {
   replySending.value = true
   try {
     const from = auth.currentUser?.email ?? ''
+    // (N2) members denormalizzati: necessari perché il messaggio sia leggibile
+    // via collectionGroup solo dai membri. Uso i membri CORRENTI della chat
+    // (chatCache) con fallback a quelli della pendenza, così resta un
+    // sottoinsieme dei membri reali (la regola di create esige `hasOnly`).
+    const replyMembers = chatCache.value.get(msg.chatId)?.members ?? msg.members
     // 1. Aggiungi il messaggio di risposta nella chat
     await addDoc(collection(db, 'chats', msg.chatId, 'messages'), {
       text:       replyText.value.trim(),
       from,
+      members:    replyMembers,
       createdAt:  serverTimestamp(),
       flags:      [],
       hashtags:   [],
       mentions:   [],
+      refs:       [],
       taskId:     null,
       answeredAt: null,
+      rejectedAt: null,
       replyToId:  msg.id,
     })
     // 2. Aggiorna lastMessage della chat

@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.autoDeliveredAfter7Days = exports.backfillAssigneeUids = exports.auditAssigneeUids = exports.changeTeamMemberEmail = exports.createTeamMember = void 0;
+exports.autoDeliveredAfter7Days = exports.backfillMessageMembers = exports.backfillAssigneeUids = exports.auditAssigneeUids = exports.changeTeamMemberEmail = exports.createTeamMember = void 0;
 const dotenv = __importStar(require("dotenv")); // <--- AGGIUNGI QUESTO
 dotenv.config(); // <--- E QUESTO (Carica subito il file .env)
 const functions = __importStar(require("firebase-functions/v1"));
@@ -824,6 +824,70 @@ exports.backfillAssigneeUids = functions
         refsUnresolved,
         unresolvedSamples: [...unresolvedSamples].slice(0, 50),
     };
+});
+/**
+ * (N2) Backfill `members` sui messaggi esistenti.
+ * La regola del collectionGroup `messages` concede la read solo a chi è in
+ * `resource.data.members`. I messaggi creati prima del fix non hanno il campo →
+ * questo backfill lo copia dai `members` della chat di origine (parent path),
+ * con cache per-chat per evitare letture ripetute.
+ * Admin-only. Default dryRun. Idempotente (scrive solo dove manca/diverge).
+ */
+exports.backfillMessageMembers = functions
+    .region('europe-west1')
+    .https.onCall(async (data, context) => {
+    var _a, _b, _c, _d, _e, _f;
+    const callerEmail = (((_b = (_a = context.auth) === null || _a === void 0 ? void 0 : _a.token) === null || _b === void 0 ? void 0 : _b.email) || '').toLowerCase().trim();
+    const callerRole = (_d = (_c = context.auth) === null || _c === void 0 ? void 0 : _c.token) === null || _d === void 0 ? void 0 : _d.role;
+    const isAdminCaller = callerRole === 'ADMIN' || callerEmail === 'info@inglesinaitaliana.it';
+    if (!context.auth || !isAdminCaller) {
+        throw new functions.https.HttpsError('permission-denied', 'Riservato agli amministratori.');
+    }
+    const dryRun = (data === null || data === void 0 ? void 0 : data.dryRun) !== false; // default: anteprima senza scrivere
+    const db = admin.firestore();
+    const chatMembersCache = new Map();
+    const msgsSnap = await db.collectionGroup('messages').get();
+    let scanned = 0, changed = 0, skippedNoParent = 0, skippedNoMembers = 0;
+    let batch = db.batch();
+    let pending = 0;
+    const commits = [];
+    const sameSet = (a, b) => a.length === b.length && a.every((x) => b.includes(x));
+    for (const msgDoc of msgsSnap.docs) {
+        scanned++;
+        const chatRef = msgDoc.ref.parent.parent; // chats/{chatId}
+        if (!chatRef) {
+            skippedNoParent++;
+            continue;
+        }
+        let members = chatMembersCache.get(chatRef.id);
+        if (members === undefined) {
+            const chatSnap = await chatRef.get();
+            const m = (_e = chatSnap.data()) === null || _e === void 0 ? void 0 : _e.members;
+            members = Array.isArray(m) ? m : [];
+            chatMembersCache.set(chatRef.id, members);
+        }
+        if (members.length === 0) {
+            skippedNoMembers++;
+            continue;
+        }
+        const current = (_f = msgDoc.data()) === null || _f === void 0 ? void 0 : _f.members;
+        if (Array.isArray(current) && sameSet(current, members))
+            continue; // già allineato
+        changed++;
+        if (!dryRun) {
+            batch.update(msgDoc.ref, { members });
+            pending++;
+            if (pending >= 400) {
+                commits.push(batch.commit());
+                batch = db.batch();
+                pending = 0;
+            }
+        }
+    }
+    if (!dryRun && pending > 0)
+        commits.push(batch.commit());
+    await Promise.all(commits);
+    return { dryRun, scanned, changed, skippedNoParent, skippedNoMembers, chatsRead: chatMembersCache.size };
 });
 // --- FUNZIONE RINNOVO TOKEN (ACCESS TOKEN MANAGER) ---
 async function getValidFicToken() {
@@ -3147,6 +3211,7 @@ exports.listNebulaApiKeys = functions
 // ============================================================================
 const server_1 = require("./lib_mcp/server");
 const oauth_1 = require("./lib_mcp/oauth");
+const rateLimit_1 = require("./lib_mcp/rateLimit");
 // Handler HTTP condiviso. Esposto come due function:
 //   mcpSidera — endpoint canonico (serve l'intera suite: NEBULA-docs + CEPHEID)
 //   mcpNebula — alias di compatibilità per i client già connessi all'URL legacy.
@@ -3156,6 +3221,19 @@ const mcpHttpHandler = functions
     .region('europe-west1')
     .runWith({ memory: '256MB', timeoutSeconds: 60 })
     .https.onRequest(async (req, res) => {
+    // (N4) Rate-limit per IP sugli endpoint pubblici. Bucket separati:
+    // i path OAuth sensibili (/token, /register, /authorize) hanno un tetto
+    // più stretto contro il brute-force su code/token; le chiamate MCP
+    // (autenticate via Bearer) hanno un tetto più generoso.
+    const ip = (0, rateLimit_1.clientIpFromHeaders)(req.headers, req.ip || 'unknown');
+    const p = (req.path || '').toLowerCase();
+    const sensitive = p.includes('/token') || p.includes('/register') || p.includes('/authorize');
+    const rl = await (0, rateLimit_1.checkRateLimit)(`mcp:${sensitive ? 'oauth' : 'rpc'}:${ip}`, sensitive ? 20 : 120, 60);
+    if (!rl.allowed) {
+        res.set('Retry-After', String(rl.retryAfterSec));
+        res.status(429).json({ error: 'rate_limited', error_description: 'Troppe richieste, riprova più tardi.' });
+        return;
+    }
     const result = await (0, server_1.handleMcpRequest)({
         headers: req.headers,
         method: req.method,
@@ -3243,6 +3321,22 @@ exports.oauthCleanup = functions
     .onRun(async () => {
     const r = await (0, oauth_1.cleanupOAuthStale)();
     console.log(`[oauthCleanup] deleted requests=${r.requests} codes=${r.codes} tokens=${r.tokens}`);
+    // (N4) purge dei contatori rate-limit con finestra scaduta da >1 giorno
+    // (1 doc per IP: crescita minima, ma teniamo pulito).
+    try {
+        const db = admin.firestore();
+        const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+        const stale = await db.collection('rateLimits').where('windowStart', '<', cutoff).limit(500).get();
+        if (!stale.empty) {
+            const batch = db.batch();
+            stale.docs.forEach((d) => batch.delete(d.ref));
+            await batch.commit();
+            console.log(`[oauthCleanup] purged ${stale.size} stale rateLimits`);
+        }
+    }
+    catch (e) {
+        console.error('[oauthCleanup] rateLimits purge failed', e);
+    }
     return null;
 });
 // ============================================================================

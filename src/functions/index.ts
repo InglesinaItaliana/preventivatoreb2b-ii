@@ -850,6 +850,64 @@ export const backfillAssigneeUids = functions
     };
   });
 
+/**
+ * (N2) Backfill `members` sui messaggi esistenti.
+ * La regola del collectionGroup `messages` concede la read solo a chi è in
+ * `resource.data.members`. I messaggi creati prima del fix non hanno il campo →
+ * questo backfill lo copia dai `members` della chat di origine (parent path),
+ * con cache per-chat per evitare letture ripetute.
+ * Admin-only. Default dryRun. Idempotente (scrive solo dove manca/diverge).
+ */
+export const backfillMessageMembers = functions
+  .region('europe-west1')
+  .https.onCall(async (data, context) => {
+    const callerEmail = (context.auth?.token?.email || '').toLowerCase().trim();
+    const callerRole = context.auth?.token?.role;
+    const isAdminCaller = callerRole === 'ADMIN' || callerEmail === 'info@inglesinaitaliana.it';
+    if (!context.auth || !isAdminCaller) {
+      throw new functions.https.HttpsError('permission-denied', 'Riservato agli amministratori.');
+    }
+    const dryRun = data?.dryRun !== false;   // default: anteprima senza scrivere
+
+    const db = admin.firestore();
+    const chatMembersCache = new Map<string, string[]>();
+    const msgsSnap = await db.collectionGroup('messages').get();
+
+    let scanned = 0, changed = 0, skippedNoParent = 0, skippedNoMembers = 0;
+    let batch = db.batch();
+    let pending = 0;
+    const commits: Promise<unknown>[] = [];
+
+    const sameSet = (a: string[], b: string[]) =>
+      a.length === b.length && a.every((x) => b.includes(x));
+
+    for (const msgDoc of msgsSnap.docs) {
+      scanned++;
+      const chatRef = msgDoc.ref.parent.parent;   // chats/{chatId}
+      if (!chatRef) { skippedNoParent++; continue; }
+      let members = chatMembersCache.get(chatRef.id);
+      if (members === undefined) {
+        const chatSnap = await chatRef.get();
+        const m = chatSnap.data()?.members;
+        members = Array.isArray(m) ? m : [];
+        chatMembersCache.set(chatRef.id, members);
+      }
+      if (members.length === 0) { skippedNoMembers++; continue; }
+      const current = msgDoc.data()?.members;
+      if (Array.isArray(current) && sameSet(current, members)) continue;   // già allineato
+      changed++;
+      if (!dryRun) {
+        batch.update(msgDoc.ref, { members });
+        pending++;
+        if (pending >= 400) { commits.push(batch.commit()); batch = db.batch(); pending = 0; }
+      }
+    }
+    if (!dryRun && pending > 0) commits.push(batch.commit());
+    await Promise.all(commits);
+
+    return { dryRun, scanned, changed, skippedNoParent, skippedNoMembers, chatsRead: chatMembersCache.size };
+  });
+
 // --- FUNZIONE RINNOVO TOKEN (ACCESS TOKEN MANAGER) ---
 async function getValidFicToken(): Promise<string> {
     const db = admin.firestore();
@@ -3472,6 +3530,7 @@ exports.listNebulaApiKeys = functions
 
 import { handleMcpRequest } from './lib_mcp/server';
 import { issueAuthCodeForConsent, cleanupOAuthStale } from './lib_mcp/oauth';
+import { checkRateLimit, clientIpFromHeaders } from './lib_mcp/rateLimit';
 
 // Handler HTTP condiviso. Esposto come due function:
 //   mcpSidera — endpoint canonico (serve l'intera suite: NEBULA-docs + CEPHEID)
@@ -3482,6 +3541,23 @@ const mcpHttpHandler = functions
     .region('europe-west1')
     .runWith({ memory: '256MB', timeoutSeconds: 60 })
     .https.onRequest(async (req, res) => {
+        // (N4) Rate-limit per IP sugli endpoint pubblici. Bucket separati:
+        // i path OAuth sensibili (/token, /register, /authorize) hanno un tetto
+        // più stretto contro il brute-force su code/token; le chiamate MCP
+        // (autenticate via Bearer) hanno un tetto più generoso.
+        const ip = clientIpFromHeaders(req.headers as Record<string, unknown>, req.ip || 'unknown');
+        const p = (req.path || '').toLowerCase();
+        const sensitive = p.includes('/token') || p.includes('/register') || p.includes('/authorize');
+        const rl = await checkRateLimit(
+            `mcp:${sensitive ? 'oauth' : 'rpc'}:${ip}`,
+            sensitive ? 20 : 120,
+            60,
+        );
+        if (!rl.allowed) {
+            res.set('Retry-After', String(rl.retryAfterSec));
+            res.status(429).json({ error: 'rate_limited', error_description: 'Troppe richieste, riprova più tardi.' });
+            return;
+        }
         const result = await handleMcpRequest({
             headers: req.headers as Record<string, unknown>,
             method: req.method,
@@ -3575,6 +3651,21 @@ exports.oauthCleanup = functions
     .onRun(async () => {
         const r = await cleanupOAuthStale();
         console.log(`[oauthCleanup] deleted requests=${r.requests} codes=${r.codes} tokens=${r.tokens}`);
+        // (N4) purge dei contatori rate-limit con finestra scaduta da >1 giorno
+        // (1 doc per IP: crescita minima, ma teniamo pulito).
+        try {
+            const db = admin.firestore();
+            const cutoff = Date.now() - 24 * 60 * 60 * 1000;
+            const stale = await db.collection('rateLimits').where('windowStart', '<', cutoff).limit(500).get();
+            if (!stale.empty) {
+                const batch = db.batch();
+                stale.docs.forEach((d) => batch.delete(d.ref));
+                await batch.commit();
+                console.log(`[oauthCleanup] purged ${stale.size} stale rateLimits`);
+            }
+        } catch (e) {
+            console.error('[oauthCleanup] rateLimits purge failed', e);
+        }
         return null;
     });
 

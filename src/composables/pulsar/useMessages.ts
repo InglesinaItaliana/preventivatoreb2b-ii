@@ -79,6 +79,17 @@ export function useMessages(chatId: string) {
 
   onUnmounted(unsubscribe)
 
+  // (N2) Membri della chat in cache. Servono a scrivere `members` su ogni
+  // messaggio, così la regola del collectionGroup `messages` può concederne la
+  // lettura SOLO ai membri (la ricerca hashtag/pendenze filtra per membership).
+  // Sottoscrizione → valore in memoria, nessuna lettura al send (offline-safe).
+  const chatMembers = ref<string[]>([])
+  const unsubChat = onSnapshot(doc(db, 'chats', chatId), (snap) => {
+    const m = snap.data()?.members
+    if (Array.isArray(m)) chatMembers.value = m
+  })
+  onUnmounted(unsubChat)
+
   async function sendMessage(data: {
     text: string
     flags: string[]
@@ -91,6 +102,7 @@ export function useMessages(chatId: string) {
     await addDoc(collection(db, 'chats', chatId, 'messages'), {
       text:       data.text,
       from,
+      members:    chatMembers.value,   // (N2) leggibile via collectionGroup solo dai membri
       createdAt:  serverTimestamp(),
       flags:      data.flags,
       hashtags:   data.hashtags,
