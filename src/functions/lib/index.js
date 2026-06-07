@@ -36,13 +36,15 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.autoDeliveredAfter7Days = exports.changeTeamMemberEmail = exports.createTeamMember = void 0;
+exports.autoDeliveredAfter7Days = exports.backfillAssigneeUids = exports.auditAssigneeUids = exports.changeTeamMemberEmail = exports.createTeamMember = void 0;
 const dotenv = __importStar(require("dotenv")); // <--- AGGIUNGI QUESTO
 dotenv.config(); // <--- E QUESTO (Carica subito il file .env)
 const functions = __importStar(require("firebase-functions/v1"));
 const admin = __importStar(require("firebase-admin"));
 const axios_1 = __importDefault(require("axios"));
 const nodemailer = __importStar(require("nodemailer"));
+// Layer di fatturazione (migrazione FiC→CiC). Vedi src/functions/lib_billing/.
+const lib_billing_1 = require("./lib_billing");
 // Inizializza Firebase
 if (admin.apps.length === 0) {
     admin.initializeApp();
@@ -101,11 +103,26 @@ exports.cancelOrder = functions
                 // Non blocchiamo: se l'ordine non esiste più su FiC, va bene lo stesso.
             }
         }
+        // 2b. ELIMINAZIONE SU CONTABILITÀ IN CLOUD (Se esiste)
+        const cicId = orderData === null || orderData === void 0 ? void 0 : orderData.cic_order_id;
+        if (cicId) {
+            try {
+                console.log(`[CANCEL] Eliminazione ordine CiC ID: ${cicId}...`);
+                const provider = await (0, lib_billing_1.createCicProvider)();
+                await provider.deleteDocument({ id: cicId, type: 'order' });
+                console.log(`[CANCEL] Ordine CiC eliminato correttamente.`);
+            }
+            catch (cicError) {
+                console.error("[CANCEL] Errore eliminazione CiC (procedo comunque all'annullamento locale):", cicError.message);
+            }
+        }
         // 3. AGGIORNAMENTO STATO FIRESTORE -> REJECTED
         await docRef.update({
             stato: 'REJECTED',
             fic_order_id: admin.firestore.FieldValue.delete(),
             fic_order_url: admin.firestore.FieldValue.delete(),
+            cic_order_id: admin.firestore.FieldValue.delete(),
+            cic_order_url: admin.firestore.FieldValue.delete(),
             // Manteniamo traccia di chi ha annullato
             annullatoDa: context.auth.token.email || context.auth.uid,
             dataAnnullamento: admin.firestore.FieldValue.serverTimestamp()
@@ -643,6 +660,170 @@ exports.changeTeamMemberEmail = functions
         throw new functions.https.HttpsError('internal', 'Cambio email fallito: ' + error.message);
     }
 });
+/**
+ * A0 — Audit assignees email→UID (migrazione STELLA-GRAFO Strada B).
+ * READ-ONLY: nessuna scrittura. Costruisce la mappa email→uid da /team (uid-keyed
+ * post re-key) e scansiona TUTTE le task (collectionGroup: root tasks +
+ * projects/{id}/tasks), classificando ogni voce di `assignees`:
+ *   - emailMappable:    email con uid noto → migrabile in backfill;
+ *   - emailOrphan:      email SENZA uid (esterni/ex-staff) → resterà email;
+ *   - alreadyUid:       già un uid noto (idempotenza, dual-run);
+ *   - unknownNonEmail:  stringa né email né uid noto (anomalia da indagare).
+ * Gate `readyForBackfill` = nessuna anomalia non-email. Nessun rischio.
+ */
+exports.auditAssigneeUids = functions
+    .region('europe-west1')
+    .https.onCall(async (_data, context) => {
+    var _a, _b, _c, _d;
+    const callerEmail = (((_b = (_a = context.auth) === null || _a === void 0 ? void 0 : _a.token) === null || _b === void 0 ? void 0 : _b.email) || '').toLowerCase().trim();
+    const callerRole = (_d = (_c = context.auth) === null || _c === void 0 ? void 0 : _c.token) === null || _d === void 0 ? void 0 : _d.role;
+    const isAdminCaller = callerRole === 'ADMIN' || callerEmail === 'info@inglesinaitaliana.it';
+    if (!context.auth || !isAdminCaller) {
+        throw new functions.https.HttpsError('permission-denied', 'Riservato agli amministratori.');
+    }
+    const db = admin.firestore();
+    // 1. Mappa email→uid da /team (uid-keyed).
+    const teamSnap = await db.collection('team').get();
+    const emailToUid = new Map();
+    const knownUids = new Set();
+    teamSnap.forEach((d) => {
+        var _a;
+        knownUids.add(d.id);
+        const email = String(((_a = d.data()) === null || _a === void 0 ? void 0 : _a.email) || '').toLowerCase().trim();
+        if (email)
+            emailToUid.set(email, d.id);
+    });
+    // 2. Sweep di tutte le task (root + sotto-progetto via collectionGroup).
+    const tasksSnap = await db.collectionGroup('tasks').get();
+    let taskCount = 0, tasksWithAssignees = 0, assigneeRefs = 0;
+    let emailMappable = 0, emailOrphan = 0, alreadyUid = 0, unknownNonEmail = 0;
+    const orphanEmails = new Set();
+    const unknownRefs = new Set();
+    tasksSnap.forEach((d) => {
+        var _a;
+        taskCount++;
+        const a = (_a = d.data()) === null || _a === void 0 ? void 0 : _a.assignees;
+        if (!Array.isArray(a) || a.length === 0)
+            return;
+        tasksWithAssignees++;
+        for (const raw of a) {
+            if (typeof raw !== 'string' || !raw.trim())
+                continue;
+            assigneeRefs++;
+            const v = raw.toLowerCase().trim();
+            if (v.includes('@')) {
+                if (emailToUid.has(v))
+                    emailMappable++;
+                else {
+                    emailOrphan++;
+                    orphanEmails.add(v);
+                }
+            }
+            else if (knownUids.has(raw)) {
+                alreadyUid++;
+            }
+            else {
+                unknownNonEmail++;
+                unknownRefs.add(raw);
+            }
+        }
+    });
+    return {
+        teamMembers: teamSnap.size,
+        taskCount,
+        tasksWithAssignees,
+        assigneeRefs,
+        emailMappable,
+        emailOrphan,
+        alreadyUid,
+        unknownNonEmail,
+        orphanEmails: [...orphanEmails].sort(),
+        unknownRefs: [...unknownRefs].slice(0, 50),
+        readyForBackfill: unknownNonEmail === 0,
+    };
+});
+/**
+ * A3 — Backfill assignees email→UID (migrazione Strada B). Converte ogni assignee
+ * email (con uid noto in /team) in uid, su tutte le task (collectionGroup: root
+ * tasks e projects/{id}/tasks). Idempotente: riscrive SOLO gli array effettivamente
+ * cambiati; voci già uid o non risolvibili (orfani esterni) restano invariate.
+ * `dryRun` (default true): conta cosa cambierebbe SENZA scrivere.
+ */
+exports.backfillAssigneeUids = functions
+    .region('europe-west1')
+    .https.onCall(async (data, context) => {
+    var _a, _b, _c, _d, _e;
+    const callerEmail = (((_b = (_a = context.auth) === null || _a === void 0 ? void 0 : _a.token) === null || _b === void 0 ? void 0 : _b.email) || '').toLowerCase().trim();
+    const callerRole = (_d = (_c = context.auth) === null || _c === void 0 ? void 0 : _c.token) === null || _d === void 0 ? void 0 : _d.role;
+    const isAdminCaller = callerRole === 'ADMIN' || callerEmail === 'info@inglesinaitaliana.it';
+    if (!context.auth || !isAdminCaller) {
+        throw new functions.https.HttpsError('permission-denied', 'Riservato agli amministratori.');
+    }
+    const dryRun = (data === null || data === void 0 ? void 0 : data.dryRun) !== false; // default: anteprima senza scrivere
+    const db = admin.firestore();
+    // Mappa email→uid da /team (uid-keyed).
+    const teamSnap = await db.collection('team').get();
+    const emailToUid = new Map();
+    teamSnap.forEach((d) => {
+        var _a;
+        const email = String(((_a = d.data()) === null || _a === void 0 ? void 0 : _a.email) || '').toLowerCase().trim();
+        if (email)
+            emailToUid.set(email, d.id);
+    });
+    const tasksSnap = await db.collectionGroup('tasks').get();
+    let tasksScanned = 0, tasksChanged = 0, refsConverted = 0, refsUnresolved = 0;
+    const unresolvedSamples = new Set();
+    let batch = db.batch();
+    let pending = 0;
+    const commits = [];
+    for (const taskDoc of tasksSnap.docs) {
+        tasksScanned++;
+        const a = (_e = taskDoc.data()) === null || _e === void 0 ? void 0 : _e.assignees;
+        if (!Array.isArray(a) || a.length === 0)
+            continue;
+        let changed = false;
+        const next = a.map((raw) => {
+            if (typeof raw !== 'string' || !raw)
+                return raw;
+            const v = raw.toLowerCase().trim();
+            if (v.includes('@')) {
+                const uid = emailToUid.get(v);
+                if (uid) {
+                    changed = true;
+                    refsConverted++;
+                    return uid;
+                }
+                refsUnresolved++;
+                unresolvedSamples.add(v);
+                return raw; // orfano: resta email
+            }
+            return raw; // già uid (o stringa non-email)
+        });
+        if (changed) {
+            tasksChanged++;
+            if (!dryRun) {
+                batch.update(taskDoc.ref, { assignees: next });
+                pending++;
+                if (pending >= 400) {
+                    commits.push(batch.commit());
+                    batch = db.batch();
+                    pending = 0;
+                }
+            }
+        }
+    }
+    if (!dryRun && pending > 0)
+        commits.push(batch.commit());
+    await Promise.all(commits);
+    return {
+        dryRun,
+        tasksScanned,
+        tasksChanged,
+        refsConverted,
+        refsUnresolved,
+        unresolvedSamples: [...unresolvedSamples].slice(0, 50),
+    };
+});
 // --- FUNZIONE RINNOVO TOKEN (ACCESS TOKEN MANAGER) ---
 async function getValidFicToken() {
     var _a;
@@ -702,13 +883,23 @@ exports.generaOrdineFIC = functions
     // 1. CONTROLLO TRIGGER (ORDER_REQ -> WAITING...)
     const statiAttivazione = ['WAITING_FAST', 'WAITING_SIGN'];
     const eAttivato = statiAttivazione.includes(newData.stato);
-    if (!eAttivato || newData.fic_order_id)
+    if (!eAttivato || newData.fic_order_id || newData.cic_order_id)
         return null;
     const clienteUID = newData.clienteUID;
     if (!clienteUID) {
         console.error("[FIC] ERRORE: Manca clienteUID nel preventivo.");
         return null;
     }
+    // --- SELETTORE BACKEND (migrazione FiC→CiC) ---
+    // Default ASSOLUTO = FiC (comportamento storico invariato). Il ramo CiC
+    // parte SOLO se l'ordine è già marcato 'cic' o se config/billing.activeBackend='cic'.
+    // Errori di lettura del flag → fallback 'fic'. Vedi resolveBillingBackend().
+    const billingBackend = await resolveBillingBackend(newData);
+    if (billingBackend === 'cic') {
+        await generaOrdineCiC(change, newData, clienteUID);
+        return null;
+    }
+    // --- da qui in giù: path FiC ESISTENTE, INVARIATO ---
     try {
         // RECUPERA TOKEN VALIDO (Nuova logica)
         const accessToken = await getValidFicToken();
@@ -894,6 +1085,186 @@ exports.generaOrdineFIC = functions
     }
     return null;
 });
+// --- Risoluzione backend di fatturazione (frozen sul preventivo, default FiC) ---
+// Se l'ordine ha già billingBackend → si rispetta (scelta congelata). Altrimenti
+// si legge config/billing.activeBackend. Qualunque errore → 'fic' (mai rompere il flusso).
+async function resolveBillingBackend(newData) {
+    if (newData.billingBackend === 'cic' || newData.billingBackend === 'fic') {
+        return newData.billingBackend;
+    }
+    try {
+        return await (0, lib_billing_1.getActiveBackend)();
+    }
+    catch (e) {
+        console.warn('[BILLING] lettura config/billing fallita, fallback FiC', e);
+        return 'fic';
+    }
+}
+// --- GENERA ORDINE SU CONTABILITÀ IN CLOUD (CiC/Reviso) ---
+// Gemello di generaOrdineFIC per il nuovo backend. ADDITIVO: invocato SOLO quando
+// billingBackend === 'cic'. Anti-duplicato: scrive cic_order_id appena disponibile
+// (il guard di re-entry blocca i ri-trigger). In caso di errore PRIMA di avere l'id
+// NON scrive nulla sul doc (come il path FiC) → niente loop, niente ordini doppi.
+async function generaOrdineCiC(change, newData, clienteUID) {
+    try {
+        const userDoc = await admin.firestore().collection('users').doc(clienteUID).get();
+        const userData = userDoc.data();
+        const pivaCliente = userData === null || userData === void 0 ? void 0 : userData.piva;
+        if (!pivaCliente) {
+            console.error('[CIC] P.IVA mancante nell\'anagrafica utente.');
+            return;
+        }
+        const provider = await (0, lib_billing_1.createCicProvider)();
+        const customer = await provider.findOrCreateCustomer({
+            piva: pivaCliente,
+            name: (userData === null || userData === void 0 ? void 0 : userData.ragioneSociale) || newData.cliente || 'Cliente',
+            email: userData === null || userData === void 0 ? void 0 : userData.email,
+            taxCode: userData === null || userData === void 0 ? void 0 : userData.codiceFiscale,
+            address: userData === null || userData === void 0 ? void 0 : userData.indirizzo,
+            zip: userData === null || userData === void 0 ? void 0 : userData.cap,
+            city: userData === null || userData === void 0 ? void 0 : userData.citta,
+            province: userData === null || userData === void 0 ? void 0 : userData.provincia,
+        });
+        const lines = (newData.elementi || []).map((item) => {
+            let desc = item.descrizioneCompleta || 'Articolo Vetrata';
+            if (item.categoria !== 'EXTRA' && (item.base_mm > 0 || item.altezza_mm > 0)) {
+                desc += ` - Dim: ${item.base_mm}x${item.altezza_mm} mm${item.infoCanalino ? ` - ${item.infoCanalino}` : ''}`;
+            }
+            return {
+                code: item.codice ? String(item.codice).toUpperCase().trim() : '',
+                description: desc,
+                qty: item.quantita || 1,
+                unitNetPrice: item.prezzo_unitario || 0,
+                category: item.categoria,
+            };
+        });
+        const result = await provider.createOrder({
+            customer,
+            date: newData.dataConsegnaPrevista || new Date().toISOString().split('T')[0],
+            lines,
+            discountPercentage: Number(newData.scontoPercentuale) || 0,
+            visibleSubject: newData.commessa || `Rif: ${newData.codice}`,
+        });
+        // id salvato SUBITO → blocca i ri-trigger (anti-duplicato)
+        await change.after.ref.update({
+            cic_order_id: result.id,
+            cic_order_url: result.url || null,
+            billingBackend: 'cic',
+            billingError: admin.firestore.FieldValue.delete(),
+        });
+        // validazione totali NON bloccante: la cifra cliente deve combaciare al centesimo
+        const expectedNet = (typeof newData.totaleScontato === 'number')
+            ? newData.totaleScontato
+            : (newData.totaleImponibile || 0);
+        if (Math.abs((result.netAmount || 0) - expectedNet) > 0.01) {
+            await change.after.ref.update({
+                billingError: `Totale CiC ${result.netAmount} ≠ atteso POPS ${expectedNet}`,
+            });
+            console.warn(`[CIC] Discrepanza totale: CiC ${result.netAmount} vs atteso ${expectedNet}`);
+        }
+        console.log(`✅ [CIC] ORDINE CREATO! ID: ${result.id}`);
+    }
+    catch (error) {
+        // come il path FiC: logga e basta, NESSUNA scrittura sul doc → niente
+        // ri-trigger e niente ordini duplicati su CiC.
+        console.error('❌ [CIC] Errore creazione ordine:', (error === null || error === void 0 ? void 0 : error.message) || error);
+        if (error === null || error === void 0 ? void 0 : error.response) {
+            console.error('Dettaglio errore API CiC:', JSON.stringify(error.response.data, null, 2));
+        }
+    }
+}
+// --- DDT CUMULATIVO SU CONTABILITÀ IN CLOUD (CiC) ---
+// Gemello CiC di creaDdtCumulativo. Reviso non ha il "join" ordini→DDT: POPS
+// assembla le righe dai preventivi in Firestore. Il DDT è un documento di
+// trasporto → elenca la MERCE (righe non-EXTRA); i prezzi non sono rilevanti.
+async function creaDdtCumulativoCiC(orderIds, data) {
+    var _a, _b;
+    const { date, colli, weight, tipoTrasporto, corriere, tracking } = data;
+    const db = admin.firestore();
+    try {
+        const snaps = await Promise.all(orderIds.map((id) => db.collection('preventivi').doc(id).get()));
+        const orders = snaps
+            .map((s) => ({ firestoreId: s.id, data: s.data() }))
+            .filter((o) => !!o.data && !!o.data.cic_order_id);
+        if (orders.length === 0)
+            return { success: false, message: 'Nessun ordine CiC valido trovato.' };
+        // Cliente dal primo ordine (un DDT cumulativo è per singolo cliente)
+        const clienteUID = orders[0].data.clienteUID;
+        const userData = clienteUID
+            ? (await db.collection('users').doc(clienteUID).get()).data()
+            : undefined;
+        const piva = userData === null || userData === void 0 ? void 0 : userData.piva;
+        if (!piva)
+            return { success: false, message: 'P.IVA cliente mancante.' };
+        const provider = await (0, lib_billing_1.createCicProvider)();
+        const customer = await provider.findOrCreateCustomer({
+            piva,
+            name: (userData === null || userData === void 0 ? void 0 : userData.ragioneSociale) || orders[0].data.cliente || 'Cliente',
+            email: userData === null || userData === void 0 ? void 0 : userData.email,
+            taxCode: userData === null || userData === void 0 ? void 0 : userData.codiceFiscale,
+            address: userData === null || userData === void 0 ? void 0 : userData.indirizzo,
+            zip: userData === null || userData === void 0 ? void 0 : userData.cap,
+            city: userData === null || userData === void 0 ? void 0 : userData.citta,
+            province: userData === null || userData === void 0 ? void 0 : userData.provincia,
+        });
+        // Righe = merce trasportata (escludo gli EXTRA: spedizione/lavorazioni).
+        const lines = [];
+        for (const o of orders) {
+            for (const item of (o.data.elementi || [])) {
+                if (item.categoria === 'EXTRA')
+                    continue;
+                let desc = item.descrizioneCompleta || 'Articolo Vetrata';
+                if (item.base_mm > 0 || item.altezza_mm > 0) {
+                    desc += ` - Dim: ${item.base_mm}x${item.altezza_mm} mm`;
+                }
+                lines.push({
+                    code: item.codice ? String(item.codice).toUpperCase().trim() : '',
+                    description: desc,
+                    qty: item.quantita || 1,
+                    unitNetPrice: item.prezzo_unitario || 0,
+                    category: item.categoria,
+                });
+            }
+        }
+        if (lines.length === 0)
+            return { success: false, message: 'Nessuna riga merce da spedire.' };
+        const ddt = await provider.createDeliveryNote({
+            customer,
+            date,
+            lines,
+            shipping: {
+                packages: Number(colli) || 1,
+                weight: weight ? Number(weight) : undefined,
+                carrier: tipoTrasporto === 'COURIER' ? corriere : undefined,
+                tracking: tipoTrasporto === 'COURIER' ? tracking : undefined,
+                transportType: tipoTrasporto === 'COURIER' ? 'COURIER' : 'INTERNAL',
+            },
+        });
+        const batch = db.batch();
+        const nuovoStato = tipoTrasporto === 'COURIER' ? 'SHIPPED' : 'DELIVERY';
+        for (const o of orders) {
+            const ref = db.collection('preventivi').doc(o.firestoreId);
+            batch.update(ref, {
+                cic_ddt_id: ddt.id,
+                cic_ddt_number: (_a = ddt.number) !== null && _a !== void 0 ? _a : null,
+                cic_ddt_url: (_b = ddt.url) !== null && _b !== void 0 ? _b : null,
+                stato: nuovoStato,
+                dataConsegnaPrevista: date,
+                colli: colli != null ? Number(colli) : null,
+                metodoSpedizione: tipoTrasporto,
+                corriere: tipoTrasporto === 'COURIER' ? corriere : null,
+                trackingCode: tipoTrasporto === 'COURIER' ? tracking : null,
+                dataSpedizione: admin.firestore.FieldValue.serverTimestamp(),
+            });
+        }
+        await batch.commit();
+        return { success: true, cic_id: ddt.id };
+    }
+    catch (error) {
+        console.error('❌ [CIC DDT] Errore:', (error === null || error === void 0 ? void 0 : error.response) ? JSON.stringify(error.response.data) : error === null || error === void 0 ? void 0 : error.message);
+        return { success: false, message: 'Errore CiC: ' + ((error === null || error === void 0 ? void 0 : error.message) || 'sconosciuto') };
+    }
+}
 // --- FUNZIONE CREAZIONE DDT (UNIFICATA) ---
 exports.creaDdtCumulativo = functions
     .region('europe-west1')
@@ -905,6 +1276,12 @@ exports.creaDdtCumulativo = functions
     }
     try {
         const db = admin.firestore();
+        // --- SELETTORE BACKEND: se gli ordini sono su CiC, usa il path CiC ---
+        const firstSnap = await db.collection('preventivi').doc(orderIds[0]).get();
+        const firstData = firstSnap.data();
+        if (firstData && (firstData.billingBackend === 'cic' || firstData.cic_order_id)) {
+            return await creaDdtCumulativoCiC(orderIds, data);
+        }
         const accessToken = await getValidFicToken();
         // 1. Recupera i documenti da Firestore
         const orderSnapshots = await Promise.all(orderIds.map((id) => db.collection('preventivi').doc(id).get()));
@@ -1409,11 +1786,30 @@ exports.resetOrderState = functions
                 // Non blocchiamo il reset del DB se FiC fallisce (es. già cancellato)
             }
         }
+        // 2b. Se esiste su Contabilità in Cloud, ELIMINALO
+        const cicId = orderData === null || orderData === void 0 ? void 0 : orderData.cic_order_id;
+        if (cicId) {
+            try {
+                console.log(`[RESET] Eliminazione ordine CiC ID: ${cicId}...`);
+                const provider = await (0, lib_billing_1.createCicProvider)();
+                await provider.deleteDocument({ id: cicId, type: 'order' });
+                console.log(`[RESET] Ordine CiC eliminato correttamente.`);
+            }
+            catch (cicError) {
+                console.error("[RESET] Errore eliminazione CiC (procedo comunque al reset DB):", cicError.message);
+            }
+        }
         // 3. Resetta lo stato e pulisce i campi su Firestore
         await docRef.update({
             stato: 'DRAFT',
             fic_order_id: admin.firestore.FieldValue.delete(),
             fic_order_url: admin.firestore.FieldValue.delete(),
+            cic_order_id: admin.firestore.FieldValue.delete(),
+            cic_order_url: admin.firestore.FieldValue.delete(),
+            cic_ddt_id: admin.firestore.FieldValue.delete(),
+            cic_ddt_url: admin.firestore.FieldValue.delete(),
+            cic_ddt_number: admin.firestore.FieldValue.delete(),
+            billingError: admin.firestore.FieldValue.delete(),
             dataConferma: admin.firestore.FieldValue.delete(),
             metodoConferma: admin.firestore.FieldValue.delete(),
             contrattoFirmatoUrl: admin.firestore.FieldValue.delete(),
@@ -2987,5 +3383,207 @@ exports.unarchiveNebulaDoc = functions
     if (!docId)
         throw new functions.https.HttpsError('invalid-argument', 'docId mancante');
     return setArchivedFlag(docId, userEmail, false);
+});
+// ============================================================================
+// QUASAR · Calendario EPHEMERIS — notifiche appuntamenti (push FCM data-only)
+// Un appuntamento E' una task con type==='appointment' standalone in tasks/{id}.
+// Clone del pattern notifyOnMention:
+//   - team doc fcmTokens map { tokenStr: { ts, scope, ua? } | Timestamp legacy }
+//   - filtro scope 'sidera' (audience QUASAR/desktop; il root SW serve quasar+sidera)
+//   - payload data-only scope='quasar' url='/quasar/calendario'
+//   - assignees ora sono UID -> risoluzione UID->team doc tollerante al re-key /team
+// Notifiche FISSE per ora (impostazioni utente in CORE = step successivo).
+// v1 ammette piu' trigger indipendenti sullo stesso path (vedi logTaskActivityStandalone).
+// ============================================================================
+const APPT_LEADS = [
+    { key: 'd1', ms: 24 * 60 * 60 * 1000 },
+    { key: 'h1', ms: 60 * 60 * 1000 },
+];
+// Risolve i team doc di un UID (tollerante docs/STELLA-GRAFO.md): un partecipante puo'
+// avere doc uid-keyed (id===uid) o email-keyed con campo uid. Raccoglie da entrambi.
+async function teamRefsForUid(uid) {
+    const db = admin.firestore();
+    const out = [];
+    try {
+        const direct = await db.collection('team').doc(uid).get();
+        if (direct.exists)
+            out.push(direct);
+    }
+    catch (_) { /* ignore */ }
+    try {
+        const byField = await db.collection('team').where('uid', '==', uid).get();
+        byField.docs.forEach(d => out.push(d));
+    }
+    catch (_) { /* ignore */ }
+    return out;
+}
+// UID partecipanti -> token FCM scope 'sidera' (dedup per doc e per token).
+async function collectAppointmentTokens(uids) {
+    var _a, _b;
+    const clean = Array.from(new Set((uids !== null && uids !== void 0 ? uids : []).filter(Boolean)));
+    if (!clean.length)
+        return [];
+    const perUid = await Promise.all(clean.map(teamRefsForUid));
+    const seenDoc = new Set();
+    const rawTokens = [];
+    for (const snap of perUid.flat()) {
+        if (!snap.exists || seenDoc.has(snap.ref.path))
+            continue;
+        seenDoc.add(snap.ref.path);
+        const tokensMap = ((_b = (_a = snap.data()) === null || _a === void 0 ? void 0 : _a.fcmTokens) !== null && _b !== void 0 ? _b : {});
+        for (const [tk, val] of Object.entries(tokensMap)) {
+            if (val && typeof val === 'object' && 'scope' in val) {
+                if (val.scope === 'sidera')
+                    rawTokens.push(tk);
+            }
+            // legacy timestamp nudo = default 'pulsar' -> skip (calendario non rilevante)
+        }
+    }
+    return Array.from(new Set(rawTokens));
+}
+// Orario leggibile in italiano (timezone Europe/Rome).
+function apptWhen(startAt) {
+    if (!startAt)
+        return '';
+    return startAt.toDate().toLocaleString('it-IT', {
+        weekday: 'long', day: 'numeric', month: 'long',
+        hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome',
+    });
+}
+// Invio multicast + cleanup token invalidi (best-effort, per-uid tollerante).
+async function sendAppointmentPush(uids, title, body, messageId) {
+    const tokens = await collectAppointmentTokens(uids);
+    if (!tokens.length) {
+        console.log('[appt push] 0 token scope=sidera');
+        return;
+    }
+    const res = await admin.messaging().sendEachForMulticast({
+        tokens,
+        data: { messageId, scope: 'quasar', title, body, url: '/quasar/calendario' },
+    });
+    const invalid = [];
+    res.responses.forEach((r, i) => {
+        var _a, _b;
+        if (!r.success) {
+            const code = (_b = (_a = r.error) === null || _a === void 0 ? void 0 : _a.code) !== null && _b !== void 0 ? _b : '';
+            if (code === 'messaging/invalid-registration-token' ||
+                code === 'messaging/registration-token-not-registered')
+                invalid.push(tokens[i]);
+        }
+    });
+    if (invalid.length) {
+        const updates = {};
+        invalid.forEach(tk => { updates[`fcmTokens.${tk}`] = admin.firestore.FieldValue.delete(); });
+        await Promise.all(Array.from(new Set(uids.filter(Boolean))).map(async (uid) => {
+            try {
+                const refs = (await teamRefsForUid(uid)).map(s => s.ref);
+                await Promise.all(refs.map(r => r.update(updates).catch(() => undefined)));
+            }
+            catch (_) { /* ignore */ }
+        }));
+    }
+    console.log(`[appt push] target uids ${uids.length}, tokens ${tokens.length}, success ${res.successCount}`);
+}
+// Trigger onWrite: invito (create), riprogrammazione (cambio startAt/endAt), annullamento (delete).
+// Reagisce SOLO alle task type==='appointment'; gli altri update task (incl. remindersSent
+// scritto dallo scheduler) non producono push.
+exports.notifyOnAppointment = functions
+    .region('europe-west1')
+    .firestore.document('tasks/{taskId}')
+    .onWrite(async (change, context) => {
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m;
+    const before = change.before.exists ? change.before.data() : null;
+    const after = change.after.exists ? change.after.data() : null;
+    const isAppt = ((after === null || after === void 0 ? void 0 : after.type) === 'appointment') || ((before === null || before === void 0 ? void 0 : before.type) === 'appointment');
+    if (!isAppt)
+        return null;
+    const taskId = context.params.taskId;
+    const data = (after !== null && after !== void 0 ? after : before);
+    const title = data.title || 'Appuntamento';
+    const creator = data.createdBy || '';
+    const participants = Array.isArray(data.assignees) ? data.assignees.filter(Boolean) : [];
+    // Notifica gli ALTRI partecipanti: l'autore della modifica e' tipicamente il creatore.
+    const targets = participants.filter(u => u && u !== creator);
+    if (!targets.length)
+        return null;
+    let pushTitle = '';
+    let pushBody = '';
+    if (!before && after) {
+        pushTitle = 'Nuovo appuntamento';
+        pushBody = `${title}${after.startAt ? ' · ' + apptWhen(after.startAt) : ''}`;
+    }
+    else if (before && !after) {
+        pushTitle = 'Appuntamento annullato';
+        pushBody = `${title}${before.startAt ? ' · ' + apptWhen(before.startAt) : ''}`;
+    }
+    else if (before && after) {
+        const bs = (_c = (_b = (_a = before.startAt) === null || _a === void 0 ? void 0 : _a.toMillis) === null || _b === void 0 ? void 0 : _b.call(_a)) !== null && _c !== void 0 ? _c : 0;
+        const as = (_f = (_e = (_d = after.startAt) === null || _d === void 0 ? void 0 : _d.toMillis) === null || _e === void 0 ? void 0 : _e.call(_d)) !== null && _f !== void 0 ? _f : 0;
+        const be = (_j = (_h = (_g = before.endAt) === null || _g === void 0 ? void 0 : _g.toMillis) === null || _h === void 0 ? void 0 : _h.call(_g)) !== null && _j !== void 0 ? _j : 0;
+        const ae = (_m = (_l = (_k = after.endAt) === null || _k === void 0 ? void 0 : _k.toMillis) === null || _l === void 0 ? void 0 : _l.call(_k)) !== null && _m !== void 0 ? _m : 0;
+        if (bs === as && be === ae)
+            return null; // update non-orario -> niente push
+        pushTitle = 'Appuntamento riprogrammato';
+        pushBody = `${title}${after.startAt ? ' · ' + apptWhen(after.startAt) : ''}`;
+    }
+    else {
+        return null;
+    }
+    await sendAppointmentPush(targets, pushTitle, pushBody, `appt-${taskId}-${Date.now()}`);
+    return null;
+});
+// Scheduler: promemoria FISSI 1 giorno e 1 ora prima. Scan ogni 15 min, idempotente
+// via task.remindersSent[] (aggiornarlo NON ri-triggera notifyOnAppointment: reagisce
+// solo a create/delete/cambio orario). Range su startAt = indice single-field automatico.
+exports.appointmentReminders = functions
+    .region('europe-west1')
+    .pubsub.schedule('every 15 minutes')
+    .timeZone('Europe/Rome')
+    .onRun(async () => {
+    const db = admin.firestore();
+    const now = Date.now();
+    const GRACE = 30 * 60 * 1000;
+    const fromTs = admin.firestore.Timestamp.fromMillis(now);
+    const toTs = admin.firestore.Timestamp.fromMillis(now + 25 * 60 * 60 * 1000);
+    const snap = await db.collection('tasks')
+        .where('startAt', '>', fromTs).where('startAt', '<', toTs).get();
+    let sentCount = 0;
+    for (const docSnap of snap.docs) {
+        const t = docSnap.data();
+        if (t.type !== 'appointment')
+            continue;
+        const startAt = t.startAt;
+        if (!startAt)
+            continue;
+        const start = startAt.toMillis();
+        if (start <= now)
+            continue;
+        const title = t.title || 'Appuntamento';
+        const creator = t.createdBy || '';
+        const participants = Array.isArray(t.assignees) ? t.assignees.filter(Boolean) : [];
+        // Promemoria: include anche il creatore (deve ricordarsi del proprio impegno).
+        const targets = Array.from(new Set(participants.length ? participants : (creator ? [creator] : [])));
+        if (!targets.length)
+            continue;
+        const sent = new Set(Array.isArray(t.remindersSent) ? t.remindersSent : []);
+        let changed = false;
+        for (const lead of APPT_LEADS) {
+            const fireAt = start - lead.ms;
+            if (now >= fireAt && !sent.has(lead.key)) {
+                if (now <= fireAt + GRACE) {
+                    const when = apptWhen(startAt);
+                    const head = lead.key === 'd1' ? 'Domani' : "Tra un'ora";
+                    await sendAppointmentPush(targets, 'Promemoria appuntamento', `${head} · ${title}${when ? ' (' + when + ')' : ''}`, `appt-rem-${docSnap.id}-${lead.key}`);
+                    sentCount++;
+                }
+                sent.add(lead.key); // marca comunque per non spammare reminder in ritardo
+                changed = true;
+            }
+        }
+        if (changed)
+            await docSnap.ref.update({ remindersSent: Array.from(sent) }).catch(() => undefined);
+    }
+    console.log(`[appointmentReminders] scanned ${snap.size}, reminders sent ${sentCount}`);
+    return null;
 });
 //# sourceMappingURL=index.js.map

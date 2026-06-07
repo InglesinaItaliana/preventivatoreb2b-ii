@@ -9,6 +9,8 @@
   import { TourGuideClient } from "@sjmc11/tourguidejs/src/Tour"; // Importazione JS
   import "@sjmc11/tourguidejs/dist/css/tour.min.css"; // Importazione CSS Stile
   import { httpsCallable } from 'firebase/functions';
+  import { resolveBackend } from '../lib/billing';
+  import { openDdtPdf } from '../lib/billingPdf';
   import { 
     DocumentTextIcon, 
     CheckCircleIcon,
@@ -466,7 +468,9 @@ const confermaRicezione = async (order: any) => {
     router.push(route);
   };
   
-  const apriDdt = async (ficId: string | number, fallbackUrl?: string) => {
+  const apriDdt = async (ficId: string | number, fallbackUrl?: string, order?: any) => {
+    // CiC: nessun URL pubblico → POPS genera il PDF (Opzione B). FiC: invariato.
+    if (order && resolveBackend(order) === 'cic') { openDdtPdf(order); return; }
     try {
         // Mostra un feedback visivo se possibile, o usa un cursore wait
         document.body.style.cursor = 'wait';
@@ -831,12 +835,12 @@ const confermaRicezione = async (order: any) => {
                       CONFERMA RICEZIONE
                     </button>
                     <button 
-                    v-if="['DELIVERY', 'SHIPPED'].includes(p.stato) && p.fic_ddt_id"
-                    @click="apriDdt(p.fic_ddt_id, p.fic_ddt_url)"
+                    v-if="['DELIVERY', 'SHIPPED'].includes(p.stato) && (p.fic_ddt_id || p.cic_ddt_id)"
+                    @click="apriDdt(p.fic_ddt_id, p.fic_ddt_url, p)"
                       class="w-full text-amber-950 bg-amber-400 hover:bg-amber-300 px-12 py-2 rounded-full font-bold text-xs shadow-sm flex justify-center items-center gap-2 transition-transform active:scale-95"
                     >
                       <DocumentTextIcon class="h-5 w-5" />
-                      VEDI DDT {{ p.fic_ddt_number ? '#' + p.fic_ddt_number : '' }}
+                      VEDI DDT {{ (p.fic_ddt_number || p.cic_ddt_number) ? '#' + (p.fic_ddt_number || p.cic_ddt_number) : '' }}
                     </button>   
                   <button @click="vaiAlBuilder(p.codice)" class="border border-gray-300 text-gray-600 px-4 py-2 rounded-full font-bold text-xs hover:bg-gray-50">APRI</button>
                 </div>             

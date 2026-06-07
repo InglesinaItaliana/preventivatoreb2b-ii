@@ -7,6 +7,7 @@ import {
 import { httpsCallable } from 'firebase/functions';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage, auth, functions } from '../firebase';
+import { computeTotals } from '../lib/billingTotals';
 import { useCatalogStore } from '../Data/catalog';
 import type { Categoria, RigaPreventivo, StatoPreventivo, Allegato, RiepilogoRiga } from '../types';
 import { calculatePrice } from '../logic/pricing';
@@ -286,10 +287,31 @@ const opzioniTelaio = reactive({ nonEquidistanti: false, curva: false, tacca: fa
 const isAdmin = computed(() => route.query?.admin === 'true');
 
 const totaleImponibile = computed(() => preventivo.value.reduce((t, i) => t + i.prezzo_totale, 0));
+
+// FE-4: in modalità CiC il totale finale usa la regola canonica (half-up per
+// riga, identica al backend/CiC) → la cifra a video combacia col documento.
+// Attivo SOLO quando config/billing.activeBackend === 'cic'; in FiC: invariato.
+const cicTotalsActive = ref(false);
 const totaleFinale = computed(() => {
+  if (cicTotalsActive.value) {
+    return computeTotals(
+      preventivo.value.map((i) => ({ qty: (i as any).quantita || 1, unitNetPrice: (i as any).prezzo_unitario || 0 })),
+      scontoApplicato.value, 22,
+    ).net;
+  }
   const sconto = (totaleImponibile.value * scontoApplicato.value) / 100;
   return totaleImponibile.value - sconto;
 });
+// La regola canonica si attiva solo col flag globale di cutover.
+let unsubBilling: (() => void) | null = null;
+onMounted(() => {
+  unsubBilling = onSnapshot(
+    doc(db, 'config', 'billing'),
+    (snap) => { cicTotalsActive.value = snap.exists() && (snap.data() as any)?.activeBackend === 'cic'; },
+    () => { cicTotalsActive.value = false; },
+  );
+});
+onUnmounted(() => { if (unsubBilling) unsubBilling(); });
 
 const isStandard = computed(() => {
   const haLavorazioniSpeciali = preventivo.value.some(r => 

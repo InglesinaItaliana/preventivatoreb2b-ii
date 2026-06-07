@@ -105,6 +105,23 @@ export interface PreventivoDocumento {
   dataScadenza: any;
 
   datiLegali?: DatiLegali; // <--- NUOVO CAMPO OPZIONALE
+
+  // BILLING (migrazione FiC→CiC). 'billingBackend' è congelato alla creazione
+  // del primo documento; assente = FiC (comportamento storico). Vedi lib_billing.
+  billingBackend?: 'fic' | 'cic';
+  billingError?: string;
+  // Riferimenti documento FiC (legacy)
+  fic_order_id?: string | number;
+  fic_order_url?: string;
+  fic_ddt_id?: string | number;
+  fic_ddt_url?: string;
+  fic_ddt_number?: string | number;
+  // Riferimenti documento CiC (Contabilità in Cloud / Reviso)
+  cic_order_id?: string | number;
+  cic_order_url?: string;
+  cic_ddt_id?: string | number;
+  cic_ddt_url?: string;
+  cic_ddt_number?: string | number;
 }
 
 export interface DatiLegali {

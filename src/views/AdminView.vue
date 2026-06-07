@@ -19,6 +19,8 @@ import { httpsCallable } from 'firebase/functions'; // Importa functions
 import { functions } from '../firebase'; // Assicurati di esportare 'functions' dal tuo firebase.ts
 import DdtModal from '../components/DdtModal.vue'; // Importa il nuovo componente
 import { STATUS_DETAILS, ACTIVE_STATUSES } from '../types';
+import { resolveBackend } from '../lib/billing';
+import { openDdtPdf } from '../lib/billingPdf';
 import ArchiveModal from '../components/ArchiveModal.vue'; // Importa Modale
 
 // IMPORT ICONE HEROICONS
@@ -508,7 +510,14 @@ const getUiConfig = (stato: string) => {
   const config = STATUS_DETAILS[stato as keyof typeof STATUS_DETAILS] || STATUS_DETAILS['DRAFT'];
   return { ...config, icon: iconMap[stato] || DocumentTextIcon };
 };
-const apriDdt = async (ficId: string | number, fallbackUrl?: string) => {
+const apriDdt = async (ficId: string | number, fallbackUrl?: string, order?: any) => {
+  // CiC: PDF POPS (Opzione B). Gestisce sia il singolo ordine sia il gruppo DDT (order.items).
+  if (order) {
+    const items = Array.isArray(order.items) ? order.items : null;
+    const isCic = order.backend === 'cic' || resolveBackend(order) === 'cic'
+      || (items ? items.some((it: any) => resolveBackend(it) === 'cic') : false);
+    if (isCic) { openDdtPdf(items || order); return; }
+  }
   if (!ficId || String(ficId) === 'Senza DDT') {
      if(fallbackUrl) window.open(fallbackUrl, '_blank');
      return;
@@ -555,7 +564,7 @@ const getActionData = (p: any) => {
       text: 'VEDI DDT', 
       class: 'text-amber-950 border-amber-500 bg-amber-400  hover:bg-amber-300 rounded-full', 
       // Apre il PDF del DDT se disponibile, altrimenti apre l'editor
-      action: () => apriDdt(p.fic_ddt_id, p.fic_ddt_url), 
+      action: () => apriDdt(p.fic_ddt_id, p.fic_ddt_url, p),
       icon: DocumentTextIcon
     };
     return null;
@@ -700,20 +709,21 @@ const toggleSpedizione = (preventivo: any) => {
 
 // Funzione per raggruppare gli ordini DELIVERY per DDT
 const raggruppaPerDdt = (lista: any[]) => {
-  const gruppi: Record<string, { id: string, number?: string, items: any[], url?: string, data?: string, corriere?: string }> = {};
-  
+  const gruppi: Record<string, { id: string, number?: string, items: any[], url?: string, data?: string, corriere?: string, backend?: string }> = {};
+
   lista.forEach(p => {
-    // Usa l'ID del DDT o un placeholder se mancante
-    const id = p.fic_ddt_id ? String(p.fic_ddt_id) : 'Senza DDT';
-    
+    // ID del DDT (FiC o CiC) o un placeholder se mancante
+    const id = p.fic_ddt_id ? String(p.fic_ddt_id) : (p.cic_ddt_id ? String(p.cic_ddt_id) : 'Senza DDT');
+
     if (!gruppi[id]) {
-      gruppi[id] = { 
-        id, 
-        number: p.fic_ddt_number,
-        items: [], 
-        url: p.fic_ddt_url, 
+      gruppi[id] = {
+        id,
+        number: p.fic_ddt_number || p.cic_ddt_number,
+        items: [],
+        url: p.fic_ddt_url || p.cic_ddt_url,
         data: p.dataConsegnaPrevista,
-        corriere: p.corriere // <--- AGGIUNTO
+        corriere: p.corriere,
+        backend: resolveBackend(p)
       };
     }
     gruppi[id].items.push(p);
@@ -1047,7 +1057,7 @@ onUnmounted(() => {
                       </h3>
                     </div>
                   </div>
-                  <button v-if="ddt.url" @click="apriDdt(ddt.id, ddt.url)" class="text-xs bg-amber-400 border border-amber-500 hover:bg-amber-300 hover:text-amber-950 px-4 py-2 rounded-full font-bold transition-all shadow-sm flex items-center gap-2">
+                  <button v-if="ddt.id && ddt.id !== 'Senza DDT'" @click="apriDdt(ddt.id, ddt.url, ddt)" class="text-xs bg-amber-400 border border-amber-500 hover:bg-amber-300 hover:text-amber-950 px-4 py-2 rounded-full font-bold transition-all shadow-sm flex items-center gap-2">
                     APRI DDT
                   </button>
                 </div>
@@ -1065,6 +1075,7 @@ onUnmounted(() => {
                                   <h3 class="text-xl font-bold text-gray-900">{{ p.cliente }}</h3>
                                   <p class="text-xs text-gray-500">• {{ formatDate(getEffectiveDate(p)) }}</p>
                                   <span class="text-xs text-gray-500">• Rif. {{ p.commessa || 'Senza Nome' }}</span>
+                                  <span v-if="p.billingError" :title="p.billingError" class="text-[9px] px-2 py-0.5 rounded border uppercase font-bold bg-red-100 text-red-700 border-red-200">⚠ Errore fatturazione</span>
                                 </div>
                                 <div v-if="p.elementi" class="flex flex-col gap-1 mt-2 items-start">
                                   <span v-for="(riga, idx) in getRiepilogoPulito(p.elementi)" :key="idx" 
@@ -1137,6 +1148,7 @@ onUnmounted(() => {
                           <h3 class="text-xl font-bold text-gray-900">{{ p.cliente }}</h3>
                           <span class="text-xs text-gray-500">• Rif. {{ p.commessa || 'Senza Nome' }}</span>
                           <span v-if="p.isReopened" class="text-[9px] px-2 py-0.5 rounded border uppercase font-bold bg-purple-100 text-purple-700 border-purple-200">RIAPERTO</span>
+                          <span v-if="p.billingError" :title="p.billingError" class="text-[9px] px-2 py-0.5 rounded border uppercase font-bold bg-red-100 text-red-700 border-red-200">⚠ Errore fatturazione</span>
                         </div>
                         <div v-if="p.elementi" class="flex flex-col gap-1 mt-2 items-start">
                           <span v-for="(riga, idx) in getRiepilogoPulito(p.elementi)" :key="idx" 

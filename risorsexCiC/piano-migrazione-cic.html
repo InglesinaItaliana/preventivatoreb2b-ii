@@ -238,6 +238,16 @@
 <!-- ════ SINTESI ════ -->
 <section id="sintesi" class="lead">
   <h2><span class="kick">TL;DR</span>Sintesi esecutiva</h2>
+  <div class="box insight">
+    <div class="bt">▲ VALIDATO SU DATI REALI — sessione spike 05/06/2026 (trial CiC)</div>
+    <p style="margin:0 0 6px;">Connessione API riuscita; i tre documenti creati <strong>davvero via API</strong> sul trial italiano:</p>
+    <ul style="margin:0 0 6px;">
+      <li><strong>Ordine</strong> — net 807,56 / IVA 177,66 / lordo 985,22; PDF corretto. Totali al centesimo (regola half-up per riga confermata).</li>
+      <li><strong>Preventivo</strong> (nuovo scope) — totali identici. <code>/quotations</code> = stesso motore dell'ordine.</li>
+      <li><strong>DDT</strong> — creabile; documento di trasporto (prezzi opzionali), nessun nodo totali.</li>
+    </ul>
+    <p style="margin:0;">Il rischio #1 (coerenza cifre cliente) è <strong>de-riscato</strong>. Restano: implementazione <code>CicProvider</code>, migrazione dati (import nativo), gestione doppio-backend.</p>
+  </div>
   <p>
     Tutte le connessioni a Fatture in Cloud sono <strong>replicabili su Contabilità in Cloud</strong>:
     Reviso espone gli stessi concetti (clienti, prodotti, ordini, DDT, fatture) con API REST.
@@ -251,10 +261,11 @@
       documento fiscale. Sparisce il "balletto del retry su 422" di FiC.</p>
     </div>
     <div class="box risk" style="margin:6px 0;">
-      <div class="bt">▼ Da gestire · doppio backend convivente</div>
-      <p style="margin:0;">Il 20/6 <strong>non è un interruttore secco</strong>. Gli ordini già aperti su FiC
-      vanno <em>chiusi</em> su FiC (vecchia P.IVA); i nuovi nascono su CiC. POPS deve parlare con
-      <strong>entrambi i sistemi insieme</strong> finché il backlog vecchio non si svuota.</p>
+      <div class="bt">▼ Da gestire · il backlog al cutover</div>
+      <p style="margin:0;">Al 20/6 ci saranno ordini aperti. <strong>Due strade</strong>: (A) chiuderli su FiC
+      (vecchia P.IVA) → doppio backend per settimane; (B) <strong>migrarli in CiC</strong> e chiuderli lì (DDT+fattura
+      nuova azienda) → <strong>cutover netto, FiC subito sola-lettura</strong>. Vedi box variante in §6. La scelta è
+      <strong>fiscale</strong> (commercialista).</p>
     </div>
   </div>
   <div class="statbar">
@@ -370,7 +381,7 @@
         <td><code>GET /issued_documents/join</code> + <code>POST</code> delivery_note</td>
         <td><code>POST /delivery-notes/sales</code><br>(assemblato da Firestore)</td>
         <td><span class="feas rw">◐ Riscrittura</span></td>
-        <td><strong>Reviso non ha il "join" ordini→DDT.</strong> Ma POPS ha già tutte le righe in Firestore: si costruisce un unico DDT direttamente. Più semplice e robusto. → §4</td></tr>
+        <td><strong>Reviso non ha il "join" ordini→DDT.</strong> Ma POPS ha già tutte le righe in Firestore: si costruisce un unico DDT direttamente. <strong>Spike (trial IT):</strong> DDT creabile (serie 29, modello legacy con riferimenti <code>id</code>). Non auto-arrotonda né auto-totalizza, ma <strong>è irrilevante</strong>: il DDT è un documento di trasporto, <strong>i prezzi normalmente non si mettono</strong> → POPS lo crea con prodotto + quantità. La precisione fiscale dei totali vive su ordine (verificato ✓) e fattura. → §3, §4</td></tr>
       <tr><td><code>cancelOrder</code> / <code>resetOrderState</code></td>
         <td><code>DELETE /issued_documents/{id}</code></td>
         <td><code>DELETE /orders/{n}</code><br><code>DELETE /delivery-notes/sales/{id}</code></td>
@@ -379,8 +390,8 @@
       <tr><td><code>getFreshFicUrl</code></td>
         <td><code>GET /issued_documents/{id}</code> → <code>url</code></td>
         <td><code>GET /orders/{n}</code> → <code>pdf.download</code></td>
-        <td><span class="feas warn">▲ Verifica</span></td>
-        <td>Il link PDF Reviso <strong>potrebbe richiedere i token</strong> (non pubblico). Se così, serve un proxy che streami il PDF. → §8</td></tr>
+        <td><span class="feas rw">◐ + proxy</span></td>
+        <td><strong>CONFERMATO (test demo):</strong> <code>pdf.download</code> è un endpoint REST autenticato (<code>rest.reviso.com/orders/{n}/pdf</code>), <strong>non apribile dal browser del cliente</strong>. Serve una Cloud Function proxy che streami il PDF. → §8</td></tr>
       <tr><td><code>syncProductsWithFic</code></td>
         <td><code>GET /products</code></td>
         <td><code>GET /products</code></td>
@@ -455,19 +466,47 @@
         <em>oppure</em> mantenere la riga "SCONTO" — purché il totale finale combaci col mostrato.</li>
     </ol>
   </div>
-  <div class="box verify">
-    <div class="bt">◇ Da verificare nello spike (§8)</div>
-    <p style="margin:0;">La collection Postman non contiene risposte salvate: va <strong>confermato su una
-    chiamata reale</strong> che Reviso <em>accetti</em> i totali inviati senza ricalcolarli/sovrascriverli.
-    Esiste un endpoint draft "senza totali" in cui il server li calcola: se servisse quello, la logica si
-    sposta ma il principio (un solo algoritmo, riconciliazione) resta. Test su ≥10 preventivi reali, incluso
-    qualcuno con sconto e con righe a virgola.</p>
+  <div class="box insight">
+    <div class="bt">▲ Confermato dal test demo (2026-06-05)</div>
+    <p style="margin:0 0 6px;">Lettura di un ordine reale via API:</p>
+    <ul style="margin:0;">
+      <li>I totali sono <strong>campi piatti a livello documento</strong> (<code>netAmount</code> /
+        <code>vatAmount</code> / <code>grossAmount</code>), internamente coerenti → li <strong>imponiamo noi</strong>.</li>
+      <li>Ogni riga ha <strong><code>discountPercentage</code></strong>: lo sconto globale di POPS si traduce
+        applicando la <strong>stessa % a ogni riga</strong> → la somma combacia al centesimo con <code>totaleScontato</code>.
+        <strong>Niente più riga "SCONTO" fasulla.</strong></li>
+      <li>Esiste un campo <strong><code>roundingAmount</code></strong> dedicato: l'eventuale ultimo centesimo
+        di scarto si assorbe lì.</li>
+      <li><code>unitNetPrice</code> a 10 decimali + totali a 2 → controllo fine del prezzo. Modello riga
+        (<code>quantity</code> × <code>unitNetPrice</code> × (1−<code>discount%</code>) = <code>totalNetAmount</code>)
+        <strong>mappa 1:1</strong> con i dati che POPS già possiede.</li>
+    </ul>
+    <p style="margin:8px 0 0;font-size:13px;color:var(--s-text-mid);">Aperto: nelle righe ordine demo l'IVA è
+    derivata dalla <code>vatZone</code> del cliente (nessun <code>vatCode</code> esplicito). Da confermare nel
+    test di scrittura IT se impostare il <code>vatCode</code> 22% per riga o lasciarlo derivare.</p>
+  </div>
+  <div class="box insight">
+    <div class="bt">▲ TEST DI SCRITTURA SUPERATO — trial IT, 2026-06-05</div>
+    <p style="margin:0 0 6px;">Ordine reale creato via API (<strong>HTTP 201</strong>): 3 righe, sconto 7%, prezzi a virgola.
+    I totali restituiti da Reviso coincidono <strong>al centesimo</strong> con un calcolo indipendente:</p>
+    <ul style="margin:0 0 6px;">
+      <li>net <strong>807,56</strong> · IVA <strong>177,66</strong> · lordo <strong>985,22</strong> — esatti.</li>
+      <li>Caso-limite: 45,50 × 0,93 = 42,315 → Reviso <strong>42,32</strong> (half-up per riga).</li>
+    </ul>
+    <p style="margin:0 0 6px;"><strong>Regola confermata:</strong> netto riga = round(qty × unitNetPrice × (1−sconto%), 2, half-up);
+    netto doc = Σ righe; IVA = round(netto × 22%, 2); lordo = netto + IVA. Se POPS adotta <strong>questo identico
+    algoritmo</strong>, cifra-cliente == documento CiC. <strong>Nodo #1 de-riscato su dati reali.</strong></p>
+    <p style="margin:0;"><strong>PDF/layout validati visivamente:</strong> la "Conferma d'Ordine" (layout IT v2.0)
+    esce corretta e presentabile — intestazione, righe, riepilogo IVA, Imponibile/Imposta/Totale esatti. Unico
+    appunto cosmetico: la colonna "Codice" tronca i codici lunghi (i codici vetro reali sono corti → ok).</p>
   </div>
 
   <h4>IVA — cambio di modello</h4>
   <p>FiC: IVA hardcoded <code>VAT_ID=0, VAT_VALUE=22</code> sulla riga. CiC: l'IVA è un
   <code>vatCode</code> (es. <code>V022</code> per il 22%) preso dal catalogo <code>/vat-accounts</code> della
-  <strong>nuova</strong> azienda — i codici sono diversi da quelli di FiC e vanno letti una volta e mappati.</p>
+  <strong>nuova</strong> azienda — i codici sono diversi da quelli di FiC. <strong>Buona notizia:</strong> il
+  wizard "Importa da Fatture in Cloud" (§6, Fase 4) include il <strong>mapping guidato delle aliquote</strong>
+  FiC → <code>vatCode</code> CiC, quindi la corrispondenza si fa lì una volta sola.</p>
 </section>
 
 <!-- ════ 4 · ARCHITETTURA ════ -->
@@ -574,13 +613,18 @@
   <div class="phase">
     <div class="mark">0</div>
     <div class="body">
-      <h3>Setup & accessi <span class="when now">subito</span></h3>
+      <h3>Setup & accessi — Developer Agreement attivo ✓ <span class="when now">subito</span></h3>
       <div class="card">
+        <p style="margin:0 0 10px;font-size:13.5px;color:var(--s-text-mid);">Il Developer Agreement Reviso è già stato ricevuto via email. Procedura concreta:</p>
         <ul style="margin:0;">
-          <li>Ottenere da Reviso/CiC: <code>X-AppSecretToken</code> (app) e <code>X-AgreementGrantToken</code> (nuova azienda). <strong>Chiedere se esiste un agreement di TEST</strong> per non lavorare sui libri veri.</li>
-          <li>Configurare nella nuova azienda: <code>vat-accounts</code> (V022), <code>number-series</code>, <code>units</code>, <code>payment-terms</code>, <code>product-groups</code>.</li>
-          <li>Leggere e annotare gli ID risultanti (serviranno nel payload).</li>
+          <li><strong>Accedi</strong> al Developer Agreement (TeamSystem ID) → prendi l'<code>AppSecretToken</code> dall'applicazione creata in automatico (lista applicazioni). Conservalo come <strong>segreto</strong> (Firebase secret / functions config), mai nel client.</li>
+          <li><strong>Testa subito con i dati demo</strong>: <code>GET https://rest.reviso.com/self</code> con gli header, e <code>?demo=true</code> per i dati di esempio. Niente attese, niente libri veri. (→ è qui che gira lo spike di Fase 1.)</li>
+          <li><strong>Demo agreement gratuito</strong> per un sandbox più completo (creare ordini/DDT di prova).</li>
+          <li><strong>Collega la nuova azienda</strong> quando pronto: l'admin CiC apre il <em>grant link</em> dell'app (<code>appPublicToken=9BUo…</code>) → autorizza → ottieni l'<code>AgreementGrantToken</code> di produzione. Coordina con chi possiede l'account CiC (forse il commercialista).</li>
+          <li><strong>Attiva entro 3 mesi</strong> scrivendo a <code>api@reviso.com</code> (resta gratis), <em>prima</em> del go-live.</li>
+          <li>Configurare/annotare nella nuova azienda gli ID: <code>vatCode</code> (V022), <code>number-series</code>, <code>units</code>, <code>payment-terms</code>, <code>product-groups</code> — molti arrivano già dall'import nativo (Fase 4).</li>
         </ul>
+        <div class="box risk" style="margin:12px 0 0;"><div class="bt">▼ Sicurezza</div><p style="margin:0;"><code>AppSecretToken</code> + <code>AgreementGrantToken</code> insieme = accesso completo alla contabilità. Segreti di massimo livello: mai nel repo, mai lato client.</p></div>
       </div>
     </div>
   </div>
@@ -632,12 +676,14 @@
   <div class="phase">
     <div class="mark">4</div>
     <div class="body">
-      <h3>Migrazione anagrafiche & catalogo <span class="when">pre 20/6</span></h3>
+      <h3>Migrazione anagrafiche & catalogo — via import nativo <span class="when">pre 20/6</span></h3>
       <div class="card">
+        <div class="box insight" style="margin:0 0 12px;"><div class="bt">▲ Scorciatoia · "Importa da Fatture in Cloud"</div><p style="margin:0;">CiC ha una funzione <strong>nativa</strong> (Impostazioni → Altro → Apps → "Importa da Fatture in Cloud"): inserisci le credenziali FiC e importa <strong>clienti, fornitori, prodotti</strong> con ragione sociale, P.IVA, CF, indirizzo, <strong>codice destinatario</strong> e <strong>PEC</strong>, più un <strong>wizard di mapping IVA</strong> (FiC → <code>vatCode</code> CiC). Niente script di export a mano.</p></div>
         <ul style="margin:0;">
-          <li><strong>Clienti</strong>: esportare gli attivi → creare in CiC → salvare <code>cicCustomerNumber</code>. (Fallback: creazione al volo al primo ordine, già supportata dalla logica.)</li>
-          <li><strong>Prodotti</strong>: ricreare il catalogo in CiC (<code>productNumber=code</code>, <code>salesPrice</code>) → mappare su <code>products/*</code>.</li>
-          <li>Riconciliazione: confrontare conteggi e prezzi FiC vs CiC.</li>
+          <li><strong>Clienti + prodotti</strong>: usare l'import nativo → popolano il registro vuoto della nuova azienda + risolvono il mapping IVA.</li>
+          <li><strong>NON importare le fatture storiche</strong> nella nuova P.IVA (appartengono alla vecchia azienda) — salvo diversa indicazione del commercialista. I pagamenti non vengono importati comunque.</li>
+          <li><strong>Sync POPS (via API)</strong>: l'import non aggiorna Firestore → un passo di sync mappa per <em>chiave naturale</em> (P.IVA per i clienti, <code>code/productNumber</code> per i prodotti) e salva <code>cicCustomerNumber</code>/<code>cicProductId</code>. La logica di lookup esistente funziona già contro CiC dopo l'import.</li>
+          <li>Riconciliazione: confrontare conteggi e prezzi FiC vs CiC dopo l'import.</li>
         </ul>
       </div>
     </div>
@@ -675,12 +721,18 @@
   <div class="phase">
     <div class="mark">7</div>
     <div class="body">
-      <h3>Drain del backlog + consolidamento <span class="when">dopo 20/6</span></h3>
+      <h3>Backlog: migrazione ordini aperti (variante B) <span class="when">20/6</span></h3>
       <div class="card">
+        <div class="box insight" style="margin:0 0 12px;"><div class="bt">▲ Variante consigliata · cutover netto (condizionata al commercialista)</div>
+        <p style="margin:0 0 6px;">Un ordine <strong>non è un documento fiscale</strong>: il fatto fiscale nasce con DDT+fattura.
+        Quindi gli ordini aperti <strong>senza DDT/fattura FiC</strong> si possono <strong>ricreare in CiC</strong> (batch da Firestore)
+        e chiudere lì. Effetto: dal 20/6 <strong>POPS scrive solo su CiC</strong>, FiC <strong>subito sola-lettura</strong>, niente lungo periodo di doppia-scrittura.</p>
+        <p style="margin:0;"><strong>Regola di routing:</strong> ordine con <code>fic_ddt</code>/fattura già emessi → resta su FiC; ordine puro → migra in CiC.
+        <strong>Gate fiscale</strong>: ricavo→nuova società, continuità IVA, cliente accetta nuova P.IVA → conferma commercialista.</p></div>
         <ul style="margin:0;">
-          <li>Smaltire gli ordini vecchi: spedizioni/DDT/fatture su FiC finché la coda <code>billingBackend:'fic'</code> attiva è vuota.</li>
-          <li>Quando il backlog = 0: FiC passa a <strong>sola lettura</strong> (link storici restano per sempre).</li>
-          <li>Documentare in <code>docs/ATLAS.md</code>; congelare/rimuovere il <em>path di scrittura</em> FiC (lasciare la lettura).</li>
+          <li>Script batch: legge gli ordini aperti senza <code>fic_ddt</code> → li crea in CiC con <code>billingBackend:'cic'</code>.</li>
+          <li>FiC → <strong>sola lettura</strong> (link storici restano per sempre); chiudere su FiC solo gli ordini già con DDT/fattura.</li>
+          <li>Documentare in <code>docs/ATLAS.md</code>; rimuovere il <em>path di scrittura</em> FiC dal <code>BillingProvider</code>.</li>
         </ul>
       </div>
     </div>
@@ -700,8 +752,21 @@
       <span>Regime, split payment, eventuale esigibilità IVA, serie di numerazione: possono differire dalla vecchia. Da allineare con il commercialista <em>prima</em> del primo documento.</span></span></li>
     <li><span class="ic must">D</span><span class="tx"><strong>Doppio-write accidentale</strong>
       <span>Mantenere il guard di idempotenza (oggi: <code>if newData.fic_order_id return</code>) anche per CiC, e impedire che un ordine finisca in entrambi i sistemi.</span></span></li>
-    <li><span class="ic must">E</span><span class="tx"><strong>Link PDF verso il cliente</strong>
-      <span>Se Reviso non dà link pubblici, il Cruscotto cliente e "VEDI DDT" si rompono. Serve un proxy che autentichi e streami il PDF. Da decidere nello spike (§8).</span></span></li>
+    <li><span class="ic must">E</span><span class="tx"><strong>Documento PDF per il cliente — scelta di design</strong>
+      <span>L'ordine CiC <strong>non ha un PDF fisso né un link pubblico</strong>: il <code>pdf.download</code> è un
+      generatore on-demand autenticato. Due strade: <strong>(A)</strong> Cloud Function proxy che streama il PDF
+      ufficiale CiC; <strong>(B)</strong> POPS genera il proprio PDF con <code>jspdf</code> (già in uso) usando i
+      totali confermati da CiC → niente proxy. Separazione naturale: <strong>CiC = verità fiscale</strong> (numerazione, IVA, invio SDI/mail), <strong>POPS = esperienza cliente</strong>. <strong>DECISIONE: Opzione B</strong> (POPS+jspdf) → nessun proxy.</span></span></li>
+    <li><span class="ic info">L</span><span class="tx"><strong>Nuovo scope: preventivi su CiC</strong>
+      <span>Su FiC POPS gestiva solo gli ordini. <strong>Decisione: aggiungere i preventivi</strong> via <code>/quotations</code>
+      (stesso modello-righe degli ordini, <code>salesDocumentType: quotation</code>). Il <code>CicProvider</code> avrà
+      anche <code>createQuotation</code>; flusso naturale CiC: preventivo → ordine → DDT → fattura. <strong>Validato ✓</strong> (totali identici all'ordine).</span></span></li>
+    <li><span class="ic must">M</span><span class="tx"><strong>Vincoli di cancellazione & quirk API — da spike</strong>
+      <span>Per <code>cancelOrder</code>/<code>resetOrderState</code> su CiC: gli ordini <strong>archiviati non si cancellano</strong>
+      (errore <code>S_V_87</code>) → prima de-archiviare (PUT <code>isArchived:false</code>) poi DELETE. Un <strong>prodotto referenziato
+      non si elimina</strong> (403 "in use"). I <strong>DDT vivono su un microservizio separato</strong>
+      (<code>reviso-delivery-note-app.azurewebsites.net</code> nel loro <code>self</code>): per le chiamate usare
+      <code>rest.reviso.com/delivery-notes/sales/{id}</code>, non il self.</span></span></li>
     <li><span class="ic must">F</span><span class="tx"><strong>Metodi/termini di pagamento</strong>
       <span>FiC li usava in <code>payments_list</code>. Su Reviso stanno sul cliente (<code>paymentTerms</code>). Se servono scadenze in fattura, mappare; altrimenti default semplice.</span></span></li>
     <li><span class="ic info">G</span><span class="tx"><strong>Errori non più silenziosi</strong>
@@ -712,6 +777,8 @@
       <span><code>index.ts</code> è un unico bundle: un errore di sintassi blocca il deploy di <em>tutte</em> le funzioni (POPS live). Solo blocchi additivi, <code>tsc</code> exit 0 verificato, attenzione ai <code>*/</code> nei commenti.</span></span></li>
     <li><span class="ic info">J</span><span class="tx"><strong>Formazione amministrazione + run di prova</strong>
       <span>Far girare qualche ordine vero in CiC con l'ufficio prima del 20/6: numerazione nuova, layout fattura nuovo, abitudini diverse. Il rischio non è solo tecnico.</span></span></li>
+    <li><span class="ic alert">K</span><span class="tx"><strong>Ogni riga DEVE riferire un prodotto — CONFERMATO</strong>
+      <span>Su CiC una riga con quantità/prezzo <strong>esige un <code>product</code></strong> (<code>"When quantity is set product must also be set"</code>): niente righe a testo libero come su FiC. Tutte le voci POPS — incluse <strong>Spedizione, Lavorazioni, Extra</strong> — vanno mappate a un prodotto CiC (o a un <strong>prodotto generico "varie"</strong>). Il prezzo si sovrascrive per riga (<code>unitNetPrice</code> + <code>manuallyEditedSalesPrice</code>), ma il riferimento prodotto è obbligatorio. Impatta <code>generaOrdineFIC</code>/<code>creaDdtCumulativo</code> nel <code>CicProvider</code>.</span></span></li>
   </ul>
 </section>
 
@@ -723,21 +790,21 @@
   <table>
     <thead><tr><th>Domanda</th><th>Perché conta</th><th>Come rispondere</th></tr></thead>
     <tbody>
-      <tr><td><strong>Reviso accetta i totali che invio senza ricalcolarli?</strong></td>
+      <tr style="background:var(--s-green-glow);"><td><strong>I totali sono deterministici e replicabili?</strong> <span class="feas yes">● Risolto</span></td>
         <td>È la garanzia "stessa cifra per il cliente". Decide tutta la strategia §3.</td>
-        <td>POST /orders con totali espliciti su agreement di test → confronta response.</td></tr>
-      <tr><td><strong>Il link <code>pdf.download</code> è pubblico?</strong></td>
+        <td><strong>Sì (POST reale su trial)</strong>: net/IVA/lordo coincidono al centesimo con calcolo indipendente; regola half-up per riga confermata.</td></tr>
+      <tr style="background:var(--s-red-glow);"><td><strong>Il link <code>pdf.download</code> è pubblico?</strong> <span class="feas rw">◐ Risolto: NO</span></td>
         <td>Decide se "VEDI DDT" / Cruscotto cliente funzionano diretti o serve un proxy.</td>
-        <td>Aprire il link senza header in incognito.</td></tr>
-      <tr><td><strong>Esiste un agreement / ambiente di TEST?</strong></td>
+        <td><strong>Confermato: NO</strong> — è un endpoint REST autenticato. <strong>Serve un proxy</strong> (Cloud Function) per il cliente.</td></tr>
+      <tr style="background:var(--s-green-glow);"><td><strong>Esiste un ambiente di TEST?</strong> <span class="feas yes">● Risolto</span></td>
         <td>Non si testano ordini veri sui libri della nuova azienda.</td>
-        <td>Chiedere a Reviso/commercialista.</td></tr>
+        <td><strong>Sì</strong>: <code>?demo=true</code> sull'API + demo agreement gratuito (dal Developer Agreement).</td></tr>
       <tr><td><strong>Quali <code>vatCode</code> / <code>numberSeries</code> / <code>unit</code> nella nuova azienda?</strong></td>
         <td>Servono ID precisi nel payload; sono diversi da FiC.</td>
         <td>GET /vat-accounts, /number-series, /units.</td></tr>
-      <tr><td><strong>Lo sconto: <code>discountPercentage</code> di riga o riga "SCONTO"?</strong></td>
-        <td>Determina come riprodurre <code>totaleScontato</code> al centesimo.</td>
-        <td>Provare entrambi nello spike, scegliere quello che riconcilia.</td></tr>
+      <tr style="background:var(--s-green-glow);"><td><strong>Lo sconto: come riprodurlo?</strong> <span class="feas yes">● Risolto</span></td>
+        <td>Riprodurre <code>totaleScontato</code> al centesimo.</td>
+        <td><strong>Confermato</strong>: <code>discountPercentage</code> per riga esiste (test demo). Stessa % su ogni riga = sconto globale esatto. Residuo → <code>roundingAmount</code>.</td></tr>
       <tr><td><strong>Rate limit Reviso?</strong></td>
         <td>I loop di sync prodotti/clienti possono sforare.</td>
         <td>Doc Reviso + test di carico leggero.</td></tr>
@@ -760,9 +827,10 @@
     <div class="box action" style="margin:6px 0;"><div class="bt">◆ 2 · Pre-carico o creazione al volo dei clienti</div>
       <p style="margin:0;">Pre-caricare tutti i clienti attivi in CiC (più pulito) o lasciarli creare al primo
       ordine (più lento ma incrementale)? Consiglio: pre-carico + fallback al volo.</p></div>
-    <div class="box action" style="margin:6px 0;"><div class="bt">◆ 3 · Ambiente di test Reviso</div>
-      <p style="margin:0;">C'è un agreement di test disponibile? Senza, lo spike va fatto con cautela su
-      documenti-bozza cancellabili nella nuova azienda.</p></div>
+    <div class="box action" style="margin:6px 0;"><div class="bt">◆ 3 · Chi possiede l'account CiC della nuova azienda</div>
+      <p style="margin:0;">L'ambiente di test è risolto (<code>?demo=true</code> + demo agreement). Resta da capire <strong>chi
+      apre il grant link</strong> per la nuova azienda vera (tu o il commercialista) e quando attiviamo il
+      developer agreement (<code>api@reviso.com</code>, entro 3 mesi).</p></div>
     <div class="box action" style="margin:6px 0;"><div class="bt">◆ 4 · Numerazione & layout fattura</div>
       <p style="margin:0;">Confermare con il commercialista serie di numerazione e layout della nuova
       azienda prima del primo documento emesso.</p></div>

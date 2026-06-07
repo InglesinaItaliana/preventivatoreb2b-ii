@@ -3,6 +3,8 @@ import { ref, computed, watch } from 'vue';
 import { 
   CheckCircleIcon, DocumentTextIcon, CogIcon, ClipboardDocumentIcon, ClipboardDocumentCheckIcon, EyeIcon 
 } from '@heroicons/vue/24/solid';
+import { resolveBackend } from '../lib/billing';
+import { openOrderPdf } from '../lib/billingPdf';
 
 const props = defineProps<{
   show: boolean;
@@ -41,6 +43,11 @@ const handleFastConfirm = async () => {
 };
 
 const openDocument = () => {
+  // CiC: nessun URL pubblico → POPS genera il PDF (Opzione B). FiC: invariato.
+  if (resolveBackend(props.order) === 'cic') {
+    openOrderPdf(props.order);
+    return;
+  }
   if (props.order?.fic_order_url) {
     window.open(props.order.fic_order_url, '_blank');
   } else {

@@ -4,6 +4,8 @@ import * as functions from 'firebase-functions/v1';
 import * as admin from 'firebase-admin';
 import axios from 'axios';
 import * as nodemailer from 'nodemailer';
+// Layer di fatturazione (migrazione FiC→CiC). Vedi src/functions/lib_billing/.
+import { createCicProvider, getActiveBackend } from './lib_billing';
 
 // Inizializza Firebase
 if (admin.apps.length === 0) {
@@ -74,11 +76,26 @@ exports.cancelOrder = functions
                 }
             }
 
+            // 2b. ELIMINAZIONE SU CONTABILITÀ IN CLOUD (Se esiste)
+            const cicId = orderData?.cic_order_id;
+            if (cicId) {
+                try {
+                    console.log(`[CANCEL] Eliminazione ordine CiC ID: ${cicId}...`);
+                    const provider = await createCicProvider();
+                    await provider.deleteDocument({ id: cicId, type: 'order' });
+                    console.log(`[CANCEL] Ordine CiC eliminato correttamente.`);
+                } catch (cicError: any) {
+                    console.error("[CANCEL] Errore eliminazione CiC (procedo comunque all'annullamento locale):", cicError.message);
+                }
+            }
+
             // 3. AGGIORNAMENTO STATO FIRESTORE -> REJECTED
             await docRef.update({
                 stato: 'REJECTED',
                 fic_order_id: admin.firestore.FieldValue.delete(),
                 fic_order_url: admin.firestore.FieldValue.delete(),
+                cic_order_id: admin.firestore.FieldValue.delete(),
+                cic_order_url: admin.firestore.FieldValue.delete(),
                 // Manteniamo traccia di chi ha annullato
                 annullatoDa: context.auth.token.email || context.auth.uid,
                 dataAnnullamento: admin.firestore.FieldValue.serverTimestamp()
@@ -904,13 +921,24 @@ exports.generaOrdineFIC = functions
         const statiAttivazione = ['WAITING_FAST', 'WAITING_SIGN'];
         const eAttivato = statiAttivazione.includes(newData.stato);
 
-        if (!eAttivato || newData.fic_order_id) return null;
+        if (!eAttivato || newData.fic_order_id || newData.cic_order_id) return null;
 
         const clienteUID = newData.clienteUID;
         if (!clienteUID) {
             console.error("[FIC] ERRORE: Manca clienteUID nel preventivo.");
             return null;
         }
+
+        // --- SELETTORE BACKEND (migrazione FiC→CiC) ---
+        // Default ASSOLUTO = FiC (comportamento storico invariato). Il ramo CiC
+        // parte SOLO se l'ordine è già marcato 'cic' o se config/billing.activeBackend='cic'.
+        // Errori di lettura del flag → fallback 'fic'. Vedi resolveBillingBackend().
+        const billingBackend = await resolveBillingBackend(newData);
+        if (billingBackend === 'cic') {
+            await generaOrdineCiC(change, newData, clienteUID);
+            return null;
+        }
+        // --- da qui in giù: path FiC ESISTENTE, INVARIATO ---
 
         try {
             // RECUPERA TOKEN VALIDO (Nuova logica)
@@ -1125,6 +1153,203 @@ exports.generaOrdineFIC = functions
         return null;
     });
 
+// --- Risoluzione backend di fatturazione (frozen sul preventivo, default FiC) ---
+// Se l'ordine ha già billingBackend → si rispetta (scelta congelata). Altrimenti
+// si legge config/billing.activeBackend. Qualunque errore → 'fic' (mai rompere il flusso).
+async function resolveBillingBackend(newData: admin.firestore.DocumentData): Promise<'fic' | 'cic'> {
+    if (newData.billingBackend === 'cic' || newData.billingBackend === 'fic') {
+        return newData.billingBackend;
+    }
+    try {
+        return await getActiveBackend();
+    } catch (e) {
+        console.warn('[BILLING] lettura config/billing fallita, fallback FiC', e);
+        return 'fic';
+    }
+}
+
+// --- GENERA ORDINE SU CONTABILITÀ IN CLOUD (CiC/Reviso) ---
+// Gemello di generaOrdineFIC per il nuovo backend. ADDITIVO: invocato SOLO quando
+// billingBackend === 'cic'. Anti-duplicato: scrive cic_order_id appena disponibile
+// (il guard di re-entry blocca i ri-trigger). In caso di errore PRIMA di avere l'id
+// NON scrive nulla sul doc (come il path FiC) → niente loop, niente ordini doppi.
+async function generaOrdineCiC(
+    change: functions.Change<admin.firestore.DocumentSnapshot>,
+    newData: admin.firestore.DocumentData,
+    clienteUID: string,
+): Promise<void> {
+    try {
+        const userDoc = await admin.firestore().collection('users').doc(clienteUID).get();
+        const userData = userDoc.data();
+        const pivaCliente = userData?.piva;
+        if (!pivaCliente) {
+            console.error('[CIC] P.IVA mancante nell\'anagrafica utente.');
+            return;
+        }
+
+        const provider = await createCicProvider();
+
+        const customer = await provider.findOrCreateCustomer({
+            piva: pivaCliente,
+            name: userData?.ragioneSociale || newData.cliente || 'Cliente',
+            email: userData?.email,
+            taxCode: userData?.codiceFiscale,
+            address: userData?.indirizzo,
+            zip: userData?.cap,
+            city: userData?.citta,
+            province: userData?.provincia,
+        });
+
+        const lines = (newData.elementi || []).map((item: any) => {
+            let desc = item.descrizioneCompleta || 'Articolo Vetrata';
+            if (item.categoria !== 'EXTRA' && (item.base_mm > 0 || item.altezza_mm > 0)) {
+                desc += ` - Dim: ${item.base_mm}x${item.altezza_mm} mm${item.infoCanalino ? ` - ${item.infoCanalino}` : ''}`;
+            }
+            return {
+                code: item.codice ? String(item.codice).toUpperCase().trim() : '',
+                description: desc,
+                qty: item.quantita || 1,
+                unitNetPrice: item.prezzo_unitario || 0,
+                category: item.categoria,
+            };
+        });
+
+        const result = await provider.createOrder({
+            customer,
+            date: newData.dataConsegnaPrevista || new Date().toISOString().split('T')[0],
+            lines,
+            discountPercentage: Number(newData.scontoPercentuale) || 0,
+            visibleSubject: newData.commessa || `Rif: ${newData.codice}`,
+        });
+
+        // id salvato SUBITO → blocca i ri-trigger (anti-duplicato)
+        await change.after.ref.update({
+            cic_order_id: result.id,
+            cic_order_url: result.url || null,
+            billingBackend: 'cic',
+            billingError: admin.firestore.FieldValue.delete(),
+        });
+
+        // validazione totali NON bloccante: la cifra cliente deve combaciare al centesimo
+        const expectedNet = (typeof newData.totaleScontato === 'number')
+            ? newData.totaleScontato
+            : (newData.totaleImponibile || 0);
+        if (Math.abs((result.netAmount || 0) - expectedNet) > 0.01) {
+            await change.after.ref.update({
+                billingError: `Totale CiC ${result.netAmount} ≠ atteso POPS ${expectedNet}`,
+            });
+            console.warn(`[CIC] Discrepanza totale: CiC ${result.netAmount} vs atteso ${expectedNet}`);
+        }
+
+        console.log(`✅ [CIC] ORDINE CREATO! ID: ${result.id}`);
+    } catch (error: any) {
+        // come il path FiC: logga e basta, NESSUNA scrittura sul doc → niente
+        // ri-trigger e niente ordini duplicati su CiC.
+        console.error('❌ [CIC] Errore creazione ordine:', error?.message || error);
+        if (error?.response) {
+            console.error('Dettaglio errore API CiC:', JSON.stringify(error.response.data, null, 2));
+        }
+    }
+}
+
+// --- DDT CUMULATIVO SU CONTABILITÀ IN CLOUD (CiC) ---
+// Gemello CiC di creaDdtCumulativo. Reviso non ha il "join" ordini→DDT: POPS
+// assembla le righe dai preventivi in Firestore. Il DDT è un documento di
+// trasporto → elenca la MERCE (righe non-EXTRA); i prezzi non sono rilevanti.
+async function creaDdtCumulativoCiC(
+    orderIds: string[],
+    data: any,
+): Promise<{ success: boolean; message?: string; cic_id?: any }> {
+    const { date, colli, weight, tipoTrasporto, corriere, tracking } = data;
+    const db = admin.firestore();
+    try {
+        const snaps = await Promise.all(orderIds.map((id) => db.collection('preventivi').doc(id).get()));
+        const orders = snaps
+            .map((s) => ({ firestoreId: s.id, data: s.data() }))
+            .filter((o): o is { firestoreId: string; data: admin.firestore.DocumentData } =>
+                !!o.data && !!o.data.cic_order_id);
+
+        if (orders.length === 0) return { success: false, message: 'Nessun ordine CiC valido trovato.' };
+
+        // Cliente dal primo ordine (un DDT cumulativo è per singolo cliente)
+        const clienteUID = orders[0].data.clienteUID;
+        const userData = clienteUID
+            ? (await db.collection('users').doc(clienteUID).get()).data()
+            : undefined;
+        const piva = userData?.piva;
+        if (!piva) return { success: false, message: 'P.IVA cliente mancante.' };
+
+        const provider = await createCicProvider();
+        const customer = await provider.findOrCreateCustomer({
+            piva,
+            name: userData?.ragioneSociale || orders[0].data.cliente || 'Cliente',
+            email: userData?.email,
+            taxCode: userData?.codiceFiscale,
+            address: userData?.indirizzo,
+            zip: userData?.cap,
+            city: userData?.citta,
+            province: userData?.provincia,
+        });
+
+        // Righe = merce trasportata (escludo gli EXTRA: spedizione/lavorazioni).
+        const lines: any[] = [];
+        for (const o of orders) {
+            for (const item of (o.data.elementi || [])) {
+                if (item.categoria === 'EXTRA') continue;
+                let desc = item.descrizioneCompleta || 'Articolo Vetrata';
+                if (item.base_mm > 0 || item.altezza_mm > 0) {
+                    desc += ` - Dim: ${item.base_mm}x${item.altezza_mm} mm`;
+                }
+                lines.push({
+                    code: item.codice ? String(item.codice).toUpperCase().trim() : '',
+                    description: desc,
+                    qty: item.quantita || 1,
+                    unitNetPrice: item.prezzo_unitario || 0,
+                    category: item.categoria,
+                });
+            }
+        }
+        if (lines.length === 0) return { success: false, message: 'Nessuna riga merce da spedire.' };
+
+        const ddt = await provider.createDeliveryNote({
+            customer,
+            date,
+            lines,
+            shipping: {
+                packages: Number(colli) || 1,
+                weight: weight ? Number(weight) : undefined,
+                carrier: tipoTrasporto === 'COURIER' ? corriere : undefined,
+                tracking: tipoTrasporto === 'COURIER' ? tracking : undefined,
+                transportType: tipoTrasporto === 'COURIER' ? 'COURIER' : 'INTERNAL',
+            },
+        });
+
+        const batch = db.batch();
+        const nuovoStato = tipoTrasporto === 'COURIER' ? 'SHIPPED' : 'DELIVERY';
+        for (const o of orders) {
+            const ref = db.collection('preventivi').doc(o.firestoreId);
+            batch.update(ref, {
+                cic_ddt_id: ddt.id,
+                cic_ddt_number: ddt.number ?? null,
+                cic_ddt_url: ddt.url ?? null,
+                stato: nuovoStato,
+                dataConsegnaPrevista: date,
+                colli: colli != null ? Number(colli) : null,
+                metodoSpedizione: tipoTrasporto,
+                corriere: tipoTrasporto === 'COURIER' ? corriere : null,
+                trackingCode: tipoTrasporto === 'COURIER' ? tracking : null,
+                dataSpedizione: admin.firestore.FieldValue.serverTimestamp(),
+            });
+        }
+        await batch.commit();
+
+        return { success: true, cic_id: ddt.id };
+    } catch (error: any) {
+        console.error('❌ [CIC DDT] Errore:', error?.response ? JSON.stringify(error.response.data) : error?.message);
+        return { success: false, message: 'Errore CiC: ' + (error?.message || 'sconosciuto') };
+    }
+}
+
 // --- FUNZIONE CREAZIONE DDT (UNIFICATA) ---
 exports.creaDdtCumulativo = functions
     .region('europe-west1')
@@ -1138,8 +1363,16 @@ exports.creaDdtCumulativo = functions
 
         try {
             const db = admin.firestore();
-            const accessToken = await getValidFicToken(); 
-            
+
+            // --- SELETTORE BACKEND: se gli ordini sono su CiC, usa il path CiC ---
+            const firstSnap = await db.collection('preventivi').doc(orderIds[0]).get();
+            const firstData = firstSnap.data();
+            if (firstData && (firstData.billingBackend === 'cic' || firstData.cic_order_id)) {
+                return await creaDdtCumulativoCiC(orderIds, data);
+            }
+
+            const accessToken = await getValidFicToken();
+
             // 1. Recupera i documenti da Firestore
             const orderSnapshots = await Promise.all(
                 orderIds.map((id: string) => db.collection('preventivi').doc(id).get())
@@ -1717,11 +1950,30 @@ exports.resetOrderState = functions
                 }
             }
 
+            // 2b. Se esiste su Contabilità in Cloud, ELIMINALO
+            const cicId = orderData?.cic_order_id;
+            if (cicId) {
+                try {
+                    console.log(`[RESET] Eliminazione ordine CiC ID: ${cicId}...`);
+                    const provider = await createCicProvider();
+                    await provider.deleteDocument({ id: cicId, type: 'order' });
+                    console.log(`[RESET] Ordine CiC eliminato correttamente.`);
+                } catch (cicError: any) {
+                    console.error("[RESET] Errore eliminazione CiC (procedo comunque al reset DB):", cicError.message);
+                }
+            }
+
             // 3. Resetta lo stato e pulisce i campi su Firestore
             await docRef.update({
                 stato: 'DRAFT',
                 fic_order_id: admin.firestore.FieldValue.delete(),
                 fic_order_url: admin.firestore.FieldValue.delete(),
+                cic_order_id: admin.firestore.FieldValue.delete(),
+                cic_order_url: admin.firestore.FieldValue.delete(),
+                cic_ddt_id: admin.firestore.FieldValue.delete(),
+                cic_ddt_url: admin.firestore.FieldValue.delete(),
+                cic_ddt_number: admin.firestore.FieldValue.delete(),
+                billingError: admin.firestore.FieldValue.delete(),
                 dataConferma: admin.firestore.FieldValue.delete(),
                 metodoConferma: admin.firestore.FieldValue.delete(),
                 contrattoFirmatoUrl: admin.firestore.FieldValue.delete(),

@@ -6,6 +6,8 @@ import { collection, query, where, getDocs, orderBy, limit } from 'firebase/fire
 import { db } from '../firebase';
 import { ARCHIVE_STATUSES, STATUS_DETAILS } from '../types';
 import { useRouter } from 'vue-router';
+import { resolveBackend } from '../lib/billing';
+import { openDdtPdf } from '../lib/billingPdf';
 
 const props = defineProps<{
   show: boolean;
@@ -65,8 +67,10 @@ const openOrder = (codice: string) => {
   router.push(url);
 };
 
-const openDdt = (url: string) => {
-  window.open(url, '_blank');
+const openDdt = (order: any) => {
+  // CiC: PDF POPS (Opzione B). FiC: invariato.
+  if (resolveBackend(order) === 'cic') { openDdtPdf(order); return; }
+  if (order?.fic_ddt_url) window.open(order.fic_ddt_url, '_blank');
 };
 </script>
 
@@ -151,8 +155,8 @@ const openDdt = (url: string) => {
                       <div class="font-bold text-gray-900">{{ (order.totaleScontato || order.totaleImponibile || 0).toFixed(2) }} €</div>
                       <div v-if="isAdmin" class="text-xs text-blue-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity">VEDI ></div>
                       <button 
-                          v-if="order.fic_ddt_url" 
-                          @click.stop="openDdt(order.fic_ddt_url)"
+                          v-if="order.fic_ddt_url || order.cic_ddt_id"
+                          @click.stop="openDdt(order)"
                           class="flex items-center gap-1 text-sm font-bold text-amber-950 bg-amber-400 border border-amber-500 px-8 py-0.5 rounded-full hover:bg-amber-300 transition-colors"
                           title="Visualizza DDT"
                         >
