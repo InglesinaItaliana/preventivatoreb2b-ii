@@ -35,7 +35,7 @@ POLARIS è la roadmap che governa l'evoluzione architetturale di `preventivatore
 | QUASAR | `/sidera` (home) | — | "Il Mio Giorno", solo desktop |
 | CEPHEID | `/cepheid/*` | ✅ PWA attiva | Azioni / Progetti / Scadenze. Manifest statico in `/public/cepheid.webmanifest`, swap runtime in `index.html` |
 | PULSAR | `/pulsar/*` | ✅ PWA attiva | Chat + FCM push. Manifest via VitePWA. Notifiche data-only |
-| NEBULA | `/nebula/*` | ✅ PWA attiva | Team. Manifest statico in `/public/nebula.webmanifest`, scope token FCM `'nebula'` (no eventi ancora) |
+| NEBULA | `/nebula/*` | ✅ PWA attiva | Squadra, Documenti wiki, **Archivio file**, **Mezzi** (`docs/NEBULA-FLOTTA-ARCHIVIO.md`). Manifest `/public/nebula.webmanifest`, FCM scope `'nebula'` |
 | NOVA | `/sidera/nova/spedizioni` | ☐ Solo view SIDERA | Spedizioni — non ancora PWA |
 | 6° modulo | TBD | ☐ Non definito | — |
 

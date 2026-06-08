@@ -42,7 +42,7 @@ export const ENABLE_NEBULA_DOCS = true
 export interface FabConfig {
   icon: string
   /** Identifier of the action; consumed via provide/inject by the active scope view. */
-  action: 'new-chat' | 'new-task' | 'new-project' | 'new-goal' | 'new-doc' | 'new-appointment' | 'none'
+  action: 'new-chat' | 'new-task' | 'new-project' | 'new-goal' | 'new-doc' | 'new-appointment' | 'new-archivio-upload' | 'new-vehicle' | 'none'
   ariaLabel: string
 }
 
@@ -103,11 +103,14 @@ export const SCOPE_CONFIGS: Record<Exclude<ScopeId, 'sidera'>, ScopeConfig> = {
     wordmark: 'NEBULA',
     brandSvg: 'nebula',
     mobileNav: [
-      { path: '/nebula/docs', exact: false, label: 'Documenti', icon: 'description' },
-      { path: '/nebula',      exact: true,  label: 'Squadra',    icon: 'group' },
+      { path: '/nebula/docs',     exact: false, label: 'Documenti', icon: 'description' },
+      { path: '/nebula/archivio', exact: false, label: 'Archivio',  icon: 'folder' },
+      { path: '/nebula/mezzi',    exact: false, label: 'Mezzi',     icon: 'directions_car' },
+      { path: '/nebula',          exact: true,  label: 'Squadra',   icon: 'group' },
     ],
     fab: { icon: 'add', action: 'new-doc', ariaLabel: 'Nuovo documento' },
-    isTopLevelPath: (p) => p === '/nebula' || p === '/nebula/docs',
+    isTopLevelPath: (p) =>
+      ['/nebula', '/nebula/docs', '/nebula/archivio', '/nebula/mezzi'].includes(p),
     loginPath: '/nebula/login',
     notificationScope: 'nebula',
   },

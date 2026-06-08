@@ -68,22 +68,25 @@ export interface Capabilities {
   canSeeAllTasks: boolean     // CEPHEID: vede tutte le task (false = solo le proprie assegnate/create)
   canEditAnyTask: boolean     // CEPHEID: edit/elimina task di chiunque
   canEditOwnTask: boolean     // CEPHEID: edit le proprie task (assegnate/create)
+  canManageArchivio: boolean  // NEBULA Archivio: upload/elimina file
+  canManageFleet: boolean     // NEBULA Mezzi: CRUD flotta e scadenze
 }
 
 const EMPTY_CAPS: Capabilities = {
   canEditProjects: false, canManageGoals: false, canManageTeamMeta: false, canCreateTasks: false,
   canTriage: false, canSeeAllTasks: false, canEditAnyTask: false, canEditOwnTask: false,
+  canManageArchivio: false, canManageFleet: false,
 }
 
 export const ROLE_CAPABILITIES: Record<Role, Capabilities> = {
   // ADMIN: tutto.
-  ADMIN:       { canEditProjects: true,  canManageGoals: true,  canManageTeamMeta: true, canCreateTasks: true, canTriage: true, canSeeAllTasks: true, canEditAnyTask: true, canEditOwnTask: true },
+  ADMIN:       { canEditProjects: true,  canManageGoals: true,  canManageTeamMeta: true, canCreateTasks: true, canTriage: true, canSeeAllTasks: true, canEditAnyTask: true, canEditOwnTask: true, canManageArchivio: true, canManageFleet: true },
   // COMMERCIALE: accesso ampio CEPHEID + può creare progetti. NIENTE Obiettivi, niente edit team.
-  COMMERCIALE: { canEditProjects: true,  canManageGoals: false, canManageTeamMeta: false, canCreateTasks: true, canTriage: true, canSeeAllTasks: true, canEditAnyTask: true, canEditOwnTask: true },
+  COMMERCIALE: { canEditProjects: true,  canManageGoals: false, canManageTeamMeta: false, canCreateTasks: true, canTriage: true, canSeeAllTasks: true, canEditAnyTask: true, canEditOwnTask: true, canManageArchivio: false, canManageFleet: false },
   // PRODUZIONE: crea task + vede/modifica SOLO le proprie. Niente Obiettivi/smistamento.
-  PRODUZIONE:  { canEditProjects: false, canManageGoals: false, canManageTeamMeta: false, canCreateTasks: true, canTriage: false, canSeeAllTasks: false, canEditAnyTask: false, canEditOwnTask: true },
+  PRODUZIONE:  { canEditProjects: false, canManageGoals: false, canManageTeamMeta: false, canCreateTasks: true, canTriage: false, canSeeAllTasks: false, canEditAnyTask: false, canEditOwnTask: true, canManageArchivio: false, canManageFleet: false },
   // LOGISTICA: sola lettura delle proprie + completamento. Niente creazione/edit/Obiettivi/smistamento.
-  LOGISTICA:   { canEditProjects: false, canManageGoals: false, canManageTeamMeta: false, canCreateTasks: false, canTriage: false, canSeeAllTasks: false, canEditAnyTask: false, canEditOwnTask: false },
+  LOGISTICA:   { canEditProjects: false, canManageGoals: false, canManageTeamMeta: false, canCreateTasks: false, canTriage: false, canSeeAllTasks: false, canEditAnyTask: false, canEditOwnTask: false, canManageArchivio: false, canManageFleet: false },
   '':          { ...EMPTY_CAPS },
 }
 

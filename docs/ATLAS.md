@@ -59,7 +59,7 @@ Eccezioni: **QUASAR** e **SIDERA** hanno un solo valore perché vivono già in z
 | Modulo | Tipo astronomico | Funzione | Accent on-dark | Accent on-light |
 |---|---|---|---|---|
 | QUASAR | Quasar (oggetto galattico luminosissimo) | Analytics · KPI · Business Intelligence | `#98C0D0` | `#98C0D0` |
-| NEBULA | Nebula (gas interstellare) | HR · Anagrafiche · Documentale | `#C46030` | `#B85425` |
+| NEBULA | Nebula (gas interstellare) | HR · Squadra · Documenti wiki · **Archivio file** · **Mezzi** | `#C46030` | `#B85425` |
 | CEPHEID | Cefeide (stella variabile) | Project Management · Workflow · Task | `#D4A020` | `#C4941C` |
 | PULSAR | Pulsar (stella di neutroni) | Chat · Comunicazione · Collaborazione | `#3AAF98` | `#3A8C80` |
 | NOVA | Nova (esplosione stellare) | Logistica · Supply Chain · Spedizioni | `#8FAB35` | `#5C6822` |

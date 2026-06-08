@@ -24,12 +24,13 @@ const { items, loading } = useCalendarItems()
 const { members } = useTeamMembers()
 
 // ── Filtro per sorgente: Tutto / QUASAR (appuntamenti+obiettivi) / CEPHEID (azioni+deliverable)
-type SourceFilter = 'all' | 'quasar' | 'cepheid'
+type SourceFilter = 'all' | 'quasar' | 'cepheid' | 'nebula'
 const sourceFilter = ref<SourceFilter>('all')
 const filterTabs = [
   { id: 'all',     label: 'Tutto',   icon: 'apps' },
   { id: 'quasar',  label: 'QUASAR',  icon: 'event' },
   { id: 'cepheid', label: 'CEPHEID', icon: 'check_circle' },
+  { id: 'nebula',  label: 'NEBULA',  icon: 'directions_car' },
 ]
 const visibleItems = computed(() =>
   sourceFilter.value === 'all' ? items.value : items.value.filter(i => i.source === sourceFilter.value),
@@ -146,7 +147,11 @@ function onDetailEdit(it: CalendarItem) {
 function iconOf(kind: CalendarItem['kind']): string {
   // CEPHEID distinto per icona: check = azioni/task, scatola = deliverable.
   // QUASAR: event = appuntamento, flag = obiettivo.
-  return kind === 'deliverable' ? 'inventory_2' : kind === 'appointment' ? 'event' : kind === 'goal' ? 'flag' : 'check_circle'
+  if (kind === 'vehicle_deadline') return 'directions_car'
+  if (kind === 'deliverable') return 'inventory_2'
+  if (kind === 'appointment') return 'event'
+  if (kind === 'goal') return 'flag'
+  return 'check_circle'
 }
 
 const periodTotal = computed(() => {

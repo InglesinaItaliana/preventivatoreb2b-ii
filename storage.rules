@@ -1,0 +1,41 @@
+rules_version = '2';
+
+// Firebase Storage — versionate in repo (NEBULA Archivio + path legacy POPS).
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return request.auth != null && (
+        request.auth.token.role == 'ADMIN' ||
+        request.auth.token.email == 'info@inglesinaitaliana.it'
+      );
+    }
+
+    // NEBULA Archivio — team legge, solo ADMIN scrive/elimina.
+    match /nebula-archivio/{fileId}/{fileName} {
+      allow read: if isAuthenticated();
+      allow write, delete: if isAdmin();
+    }
+
+    // POPS — allegati preventivi (clienti + staff autenticati).
+    match /allegati/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
+    match /allegati_clienti/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+
+    // POPS — firme consegne (logistica).
+    match /firme_consegne/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated();
+    }
+  }
+}
