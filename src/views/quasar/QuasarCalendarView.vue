@@ -5,7 +5,7 @@
  * appuntamenti veri arrivano in B3) e le dispone in una griglia mensile M3,
  * lunedì-prima. Ogni chip è cliccabile → deep-link al modulo d'origine.
  */
-import { ref, computed } from 'vue'
+import { ref, computed, inject, watch, onMounted, nextTick, type Ref } from 'vue'
 import { useRouter } from 'vue-router'
 import MIcon from '../../components/shared/MIcon.vue'
 import MdPageHeader from '../../components/shared/MdPageHeader.vue'
@@ -41,6 +41,16 @@ const apptEdit = ref<CalendarItem | null>(null)
 const apptDate = ref<Date | null>(null)
 function newAppointment(date?: Date) { apptEdit.value = null; apptDate.value = date ?? null; apptOpen.value = true }
 function editAppointment(it: CalendarItem) { apptEdit.value = it; apptDate.value = null; apptOpen.value = true }
+
+// Trigger dal FAB mobile del layout (vedi SideraLayout.onFabTrigger 'new-appointment').
+const newAppointmentTick = inject<Ref<number>>('quasar-new-appointment-tick', null as any)
+if (newAppointmentTick) watch(newAppointmentTick, () => newAppointment())
+onMounted(() => {
+  if (sessionStorage.getItem('quasar-pending-new-appointment') === '1') {
+    sessionStorage.removeItem('quasar-pending-new-appointment')
+    nextTick(() => newAppointment())
+  }
+})
 
 // vista corrente + cursore (giorno di riferimento)
 type CalView = 'mese' | 'settimana' | 'giorno' | 'agenda'
@@ -207,22 +217,24 @@ function agendaLabel(d: Date): string {
     >
       <template #tools>
         <div class="cal-tools">
-          <div class="cal-nav">
-            <template v-if="view !== 'agenda'">
-              <button class="cal-navbtn" aria-label="Precedente" @click="prev"><MIcon name="chevron_left" :size="20" /></button>
-              <span class="cal-month">{{ periodLabel }}</span>
-              <button class="cal-navbtn" aria-label="Successivo" @click="next"><MIcon name="chevron_right" :size="20" /></button>
-              <button class="cal-today" @click="goToday">Oggi</button>
-            </template>
+          <div class="cal-tools__filters">
+            <CepheidViewSwitcher :model-value="sourceFilter" :tabs="filterTabs" @update:model-value="(v) => (sourceFilter = v as SourceFilter)" />
+            <button class="cal-new" @click="newAppointment()"><MIcon name="add" :size="16" /> Appuntamento</button>
           </div>
-          <CepheidViewSwitcher :model-value="sourceFilter" :tabs="filterTabs" @update:model-value="(v) => (sourceFilter = v as SourceFilter)" />
-          <CepheidViewSwitcher :model-value="view" :tabs="viewTabs" @update:model-value="(v) => (view = v as CalView)" />
-          <button class="cal-new" @click="newAppointment()"><MIcon name="add" :size="16" /> Appuntamento</button>
+          <div class="cal-tools__view">
+            <CepheidViewSwitcher :model-value="view" :tabs="viewTabs" @update:model-value="(v) => (view = v as CalView)" />
+          </div>
         </div>
       </template>
     </MdPageHeader>
 
     <div class="cal-content">
+      <div v-if="view !== 'agenda'" class="cal-period-nav">
+        <button class="cal-navbtn" aria-label="Precedente" @click="prev"><MIcon name="chevron_left" :size="20" /></button>
+        <span class="cal-month">{{ periodLabel }}</span>
+        <button class="cal-navbtn" aria-label="Successivo" @click="next"><MIcon name="chevron_right" :size="20" /></button>
+        <button class="cal-today" @click="goToday">Oggi</button>
+      </div>
       <!-- ── MESE: griglia mensile ── -->
       <template v-if="view === 'mese'">
         <div class="cal-grid cal-weekhead">
@@ -343,6 +355,8 @@ function agendaLabel(d: Date): string {
   color: var(--md-sys-color-on-surface);
   height: 100%;
   overflow: auto;
+  overflow-x: clip;
+  max-width: 100%;
   --page-bg: #EFE7D9;
   background: var(--page-bg);
 }
@@ -355,7 +369,6 @@ function agendaLabel(d: Date): string {
 @media (prefers-color-scheme: dark) { :deep(.md-page-header.is-sticky) { background: #16130B; } }
 @media (min-width: 1024px) { :deep(.md-page-header) { padding: 24px max(40px, calc(50% - 540px)) 18px; } }
 
-.cal-nav { display: flex; align-items: center; gap: 6px; }
 .cal-navbtn, .cal-today {
   display: inline-flex; align-items: center; justify-content: center;
   background: none; border: 1px solid var(--md-sys-color-outline-variant);
@@ -365,6 +378,13 @@ function agendaLabel(d: Date): string {
 .cal-navbtn { width: 32px; height: 32px; }
 .cal-today { height: 32px; padding: 0 14px; font-size: 13px; font-weight: 600; border-radius: var(--md-sys-shape-corner-small); }
 .cal-navbtn:hover, .cal-today:hover { background: color-mix(in srgb, var(--md-sys-color-primary) 8%, transparent); }
+.cal-period-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-bottom: 12px;
+}
 .cal-new {
   display: inline-flex; align-items: center; gap: 4px; height: 32px; padding: 0 14px;
   border: none; border-radius: var(--md-sys-shape-corner-small); cursor: pointer;
@@ -373,6 +393,51 @@ function agendaLabel(d: Date): string {
 }
 .cal-new:hover { background: var(--md-sys-color-primary-hover, var(--md-sys-color-primary)); }
 .cal-tools { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.cal-tools__filters { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+@media (max-width: 768px) {
+  :deep(.md-page-header) {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto auto;
+    gap: 8px 12px;
+    align-items: start;
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+  }
+  :deep(.md-page-header__text) {
+    grid-column: 1;
+    grid-row: 1 / 3;
+    min-width: 0;
+    align-self: center;
+  }
+  :deep(.md-page-header__subtitle) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  :deep(.md-page-header__tools) {
+    display: contents;
+    min-width: 0;
+  }
+  .cal-tools__filters {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+  }
+  .cal-tools__view {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: end;
+  }
+  .cal-new { display: none; }
+}
+
+@media (min-width: 769px) {
+  .cal-tools__filters { order: 1; }
+  .cal-tools__view { order: 2; }
+}
 
 /* Settimana: celle più alte (più item visibili) */
 .cal-body.is-week .cal-cell { min-height: 180px; }
@@ -430,7 +495,10 @@ function agendaLabel(d: Date): string {
 .cal-ag-date { font-size: 13px; font-weight: 700; text-transform: capitalize; color: var(--md-sys-color-primary); margin: 0 4px 8px; }
 .cal-month { min-width: 130px; text-align: center; font-weight: 600; font-size: 14px; text-transform: capitalize; }
 
-.cal-content { max-width: 1100px; margin: 0 auto; padding: 12px 16px 28px; }
+.cal-content { max-width: 1100px; margin: 0 auto; padding: 12px 16px 28px; width: 100%; box-sizing: border-box; }
+@media (max-width: 768px) {
+  .cal-tg { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+}
 .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
 .cal-weekhead { margin-bottom: 6px; }
 .cal-wd { text-align: center; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--md-sys-color-on-surface-variant); padding: 4px 0; }

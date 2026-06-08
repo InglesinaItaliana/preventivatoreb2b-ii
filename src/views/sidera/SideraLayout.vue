@@ -57,6 +57,8 @@ const showFab = computed(() => {
   const fab = currentScopeConfig.value?.fab
   if (!fab) return false
   if (fab.action === 'new-task') return can('canCreateTasks')
+  // QUASAR: FAB solo sul calendario (unica azione primaria "+").
+  if (fab.action === 'new-appointment') return route.path.startsWith('/quasar/calendario')
   return true
 })
 
@@ -94,14 +96,16 @@ const newChatTick    = ref(0)
 const newTaskTick    = ref(0)
 const newProjectTick = ref(0)
 const newGoalTick    = ref(0)
-const newDocTick     = ref(0)
-provide('pulsar-new-chat-tick',     newChatTick)
-provide('cepheid-new-task-tick',    newTaskTick)
-provide('cepheid-new-project-tick', newProjectTick)
-provide('cepheid-new-goal-tick',    newGoalTick)
-provide('nebula-new-doc-tick',      newDocTick)
+const newDocTick           = ref(0)
+const newAppointmentTick   = ref(0)
+provide('pulsar-new-chat-tick',         newChatTick)
+provide('cepheid-new-task-tick',        newTaskTick)
+provide('cepheid-new-project-tick',     newProjectTick)
+provide('cepheid-new-goal-tick',        newGoalTick)
+provide('nebula-new-doc-tick',          newDocTick)
+provide('quasar-new-appointment-tick',  newAppointmentTick)
 
-function onFabTrigger(action: 'new-chat' | 'new-task' | 'new-project' | 'new-goal' | 'new-doc' | 'none') {
+function onFabTrigger(action: 'new-chat' | 'new-task' | 'new-project' | 'new-goal' | 'new-doc' | 'new-appointment' | 'none') {
   if (action === 'new-chat') {
     if (route.path === '/pulsar') {
       newChatTick.value++
@@ -147,6 +151,15 @@ function onFabTrigger(action: 'new-chat' | 'new-task' | 'new-project' | 'new-goa
     } else {
       sessionStorage.setItem('nebula-pending-new-doc', '1')
       router.push('/nebula/docs')
+    }
+    return
+  }
+  if (action === 'new-appointment') {
+    if (route.path.startsWith('/quasar/calendario')) {
+      newAppointmentTick.value++
+    } else {
+      sessionStorage.setItem('quasar-pending-new-appointment', '1')
+      router.push('/quasar/calendario')
     }
   }
 }
