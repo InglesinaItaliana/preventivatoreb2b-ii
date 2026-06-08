@@ -2,6 +2,7 @@
 import MIcon from '../../shared/MIcon.vue'
 import NebulaVehicleStatusBadge from './NebulaVehicleStatusBadge.vue'
 import type { VehicleDeadline } from '../../../types/nebula-fleet'
+import { deadlineIsAllDay } from '../../../types/nebula-fleet'
 import { deadlineStatus } from '../../../composables/shared/useVehicles'
 
 defineProps<{
@@ -26,6 +27,18 @@ const kindLabels: Record<string, string> = {
 function formatDate(d: Date) {
   return new Intl.DateTimeFormat('it-IT', { day: 'numeric', month: 'short', year: 'numeric' }).format(d)
 }
+
+function formatTime(d: Date) {
+  return new Intl.DateTimeFormat('it-IT', { hour: '2-digit', minute: '2-digit' }).format(d)
+}
+
+function formatSchedule(d: VehicleDeadline) {
+  if (deadlineIsAllDay(d)) return formatDate(d.dueDate)
+  const date = formatDate(d.dueDate)
+  const start = formatTime(d.dueDate)
+  const end = d.endAt ? formatTime(d.endAt) : ''
+  return end ? `${date} · ${start}–${end}` : `${date} · ${start}`
+}
 </script>
 
 <template>
@@ -33,7 +46,7 @@ function formatDate(d: Date) {
     <li v-for="d in deadlines" :key="d.id" class="ndl-item md-card-outlined">
       <div class="ndl-main">
         <div class="ndl-title">{{ d.title || kindLabels[d.kind] || d.kind }}</div>
-        <div class="ndl-date">{{ formatDate(d.dueDate) }}</div>
+        <div class="ndl-date">{{ formatSchedule(d) }}</div>
       </div>
       <NebulaVehicleStatusBadge :status="deadlineStatus(d.dueDate, d.completedAt)" />
       <div v-if="canManage && !d.completedAt" class="ndl-actions">

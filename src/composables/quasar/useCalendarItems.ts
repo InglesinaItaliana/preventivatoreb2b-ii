@@ -16,6 +16,7 @@ import { useAllTasks, type AppointmentLink } from '../sidera/useAllTasks'
 import { useProjects } from '../sidera/useProjects'
 import { useObiettivi } from '../sidera/useObiettivi'
 import { useVehicleDeadlines, useVehicles } from '../shared/useVehicles'
+import { deadlineIsAllDay } from '../../types/nebula-fleet'
 
 export type CalendarKind = 'task' | 'deliverable' | 'appointment' | 'goal' | 'vehicle_deadline'
 // Identità "modulo di appartenenza", usata dal filtro del calendario.
@@ -124,10 +125,11 @@ export function useCalendarItems() {
     for (const d of openDeadlines.value) {
       const plate = plateById.get(d.vehicleId) ?? ''
       const label = d.title || DEADLINE_KIND_LABEL[d.kind] || d.kind
+      const allDay = deadlineIsAllDay(d)
       out.push({
         id: d.id, kind: 'vehicle_deadline', source: 'nebula',
         title: plate ? `${plate} — ${label}` : label,
-        start: d.dueDate, end: null, allDay: true, done: false,
+        start: d.dueDate, end: d.endAt ?? null, allDay, done: false,
         color: COLOR.nebula, projectId: d.vehicleId, projectName: plate,
         assignees: [], location: '', notes: d.notes ?? '', links: [],
         link: `/nebula/mezzi/${d.vehicleId}?tab=scadenze`,

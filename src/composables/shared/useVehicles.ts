@@ -7,7 +7,7 @@ import { db, auth } from '../../firebase'
 import type {
   Vehicle, VehicleDeadline, VehicleType, VehicleUsage, VehicleStatus, DeadlineKind,
 } from '../../types/nebula-fleet'
-import { tsToDate } from '../../types/nebula-fleet'
+import { tsToDate, deadlineIsAllDay } from '../../types/nebula-fleet'
 
 /** Firestore rifiuta valori `undefined` in set/add — omettiamoli dal payload. */
 function omitUndefined(data: Record<string, unknown>): Record<string, unknown> {
@@ -40,12 +40,17 @@ function mapVehicle(id: string, data: Record<string, unknown>): Vehicle {
 }
 
 function mapDeadline(id: string, data: Record<string, unknown>): VehicleDeadline {
+  const dueDate = tsToDate(data.dueDate as never) ?? new Date(0)
+  const endAt = tsToDate(data.endAt as never) ?? undefined
+  const allDay = data.allDay === false ? false : data.allDay === true ? true : deadlineIsAllDay({ dueDate, endAt })
   return {
     id,
     vehicleId: String(data.vehicleId ?? ''),
     kind: (data.kind as DeadlineKind) ?? 'altro',
     title: data.title != null ? String(data.title) : undefined,
-    dueDate: tsToDate(data.dueDate as never) ?? new Date(0),
+    dueDate,
+    endAt,
+    allDay,
     completedAt: tsToDate(data.completedAt as never) ?? undefined,
     reminderDays: Array.isArray(data.reminderDays) ? data.reminderDays.map(Number) : undefined,
     archivioFileIds: Array.isArray(data.archivioFileIds) ? data.archivioFileIds.map(String) : [],
@@ -156,22 +161,27 @@ export async function createVehicleDeadline(input: {
   kind: DeadlineKind
   title?: string
   dueDate: Date
+  endAt?: Date
+  allDay?: boolean
   reminderDays?: number[]
   notes?: string
 }): Promise<string> {
   const uid = auth.currentUser?.uid
   if (!uid) throw new Error('Non autenticato')
-  const ref = await addDoc(collection(db, 'vehicleDeadlines'), {
+  const allDay = input.allDay ?? deadlineIsAllDay({ dueDate: input.dueDate, endAt: input.endAt })
+  const ref = await addDoc(collection(db, 'vehicleDeadlines'), omitUndefined({
     vehicleId: input.vehicleId,
     kind: input.kind,
     title: input.title?.trim() || null,
     dueDate: Timestamp.fromDate(input.dueDate),
+    endAt: input.endAt ? Timestamp.fromDate(input.endAt) : null,
+    allDay,
     completedAt: null,
     reminderDays: input.reminderDays ?? [30, 7],
     archivioFileIds: [],
     notes: input.notes?.trim() || null,
     createdByUid: uid,
-  })
+  }))
   return ref.id
 }
 
