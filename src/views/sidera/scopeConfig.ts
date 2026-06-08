@@ -42,7 +42,7 @@ export const ENABLE_NEBULA_DOCS = true
 export interface FabConfig {
   icon: string
   /** Identifier of the action; consumed via provide/inject by the active scope view. */
-  action: 'new-chat' | 'new-task' | 'new-project' | 'new-goal' | 'new-doc' | 'none'
+  action: 'new-chat' | 'new-task' | 'new-project' | 'new-goal' | 'new-doc' | 'new-appointment' | 'none'
   ariaLabel: string
 }
 
@@ -142,6 +142,7 @@ export const SCOPE_CONFIGS: Record<Exclude<ScopeId, 'sidera'>, ScopeConfig> = {
       { path: '/quasar/quadranti', exact: false, label: 'Quadranti',  icon: 'grid_view' },
       { path: '/quasar/attivita',  exact: false, label: 'Attività',   icon: 'history' },
     ],
+    fab: { icon: 'add', action: 'new-appointment', ariaLabel: 'Nuovo appuntamento' },
     isTopLevelPath: (p) => ['/quasar', '/quasar/cruscotto', '/quasar/calendario', '/quasar/quadranti', '/quasar/attivita'].includes(p),
     loginPath: '/quasar/login',
     notificationScope: 'sidera',
