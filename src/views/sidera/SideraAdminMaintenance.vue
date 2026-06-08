@@ -104,6 +104,37 @@ async function runAssigneeBackfill(dryRun: boolean) {
   }
 }
 
+// N2 — Backfill members sui messaggi PULSAR (dry-run default)
+interface BackfillMembersResult {
+  dryRun: boolean
+  scanned: number
+  changed: number
+  skippedNoParent: number
+  skippedNoMembers: number
+  chatsRead: number
+}
+const mbRunning = ref(false)
+const mbResult = ref<BackfillMembersResult | null>(null)
+const mbError = ref<string>('')
+
+async function runMembersBackfill(dryRun: boolean) {
+  if (mbRunning.value) return
+  if (!dryRun && !confirm('Applicare il backfill? Scrive il campo members sui messaggi esistenti (copiato dalla chat). Idempotente, ma scrive sui dati.')) return
+  mbRunning.value = true
+  mbResult.value = null
+  mbError.value = ''
+  try {
+    const fn = httpsCallable<{ dryRun: boolean }, BackfillMembersResult>(functions, 'backfillMessageMembers')
+    const res = await fn({ dryRun })
+    mbResult.value = res.data
+  } catch (e: any) {
+    console.error('[backfillMessageMembers]', e)
+    mbError.value = e?.message || 'Errore sconosciuto. Vedi console.'
+  } finally {
+    mbRunning.value = false
+  }
+}
+
 async function runCleanup() {
   if (running.value) return
   if (!confirm('Eseguire cleanup delle pendenze orfane? L\'operazione può richiedere fino a 9 minuti su workspace grandi.')) return
@@ -268,6 +299,39 @@ async function runAvatarBackfill() {
 
       <div v-if="bfError" class="m-error">
         <strong>Errore:</strong> {{ bfError }}
+      </div>
+    </div>
+
+    <div v-if="isAdmin" class="m-task">
+      <h3 class="m-task-title">Backfill members messaggi (PULSAR · N2)</h3>
+      <p class="m-task-desc">
+        Copia il campo <code>members</code> dalla chat su ogni messaggio esistente.
+        Serve alle rules del <code>collectionGroup('messages')</code> (ricerca hashtag
+        e pendenze) per concedere la lettura solo ai membri. I messaggi nuovi lo
+        scrivono già all'invio; questo allinea gli storici.
+        <strong>Anteprima (dry-run)</strong> conta senza scrivere; <strong>Applica</strong>
+        scrive. Idempotente: ri-eseguibile senza danni.
+      </p>
+
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <button class="m-btn m-btn--ghost" :disabled="mbRunning" @click="runMembersBackfill(true)">
+          {{ mbRunning ? 'In esecuzione…' : 'Anteprima (dry-run)' }}
+        </button>
+        <button class="m-btn" :disabled="mbRunning" @click="runMembersBackfill(false)">
+          {{ mbRunning ? 'In esecuzione…' : 'Applica backfill' }}
+        </button>
+      </div>
+
+      <div v-if="mbResult" class="m-result">
+        <h4>Risultato — {{ mbResult.dryRun ? 'ANTEPRIMA (nessuna scrittura)' : 'APPLICATO' }}</h4>
+        <ul>
+          <li><strong>{{ mbResult.changed }}</strong> messaggi {{ mbResult.dryRun ? 'da aggiornare' : 'aggiornati' }} (su {{ mbResult.scanned }} scansionati · {{ mbResult.chatsRead }} chat lette)</li>
+          <li>{{ mbResult.skippedNoMembers }} saltati (chat senza members) · {{ mbResult.skippedNoParent }} senza parent</li>
+        </ul>
+      </div>
+
+      <div v-if="mbError" class="m-error">
+        <strong>Errore:</strong> {{ mbError }}
       </div>
     </div>
   </div>
