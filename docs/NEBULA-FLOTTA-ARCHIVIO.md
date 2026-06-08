@@ -49,7 +49,7 @@ LOGISTICA ha già accesso a `/nebula` (routing) in sola lettura.
 ## 4. Integrazioni
 
 - **QUASAR Calendario:** `useCalendarItems` proietta `vehicle_deadline` con `source: 'nebula'`
-- **NOVA / POPS DDT:** `NovaVehiclePicker` in `DdtModal` quando trasporto = Mezzi interni
+- **P.O.P.S. Delivery:** `NovaVehiclePicker` opzionale in `DeliveryView` alla creazione viaggio (accanto all'autista)
 
 ---
 

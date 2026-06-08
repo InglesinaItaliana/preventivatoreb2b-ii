@@ -2,7 +2,7 @@
 import MIcon from '../../shared/MIcon.vue'
 import NebulaVehicleStatusBadge from './NebulaVehicleStatusBadge.vue'
 import type { VehicleDeadline } from '../../../types/nebula-fleet'
-import { deadlineIsAllDay } from '../../../types/nebula-fleet'
+import { deadlineIsAllDay, DEADLINE_KIND_LABELS } from '../../../types/nebula-fleet'
 import { deadlineStatus } from '../../../composables/shared/useVehicles'
 
 defineProps<{
@@ -14,15 +14,6 @@ const emit = defineEmits<{
   complete: [string]
   edit: [VehicleDeadline]
 }>()
-
-const kindLabels: Record<string, string> = {
-  assicurazione: 'Assicurazione',
-  bollo: 'Bollo',
-  revisione: 'Revisione',
-  tagliando: 'Tagliando',
-  patente: 'Patente',
-  altro: 'Altro',
-}
 
 function formatDate(d: Date) {
   return new Intl.DateTimeFormat('it-IT', { day: 'numeric', month: 'short', year: 'numeric' }).format(d)
@@ -45,7 +36,7 @@ function formatSchedule(d: VehicleDeadline) {
   <ul class="ndl">
     <li v-for="d in deadlines" :key="d.id" class="ndl-item md-card-outlined">
       <div class="ndl-main">
-        <div class="ndl-title">{{ d.title || kindLabels[d.kind] || d.kind }}</div>
+        <div class="ndl-title">{{ d.title || DEADLINE_KIND_LABELS[d.kind] || d.kind }}</div>
         <div class="ndl-date">{{ formatSchedule(d) }}</div>
       </div>
       <NebulaVehicleStatusBadge :status="deadlineStatus(d.dueDate, d.completedAt)" />

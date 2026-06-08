@@ -1,6 +1,6 @@
 import { ref, onUnmounted, watch, type Ref } from 'vue'
 import {
-  collection, doc, addDoc, updateDoc, setDoc, onSnapshot, query, where, orderBy,
+  collection, doc, addDoc, updateDoc, setDoc, deleteDoc, getDocs, onSnapshot, query, where, orderBy,
   serverTimestamp, type Unsubscribe,
 } from 'firebase/firestore'
 import { ref as storageRef, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage'
@@ -133,6 +133,25 @@ export async function archiveArchivioFile(fileId: string, storagePath: string): 
 
 export async function renameArchivioFile(fileId: string, name: string): Promise<void> {
   await updateDoc(doc(db, 'nebulaArchivio', fileId), { name: name.trim() })
+}
+
+export async function deleteArchivioFolder(
+  folderId: string,
+  allFolders: NebulaArchivioFolder[],
+): Promise<void> {
+  const hasChildFolders = allFolders.some(f => f.parentId === folderId)
+  if (hasChildFolders) {
+    throw new Error('La cartella contiene sottocartelle. Elimina o sposta prima il contenuto.')
+  }
+  const filesSnap = await getDocs(query(
+    collection(db, 'nebulaArchivio'),
+    where('archived', '==', false),
+    where('folderId', '==', folderId),
+  ))
+  if (!filesSnap.empty) {
+    throw new Error('La cartella non è vuota. Elimina o sposta prima i file.')
+  }
+  await deleteDoc(doc(db, 'nebulaArchivioFolders', folderId))
 }
 
 export async function createArchivioFolder(name: string, parentId: string | null = null): Promise<string> {

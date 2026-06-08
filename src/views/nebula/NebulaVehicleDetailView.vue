@@ -19,7 +19,7 @@ import { useVehicleDeadlines } from '../../composables/shared/useVehicles'
 import { useArchivioFilesForVehicle, getArchivioDownloadUrl, uploadArchivioFile } from '../../composables/shared/useNebulaArchivio'
 import { linkArchivioToVehicle, unlinkArchivioFromVehicle, uploadAndLinkToVehicle } from '../../composables/nebula/useVehicleArchivioLinks'
 import type { Vehicle, DeadlineKind } from '../../types/nebula-fleet'
-import { tsToDate } from '../../types/nebula-fleet'
+import { tsToDate, DEADLINE_KIND_LABELS } from '../../types/nebula-fleet'
 
 const route = useRoute()
 const router = useRouter()
@@ -29,7 +29,8 @@ const { can } = useCan()
 const { members } = useNebulaTeam()
 const vehicleId = computed(() => route.params.vehicleId as string)
 const vehicle = ref<Vehicle | null>(null)
-const tab = ref<'anagrafica' | 'scadenze' | 'documenti'>('anagrafica')
+const tab = ref<'anagrafica' | 'scadenze' | 'documenti'>('scadenze')
+const deadlineKindOptions = Object.entries(DEADLINE_KIND_LABELS) as [DeadlineKind, string][]
 const { openDeadlines } = useVehicleDeadlines()
 const { files: linkedFiles } = useArchivioFilesForVehicle(vehicleId)
 
@@ -92,15 +93,25 @@ watch(vehicleId, (id) => {
 }, { immediate: true })
 
 watch(tab, (t) => {
-  const want = t === 'anagrafica' ? undefined : t
-  if (route.query.tab === want || (t === 'anagrafica' && !route.query.tab)) return
-  router.replace({ query: want ? { tab: want } : {} })
+  if (t === 'scadenze') {
+    if (!route.query.tab) return
+    router.replace({ query: {} })
+    return
+  }
+  if (route.query.tab === t) return
+  router.replace({ query: { tab: t } })
 })
 
 function syncTabFromRoute() {
   const t = route.query.tab
-  if (t === 'scadenze' || t === 'documenti') tab.value = t
-  else if (!t) tab.value = 'anagrafica'
+  if (t === 'anagrafica' || t === 'documenti') tab.value = t
+  else tab.value = 'scadenze'
+}
+
+function onPlateInput(e: Event) {
+  if (!vehicle.value) return
+  const el = e.target as HTMLInputElement
+  vehicle.value.plate = el.value.toUpperCase()
 }
 
 onMounted(syncTabFromRoute)
@@ -212,6 +223,17 @@ async function unlinkFile(fileId: string) {
       <template #tools>
         <CepheidViewSwitcher v-model="tab" :tabs="tabs" />
       </template>
+      <template #cta>
+        <button
+          v-if="tab === 'scadenze' && can('canManageFleet')"
+          type="button"
+          class="md-btn md-btn--filled md-btn--sm md-btn--square nvd-create-btn"
+          @click="openDeadlineModal"
+        >
+          <MIcon name="add" :size="16" />
+          Nuova scadenza
+        </button>
+      </template>
     </MdPageHeader>
 
     <div class="nvd-content">
@@ -219,7 +241,11 @@ async function unlinkFile(fileId: string) {
         <template v-if="can('canManageFleet')">
           <label class="md-text-field">
             <span class="md-text-field-label">Targa</span>
-            <input v-model="vehicle.plate" class="md-text-field-input" />
+            <input
+              :value="vehicle.plate"
+              class="md-text-field-input nvd-plate"
+              @input="onPlateInput"
+            />
           </label>
           <label class="md-text-field">
             <span class="md-text-field-label">Marca / Modello</span>
@@ -251,14 +277,6 @@ async function unlinkFile(fileId: string) {
       </div>
 
       <div v-else-if="tab === 'scadenze'" class="nvd-panel">
-        <button
-          v-if="can('canManageFleet')"
-          type="button"
-          class="md-btn md-btn--filled md-btn--sm nvd-add"
-          @click="openDeadlineModal"
-        >
-          <MIcon name="add" :size="16" /> Scadenza
-        </button>
         <NebulaDeadlineList
           :deadlines="vehicleDeadlines"
           :can-manage="can('canManageFleet')"
@@ -315,12 +333,9 @@ async function unlinkFile(fileId: string) {
             <label class="md-text-field">
               <span class="md-text-field-label">Tipo</span>
               <select v-model="dlForm.kind" class="md-text-field-input">
-                <option value="assicurazione">Assicurazione</option>
-                <option value="bollo">Bollo</option>
-                <option value="revisione">Revisione</option>
-                <option value="tagliando">Tagliando</option>
-                <option value="patente">Patente</option>
-                <option value="altro">Altro</option>
+                <option v-for="[kind, label] in deadlineKindOptions" :key="kind" :value="kind">
+                  {{ label }}
+                </option>
               </select>
             </label>
             <label class="md-text-field">
@@ -409,7 +424,8 @@ async function unlinkFile(fileId: string) {
   font-size: 14px;
   cursor: pointer;
 }
-.nvd-add { align-self: flex-start; margin-bottom: 8px; }
+.nvd-plate { text-transform: uppercase; }
+.nvd-create-btn { gap: 6px; }
 .nvd-doc-actions { margin-bottom: 12px; }
 .nvd-files { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
 .nvd-file {

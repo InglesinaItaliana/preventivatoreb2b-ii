@@ -42,7 +42,27 @@ export type DeadlineKind =
   | 'revisione'
   | 'tagliando'
   | 'patente'
+  | 'cambio_pneumatici'
+  | 'convergenza'
+  | 'bilanciatura'
   | 'altro'
+
+export const DEADLINE_KIND_LABELS: Record<DeadlineKind, string> = {
+  assicurazione: 'Assicurazione',
+  bollo: 'Bollo',
+  revisione: 'Revisione',
+  tagliando: 'Tagliando',
+  patente: 'Patente',
+  cambio_pneumatici: 'Cambio pneumatici',
+  convergenza: 'Convergenza',
+  bilanciatura: 'Bilanciatura pneumatici',
+  altro: 'Altro',
+}
+
+/** Data locale a mezzogiorno per eventi all-day in calendario (evita shift UTC). */
+export function calendarAllDayDate(d: Date): Date {
+  return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0, 0)
+}
 
 export interface Vehicle {
   id: string

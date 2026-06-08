@@ -16,7 +16,7 @@ import { useAllTasks, type AppointmentLink } from '../sidera/useAllTasks'
 import { useProjects } from '../sidera/useProjects'
 import { useObiettivi } from '../sidera/useObiettivi'
 import { useVehicleDeadlines, useVehicles } from '../shared/useVehicles'
-import { deadlineIsAllDay } from '../../types/nebula-fleet'
+import { deadlineIsAllDay, calendarAllDayDate, DEADLINE_KIND_LABELS } from '../../types/nebula-fleet'
 
 export type CalendarKind = 'task' | 'deliverable' | 'appointment' | 'goal' | 'vehicle_deadline'
 // Identità "modulo di appartenenza", usata dal filtro del calendario.
@@ -48,15 +48,6 @@ const COLOR = {
   cepheid:     '#D4A020',
   nebula:      '#B85425',
 } as const
-
-const DEADLINE_KIND_LABEL: Record<string, string> = {
-  assicurazione: 'Assicurazione',
-  bollo: 'Bollo',
-  revisione: 'Revisione',
-  tagliando: 'Tagliando',
-  patente: 'Patente',
-  altro: 'Scadenza',
-}
 
 function dayKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
@@ -94,7 +85,7 @@ export function useCalendarItems() {
         if (!t.dueDate) continue
         out.push({
           id: t.id, kind: 'deliverable', source: 'cepheid', title: t.title,
-          start: t.dueDate, end: null, allDay: true, done: !!t.completedAt,
+          start: calendarAllDayDate(t.dueDate), end: null, allDay: true, done: !!t.completedAt,
           color: COLOR.cepheid, projectId: t.projectId, projectName: pn, assignees: t.assignees, location: '', notes: '', links: [],
           link: t.projectId ? `/cepheid/project/${t.projectId}` : '/cepheid',
         })
@@ -102,7 +93,7 @@ export function useCalendarItems() {
         if (!t.dueDate) continue
         out.push({
           id: t.id, kind: 'task', source: 'cepheid', title: t.title,
-          start: t.dueDate, end: null, allDay: true, done: !!t.completedAt,
+          start: calendarAllDayDate(t.dueDate), end: null, allDay: true, done: !!t.completedAt,
           color: COLOR.cepheid, projectId: t.projectId, projectName: pn, assignees: t.assignees, location: '', notes: '', links: [],
           link: t.projectId ? `/cepheid/project/${t.projectId}` : '/cepheid/azioni',
         })
@@ -115,7 +106,7 @@ export function useCalendarItems() {
       if (!o.endDate) continue
       out.push({
         id: o.id, kind: 'goal', source: 'quasar', title: o.titolo,
-        start: o.endDate, end: null, allDay: true, done: o.stato === 'raggiunto',
+        start: calendarAllDayDate(o.endDate), end: null, allDay: true, done: o.stato === 'raggiunto',
         color: COLOR.appointment, projectId: '', projectName: '', assignees: [],
         location: '', notes: o.descrizione, links: [],
         link: `/cepheid/goal/${o.id}`,
@@ -124,12 +115,13 @@ export function useCalendarItems() {
     const plateById = new Map(vehicles.value.map(v => [v.id, v.plate]))
     for (const d of openDeadlines.value) {
       const plate = plateById.get(d.vehicleId) ?? ''
-      const label = d.title || DEADLINE_KIND_LABEL[d.kind] || d.kind
+      const label = d.title || DEADLINE_KIND_LABELS[d.kind] || d.kind
       const allDay = deadlineIsAllDay(d)
       out.push({
         id: d.id, kind: 'vehicle_deadline', source: 'nebula',
         title: plate ? `${plate} — ${label}` : label,
-        start: d.dueDate, end: d.endAt ?? null, allDay, done: false,
+        start: allDay ? calendarAllDayDate(d.dueDate) : d.dueDate,
+        end: d.endAt ?? null, allDay, done: false,
         color: COLOR.nebula, projectId: d.vehicleId, projectName: plate,
         assignees: [], location: '', notes: d.notes ?? '', links: [],
         link: `/nebula/mezzi/${d.vehicleId}?tab=scadenze`,
