@@ -109,7 +109,7 @@ async function submitCreate() {
       assigneeUid: form.value.assigneeUid || undefined,
     })
     showModal.value = false
-    router.push(`/nebula/mezzi/${id}`)
+    router.push(`/nebula/mezzi/${id}?tab=scadenze`)
   } catch (e: unknown) {
     console.error('[NebulaMezzi] create', e)
     const err = e as { code?: string; message?: string }
@@ -199,7 +199,12 @@ onMounted(() => {
             <p v-if="formError" class="nmv-form-error" role="alert">{{ formError }}</p>
             <label class="md-text-field">
               <span class="md-text-field-label">Targa</span>
-              <input v-model="form.plate" class="md-text-field-input" placeholder="AB123CD" />
+              <input
+                :value="form.plate"
+                class="md-text-field-input nmv-plate"
+                placeholder="AB123CD"
+                @input="(e) => { form.plate = (e.target as HTMLInputElement).value.toUpperCase() }"
+              />
             </label>
             <label class="md-text-field">
               <span class="md-text-field-label">Marca</span>
@@ -308,6 +313,7 @@ onMounted(() => {
 .nmv-empty-hint { font-size: 12px; margin-top: 8px; }
 
 .nmv-create-btn { gap: 6px; }
+.nmv-plate { text-transform: uppercase; }
 
 .nmv-form { display: flex; flex-direction: column; gap: 12px; }
 .nmv-form-error {

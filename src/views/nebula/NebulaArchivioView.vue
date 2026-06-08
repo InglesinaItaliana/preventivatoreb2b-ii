@@ -10,7 +10,7 @@ import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
 import { useCan } from '../../composables/sidera/useCan'
 import {
   useNebulaArchivio, uploadArchivioFile, getArchivioDownloadUrl, archiveArchivioFile,
-  createArchivioFolder,
+  createArchivioFolder, deleteArchivioFolder,
 } from '../../composables/shared/useNebulaArchivio'
 
 const scrollEl = ref<HTMLElement | null>(null)
@@ -90,6 +90,16 @@ async function downloadFile(storagePath: string, name: string) {
 async function removeFile(fileId: string, storagePath: string) {
   if (!canManage() || !confirm('Eliminare questo file dall\'archivio?')) return
   await archiveArchivioFile(fileId, storagePath)
+}
+
+async function removeFolder(folderId: string, name: string) {
+  if (!canManage() || !confirm(`Eliminare la cartella «${name}»?`)) return
+  try {
+    await deleteArchivioFolder(folderId, folders.value)
+  } catch (e: unknown) {
+    const msg = e instanceof Error ? e.message : 'Impossibile eliminare la cartella.'
+    alert(msg)
+  }
 }
 
 // ── Nuova cartella ──────────────────────────────────────────────────────────
@@ -207,7 +217,9 @@ onMounted(() => {
             v-for="f in visibleFolders"
             :key="f.id"
             :folder="f"
+            :can-manage="canManage()"
             @open="goToFolder(f.id)"
+            @delete="removeFolder(f.id, f.name)"
           />
           <li v-for="file in files" :key="file.id" class="nah-file-wrap">
             <NebulaArchivioFileRow

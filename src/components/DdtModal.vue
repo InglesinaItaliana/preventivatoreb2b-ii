@@ -2,8 +2,6 @@
   import { ref, watch, computed, reactive } from 'vue';
   import { Dialog, DialogPanel, DialogTitle, TransitionChild, TransitionRoot } from '@headlessui/vue';
   import { TruckIcon } from '@heroicons/vue/24/solid';
-  import NovaVehiclePicker from './nova/NovaVehiclePicker.vue';
-  
   const props = defineProps<{
     show: boolean;
     orders: any[];
@@ -33,7 +31,6 @@
     colli: 1,
     weight: 0,
     tipoTrasporto: 'INTERNAL', // 'INTERNAL' o 'COURIER'
-    vehicleId: '',
     corriere: '', // Es. BRT, GLS
     tracking: ''
   });
@@ -111,13 +108,6 @@
                         </div>
                       </div>
   
-                      <div v-if="form.tipoTrasporto === 'INTERNAL'" class="mb-4 space-y-3 animate-in fade-in slide-in-from-top-2">
-                        <div>
-                          <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Mezzo interno</label>
-                          <NovaVehiclePicker v-model="form.vehicleId" />
-                        </div>
-                      </div>
-
                       <div v-if="form.tipoTrasporto === 'COURIER'" class="mb-4 space-y-3 animate-in fade-in slide-in-from-top-2">
                         <div>
                           <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Vettore / Corriere</label>

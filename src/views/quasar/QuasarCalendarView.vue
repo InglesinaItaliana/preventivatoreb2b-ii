@@ -91,6 +91,14 @@ function dayKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+function calendarDayKey(it: CalendarItem): string {
+  if (it.allDay) {
+    const d = it.start
+    return dayKey(new Date(d.getFullYear(), d.getMonth(), d.getDate()))
+  }
+  return dayKey(it.start)
+}
+
 // 42 celle (6 settimane), partendo dal lunedì della settimana che contiene il 1°.
 const gridDays = computed(() => {
   const y = cursor.value.getFullYear(), m = cursor.value.getMonth()
@@ -120,7 +128,7 @@ const cursorKey = computed(() => dayKey(cursor.value))
 const byDay = computed(() => {
   const map = new Map<string, CalendarItem[]>()
   for (const it of visibleItems.value) {
-    const k = dayKey(it.start)
+    const k = calendarDayKey(it)
     const arr = map.get(k); if (arr) arr.push(it); else map.set(k, [it])
   }
   // ordina: appuntamenti (con orario) prima, poi all-day per titolo
@@ -176,6 +184,8 @@ const tgDays = computed(() => {
   return weekDays.value
 })
 const gridColsStyle = computed(() => ({ gridTemplateColumns: `54px repeat(${tgDays.value.length}, minmax(0, 1fr))` }))
+const tgGutterStyle = { gridColumn: '1' }
+function tgColStyle(index: number) { return { gridColumn: String(index + 2) } }
 function allDayOf(key: string) { return itemsOf(key).filter(i => i.allDay) }
 function timedOf(key: string) { return itemsOf(key).filter(i => !i.allDay) }
 function eventStyle(it: CalendarItem) {
@@ -224,10 +234,10 @@ function agendaLabel(d: Date): string {
         <div class="cal-tools">
           <div class="cal-tools__filters">
             <CepheidViewSwitcher :model-value="sourceFilter" :tabs="filterTabs" @update:model-value="(v) => (sourceFilter = v as SourceFilter)" />
-            <button class="cal-new" @click="newAppointment()"><MIcon name="add" :size="16" /> Appuntamento</button>
           </div>
           <div class="cal-tools__view">
             <CepheidViewSwitcher :model-value="view" :tabs="viewTabs" @update:model-value="(v) => (view = v as CalView)" />
+            <button class="cal-new" @click="newAppointment()"><MIcon name="add" :size="16" /> Appuntamento</button>
           </div>
         </div>
       </template>
@@ -277,15 +287,15 @@ function agendaLabel(d: Date): string {
       <!-- ── SETTIMANA / GIORNO: griglia a fasce orarie ── -->
       <div v-else-if="view === 'settimana' || view === 'giorno'" class="cal-tg" :class="{ 'is-day': view === 'giorno' }">
         <div class="cal-tg-head" :style="gridColsStyle">
-          <div class="cal-tg-gutter" />
-          <div v-for="d in tgDays" :key="d.key" class="cal-tg-dh" :class="{ 'is-today': d.today }">
+          <div class="cal-tg-gutter" :style="tgGutterStyle" />
+          <div v-for="(d, i) in tgDays" :key="d.key" class="cal-tg-dh" :style="tgColStyle(i)" :class="{ 'is-today': d.today }">
             <span class="cal-tg-dh-wd">{{ d.date.toLocaleDateString('it-IT', { weekday: 'short' }) }}</span>
             <span class="cal-tg-dh-num">{{ d.date.getDate() }}</span>
           </div>
         </div>
         <div class="cal-tg-allday" :style="gridColsStyle">
-          <div class="cal-tg-gutter cal-tg-adlabel">giorno</div>
-          <div v-for="d in tgDays" :key="d.key" class="cal-tg-adcol">
+          <div class="cal-tg-gutter cal-tg-adlabel" :style="tgGutterStyle">giorno</div>
+          <div v-for="(d, i) in tgDays" :key="d.key" class="cal-tg-adcol" :style="tgColStyle(i)">
             <button v-for="it in allDayOf(d.key)" :key="it.id" class="cal-chip" :class="{ 'is-done': it.done }" :style="{ '--c': it.color }"
               :title="it.projectName ? it.title + ' · ' + it.projectName : it.title" @click="openItem(it)">
               <MIcon :name="iconOf(it.kind)" :size="12" filled class="cal-chip-ic" />
@@ -294,15 +304,18 @@ function agendaLabel(d: Date): string {
           </div>
         </div>
         <div class="cal-tg-body" :style="gridColsStyle">
-          <div class="cal-tg-gutter">
+          <div class="cal-tg-gutter" :style="tgGutterStyle">
             <div v-for="h in hours" :key="h" class="cal-tg-hr"><span v-if="h > HOUR_START">{{ h }}:00</span></div>
           </div>
-          <div v-for="d in tgDays" :key="d.key" class="cal-tg-col" :class="{ 'is-today': d.today }">
+          <div v-for="(d, i) in tgDays" :key="d.key" class="cal-tg-col" :style="tgColStyle(i)" :class="{ 'is-today': d.today }">
             <div v-for="h in hours" :key="h" class="cal-tg-slot" @click="newAtSlot(d.date, h)" />
             <button v-for="it in timedOf(d.key)" :key="it.id" class="cal-tg-ev" :class="{ 'is-done': it.done }"
               :style="{ ...eventStyle(it), '--c': it.color }" :title="it.title" @click.stop="openItem(it)">
-              <span class="cal-tg-ev-t">{{ timeOf(it.start) }}<template v-if="it.end">–{{ timeOf(it.end) }}</template></span>
-              <span class="cal-tg-ev-title">{{ it.title }}</span>
+              <MIcon :name="iconOf(it.kind)" :size="11" filled class="cal-tg-ev-ic" />
+              <div class="cal-tg-ev-body">
+                <span class="cal-tg-ev-t">{{ timeOf(it.start) }}<template v-if="it.end">–{{ timeOf(it.end) }}</template></span>
+                <span class="cal-tg-ev-title">{{ it.title }}</span>
+              </div>
             </button>
           </div>
         </div>
@@ -399,6 +412,7 @@ function agendaLabel(d: Date): string {
 .cal-new:hover { background: var(--md-sys-color-primary-hover, var(--md-sys-color-primary)); }
 .cal-tools { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .cal-tools__filters { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.cal-tools__view { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 
 @media (max-width: 768px) {
   :deep(.md-page-header) {
@@ -507,11 +521,13 @@ function agendaLabel(d: Date): string {
   background: color-mix(in srgb, var(--c) 22%, var(--md-sys-color-surface));
   border: none; border-left: 3px solid var(--c); border-radius: 5px;
   padding: 2px 6px; cursor: pointer; overflow: hidden;
-  display: flex; flex-direction: column; gap: 1px; text-align: left;
+  display: flex; flex-direction: row; align-items: flex-start; gap: 4px; text-align: left;
   font-family: inherit; color: var(--md-sys-color-on-surface);
 }
 .cal-tg-ev:hover { background: color-mix(in srgb, var(--c) 34%, var(--md-sys-color-surface)); }
 .cal-tg-ev.is-done { opacity: .55; text-decoration: line-through; }
+.cal-tg-ev-ic { flex: 0 0 auto; color: var(--c); margin-top: 1px; }
+.cal-tg-ev-body { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .cal-tg-ev-t { font-size: 10px; font-weight: 700; }
 .cal-tg-ev-title { font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 

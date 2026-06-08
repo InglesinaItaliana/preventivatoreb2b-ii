@@ -7,6 +7,8 @@
   import { db, auth, storage } from '../firebase';
   import { dedupeTeamDocs } from '../composables/sidera/useTeamMembers';
   import DeliveryModal from '../components/DeliveryModal.vue';
+  import NovaVehiclePicker from '../components/nova/NovaVehiclePicker.vue';
+  import { useVehicles } from '../composables/shared/useVehicles';
   import { 
     TruckIcon, MapPinIcon, 
     MapIcon, CheckCircleIcon, InboxStackIcon, PlusIcon,ChevronUpIcon, ChevronDownIcon
@@ -35,7 +37,11 @@
     date: string;
     status: 'OPEN' | 'CLOSED';
     stops: string[]; // Array di ID ordini in sequenza
+    vehicleId?: string;
+    vehiclePlate?: string;
   }
+
+  const { deliveryVehicles } = useVehicles();
   
   // --- STATO ---
   const currentUser = ref(auth.currentUser);
@@ -130,6 +136,7 @@ const fetchClientAddresses = async () => {
   // Form Creazione Viaggio (Dispatcher)
   const newTrip = reactive({
     driverId: '',
+    vehicleId: '',
     date: new Date().toISOString().split('T')[0],
     selectedOrderIds: [] as string[]
   });
@@ -298,16 +305,23 @@ const inspectTrip = async (trip: Trip) => {
     
     try {
       const driver = drivers.value.find(d => d.id === newTrip.driverId);
-      
-      // 1. Crea documento Trip
-      const tripRef = await addDoc(collection(db, 'trips'), {
+      const vehicle = deliveryVehicles.value.find(v => v.id === newTrip.vehicleId);
+
+      const tripPayload: Record<string, unknown> = {
         driverId: newTrip.driverId,
         driverName: driver ? `${driver.firstName} ${driver.lastName}` : 'Autista',
         date: newTrip.date,
         status: 'OPEN',
-        stops: newTrip.selectedOrderIds, // Salviamo gli ID per mantenere la sequenza
-        createdAt: serverTimestamp()
-      });
+        stops: newTrip.selectedOrderIds,
+        createdAt: serverTimestamp(),
+      };
+      if (newTrip.vehicleId) {
+        tripPayload.vehicleId = newTrip.vehicleId;
+        tripPayload.vehiclePlate = vehicle?.plate ?? '';
+      }
+
+      // 1. Crea documento Trip
+      const tripRef = await addDoc(collection(db, 'trips'), tripPayload);
   
       // 2. Aggiorna gli ordini (Batch)
       const batch = writeBatch(db);
@@ -324,6 +338,7 @@ const inspectTrip = async (trip: Trip) => {
       alert("Viaggio creato con successo!");
       newTrip.selectedOrderIds = [];
       newTrip.driverId = '';
+      newTrip.vehicleId = '';
     } catch (e) {
       console.error(e);
       alert("Errore creazione viaggio");
@@ -751,6 +766,7 @@ const isSelected = (ids: string[]) => {
                                  </div>
                                  <div class="text-[10px] text-slate-500 mt-0.5 pl-3.5">
                                      {{ new Date(trip.date).toLocaleDateString('it-IT') }} • {{ trip.stops.length }} Stop
+                                     <span v-if="trip.vehiclePlate"> • {{ trip.vehiclePlate }}</span>
                                  </div>
                              </div>
                              <button @click="inspectTrip(trip)" class="bg-white text-slate-600 border border-slate-200 hover:border-slate-900 hover:text-slate-900 p-1.5 rounded-lg transition-colors">
@@ -775,6 +791,11 @@ const isSelected = (ids: string[]) => {
                              </select>
                              <ChevronDownIcon class="w-4 h-4 text-slate-400 absolute right-4 top-3.5 pointer-events-none"/>
                          </div>
+                     </div>
+
+                     <div class="space-y-1">
+                         <label class="text-[10px] font-bold text-slate-400 uppercase ml-1">Mezzo (opzionale)</label>
+                         <NovaVehiclePicker v-model="newTrip.vehicleId" />
                      </div>
 
                      <div class="bg-amber-50 rounded-xl p-4 border border-amber-100 flex items-center justify-between">
@@ -815,7 +836,10 @@ const isSelected = (ids: string[]) => {
                           <div>
                               <p class="text-[10px] text-amber-400 font-bold uppercase tracking-widest mb-1">Viaggio Attivo</p>
                               <h2 class="text-3xl font-black tracking-tight">{{ new Date(activeTrip.date).toLocaleDateString('it-IT', { day: 'numeric', month: 'long'}) }}</h2>
-                              <p class="text-slate-400 text-sm font-medium mt-1">{{ activeTrip?.driverName }} al volante</p>
+                              <p class="text-slate-400 text-sm font-medium mt-1">
+                                {{ activeTrip?.driverName }} al volante
+                                <span v-if="activeTrip?.vehiclePlate"> · {{ activeTrip.vehiclePlate }}</span>
+                              </p>
                           </div>
                           <div class="bg-white/10 backdrop-blur-md border border-white/10 px-3 py-1.5 rounded-xl text-center">
                               <span class="block text-lg font-black text-white">{{ groupedTripStops.filter(g => g.status !== 'DELIVERED').length }}</span>
