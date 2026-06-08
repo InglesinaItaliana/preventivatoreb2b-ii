@@ -12,6 +12,17 @@ service cloud.firestore {
       );
     }
 
+    // Fallback se il custom claim non è ancora refreshato dopo sync /team.
+    function isTeamAdmin() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/team/$(request.auth.uid))
+        && get(/databases/$(database)/documents/team/$(request.auth.uid)).data.role == 'ADMIN';
+    }
+
+    function isNebulaFleetAdmin() {
+      return isAdmin() || isTeamAdmin();
+    }
+
     // Verifica PRODUZIONE
     function isProduction() {
       return request.auth != null && request.auth.token.role == 'PRODUZIONE';
@@ -352,22 +363,22 @@ service cloud.firestore {
     // ── NEBULA Archivio (file binari) + Mezzi aziendali ─────────────────────
     match /nebulaArchivio/{fileId} {
       allow read: if request.auth != null;
-      allow write: if isAdmin();
+      allow write: if isNebulaFleetAdmin();
     }
 
     match /nebulaArchivioFolders/{folderId} {
       allow read: if request.auth != null;
-      allow write: if isAdmin();
+      allow write: if isNebulaFleetAdmin();
     }
 
     match /vehicles/{vehicleId} {
       allow read: if request.auth != null;
-      allow write: if isAdmin();
+      allow write: if isNebulaFleetAdmin();
     }
 
     match /vehicleDeadlines/{deadlineId} {
       allow read: if request.auth != null;
-      allow write: if isAdmin();
+      allow write: if isNebulaFleetAdmin();
     }
 
     match /{document=**} {

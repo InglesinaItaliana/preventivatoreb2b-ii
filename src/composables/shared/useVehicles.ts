@@ -9,6 +9,15 @@ import type {
 } from '../../types/nebula-fleet'
 import { tsToDate } from '../../types/nebula-fleet'
 
+/** Firestore rifiuta valori `undefined` in set/add — omettiamoli dal payload. */
+function omitUndefined(data: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(data)) {
+    if (v !== undefined) out[k] = v
+  }
+  return out
+}
+
 function mapVehicle(id: string, data: Record<string, unknown>): Vehicle {
   return {
     id,
@@ -110,16 +119,24 @@ export async function createVehicle(input: {
 }): Promise<string> {
   const uid = auth.currentUser?.uid
   if (!uid) throw new Error('Non autenticato')
-  const ref = await addDoc(collection(db, 'vehicles'), {
-    ...input,
+  const ref = await addDoc(collection(db, 'vehicles'), omitUndefined({
+    type: input.type,
+    usage: input.usage,
     plate: input.plate.trim().toUpperCase(),
+    brand: input.brand.trim(),
+    model: input.model.trim(),
+    year: input.year,
+    vin: input.vin?.trim() || undefined,
     status: input.status ?? 'active',
+    assigneeUid: input.assigneeUid || undefined,
+    km: input.km,
+    notes: input.notes?.trim() || undefined,
     archivioFileIds: [],
     createdByUid: uid,
     updatedByUid: uid,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
-  })
+  }))
   return ref.id
 }
 
@@ -131,7 +148,7 @@ export async function updateVehicle(
   const data: Record<string, unknown> = { ...patch, updatedAt: serverTimestamp() }
   if (patch.plate) data.plate = patch.plate.trim().toUpperCase()
   if (uid) data.updatedByUid = uid
-  await updateDoc(doc(db, 'vehicles', vehicleId), data)
+  await updateDoc(doc(db, 'vehicles', vehicleId), omitUndefined(data))
 }
 
 export async function createVehicleDeadline(input: {
