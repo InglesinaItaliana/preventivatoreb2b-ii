@@ -167,6 +167,10 @@ const router = createRouter({
         // Dev page per testare l'IconPicker isolato (chunk 2). Stesso gate del
         // parent /nebula/docs. Da rimuovere a Fase 1 conclusa.
         { path: 'docs/_dev/icons', name: 'nebula-docs-dev-icons', component: () => import('../views/nebula/docs/_dev/IconPickerDevView.vue') },
+        { path: 'archivio', name: 'nebula-archivio', component: () => import('../views/nebula/NebulaArchivioView.vue') },
+        { path: 'archivio/:fileId', name: 'nebula-archivio-file', component: () => import('../views/nebula/NebulaArchivioFileView.vue') },
+        { path: 'mezzi', name: 'nebula-mezzi', component: () => import('../views/nebula/NebulaMezziView.vue') },
+        { path: 'mezzi/:vehicleId', name: 'nebula-vehicle', component: () => import('../views/nebula/NebulaVehicleDetailView.vue') },
       ]
     },
 

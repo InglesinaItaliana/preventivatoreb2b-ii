@@ -188,6 +188,9 @@ Gli stati vuoti hanno **cinque tipi diversi**. Confonderli è il bug più comune
 | PULSAR | Chat — preview vuota | PulsarChatsView.vue | atteso | Nessun messaggio | Nessun messaggio. |
 | NOVA | Spedizioni — categoria | NovaSpedizioniView.vue | filtro | Nessuna spedizione in questa categoria. | — |
 | NEBULA | Team — attivi | NebulaTeamView.vue | atteso | Nessun membro attivo nel team. | — |
+| NEBULA | Archivio (vuoto) | NebulaArchivioView.vue | primo-uso | Nessun file in archivio. | Nessun file in archivio. Carica il primo documento. |
+| NEBULA | Mezzi (vuoto) | NebulaMezziView.vue | primo-uso | Nessun mezzo registrato. | Nessun mezzo registrato. |
+| POPS | Archivio ordini | ArchiveModal.vue | atteso | Nessun ordine in archivio. | — |
 | NEBULA | Team — totale | NebulaTeamView.vue | primo-uso | Nessun membro nel team. | Nessun membro nel team. Aggiungi il primo. |
 | NEBULA-DOCS | Documenti (vuoto) | NebulaDocsHomeView.vue:401 | primo-uso | Nessun documento. Crea il primo o aspetta che qualcuno te ne condivida uno. | Nessun documento. Crea il primo o aspetta una condivisione. |
 | NEBULA-DOCS | Storia versioni | NebulaDocHistoryView.vue:208 | atteso | Nessuna versione in storia. | Nessuna versione in archivio. |

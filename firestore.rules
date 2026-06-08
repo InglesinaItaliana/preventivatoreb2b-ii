@@ -349,6 +349,27 @@ service cloud.firestore {
     match /nebulaOauthCodes/{code} { allow read, write: if false; }
     match /nebulaOauthTokens/{hash} { allow read, write: if false; }
 
+    // ── NEBULA Archivio (file binari) + Mezzi aziendali ─────────────────────
+    match /nebulaArchivio/{fileId} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+
+    match /nebulaArchivioFolders/{folderId} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+
+    match /vehicles/{vehicleId} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+
+    match /vehicleDeadlines/{deadlineId} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+
     match /{document=**} {
       allow read, write: if false;
     }

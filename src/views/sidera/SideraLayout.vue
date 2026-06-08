@@ -7,7 +7,7 @@ import MIcon from '../../components/shared/MIcon.vue'
 import ContextualMobileHeader from '../../components/shared/ContextualMobileHeader.vue'
 import ContextualBottomNav from '../../components/shared/ContextualBottomNav.vue'
 import ContextualFab from '../../components/shared/ContextualFab.vue'
-import { detectScope, getScopeConfig, SCOPE_CONFIGS, type ScopeId } from './scopeConfig'
+import { detectScope, getScopeConfig, SCOPE_CONFIGS, type ScopeId, type ScopeConfig } from './scopeConfig'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
 import { useTeamMembers, displayName } from '../../composables/sidera/useTeamMembers'
 import StarAvatar from '../../components/shared/StarAvatar.vue'
@@ -51,14 +51,33 @@ const isMobileLayout = computed(() => isStandalone.value || isMobileViewport.val
 const currentScope = computed<ScopeId>(() => detectScope(route.path))
 const currentScopeConfig = computed(() => getScopeConfig(currentScope.value))
 
+/** FAB NEBULA context-aware: Documenti / Archivio / Mezzi hanno azioni diverse. */
+const effectiveScopeConfig = computed((): ScopeConfig | null => {
+  const base = currentScopeConfig.value
+  if (!base || currentScope.value !== 'nebula') return base
+  const p = route.path
+  if (p.startsWith('/nebula/archivio') && !p.match(/\/archivio\/[^/]+$/)) {
+    return { ...base, fab: { icon: 'upload_file', action: 'new-archivio-upload', ariaLabel: 'Carica file' } }
+  }
+  if (p === '/nebula/mezzi') {
+    return { ...base, fab: { icon: 'add', action: 'new-vehicle', ariaLabel: 'Nuovo mezzo' } }
+  }
+  if (p.startsWith('/nebula/docs')) {
+    return { ...base, fab: { icon: 'add', action: 'new-doc', ariaLabel: 'Nuovo documento' } }
+  }
+  return { ...base, fab: undefined }
+})
+
 // FAB gating per ruolo (POLARIS Az.9): in CEPHEID il FAB "new-task" è nascosto
 // a chi non può creare task (es. LOGISTICA). Gli altri FAB restano invariati.
 const showFab = computed(() => {
-  const fab = currentScopeConfig.value?.fab
+  const fab = effectiveScopeConfig.value?.fab
   if (!fab) return false
   if (fab.action === 'new-task') return can('canCreateTasks')
   // QUASAR: FAB solo sul calendario (unica azione primaria "+").
   if (fab.action === 'new-appointment') return route.path.startsWith('/quasar/calendario')
+  if (fab.action === 'new-archivio-upload') return can('canManageArchivio')
+  if (fab.action === 'new-vehicle') return can('canManageFleet')
   return true
 })
 
@@ -98,14 +117,18 @@ const newProjectTick = ref(0)
 const newGoalTick    = ref(0)
 const newDocTick           = ref(0)
 const newAppointmentTick   = ref(0)
+const newArchivioTick      = ref(0)
+const newVehicleTick       = ref(0)
 provide('pulsar-new-chat-tick',         newChatTick)
 provide('cepheid-new-task-tick',        newTaskTick)
 provide('cepheid-new-project-tick',     newProjectTick)
 provide('cepheid-new-goal-tick',        newGoalTick)
 provide('nebula-new-doc-tick',          newDocTick)
 provide('quasar-new-appointment-tick',  newAppointmentTick)
+provide('nebula-new-archivio-tick',     newArchivioTick)
+provide('nebula-new-vehicle-tick',      newVehicleTick)
 
-function onFabTrigger(action: 'new-chat' | 'new-task' | 'new-project' | 'new-goal' | 'new-doc' | 'new-appointment' | 'none') {
+function onFabTrigger(action: 'new-chat' | 'new-task' | 'new-project' | 'new-goal' | 'new-doc' | 'new-appointment' | 'new-archivio-upload' | 'new-vehicle' | 'none') {
   if (action === 'new-chat') {
     if (route.path === '/pulsar') {
       newChatTick.value++
@@ -160,6 +183,24 @@ function onFabTrigger(action: 'new-chat' | 'new-task' | 'new-project' | 'new-goa
     } else {
       sessionStorage.setItem('quasar-pending-new-appointment', '1')
       router.push('/quasar/calendario')
+    }
+    return
+  }
+  if (action === 'new-archivio-upload') {
+    if (route.path.startsWith('/nebula/archivio') && !route.params.fileId) {
+      newArchivioTick.value++
+    } else {
+      sessionStorage.setItem('nebula-pending-archivio-upload', '1')
+      router.push('/nebula/archivio')
+    }
+    return
+  }
+  if (action === 'new-vehicle') {
+    if (route.path === '/nebula/mezzi') {
+      newVehicleTick.value++
+    } else {
+      sessionStorage.setItem('nebula-pending-new-vehicle', '1')
+      router.push('/nebula/mezzi')
     }
   }
 }
@@ -799,7 +840,7 @@ const roleLabel: Record<string, string> = {
         :triage-count="triageCount"
       >
         <template #fab>
-          <ContextualFab v-if="showFab" :config="currentScopeConfig" @trigger="onFabTrigger" />
+          <ContextualFab v-if="showFab && effectiveScopeConfig" :config="effectiveScopeConfig" @trigger="onFabTrigger" />
         </template>
       </ContextualBottomNav>
     </div>

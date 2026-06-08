@@ -5,21 +5,21 @@
  * `useAllTasks` (collectionGroup: root `tasks/` + `projects/{id}/tasks`):
  *   - appointment → evento con orario (startAt/endAt),
  *   - task / deliverable → all-day sulla `dueDate` (overlay read-only).
- * (Le scadenze gestionale sono rimandate; la milestone ha data derivata → omessa.)
+ * Scadenze mezzi NEBULA (vehicleDeadlines) → all-day sulla dueDate.
+ * (La milestone ha data derivata → omessa.)
  *
  * Filosofia "una entità, tante viste": stesso dato della timeline CEPHEID, render
  * diverso. I writer/CRUD degli appuntamenti arrivano in B3. Vedi docs/ATLAS (calendario).
  */
-import { computed } from 'vue'
+import { computed, type ComputedRef } from 'vue'
 import { useAllTasks, type AppointmentLink } from '../sidera/useAllTasks'
 import { useProjects } from '../sidera/useProjects'
 import { useObiettivi } from '../sidera/useObiettivi'
+import { useVehicleDeadlines, useVehicles } from '../shared/useVehicles'
 
-export type CalendarKind = 'task' | 'deliverable' | 'appointment' | 'goal'
+export type CalendarKind = 'task' | 'deliverable' | 'appointment' | 'goal' | 'vehicle_deadline'
 // Identità "modulo di appartenenza", usata dal filtro del calendario.
-// QUASAR = appuntamenti + obiettivi (gli obiettivi migreranno da CEPHEID a QUASAR);
-// CEPHEID = azioni/task + deliverable.
-export type CalendarSource = 'quasar' | 'cepheid'
+export type CalendarSource = 'quasar' | 'cepheid' | 'nebula'
 
 export interface CalendarItem {
   id: string
@@ -45,16 +45,29 @@ export interface CalendarItem {
 const COLOR = {
   appointment: 'var(--md-sys-color-primary)',
   cepheid:     '#D4A020',
+  nebula:      '#B85425',
 } as const
+
+const DEADLINE_KIND_LABEL: Record<string, string> = {
+  assicurazione: 'Assicurazione',
+  bollo: 'Bollo',
+  revisione: 'Revisione',
+  tagliando: 'Tagliando',
+  patente: 'Patente',
+  altro: 'Scadenza',
+}
 
 function dayKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
 export function useCalendarItems() {
-  const { tasks, loading } = useAllTasks()
+  const { tasks, loading: tasksLoading } = useAllTasks()
   const { projects } = useProjects()
   const { obiettiviAttivi } = useObiettivi()
+  const { openDeadlines, loading: deadlinesLoading } = useVehicleDeadlines()
+  const { vehicles } = useVehicles()
+  const loading: ComputedRef<boolean> = computed(() => tasksLoading.value || deadlinesLoading.value)
 
   const projName = computed(() => {
     const m = new Map<string, string>()
@@ -105,6 +118,19 @@ export function useCalendarItems() {
         color: COLOR.appointment, projectId: '', projectName: '', assignees: [],
         location: '', notes: o.descrizione, links: [],
         link: `/cepheid/goal/${o.id}`,
+      })
+    }
+    const plateById = new Map(vehicles.value.map(v => [v.id, v.plate]))
+    for (const d of openDeadlines.value) {
+      const plate = plateById.get(d.vehicleId) ?? ''
+      const label = d.title || DEADLINE_KIND_LABEL[d.kind] || d.kind
+      out.push({
+        id: d.id, kind: 'vehicle_deadline', source: 'nebula',
+        title: plate ? `${plate} — ${label}` : label,
+        start: d.dueDate, end: null, allDay: true, done: false,
+        color: COLOR.nebula, projectId: d.vehicleId, projectName: plate,
+        assignees: [], location: '', notes: d.notes ?? '', links: [],
+        link: `/nebula/mezzi/${d.vehicleId}?tab=scadenze`,
       })
     }
     return out
