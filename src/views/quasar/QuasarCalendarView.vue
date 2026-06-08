@@ -472,7 +472,28 @@ function agendaLabel(d: Date): string {
 .cal-tg-dh.is-today .cal-tg-dh-num { color: var(--md-sys-color-primary); }
 .cal-tg-allday { border-bottom: 1px solid var(--md-sys-color-outline-variant); }
 .cal-tg-adlabel { font-size: 9px; text-transform: uppercase; color: var(--md-sys-color-on-surface-variant); display: flex; align-items: center; justify-content: center; }
-.cal-tg-adcol { border-left: 1px solid var(--md-sys-color-outline-variant); padding: 3px; display: flex; flex-direction: column; gap: 3px; min-height: 26px; }
+.cal-tg-adcol {
+  border-left: 1px solid var(--md-sys-color-outline-variant);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 32px;
+  align-items: stretch;
+}
+.cal-tg-adcol .cal-chip {
+  align-items: flex-start;
+  padding: 4px 6px;
+  min-height: 24px;
+  height: auto;
+  overflow: visible;
+}
+.cal-tg-adcol .cal-chip-text {
+  overflow: visible;
+  white-space: normal;
+  line-height: 1.25;
+  word-break: break-word;
+}
 .cal-tg-body { position: relative; }
 .cal-tg-hr { height: 44px; position: relative; }
 .cal-tg-hr span { position: absolute; top: -7px; right: 6px; font-size: 10px; color: var(--md-sys-color-on-surface-variant); }
@@ -522,17 +543,27 @@ function agendaLabel(d: Date): string {
 
 .cal-items { display: flex; flex-direction: column; gap: 3px; min-height: 0; }
 .cal-chip {
-  display: flex; align-items: center; gap: 4px; width: 100%; text-align: left;
+  display: flex; align-items: flex-start; gap: 4px; width: 100%; text-align: left;
   background: color-mix(in srgb, var(--c) 16%, transparent);
   border: none; border-left: 3px solid var(--c); border-radius: 5px;
-  padding: 2px 5px; cursor: pointer; font-family: inherit; font-size: 11px;
+  padding: 3px 5px; cursor: pointer; font-family: inherit; font-size: 11px;
   color: var(--md-sys-color-on-surface); overflow: hidden;
 }
 .cal-chip:hover { background: color-mix(in srgb, var(--c) 28%, transparent); }
 .cal-chip.is-done { opacity: 0.5; text-decoration: line-through; }
 .cal-chip-ic { flex: 0 0 auto; color: var(--c); }
 .cal-chip-time { font-weight: 700; flex: 0 0 auto; }
-.cal-chip-text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-chip-text {
+  flex: 1 1 auto; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.cal-cell .cal-chip-text {
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  line-height: 1.2;
+}
 .cal-chip-proj { color: var(--md-sys-color-on-surface-variant); opacity: 0.75; }
 .cal-more { font-size: 10px; font-weight: 600; color: var(--md-sys-color-on-surface-variant); padding-left: 4px; }
 

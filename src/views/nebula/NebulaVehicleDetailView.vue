@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, watch, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { doc, onSnapshot } from 'firebase/firestore'
 import { db } from '../../firebase'
@@ -9,6 +9,7 @@ import CepheidViewSwitcher from '../../components/cepheid/CepheidViewSwitcher.vu
 import NebulaDeadlineList from '../../components/nebula/mezzi/NebulaDeadlineList.vue'
 import NebulaArchivioLinkPicker from '../../components/nebula/archivio/NebulaArchivioLinkPicker.vue'
 import NebulaArchivioUploadZone from '../../components/nebula/archivio/NebulaArchivioUploadZone.vue'
+import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
 import { useCan } from '../../composables/sidera/useCan'
 import { useNebulaTeam } from '../../composables/nebula/useNebulaTeam'
 import {
@@ -22,6 +23,8 @@ import { tsToDate } from '../../types/nebula-fleet'
 
 const route = useRoute()
 const router = useRouter()
+const scrollEl = ref<HTMLElement | null>(null)
+const { hidden: headerHidden } = useAutoHideHeader(scrollEl)
 const { can } = useCan()
 const { members } = useNebulaTeam()
 const vehicleId = computed(() => route.params.vehicleId as string)
@@ -39,6 +42,12 @@ const tabs = [
   { id: 'documenti' as const, label: 'Documenti', icon: 'folder' },
 ]
 
+const headerSubtitle = computed(() => {
+  if (!vehicle.value) return ''
+  const parts = [vehicle.value.brand, vehicle.value.model].filter(Boolean)
+  return parts.join(' ') || 'Dettaglio mezzo'
+})
+
 const showDeadlineModal = ref(false)
 const showLinkPicker = ref(false)
 const saving = ref(false)
@@ -46,6 +55,9 @@ const dlForm = ref({
   kind: 'assicurazione' as DeadlineKind,
   title: '',
   dueDate: '',
+  allDay: true,
+  startTime: '09:00',
+  endTime: '10:00',
   notes: '',
 })
 
@@ -79,10 +91,20 @@ watch(vehicleId, (id) => {
   })
 }, { immediate: true })
 
-onMounted(() => {
-  if (route.query.tab === 'scadenze') tab.value = 'scadenze'
-  if (route.query.tab === 'documenti') tab.value = 'documenti'
+watch(tab, (t) => {
+  const want = t === 'anagrafica' ? undefined : t
+  if (route.query.tab === want || (t === 'anagrafica' && !route.query.tab)) return
+  router.replace({ query: want ? { tab: want } : {} })
 })
+
+function syncTabFromRoute() {
+  const t = route.query.tab
+  if (t === 'scadenze' || t === 'documenti') tab.value = t
+  else if (!t) tab.value = 'anagrafica'
+}
+
+onMounted(syncTabFromRoute)
+watch(() => route.query.tab, syncTabFromRoute)
 
 async function saveAnagrafica() {
   if (!vehicle.value || !can('canManageFleet')) return
@@ -111,15 +133,43 @@ function parseDate(s: string): Date {
   return new Date(y, m - 1, d)
 }
 
+function combineDateTime(dateStr: string, timeStr: string): Date {
+  const [y, m, d] = dateStr.split('-').map(Number)
+  const [hh, mm] = timeStr.split(':').map(Number)
+  return new Date(y, m - 1, d, hh, mm, 0, 0)
+}
+
+function openDeadlineModal() {
+  dlForm.value = {
+    kind: 'assicurazione',
+    title: '',
+    dueDate: '',
+    allDay: true,
+    startTime: '09:00',
+    endTime: '10:00',
+    notes: '',
+  }
+  showDeadlineModal.value = true
+}
+
 async function submitDeadline() {
   if (!dlForm.value.dueDate || saving.value) return
   saving.value = true
   try {
+    const allDay = dlForm.value.allDay
+    const dueDate = allDay
+      ? parseDate(dlForm.value.dueDate)
+      : combineDateTime(dlForm.value.dueDate, dlForm.value.startTime)
+    const endAt = allDay
+      ? undefined
+      : combineDateTime(dlForm.value.dueDate, dlForm.value.endTime)
     await createVehicleDeadline({
       vehicleId: vehicleId.value,
       kind: dlForm.value.kind,
       title: dlForm.value.title || undefined,
-      dueDate: parseDate(dlForm.value.dueDate),
+      dueDate,
+      endAt,
+      allDay,
       notes: dlForm.value.notes || undefined,
     })
     showDeadlineModal.value = false
@@ -151,19 +201,18 @@ async function unlinkFile(fileId: string) {
 </script>
 
 <template>
-  <div class="nvd s-scope-nebula" v-if="vehicle">
+  <div v-if="vehicle" ref="scrollEl" class="nvd-root s-scope-nebula">
     <MdPageHeader
       :title="vehicle.plate"
-      :subtitle="`${vehicle.brand} ${vehicle.model}`"
+      :subtitle="headerSubtitle"
+      sticky
+      borderless
+      :hidden="headerHidden"
     >
-      <template #cta>
-        <button type="button" class="md-btn md-btn--outlined md-btn--sm" @click="router.push('/nebula/mezzi')">
-          Indietro
-        </button>
+      <template #tools>
+        <CepheidViewSwitcher v-model="tab" :tabs="tabs" />
       </template>
     </MdPageHeader>
-
-    <CepheidViewSwitcher v-model="tab" :tabs="tabs" class="nvd-tabs" />
 
     <div class="nvd-content">
       <div v-if="tab === 'anagrafica'" class="nvd-panel">
@@ -206,7 +255,7 @@ async function unlinkFile(fileId: string) {
           v-if="can('canManageFleet')"
           type="button"
           class="md-btn md-btn--filled md-btn--sm nvd-add"
-          @click="showDeadlineModal = true"
+          @click="openDeadlineModal"
         >
           <MIcon name="add" :size="16" /> Scadenza
         </button>
@@ -279,8 +328,26 @@ async function unlinkFile(fileId: string) {
               <input v-model="dlForm.title" class="md-text-field-input" />
             </label>
             <label class="md-text-field">
-              <span class="md-text-field-label">Data scadenza</span>
+              <span class="md-text-field-label">Data</span>
               <input v-model="dlForm.dueDate" type="date" class="md-text-field-input" />
+            </label>
+            <label class="nvd-check">
+              <input v-model="dlForm.allDay" type="checkbox" />
+              <span>Tutto il giorno</span>
+            </label>
+            <div v-if="!dlForm.allDay" class="nvd-row">
+              <label class="md-text-field">
+                <span class="md-text-field-label">Ora inizio</span>
+                <input v-model="dlForm.startTime" type="time" class="md-text-field-input" />
+              </label>
+              <label class="md-text-field">
+                <span class="md-text-field-label">Ora fine</span>
+                <input v-model="dlForm.endTime" type="time" class="md-text-field-input" />
+              </label>
+            </div>
+            <label class="md-text-field">
+              <span class="md-text-field-label">Note (opzionale)</span>
+              <textarea v-model="dlForm.notes" class="md-text-field-input nvd-notes" rows="2" />
             </label>
           </div>
           <div class="md-modal-footer">
@@ -295,11 +362,53 @@ async function unlinkFile(fileId: string) {
 </template>
 
 <style scoped>
-.nvd-tabs { margin: 0 16px 16px; }
-.nvd-content { padding: 0 16px 100px; max-width: 720px; margin: 0 auto; }
+.nvd-root {
+  height: 100%;
+  width: 100%;
+  overflow: auto;
+  font-family: 'Outfit', system-ui, sans-serif;
+  box-sizing: border-box;
+  color: var(--md-sys-color-on-surface);
+  --page-bg: #EFE7D9;
+  background: var(--page-bg);
+}
+.s-surface-dark .nvd-root { --page-bg: #0E0C07; }
+@media (prefers-color-scheme: dark) {
+  .nvd-root { --page-bg: #0E0C07; }
+}
+
+.nvd-root,
+.nvd-root *,
+.nvd-root *::before,
+.nvd-root *::after {
+  box-sizing: border-box;
+}
+
+:deep(.md-page-header) { padding: 18px 16px 14px; }
+:deep(.md-page-header.is-sticky) {
+  background: var(--md-sys-color-surface);
+}
+
+.nvd-content {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 16px 16px 60px;
+}
+@media (min-width: 1024px) {
+  :deep(.md-page-header) { padding: 24px max(40px, calc(50% - 410px)) 18px; }
+  .nvd-content { padding: 24px 40px; max-width: 900px; }
+}
+
 .nvd-panel { display: flex; flex-direction: column; gap: 12px; }
 .nvd-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .nvd-notes { resize: vertical; min-height: 72px; }
+.nvd-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  cursor: pointer;
+}
 .nvd-add { align-self: flex-start; margin-bottom: 8px; }
 .nvd-doc-actions { margin-bottom: 12px; }
 .nvd-files { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }

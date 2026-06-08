@@ -68,12 +68,24 @@ export interface VehicleDeadline {
   vehicleId: string
   kind: DeadlineKind
   title?: string
+  /** Inizio (data + ora se non all-day). */
   dueDate: Date
+  /** Fine opzionale (stesso giorno o range). */
+  endAt?: Date
+  /** Default true per record legacy senza orario. */
+  allDay?: boolean
   completedAt?: Date
   reminderDays?: number[]
   archivioFileIds: string[]
   notes?: string
   createdByUid: string
+}
+
+/** True se la scadenza va mostrata come fascia all-day in calendario. */
+export function deadlineIsAllDay(d: Pick<VehicleDeadline, 'dueDate' | 'endAt' | 'allDay'>): boolean {
+  if (d.allDay === false) return false
+  if (d.endAt) return false
+  return d.dueDate.getHours() === 0 && d.dueDate.getMinutes() === 0
 }
 
 export function tsToDate(v: Timestamp | Date | null | undefined): Date | null {
