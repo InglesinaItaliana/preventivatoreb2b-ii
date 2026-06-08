@@ -24,6 +24,7 @@ const { openDeadlines } = useVehicleDeadlines()
 const filterType = ref<'all' | VehicleType>('all')
 const showModal = ref(false)
 const saving = ref(false)
+const formError = ref('')
 const form = ref({
   type: 'automobile' as VehicleType,
   usage: 'mobilita' as VehicleUsage,
@@ -72,6 +73,7 @@ function memberName(uid?: string) {
 }
 
 function openCreate() {
+  formError.value = ''
   form.value = {
     type: 'automobile',
     usage: 'mobilita',
@@ -85,7 +87,16 @@ function openCreate() {
 }
 
 async function submitCreate() {
-  if (!form.value.plate.trim() || !form.value.brand.trim() || saving.value) return
+  formError.value = ''
+  if (!form.value.plate.trim()) {
+    formError.value = 'Inserisci la targa.'
+    return
+  }
+  if (!form.value.brand.trim()) {
+    formError.value = 'Inserisci la marca.'
+    return
+  }
+  if (saving.value) return
   saving.value = true
   try {
     const id = await createVehicle({
@@ -99,8 +110,14 @@ async function submitCreate() {
     })
     showModal.value = false
     router.push(`/nebula/mezzi/${id}`)
-  } catch (e) {
+  } catch (e: unknown) {
     console.error('[NebulaMezzi] create', e)
+    const err = e as { code?: string; message?: string }
+    if (err.code === 'permission-denied') {
+      formError.value = 'Permesso negato. Serve ruolo ADMIN (riprova dopo logout/login).'
+    } else {
+      formError.value = err.message ?? 'Impossibile creare il mezzo.'
+    }
   } finally {
     saving.value = false
   }
@@ -179,6 +196,7 @@ onMounted(() => {
             </button>
           </div>
           <div class="md-modal-body nmv-form">
+            <p v-if="formError" class="nmv-form-error" role="alert">{{ formError }}</p>
             <label class="md-text-field">
               <span class="md-text-field-label">Targa</span>
               <input v-model="form.plate" class="md-text-field-input" placeholder="AB123CD" />
@@ -220,7 +238,9 @@ onMounted(() => {
           </div>
           <div class="md-modal-footer">
             <button type="button" class="md-btn md-btn--outlined" @click="showModal = false">Annulla</button>
-            <button type="button" class="md-btn md-btn--filled" :disabled="saving" @click="submitCreate">Crea</button>
+            <button type="button" class="md-btn md-btn--filled" :disabled="saving" @click="submitCreate">
+              {{ saving ? 'Creazione…' : 'Crea' }}
+            </button>
           </div>
         </div>
       </div>
@@ -290,5 +310,13 @@ onMounted(() => {
 .nmv-create-btn { gap: 6px; }
 
 .nmv-form { display: flex; flex-direction: column; gap: 12px; }
+.nmv-form-error {
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  background: rgba(200, 50, 50, 0.10);
+  color: #a82020;
+}
 .nmv-form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 </style>

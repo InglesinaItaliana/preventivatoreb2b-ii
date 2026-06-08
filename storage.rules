@@ -15,10 +15,20 @@ service firebase.storage {
       );
     }
 
+    function isTeamAdmin() {
+      return request.auth != null
+        && firestore.exists(/databases/(default)/documents/team/$(request.auth.uid))
+        && firestore.get(/databases/(default)/documents/team/$(request.auth.uid)).data.role == 'ADMIN';
+    }
+
+    function isNebulaFleetAdmin() {
+      return isAdmin() || isTeamAdmin();
+    }
+
     // NEBULA Archivio — team legge, solo ADMIN scrive/elimina.
     match /nebula-archivio/{fileId}/{fileName} {
       allow read: if isAuthenticated();
-      allow write, delete: if isAdmin();
+      allow write, delete: if isNebulaFleetAdmin();
     }
 
     // POPS — allegati preventivi (clienti + staff autenticati).
