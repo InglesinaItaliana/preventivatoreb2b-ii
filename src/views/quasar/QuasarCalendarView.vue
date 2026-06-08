@@ -217,12 +217,12 @@ function agendaLabel(d: Date): string {
     >
       <template #tools>
         <div class="cal-tools">
-          <div class="cal-tools__view">
-            <CepheidViewSwitcher :model-value="view" :tabs="viewTabs" @update:model-value="(v) => (view = v as CalView)" />
-          </div>
           <div class="cal-tools__filters">
             <CepheidViewSwitcher :model-value="sourceFilter" :tabs="filterTabs" @update:model-value="(v) => (sourceFilter = v as SourceFilter)" />
             <button class="cal-new" @click="newAppointment()"><MIcon name="add" :size="16" /> Appuntamento</button>
+          </div>
+          <div class="cal-tools__view">
+            <CepheidViewSwitcher :model-value="view" :tabs="viewTabs" @update:model-value="(v) => (view = v as CalView)" />
           </div>
         </div>
       </template>
@@ -400,16 +400,17 @@ function agendaLabel(d: Date): string {
     display: grid;
     grid-template-columns: 1fr auto;
     grid-template-rows: auto auto;
-    gap: 10px 12px;
-    align-items: center;
+    gap: 8px 12px;
+    align-items: start;
     width: 100%;
     max-width: 100%;
     overflow: hidden;
   }
   :deep(.md-page-header__text) {
     grid-column: 1;
-    grid-row: 1;
+    grid-row: 1 / 3;
     min-width: 0;
+    align-self: center;
   }
   :deep(.md-page-header__subtitle) {
     overflow: hidden;
@@ -420,23 +421,22 @@ function agendaLabel(d: Date): string {
     display: contents;
     min-width: 0;
   }
-  .cal-tools__view {
+  .cal-tools__filters {
     grid-column: 2;
     grid-row: 1;
-    flex-shrink: 0;
+    justify-self: end;
   }
-  .cal-tools__filters {
-    grid-column: 1 / -1;
+  .cal-tools__view {
+    grid-column: 2;
     grid-row: 2;
-    width: 100%;
-    min-width: 0;
+    justify-self: end;
   }
   .cal-new { display: none; }
 }
 
 @media (min-width: 769px) {
-  .cal-tools__view { order: 2; }
   .cal-tools__filters { order: 1; }
+  .cal-tools__view { order: 2; }
 }
 
 /* Settimana: celle più alte (più item visibili) */
