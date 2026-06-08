@@ -201,9 +201,13 @@ async function completeFromModal() {
     <MdPageHeader title="Quadranti" :subtitle="subtitle" sticky borderless :hidden="headerHidden">
       <template #tools>
         <div class="qd-switchers">
-          <CepheidViewSwitcher labels class="cursor-switcher" :model-value="String(cursor)" :tabs="cursorTabs" @update:model-value="(v) => (cursor = Number(v))" />
-          <CepheidViewSwitcher :model-value="filterSector" :tabs="sectorTabs" @update:model-value="(v) => (filterSector = v)" />
-          <CepheidViewSwitcher :model-value="view" :tabs="viewTabs" @update:model-value="(v) => (view = v as ViewId)" />
+          <div class="qd-switchers__row1">
+            <CepheidViewSwitcher :model-value="view" :tabs="viewTabs" @update:model-value="(v) => (view = v as ViewId)" />
+            <CepheidViewSwitcher labels class="cursor-switcher" :model-value="String(cursor)" :tabs="cursorTabs" @update:model-value="(v) => (cursor = Number(v))" />
+          </div>
+          <div class="qd-switchers__row2">
+            <CepheidViewSwitcher :model-value="filterSector" :tabs="sectorTabs" @update:model-value="(v) => (filterSector = v)" />
+          </div>
         </div>
       </template>
     </MdPageHeader>
@@ -378,6 +382,8 @@ async function completeFromModal() {
      pillola fluttuante e il bg copre la zona della pillola. */
   height: 100%;
   overflow: auto;
+  overflow-x: clip;
+  max-width: 100%;
 }
 .s-surface-dark .qd { --page-bg: #0E0C07; }
 @media (prefers-color-scheme: dark) { .qd { --page-bg: #0E0C07; } }
@@ -404,8 +410,49 @@ async function completeFromModal() {
 @media (min-width: 1024px) {
   :deep(.md-page-header) { padding: 24px max(40px, calc(50% - 500px)) 18px; }
 }
-/* slot tools: pillola filtro settore (sx) + pillola tab vista (dx) */
+/* slot tools: pillole filtro / vista / cursore temporale */
 .qd-switchers { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.qd-switchers__row1 { display: flex; align-items: center; gap: 8px; }
+.qd-switchers__row2 { display: flex; align-items: center; }
+
+@media (max-width: 768px) {
+  :deep(.md-page-header) {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto auto;
+    gap: 8px 12px;
+    align-items: start;
+    width: 100%;
+    max-width: 100%;
+    overflow: hidden;
+  }
+  :deep(.md-page-header__text) {
+    grid-column: 1;
+    grid-row: 1 / 3;
+    min-width: 0;
+    align-self: center;
+  }
+  :deep(.md-page-header__subtitle) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  :deep(.md-page-header__tools) {
+    display: contents;
+    min-width: 0;
+  }
+  .qd-switchers { display: contents; }
+  .qd-switchers__row1 {
+    grid-column: 2;
+    grid-row: 1;
+    justify-self: end;
+  }
+  .qd-switchers__row2 {
+    grid-column: 2;
+    grid-row: 2;
+    justify-self: end;
+  }
+}
 /* pillola giorni (labels): bottoni compatti come i "quadratini" icona delle
    pillole a fianco (padding come la variante non-labels). */
 .cursor-switcher :deep(.vbtn) { padding: 0 5px; }
