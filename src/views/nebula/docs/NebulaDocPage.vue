@@ -48,6 +48,8 @@ import { cursorColorFor } from '../../../composables/nebula/useDocPresence'
 import { useDocsLight } from '../../../composables/nebula/useDocsLight'
 import PresenceStack from './components/PresenceStack.vue'
 import ShareDocModal from './components/ShareDocModal.vue'
+import DocOutline from './components/DocOutline.vue'
+import { useDocOutline } from '../../../composables/nebula/useDocOutline'
 import { useCurrentUser } from '../../../composables/sidera/useCurrentUser'
 import { useDoc } from '../../../composables/nebula/useDoc'
 import { saveDoc } from '../../../composables/nebula/useSaveDoc'
@@ -207,6 +209,9 @@ const editor = useEditor({
 })
 
 const editorRef = shallowRef(editor)
+
+// Indice/struttura del documento (heading → navigazione rapida).
+const { headings: outlineHeadings, scrollToHeading } = useDocOutline(editor)
 
 // ── Title init (campo scalare, NON collaborativo) ───────────────────────────
 // Il title vive nel doc Firestore (non nel Y.Doc): lo prendiamo al 1° load.
@@ -659,6 +664,9 @@ void editorRef
 
       <!-- Editor content -->
       <EditorContent v-if="editor" :editor="editor" class="nd-editor" />
+
+      <!-- Indice/struttura: FAB + pannello (drawer desktop / bottom-sheet mobile) -->
+      <DocOutline :headings="outlineHeadings" @select="scrollToHeading" />
     </template>
 
     <!-- Share modal (solo per owner) -->
@@ -961,6 +969,10 @@ void editorRef
   line-height: 1.7;
   color: var(--md-sys-color-on-surface, #1a1a1a);
 }
+/* scroll-margin-top: lo scroll dall'indice non finisce sotto la toolbar sticky. */
+.nd-editor :deep(.ProseMirror h1),
+.nd-editor :deep(.ProseMirror h2),
+.nd-editor :deep(.ProseMirror h3) { scroll-margin-top: 72px; }
 .nd-editor :deep(.ProseMirror h1) {
   font-family: 'Cormorant Garamond', serif;
   font-size: 30px; font-weight: 600; margin: 1.4em 0 0.5em; line-height: 1.2;
