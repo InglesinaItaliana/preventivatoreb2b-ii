@@ -136,7 +136,7 @@ const TOOLS = [
             properties: {
                 title: { type: 'string', description: 'Titolo del documento' },
                 parentId: { type: ['string', 'null'], description: 'Parent doc id opzionale' },
-                content: { type: 'string', description: 'Contenuto markdown iniziale. Supporta: heading (#/##/###), **bold**, *italic*, `code`, ~~strike~~, [testo](href), bullet/ordered list, blockquote (>), code block fenced, hr (---), tabelle GFM (`| a | b |`), **checkbox** (`- [ ]` / `- [x]`), @task:projectId/id, @milestone:projectId/id, @deliverable:projectId/id, @project:id, @obiettivo:id, {{embed-tasks ...}}. Per task/milestone/deliverable di progetto includi SEMPRE il projectId (@task:projectId/id), altrimenti il chip risulta "[Task eliminato]".' },
+                content: { type: 'string', description: 'Contenuto markdown iniziale. Supporta: heading (#/##/###), **bold**, *italic*, `code`, ~~strike~~, [testo](href), bullet/ordered list, blockquote (>), code block fenced, hr (---), tabelle GFM (`| a | b |`), **checkbox** (`- [ ]` / `- [x]`), **callout** (`:::callout tone=info|warn|success|danger icon=<material_symbol>` … `:::`), **toggle** collassabile (`:::toggle Titolo` … `:::`), @task:projectId/id, @milestone:projectId/id, @deliverable:projectId/id, @project:id, @obiettivo:id, {{embed-tasks ...}}. Per task/milestone/deliverable di progetto includi SEMPRE il projectId (@task:projectId/id), altrimenti il chip risulta "[Task eliminato]". I container `:::` NON sono annidabili (v1).' },
                 icon: {
                     type: 'object',
                     description: 'Icona Material Symbols (es. { set: "material", name: "rocket_launch" })',
@@ -154,7 +154,7 @@ const TOOLS = [
     },
     {
         name: 'nebula_appendBlock',
-        description: 'Aggiunge blocchi markdown in fondo a un documento esistente. Supporta: heading, bold, italic, code, strike, [testo](href), liste, blockquote, code block, hr, tabelle GFM (`| a | b |`), **checkbox** (`- [ ]` / `- [x]`), @task:projectId/id, @milestone:projectId/id, @deliverable:projectId/id, @project:id, @obiettivo:id, {{embed-tasks ...}}. Per task/milestone/deliverable di progetto includi SEMPRE il projectId.',
+        description: 'Aggiunge blocchi markdown in fondo a un documento esistente. Supporta: heading, bold, italic, code, strike, [testo](href), liste, blockquote, code block, hr, tabelle GFM (`| a | b |`), **checkbox** (`- [ ]` / `- [x]`), **callout** (`:::callout tone=… icon=…` … `:::`), **toggle** (`:::toggle Titolo` … `:::`), @task:projectId/id, @milestone:projectId/id, @deliverable:projectId/id, @project:id, @obiettivo:id, {{embed-tasks ...}}. Per task/milestone/deliverable di progetto includi SEMPRE il projectId. I container `:::` non sono annidabili (v1).',
         inputSchema: {
             type: 'object',
             properties: {
@@ -173,7 +173,7 @@ const TOOLS = [
             properties: {
                 docId: { type: 'string', description: 'ID del documento' },
                 sectionAnchor: { type: 'string', description: 'Testo del heading da matchare (case-insensitive, partial OK)' },
-                markdown: { type: 'string', description: 'Nuovo contenuto markdown della sezione (deve includere heading se vuoi mantenerlo). Supporta [testo](href), tabelle GFM (`| a | b |`), checkbox `- [ ]` / `- [x]`, @task:id, @project:id, {{embed-tasks ...}}.' },
+                markdown: { type: 'string', description: 'Nuovo contenuto markdown della sezione (deve includere heading se vuoi mantenerlo). Supporta [testo](href), tabelle GFM (`| a | b |`), checkbox `- [ ]` / `- [x]`, callout (`:::callout … :::`), toggle (`:::toggle Titolo … :::`), @task:id, @project:id, {{embed-tasks ...}}.' },
             },
             required: ['docId', 'sectionAnchor', 'markdown'],
         },

@@ -46,6 +46,19 @@ const FIXTURE = {
     { type: 'blockquote', content: [{ type: 'paragraph', content: [{ type: 'text', text: 'cit' }] }] },
     { type: 'codeBlock', attrs: { language: null }, content: [{ type: 'text', text: 'const x = 1' }] },
     { type: 'horizontalRule' },
+    {
+      type: 'callout',
+      attrs: { tone: 'warn', icon: { set: 'material', name: 'warning', color: null, fill: 0 } },
+      content: [{ type: 'paragraph', content: [{ type: 'text', text: 'attenzione' }] }],
+    },
+    {
+      type: 'toggle',
+      attrs: { open: true },
+      content: [
+        { type: 'toggleSummary', content: [{ type: 'text', text: 'Dettagli' }] },
+        { type: 'paragraph', content: [{ type: 'text', text: 'corpo collassabile' }] },
+      ],
+    },
   ],
 }
 
@@ -57,14 +70,14 @@ describe('nebulaSchema — guardia anti-drift', () => {
   it('contiene esattamente i nodi attesi', () => {
     const nodes = Object.keys(nebulaSchema.nodes).sort()
     expect(nodes).toEqual([
-      'blockquote', 'bulletList', 'codeBlock', 'deliverableMention', 'doc', 'docMention', 'hardBreak',
+      'blockquote', 'bulletList', 'callout', 'codeBlock', 'deliverableMention', 'doc', 'docMention', 'hardBreak',
       'heading', 'horizontalRule', 'listItem', 'milestoneMention', 'obiettivoMention', 'orderedList', 'paragraph',
       'projectMention', 'table', 'tableCell', 'tableHeader', 'tableRow',
-      'taskEmbed', 'taskItem', 'taskList', 'taskMention', 'text', 'userMention',
+      'taskEmbed', 'taskItem', 'taskList', 'taskMention', 'text', 'toggle', 'toggleSummary', 'userMention',
     ].sort())
   })
 
-  it('gli 8 nodi custom hanno gli attrs attesi', () => {
+  it('i nodi custom hanno gli attrs attesi', () => {
     const attrKeys = (n: string) => Object.keys(nebulaSchema.nodes[n].spec.attrs ?? {}).sort()
     expect(attrKeys('taskMention')).toEqual(['projectId', 'taskId'])
     expect(attrKeys('projectMention')).toEqual(['projectId'])
@@ -74,6 +87,9 @@ describe('nebulaSchema — guardia anti-drift', () => {
     expect(attrKeys('milestoneMention')).toEqual(['milestoneId', 'projectId'])
     expect(attrKeys('deliverableMention')).toEqual(['deliverableId', 'projectId'])
     expect(attrKeys('obiettivoMention')).toEqual(['obiettivoId', 'title'])
+    expect(attrKeys('callout')).toEqual(['icon', 'tone'])
+    expect(attrKeys('toggle')).toEqual(['open'])
+    expect(attrKeys('toggleSummary')).toEqual([])
   })
 
   it('marks attesi presenti', () => {
