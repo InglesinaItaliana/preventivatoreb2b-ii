@@ -17,11 +17,13 @@ exports.extractText = extractText;
  *  Block: doc, paragraph, heading (1-3), bulletList, orderedList, listItem,
  *         taskList, taskItem (GFM `- [ ]` / `- [x]`),
  *         blockquote, codeBlock, horizontalRule, taskEmbed,
- *         table/tableRow/tableHeader/tableCell (GFM `| a | b |`)
+ *         table/tableRow/tableHeader/tableCell (GFM `| a | b |`),
+ *         callout (`:::callout tone=… icon=…`), toggle (`:::toggle Titolo`) —
+ *         container Pandoc-style con contenuto annidato, NON annidabili in v1
  *  Inline: text, hardBreak, taskMention, projectMention
  *  Marks: bold, italic, code, strike, link (`[testo](href)`)
  *
- * NON supportati: images. Future Fase 5+: userMention.
+ * NON supportati: images.
  *
  * Vedi docs/NEBULA-DOCS.md §6.4 (format exchange).
  */
@@ -44,12 +46,70 @@ const DELIVERABLE_MENTION_RE = /@deliverable:(?:([A-Za-z0-9_-]+)\/)?([A-Za-z0-9_
 // Obiettivo: collection top-level obiettivi/{id}, nessun progetto.
 const OBIETTIVO_MENTION_RE = /@obiettivo:([A-Za-z0-9_-]+)/g;
 const EMBED_TASK_RE = /\{\{embed-tasks([^}]*)\}\}/g;
+// Container Pandoc-style per callout e toggle. v1 NON annidabili: il `^:::`
+// di chiusura è il primo a inizio riga dopo l'apertura (un `:::` interno
+// verrebbe scambiato per chiusura). `m` = ^/$ per-riga.
+//   :::callout tone=warn icon=warning   |   :::toggle Titolo del toggle
+//   contenuto…                          |   corpo…
+//   :::                                 |   :::
+const CONTAINER_RE = /^:::(callout|toggle)[ \t]*([^\n]*)\n([\s\S]*?)^:::[ \t]*$/gm;
 function generatePlaceholder(idx) {
     return `NEBULA_${idx}_NEBULA`;
+}
+/** Parsa una stringa "k=v k2=v2" in un oggetto. Valori senza `=` ignorati. */
+function parseKeyVals(raw) {
+    const out = {};
+    for (const part of raw.trim().split(/\s+/)) {
+        const eq = part.indexOf('=');
+        if (eq > 0)
+            out[part.slice(0, eq)] = part.slice(eq + 1);
+    }
+    return out;
+}
+/** Costruisce l'icona callout (Material Symbols) dal nome glyph. */
+function calloutIconFromName(name) {
+    if (!name)
+        return null;
+    return { set: 'material', name, color: null, fill: 0 };
 }
 function preprocessCustomSyntax(md) {
     const placeholders = [];
     let idx = 0;
+    // 0. Container :::callout / :::toggle (blocchi con contenuto annidato).
+    // Va PRIMA di tutto: l'inner viene convertito RICORSIVAMENTE (markdownTo
+    // ProseMirror gestisce mention/embed interni nella propria invocazione →
+    // niente collisione di placeholder). Il nodo prodotto porta già `content`.
+    md = md.replace(CONTAINER_RE, (_, kind, args, inner) => {
+        var _a, _b, _c, _d, _e;
+        const token = generatePlaceholder(idx++);
+        let node;
+        if (kind === 'callout') {
+            const kv = parseKeyVals(args);
+            const tone = ['info', 'warn', 'success', 'danger'].includes(kv.tone) ? kv.tone : 'info';
+            const content = (_a = markdownToProseMirror(inner).content) !== null && _a !== void 0 ? _a : [];
+            node = {
+                type: 'callout',
+                attrs: { tone, icon: calloutIconFromName(kv.icon) },
+                content: content.length ? content : [{ type: 'paragraph', content: [] }],
+            };
+        }
+        else {
+            // toggle — `args` è il TITOLO (inline). L'inner è il corpo.
+            const summaryDoc = markdownToProseMirror(args.trim());
+            const summaryInline = (_d = (_c = (_b = summaryDoc.content) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.content) !== null && _d !== void 0 ? _d : [];
+            const body = (_e = markdownToProseMirror(inner).content) !== null && _e !== void 0 ? _e : [];
+            node = {
+                type: 'toggle',
+                attrs: { open: true },
+                content: [
+                    { type: 'toggleSummary', content: summaryInline },
+                    ...(body.length ? body : [{ type: 'paragraph', content: [] }]),
+                ],
+            };
+        }
+        placeholders.push({ token, node });
+        return `\n\n${token}\n\n`; // forza nuovo blocco
+    });
     // 1. {{embed-tasks ...}} (blocco)
     md = md.replace(EMBED_TASK_RE, (_, rawAttrs) => {
         const filter = parseEmbedAttrs(rawAttrs);
@@ -221,14 +281,14 @@ function tokenToBlock(t, placeholders) {
     const tt = t.type;
     if (tt === 'space')
         return null;
-    // Placeholder solitario in un paragrafo (es. taskEmbed)
+    // Placeholder solitario in un paragrafo = nodo block-level autonomo
+    // (taskEmbed, oppure i container callout/toggle che portano già `content`).
     if (tt === 'paragraph') {
         const tokens = t.tokens;
-        // Check se il paragrafo è solo un placeholder embed
         if (tokens && tokens.length === 1 && tokens[0].type === 'text') {
             const raw = (_b = (_a = tokens[0].raw) === null || _a === void 0 ? void 0 : _a.trim()) !== null && _b !== void 0 ? _b : '';
             const ph = placeholders.find(p => p.token === raw);
-            if (ph && ph.node.type === 'taskEmbed')
+            if (ph && ['taskEmbed', 'callout', 'toggle'].includes(ph.node.type))
                 return ph.node;
         }
         const inline = tokensToInline(tokens, placeholders);
@@ -490,7 +550,7 @@ function tableToMd(node) {
     return lines.join('\n');
 }
 function blockToMd(node, depth = 0) {
-    var _a, _b, _c, _d, _e, _f, _g, _h, _j;
+    var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q;
     switch (node.type) {
         case 'paragraph':
             return inlineToMd(node.content);
@@ -526,6 +586,24 @@ function blockToMd(node, depth = 0) {
             return embedToMd(node);
         case 'table':
             return tableToMd(node);
+        case 'callout': {
+            const tone = (_l = (_k = node.attrs) === null || _k === void 0 ? void 0 : _k.tone) !== null && _l !== void 0 ? _l : 'info';
+            const iconName = (_o = (_m = node.attrs) === null || _m === void 0 ? void 0 : _m.icon) === null || _o === void 0 ? void 0 : _o.name;
+            const head = `:::callout tone=${tone}` + (iconName ? ` icon=${iconName}` : '');
+            const inner = ((_p = node.content) !== null && _p !== void 0 ? _p : []).map(c => blockToMd(c, 0)).join('\n\n');
+            return `${head}\n${inner}\n:::`;
+        }
+        case 'toggle': {
+            const children = (_q = node.content) !== null && _q !== void 0 ? _q : [];
+            const summary = children[0];
+            const summaryMd = (summary === null || summary === void 0 ? void 0 : summary.type) === 'toggleSummary' ? inlineToMd(summary.content) : '';
+            const body = children.slice((summary === null || summary === void 0 ? void 0 : summary.type) === 'toggleSummary' ? 1 : 0);
+            const inner = body.map(c => blockToMd(c, 0)).join('\n\n');
+            return `:::toggle ${summaryMd}\n${inner}\n:::`;
+        }
+        case 'toggleSummary':
+            // Non dovrebbe uscire top-level (è sempre dentro un toggle); fallback.
+            return inlineToMd(node.content);
         default:
             // Fallback: tratta come paragrafo
             if (node.content)
