@@ -14,6 +14,7 @@ import StarAvatar from '../../components/shared/StarAvatar.vue'
 import { useChats } from '../../composables/pulsar/useChats'
 import { useNotifications, type NotificationScope } from '../../composables/shared/useNotifications'
 import { useTriageCount } from '../../composables/cepheid/useTriageCount'
+import { useOpenBugCount } from '../../composables/sidera/useBugs'
 import { useCoreAdmins } from '../../composables/sidera/useCoreAdmins'
 import { useCan } from '../../composables/sidera/useCan'
 
@@ -24,6 +25,7 @@ const { can } = useCan()
 const { members } = useTeamMembers()
 const { chats } = useChats()
 const { triageCount } = useTriageCount()
+const { openCount: openBugCount } = useOpenBugCount()
 
 // Sezione CORE (admin-only): visibile a chi è nella allowlist; in bootstrap
 // (lista non ancora inizializzata) anche a un ruolo ADMIN che può crearla.
@@ -793,6 +795,11 @@ const roleLabel: Record<string, string> = {
                 <MIcon name="vpn_key" :size="18" :filled="isActive('/sidera/core/integrations', false)" class="s-nav-icon" :style="activeIconStyle('/sidera/core/integrations', false, CORE_ACCENT)" />
                 Integrazioni
               </RouterLink>
+              <RouterLink to="/sidera/core/bugs" class="s-nav-item" :style="{ ...activeStyle('/sidera/core/bugs', false, CORE_ACCENT), '--s-idx': 4 } as any">
+                <MIcon name="bug_report" :size="18" :filled="isActive('/sidera/core/bugs', false)" class="s-nav-icon" :style="activeIconStyle('/sidera/core/bugs', false, CORE_ACCENT)" />
+                Bug tracker
+                <span v-if="openBugCount > 0" class="s-nav-badge">{{ openBugCount > 9 ? '9+' : openBugCount }}</span>
+              </RouterLink>
             </div>
           </div>
         </div>
@@ -1032,6 +1039,21 @@ const roleLabel: Record<string, string> = {
    (definito in src/style.css §LYRA). */
 .s-triage-indicator {
   margin-left: auto;
+}
+
+.s-nav-badge {
+  margin-left: auto;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: #C8521A;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .s-nav-icon {

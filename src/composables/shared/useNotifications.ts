@@ -36,7 +36,7 @@ export type NotificationScope = 'pulsar' | 'cepheid' | 'nebula' | 'sidera'
 // Schema entry token in team/{email}.fcmTokens:
 //   - Nuovo: { ts: Timestamp, scope: NotificationScope, ua?: string }
 //   - Legacy: Timestamp nudo (interpretato come scope 'pulsar' dalla Cloud Function)
-type TokenEntryNew = { ts: Timestamp; scope: NotificationScope; ua?: string }
+type TokenEntryNew = { ts: Timestamp; scope: NotificationScope; ua?: string; desktop?: boolean }
 type TokenEntryLegacy = Timestamp
 type TokenEntry = TokenEntryNew | TokenEntryLegacy | null | undefined
 
@@ -92,8 +92,18 @@ export function useNotifications(scope: NotificationScope) {
             const teamRef = teamSnap.ref
 
             const ua = typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 120) : undefined
+            const isDesktopClient =
+              typeof window !== 'undefined' &&
+              !window.matchMedia('(display-mode: standalone)').matches &&
+              !(window.navigator as Navigator & { standalone?: boolean }).standalone &&
+              !window.matchMedia('(max-width: 768px)').matches
             const tokenUpdate: Record<string, unknown> = {
-              [token]: { ts: serverTimestamp(), scope, ...(ua ? { ua } : {}) },
+              [token]: {
+                ts: serverTimestamp(),
+                scope,
+                desktop: isDesktopClient,
+                ...(ua ? { ua } : {}),
+              },
             }
 
             const existing = (teamSnap.data()?.fcmTokens ?? {}) as Record<string, TokenEntry>
@@ -118,12 +128,12 @@ export function useNotifications(scope: NotificationScope) {
     return true
   }
 
-  function notify(title: string, body: string) {
+  function notify(title: string, body: string, icon = '/icons/pulsar-192.png') {
     if (typeof Notification === 'undefined' || Notification.permission !== 'granted') return
     new Notification(title, {
       body,
-      icon: '/icons/pulsar-192.png',
-      badge: '/icons/pulsar-192.png',
+      icon,
+      badge: icon,
     })
   }
 
@@ -147,8 +157,26 @@ export function useNotifications(scope: NotificationScope) {
         // già ricevuto.
         if (pushScope && pushScope !== scope) return
 
+        // Bug tracker CORE: solo browser desktop, mai PWA modulari (QUASAR usa scope sidera).
+        if (payload.data?.type === 'new_bug') {
+          const onMobileClient =
+            window.matchMedia('(display-mode: standalone)').matches ||
+            (window.navigator as Navigator & { standalone?: boolean }).standalone === true ||
+            window.matchMedia('(max-width: 768px)').matches
+          if (onMobileClient) return
+        }
+
         // Suppressione: utente già sulla URL target della push → niente notifica duplicata
         if (url && typeof window !== 'undefined' && window.location.pathname === url) {
+          return
+        }
+
+        if (payload.data?.type === 'new_bug') {
+          notify(
+            payload.data?.title || 'Nuova segnalazione bug',
+            payload.data?.body || '',
+            '/favicon.png',
+          )
           return
         }
 

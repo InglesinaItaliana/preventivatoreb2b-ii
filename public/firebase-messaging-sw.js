@@ -88,7 +88,24 @@ messaging.onBackgroundMessage(async (payload) => {
   // in altre PWA". Return silenzioso = niente notifica fantasma.
   const scope = payload.data?.scope
   if (!scope) return
+  const pushType = payload.data?.type
   const targetUrl = payload.data?.url || (chatId ? `/pulsar/chat/${chatId}` : '/pulsar')
+
+  // Bug tracker CORE: non mostrare su PWA modulari (QUASAR registra scope 'sidera').
+  if (pushType === 'new_bug') {
+    try {
+      const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+      const onModulePwa = wins.some((w) => {
+        try {
+          const path = new URL(w.url).pathname
+          return /^\/(quasar|pulsar|cepheid|nebula)(\/|$)/.test(path)
+        } catch (_) {
+          return /\/(quasar|pulsar|cepheid|nebula)(\/|$)/.test(w.url)
+        }
+      })
+      if (onModulePwa) return
+    } catch (_) { /* fallback: mostra */ }
+  }
 
   // 1) Dedup: se questo messageId è già stato gestito, non rimostrare nulla.
   //    Senza questo, su iOS la stessa push può essere ri-consegnata quando il SW
@@ -112,14 +129,23 @@ messaging.onBackgroundMessage(async (payload) => {
     if (visibleOnTargetScope) return
   } catch (_) { /* fallback: mostra comunque */ }
 
-  self.registration.showNotification(title, {
-    body,
-    icon: '/icons/pulsar-192.png',
-    badge: '/icons/pulsar-192.png',
+  const isBugPush = pushType === 'new_bug'
+  const notifTitle = isBugPush
+    ? (payload.data?.title || 'Nuova segnalazione bug')
+    : title
+  const notifBody = isBugPush
+    ? (payload.data?.body || '')
+    : body
+  const notifIcon = isBugPush ? '/favicon.png' : '/icons/pulsar-192.png'
+
+  self.registration.showNotification(notifTitle, {
+    body: notifBody,
+    icon: notifIcon,
+    badge: notifIcon,
     // tag basato su messageId quando disponibile → idempotenza visiva:
     // se per qualche motivo arriva due volte, il browser sovrascrive invece di accumulare
-    tag: messageId || (chatId ? `chat-${chatId}` : 'pulsar'),
-    data: { chatId, messageId, scope, url: targetUrl },
+    tag: messageId || (chatId ? `chat-${chatId}` : (isBugPush ? 'sidera-bug' : 'pulsar')),
+    data: { chatId, messageId, scope, url: targetUrl, type: pushType },
   })
 })
 

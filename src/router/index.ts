@@ -97,6 +97,8 @@ const router = createRouter({
         // CORE → Integrazioni: API key Claude/MCP (spostate da /nebula/docs/settings/integrations).
         // Componente invariato, cambia solo dove è montato in sidebar.
         { path: 'core/integrations', name: 'sidera-core-integrations', component: () => import('../views/nebula/docs/NebulaIntegrationsView.vue') },
+        { path: 'core/bugs', name: 'sidera-core-bugs', component: () => import('../views/sidera/CoreBugsView.vue') },
+        { path: 'core/bugs/:id', name: 'sidera-core-bug', component: () => import('../views/sidera/CoreBugDetail.vue') },
       ]
     },
     // ── PULSAR (scope mobile, montato sotto SideraLayout adattivo) ──────────

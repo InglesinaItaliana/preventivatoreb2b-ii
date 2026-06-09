@@ -172,7 +172,6 @@ async function onReset() {
 
 .m-task {
   background: var(--md-sys-color-surface-container-lowest, #FFFFFF);
-  border: 1px solid var(--md-sys-color-outline-variant, #CEC6B4);
   border-radius: 14px; padding: 24px; max-width: 720px;
 }
 .m-task-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 16px; }

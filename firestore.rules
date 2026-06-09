@@ -38,6 +38,15 @@ service cloud.firestore {
       return request.auth != null && resource.data.clienteUID == request.auth.uid;
     }
 
+    // CORE admin allowlist (bug tracker SIDERA CORE)
+    function isCoreAdminUser() {
+      return request.auth != null && (
+        request.auth.token.email == 'info@inglesinaitaliana.it' ||
+        (exists(/databases/$(database)/documents/core/admins) &&
+         request.auth.token.email.lower() in get(/databases/$(database)/documents/core/admins).data.emails)
+      );
+    }
+
     // --- REGOLE COLLEZIONI ---
 
     // Collezione TEAM
@@ -379,6 +388,19 @@ service cloud.firestore {
     match /vehicleDeadlines/{deadlineId} {
       allow read: if request.auth != null;
       allow write: if isNebulaFleetAdmin();
+    }
+
+    // ── Bug tracker (SIDERA CORE) — write solo Admin SDK via callable ───────
+    match /bugs/{bugId} {
+      allow read: if request.auth != null && (
+        isCoreAdminUser() ||
+        resource.data.reportedByUid == request.auth.uid
+      );
+      allow create, update, delete: if false;
+    }
+
+    match /counters/{docId} {
+      allow read, write: if false;
     }
 
     match /{document=**} {
