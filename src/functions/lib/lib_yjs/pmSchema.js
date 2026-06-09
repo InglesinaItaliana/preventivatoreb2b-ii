@@ -203,6 +203,59 @@ const ObiettivoMentionTwin = core_1.Node.create({
         return ['span', (0, core_1.mergeAttributes)({ 'data-type': 'obiettivo-mention' }, HTMLAttributes)];
     },
 });
+// ── Gemelli headless dei blocchi con contenuto editabile annidato ───────────
+// A differenza delle mention (atom/inline), callout e toggle hanno `content`.
+// Le spec DEVONO essere identiche 1:1 a extensions/Callout.ts e Toggle.ts
+// (name/group/content/attrs/default/defining/isolating), o il Y.Doc diverge.
+const CalloutTwin = core_1.Node.create({
+    name: 'callout',
+    group: 'block',
+    content: 'block+',
+    defining: true,
+    isolating: true,
+    addAttributes() {
+        return {
+            tone: { default: 'info' },
+            icon: { default: null },
+        };
+    },
+    parseHTML() {
+        return [{ tag: 'div[data-type="callout"]' }];
+    },
+    renderHTML({ HTMLAttributes }) {
+        return ['div', (0, core_1.mergeAttributes)({ 'data-type': 'callout' }, HTMLAttributes), 0];
+    },
+});
+const ToggleTwin = core_1.Node.create({
+    name: 'toggle',
+    group: 'block',
+    content: 'toggleSummary block+',
+    defining: true,
+    isolating: true,
+    addAttributes() {
+        return {
+            open: { default: true },
+        };
+    },
+    parseHTML() {
+        return [{ tag: 'div[data-type="toggle"]' }];
+    },
+    renderHTML({ HTMLAttributes }) {
+        return ['div', (0, core_1.mergeAttributes)({ 'data-type': 'toggle' }, HTMLAttributes), 0];
+    },
+});
+const ToggleSummaryTwin = core_1.Node.create({
+    name: 'toggleSummary',
+    content: 'inline*',
+    defining: true,
+    selectable: false,
+    parseHTML() {
+        return [{ tag: 'div[data-type="toggle-summary"]' }];
+    },
+    renderHTML({ HTMLAttributes }) {
+        return ['div', (0, core_1.mergeAttributes)({ 'data-type': 'toggle-summary' }, HTMLAttributes), 0];
+    },
+});
 /**
  * Lista estensioni che genera lo schema. Rispecchia ESATTAMENTE l'ordine e
  * la config schema-rilevante di NebulaDocView.vue. Estensioni non-schema
@@ -226,6 +279,9 @@ const SCHEMA_EXTENSIONS = [
     MilestoneMentionTwin,
     DeliverableMentionTwin,
     ObiettivoMentionTwin,
+    CalloutTwin,
+    ToggleTwin,
+    ToggleSummaryTwin,
 ];
 /**
  * Schema ProseMirror NEBULA-DOCS, costruito una sola volta. Usare per
