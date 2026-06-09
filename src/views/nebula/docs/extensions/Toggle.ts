@@ -19,9 +19,12 @@
  * ⚠️ Schema DEVE combaciare 1:1 con ToggleTwin/ToggleSummaryTwin in
  * src/functions/lib_yjs/pmSchema.ts.
  *
- * NodeView agganciato in Step 5.
+ * Render: ToggleNode.vue (triangolo + 1 NodeViewContent). `toggleSummary` NON
+ * ha NodeView: il titolo è editabile direttamente dal renderHTML (div).
  */
 import { Node, mergeAttributes } from '@tiptap/core'
+import { VueNodeViewRenderer } from '@tiptap/vue-3'
+import ToggleNode from '../components/ToggleNode.vue'
 
 export const ToggleSummary = Node.create({
   name: 'toggleSummary',
@@ -61,6 +64,10 @@ export const Toggle = Node.create({
 
   renderHTML({ HTMLAttributes }) {
     return ['div', mergeAttributes({ 'data-type': 'toggle' }, HTMLAttributes), 0]
+  },
+
+  addNodeView() {
+    return VueNodeViewRenderer(ToggleNode)
   },
 
   addCommands() {

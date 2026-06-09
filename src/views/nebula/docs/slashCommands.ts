@@ -124,6 +124,35 @@ export const SLASH_COMMANDS: SlashCommandItem[] = [
         .run()
     },
   },
+  {
+    title: 'Callout',
+    description: 'Blocco evidenziato con icona e tono',
+    icon: 'lightbulb',
+    aliases: ['callout', 'box', 'nota', 'avviso', 'banner'],
+    command: ({ editor, range }) => {
+      editor.chain().focus().deleteRange(range).insertContent({
+        type: 'callout',
+        attrs: { tone: 'info', icon: null },
+        content: [{ type: 'paragraph' }],
+      }).run()
+    },
+  },
+  {
+    title: 'Toggle',
+    description: 'Sezione collassabile con titolo',
+    icon: 'expand_more',
+    aliases: ['toggle', 'collassabile', 'dettagli', 'accordion', 'fisarmonica'],
+    command: ({ editor, range }) => {
+      editor.chain().focus().deleteRange(range).insertContent({
+        type: 'toggle',
+        attrs: { open: true },
+        content: [
+          { type: 'toggleSummary' },
+          { type: 'paragraph' },
+        ],
+      }).run()
+    },
+  },
 
   // ── CEPHEID mentions (F2-C2+) ───────────────────────────────────────────
   // Le mention usano trigger `@` direttamente; questi comandi slash sono

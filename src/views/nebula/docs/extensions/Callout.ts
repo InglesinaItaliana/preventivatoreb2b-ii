@@ -13,9 +13,11 @@
  * ⚠️ Schema (group/content/attrs/default/defining/isolating) DEVE combaciare
  * 1:1 con CalloutTwin in src/functions/lib_yjs/pmSchema.ts.
  *
- * NodeView agganciato in Step 5 (vedi addNodeView, aggiunto con la UI).
+ * Render: CalloutNode.vue (NodeViewWrapper + NodeViewContent).
  */
 import { Node, mergeAttributes } from '@tiptap/core'
+import { VueNodeViewRenderer } from '@tiptap/vue-3'
+import CalloutNode from '../components/CalloutNode.vue'
 
 export type CalloutTone = 'info' | 'warn' | 'success' | 'danger'
 
@@ -62,6 +64,10 @@ export const Callout = Node.create({
 
   renderHTML({ HTMLAttributes }) {
     return ['div', mergeAttributes({ 'data-type': 'callout' }, HTMLAttributes), 0]
+  },
+
+  addNodeView() {
+    return VueNodeViewRenderer(CalloutNode)
   },
 
   addCommands() {

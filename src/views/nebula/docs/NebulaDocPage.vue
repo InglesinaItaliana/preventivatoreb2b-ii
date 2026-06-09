@@ -37,6 +37,8 @@ import { DocMention } from './extensions/DocMention'
 import { MilestoneMention } from './extensions/MilestoneMention'
 import { DeliverableMention } from './extensions/DeliverableMention'
 import { ObiettivoMention } from './extensions/ObiettivoMention'
+import { Callout } from './extensions/Callout'
+import { Toggle, ToggleSummary } from './extensions/Toggle'
 import { useTeamMembers } from '../../../composables/sidera/useTeamMembers'
 import { useAllTasks } from '../../../composables/sidera/useAllTasks'
 import { useProjects } from '../../../composables/sidera/useProjects'
@@ -183,6 +185,11 @@ const editor = useEditor({
       linkOnPaste: true,
       HTMLAttributes: { rel: 'noopener noreferrer', target: '_blank' },
     }),
+    // Blocchi à-la-Notion. Devono combaciare coi gemelli headless in
+    // lib_yjs/pmSchema.ts (ordine non schema-rilevante, ma li teniamo in coda).
+    Callout,
+    Toggle,
+    ToggleSummary,
   ],
   editable: false,                              // sbloccato quando provider 'synced' + canWrite
   editorProps: {
