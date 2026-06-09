@@ -1,11 +1,12 @@
 <script setup lang="ts">
-  import { ref, reactive, computed, onMounted } from 'vue';
+  import { ref, reactive, computed, onMounted, onUnmounted, watch } from 'vue';
   import { useRoute, useRouter } from 'vue-router';
-  import { auth, functions, db } from '../firebase';
-  import { doc, getDoc } from 'firebase/firestore';  // <--- AGGIUNGI QUESTA RIGA
+  import { auth } from '../firebase';
   import { getTeamDoc } from '../composables/sidera/useTeamMembers';
-  import { httpsCallable } from 'firebase/functions';
   import { onAuthStateChanged } from 'firebase/auth';
+  import { submitBugReport, buildTechnicalContext } from '../composables/sidera/useBugSubmit';
+  import { useMyBugs } from '../composables/sidera/useBugs';
+  import { BUG_STATUS_LABELS, type BugStatus } from '../types/bugs';
   import { 
     BugAntIcon, 
     XMarkIcon, 
@@ -23,12 +24,16 @@
     PlusCircleIcon,
     CubeIcon,
     CogIcon,
-    SparklesIcon
+    SparklesIcon,
+    ClipboardDocumentListIcon,
   } from '@heroicons/vue/24/solid';
   
-  const isOpen = ref(false);       
+  const isOpen = ref(false);
+  const isMyBugsOpen = ref(false);
   const isMenuOpen = ref(false);   
   const isSending = ref(false);
+  const currentUserUid = ref<string | null>(null);
+  const { bugs: myBugs, loading: myBugsLoading, start: startMyBugs, stop: stopMyBugs } = useMyBugs(currentUserUid);
   const route = useRoute();
   const router = useRouter();
   
@@ -41,6 +46,7 @@
   onMounted(() => {
   onAuthStateChanged(auth, async (user) => {
     currentUserEmail.value = user?.email || null;
+    currentUserUid.value = user?.uid ?? null;
     isAuthReady.value = true;
 
     if (user?.email) {
@@ -62,6 +68,12 @@
     }
   });
 });
+
+  watch(currentUserUid, (uid) => {
+    if (uid) startMyBugs(uid);
+    else stopMyBugs();
+  }, { immediate: true });
+  onUnmounted(stopMyBugs);
   
   // Calcola se è admin
   
@@ -117,23 +129,34 @@ const openResultModal = (title: string, message: string, type: 'SUCCESS' | 'ERRO
     'UI/Grafica', 'Errore Funzionale', 'Performance', 'Dati Errati', 'Suggerimento'
   ];
   
-  const getTechnicalContext = () => ({
-    userAgent: navigator.userAgent,
-    screenSize: `${window.innerWidth}x${window.innerHeight}`,
-    timestamp: new Date().toISOString(),
-    path: route.fullPath,
-    userUid: auth.currentUser?.uid || 'anon',
-    platform: navigator.platform
-  });
-  
   const toggleMenu = () => {
     isMenuOpen.value = !isMenuOpen.value;
   };
   
   const openBugReport = () => {
-    isMenuOpen.value = false; 
-    isOpen.value = true;      
+    isMenuOpen.value = false;
+    isMyBugsOpen.value = false;
+    isOpen.value = true;
   };
+
+  const openMyBugs = () => {
+    isMenuOpen.value = false;
+    isOpen.value = false;
+    isMyBugsOpen.value = true;
+  };
+
+  function fmtBugDate(d: Date) {
+    if (!d.getTime()) return '—';
+    return d.toLocaleDateString('it-IT', { day: '2-digit', month: 'short', year: 'numeric' });
+  }
+
+  function myBugStatusClass(status: BugStatus): string {
+    const base = 'mybug-badge';
+    if (status === 'risolto') return `${base} mybug-badge--risolto`;
+    if (status === 'in_corso') return `${base} mybug-badge--corso`;
+    if (status === 'non_riproducibile') return `${base} mybug-badge--chiuso`;
+    return `${base} mybug-badge--default`;
+  }
   
   const navigateTo = (path: string) => {
     isMenuOpen.value = false;
@@ -151,19 +174,21 @@ const openResultModal = (title: string, message: string, type: 'SUCCESS' | 'ERRO
   isSending.value = true;
   
   try {
-    const submitFn = httpsCallable(functions, 'submitBugToNotion');
-    await submitFn({
+    const result = await submitBugReport({
       title: form.title,
       description: form.description,
       category: form.category,
       pageUrl: window.location.href,
-      userEmail: currentUserEmail.value || 'sconosciuto',
-      technicalContext: getTechnicalContext()
+      technicalContext: buildTechnicalContext(route.fullPath, auth.currentUser?.uid || 'anon', 'pops'),
+      source: 'pops',
     });
 
-    // --- MODIFICA QUI ---
-    isOpen.value = false; // Chiudi prima il form
-    openResultModal("Segnalazione Inviata", "Grazie! Il tuo feedback è stato inoltrato al team di sviluppo.", "SUCCESS");
+    isOpen.value = false;
+    openResultModal(
+      "Segnalazione Inviata",
+      `Grazie! La segnalazione ${result.bugNumber} è stata inoltrata al team di sviluppo.`,
+      "SUCCESS",
+    );
     
     // Reset form
     form.title = '';
@@ -221,6 +246,17 @@ const openResultModal = (title: string, message: string, type: 'SUCCESS' | 'ERRO
               <span class="text-[10px] text-gray-500 font-medium group-hover:text-rose-700 transition-colors">Supporto Tecnico</span>
             </div>
           </button>
+
+          <button @click="openMyBugs" class="flex items-center gap-4 w-full px-3 py-3 rounded-2xl hover:bg-rose-50 transition-colors group relative overflow-hidden">
+            <div class="absolute inset-0 bg-rose-50 scale-x-0 group-hover:scale-x-100 transition-transform origin-left duration-500 ease-out rounded-2xl"></div>
+            <div class="relative bg-rose-100 p-2 rounded-xl group-hover:bg-rose-500 group-hover:text-white transition-colors duration-300">
+              <ClipboardDocumentListIcon class="h-5 w-5 text-rose-500 group-hover:text-white transition-colors" />
+            </div>
+            <div class="flex flex-col items-start relative z-10">
+              <span class="font-bold text-sm text-gray-800">Le mie segnalazioni</span>
+              <span class="text-[10px] text-gray-500 font-medium group-hover:text-rose-700 transition-colors">Stato dei tuoi report</span>
+            </div>
+          </button>
   
           <template v-if="visibleLinks.length > 0 || constructionLinks.length > 0">
             <template v-if="visibleLinks.length > 0">
@@ -267,32 +303,30 @@ const openResultModal = (title: string, message: string, type: 'SUCCESS' | 'ERRO
               </template>
 
             </div>
-            <div v-if="resultModal.show" class="fixed inset-0 z-[11000] overflow-y-auto bg-gray-900/50 backdrop-blur-sm transition-opacity duration-300 flex items-center justify-center p-4">
-              <div class="bg-white rounded-[2rem] shadow-2xl max-w-sm w-full transform transition-all scale-100 p-6 text-center animate-in fade-in zoom-in duration-200">
-                
-                <div class="mx-auto flex items-center justify-center h-16 w-16 rounded-full mb-4"
-                    :class="resultModal.type === 'SUCCESS' ? 'bg-amber-100' : 'bg-red-100'">
-                  <CheckCircleIcon v-if="resultModal.type === 'SUCCESS'" class="h-10 w-10 text-amber-500" />
-                  <ExclamationTriangleIcon v-else class="h-10 w-10 text-red-500" />
-                </div>
-
-                <h3 class="text-xl font-bold text-gray-900 mb-2">{{ resultModal.title }}</h3>
-                <p class="text-gray-500 mb-6 text-sm leading-relaxed">{{ resultModal.message }}</p>
-
-                <button 
-                  @click="resultModal.show = false" 
-                  class="w-full py-3 rounded-xl font-bold text-white shadow-md transition-transform active:scale-95 outline-none focus:ring-2 focus:ring-offset-2"
-                  :class="resultModal.type === 'SUCCESS' ? 'bg-amber-400 hover:bg-amber-300 focus:ring-amber-500 text-amber-950' : 'bg-red-500 hover:bg-red-600 focus:ring-red-500'"
-                >
-                  Ho capito
-                </button>
-              </div>
-            </div>
 
           </template>
   
         </div>
       </Transition>
+
+      <div v-if="resultModal.show" class="fixed inset-0 z-[11000] overflow-y-auto bg-gray-900/50 backdrop-blur-sm transition-opacity duration-300 flex items-center justify-center p-4 pointer-events-auto">
+        <div class="bg-white rounded-[2rem] shadow-2xl max-w-sm w-full transform transition-all scale-100 p-6 text-center">
+          <div class="mx-auto flex items-center justify-center h-16 w-16 rounded-full mb-4"
+              :class="resultModal.type === 'SUCCESS' ? 'bg-amber-100' : 'bg-red-100'">
+            <CheckCircleIcon v-if="resultModal.type === 'SUCCESS'" class="h-10 w-10 text-amber-500" />
+            <ExclamationTriangleIcon v-else class="h-10 w-10 text-red-500" />
+          </div>
+          <h3 class="text-xl font-bold text-gray-900 mb-2">{{ resultModal.title }}</h3>
+          <p class="text-gray-500 mb-6 text-sm leading-relaxed">{{ resultModal.message }}</p>
+          <button 
+            @click="resultModal.show = false" 
+            class="w-full py-3 rounded-xl font-bold text-white shadow-md transition-transform active:scale-95 outline-none focus:ring-2 focus:ring-offset-2"
+            :class="resultModal.type === 'SUCCESS' ? 'bg-amber-400 hover:bg-amber-300 focus:ring-amber-500 text-amber-950' : 'bg-red-500 hover:bg-red-600 focus:ring-red-500'"
+          >
+            Ho capito
+          </button>
+        </div>
+      </div>
   
       <button 
         id="global-fab-btn"
@@ -400,9 +434,81 @@ const openResultModal = (title: string, message: string, type: 'SUCCESS' | 'ERRO
         </div>
       </div>
     </Transition>
+
+    <Transition name="slide">
+      <div v-if="isMyBugsOpen" class="fixed inset-0 z-[10000] flex justify-end">
+        <div class="absolute inset-0 bg-gray-900/30 backdrop-blur-sm transition-opacity" @click="isMyBugsOpen = false"></div>
+
+        <div class="relative w-full max-w-md bg-white h-full shadow-2xl flex flex-col border-l border-gray-100">
+          <div class="bg-gray-900 text-white px-8 py-6 flex justify-between items-center shadow-md shrink-0 z-10">
+            <div>
+              <h2 class="font-bold text-xl flex items-center gap-2.5 font-heading">
+                <div class="bg-white/10 p-2 rounded-lg">
+                  <ClipboardDocumentListIcon class="h-6 w-6 text-amber-400" />
+                </div>
+                Le mie segnalazioni
+              </h2>
+              <p class="text-xs text-gray-400 mt-1 pl-1">Stato dei report inviati al team</p>
+            </div>
+            <button @click="isMyBugsOpen = false" class="hover:bg-white/10 p-2 rounded-full transition-colors active:scale-95">
+              <XMarkIcon class="h-6 w-6" />
+            </button>
+          </div>
+
+          <div class="p-6 flex-1 overflow-y-auto bg-gray-50/50 space-y-3">
+            <div v-if="myBugsLoading" class="text-sm text-gray-500 text-center py-8">Caricamento…</div>
+            <div v-else-if="!myBugs.length" class="text-center py-12 px-4">
+              <p class="font-bold text-gray-800 mb-2">Nessuna segnalazione</p>
+              <p class="text-sm text-gray-500">Non hai ancora inviato report. Usa "Segnala Problema" se riscontri un errore.</p>
+            </div>
+            <div
+              v-for="bug in myBugs"
+              :key="bug.id"
+              class="bg-white border border-gray-100 rounded-2xl p-4 shadow-sm"
+            >
+              <div class="flex justify-between items-start gap-2 mb-2">
+                <span class="text-[10px] font-extrabold text-rose-500 uppercase tracking-widest">{{ bug.bugNumber }}</span>
+                <span :class="myBugStatusClass(bug.status)">{{ BUG_STATUS_LABELS[bug.status] }}</span>
+              </div>
+              <p class="font-bold text-sm text-gray-900 mb-1">{{ bug.title }}</p>
+              <p class="text-[11px] text-gray-500">{{ fmtBugDate(bug.createdAt) }}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </Transition>
   </template>
   
   <style scoped>
+  /* M3 label-small — badge stato in "Le mie segnalazioni" */
+  .mybug-badge {
+    flex-shrink: 0;
+    font-family: 'Outfit', sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    line-height: 1.2;
+    padding: 4px 10px;
+    border-radius: 999px;
+  }
+  .mybug-badge--default {
+    background: var(--md-sys-color-surface-container-high, #EFE7DA);
+    color: var(--md-sys-color-on-surface-variant, #6A6560);
+  }
+  .mybug-badge--corso {
+    background: color-mix(in srgb, #7D8794 18%, transparent);
+    color: #4B5563;
+  }
+  .mybug-badge--chiuso {
+    background: var(--md-sys-color-surface-container-high, #EFE7DA);
+    color: var(--md-sys-color-on-surface-variant, #6A6560);
+  }
+  .mybug-badge--risolto {
+    background: #C8E6C9;
+    color: #1B5E20;
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, #2E7D32 22%, transparent);
+  }
+
   /* Personalizzazione della bezier curve per un effetto "bouncy" */
   .cubic-bezier {
     transition-timing-function: cubic-bezier(0.34, 1.56, 0.64, 1);

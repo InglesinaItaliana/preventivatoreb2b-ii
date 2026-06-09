@@ -1,10 +1,7 @@
 <script setup lang="ts">
 /**
- * Pagina admin per task di manutenzione una-tantum.
- * Accessibile solo a info@inglesinaitaliana.it (guardia client-side; la function
- * stessa rivalida l'identità lato server).
- *
- * Aggiungere qui altri task di manutenzione futuri (es. backfill schema, fix indici).
+ * Pagina admin per task di manutenzione ricorrenti.
+ * Accessibile solo a core admin (guardia client-side; le function rivalidano lato server).
  */
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
@@ -24,116 +21,9 @@ interface CleanupResult {
   totalChatsScanned: number
 }
 
-interface BackfillResult {
-  success: boolean
-  updated: number
-  categoriesTouched: Record<string, number>
-}
-
 const running = ref(false)
 const result = ref<CleanupResult | null>(null)
 const errorMsg = ref<string>('')
-
-const backfillRunning = ref(false)
-const backfillResult = ref<BackfillResult | null>(null)
-const backfillError = ref<string>('')
-
-// A0 — Audit assignees email→UID (read-only)
-interface AssigneeAuditResult {
-  teamMembers: number
-  taskCount: number
-  tasksWithAssignees: number
-  assigneeRefs: number
-  emailMappable: number
-  emailOrphan: number
-  alreadyUid: number
-  unknownNonEmail: number
-  orphanEmails: string[]
-  unknownRefs: string[]
-  readyForBackfill: boolean
-}
-const auditRunning = ref(false)
-const auditResult = ref<AssigneeAuditResult | null>(null)
-const auditError = ref<string>('')
-
-async function runAssigneeAudit() {
-  if (auditRunning.value) return
-  auditRunning.value = true
-  auditResult.value = null
-  auditError.value = ''
-  try {
-    const fn = httpsCallable<Record<string, never>, AssigneeAuditResult>(functions, 'auditAssigneeUids')
-    const res = await fn({})
-    auditResult.value = res.data
-  } catch (e: any) {
-    console.error('[auditAssigneeUids]', e)
-    auditError.value = e?.message || 'Errore sconosciuto. Vedi console.'
-  } finally {
-    auditRunning.value = false
-  }
-}
-
-// A3 — Backfill assignees email→UID (dry-run default)
-interface BackfillAssigneeResult {
-  dryRun: boolean
-  tasksScanned: number
-  tasksChanged: number
-  refsConverted: number
-  refsUnresolved: number
-  unresolvedSamples: string[]
-}
-const bfRunning = ref(false)
-const bfResult = ref<BackfillAssigneeResult | null>(null)
-const bfError = ref<string>('')
-
-async function runAssigneeBackfill(dryRun: boolean) {
-  if (bfRunning.value) return
-  if (!dryRun && !confirm('Applicare il backfill? Riscrive gli assignees email→UID su tutte le task. Operazione idempotente, ma scrive sui dati.')) return
-  bfRunning.value = true
-  bfResult.value = null
-  bfError.value = ''
-  try {
-    const fn = httpsCallable<{ dryRun: boolean }, BackfillAssigneeResult>(functions, 'backfillAssigneeUids')
-    const res = await fn({ dryRun })
-    bfResult.value = res.data
-  } catch (e: any) {
-    console.error('[backfillAssigneeUids]', e)
-    bfError.value = e?.message || 'Errore sconosciuto. Vedi console.'
-  } finally {
-    bfRunning.value = false
-  }
-}
-
-// N2 — Backfill members sui messaggi PULSAR (dry-run default)
-interface BackfillMembersResult {
-  dryRun: boolean
-  scanned: number
-  changed: number
-  skippedNoParent: number
-  skippedNoMembers: number
-  chatsRead: number
-}
-const mbRunning = ref(false)
-const mbResult = ref<BackfillMembersResult | null>(null)
-const mbError = ref<string>('')
-
-async function runMembersBackfill(dryRun: boolean) {
-  if (mbRunning.value) return
-  if (!dryRun && !confirm('Applicare il backfill? Scrive il campo members sui messaggi esistenti (copiato dalla chat). Idempotente, ma scrive sui dati.')) return
-  mbRunning.value = true
-  mbResult.value = null
-  mbError.value = ''
-  try {
-    const fn = httpsCallable<{ dryRun: boolean }, BackfillMembersResult>(functions, 'backfillMessageMembers')
-    const res = await fn({ dryRun })
-    mbResult.value = res.data
-  } catch (e: any) {
-    console.error('[backfillMessageMembers]', e)
-    mbError.value = e?.message || 'Errore sconosciuto. Vedi console.'
-  } finally {
-    mbRunning.value = false
-  }
-}
 
 async function runCleanup() {
   if (running.value) return
@@ -145,29 +35,11 @@ async function runCleanup() {
     const fn = httpsCallable<Record<string, never>, CleanupResult>(functions, 'cleanupOrphanPendingMessages')
     const res = await fn({})
     result.value = res.data
-  } catch (e: any) {
+  } catch (e: unknown) {
     console.error('[cleanupOrphanPendingMessages]', e)
-    errorMsg.value = e?.message || 'Errore sconosciuto. Vedi console.'
+    errorMsg.value = (e as Error)?.message || 'Errore sconosciuto. Vedi console.'
   } finally {
     running.value = false
-  }
-}
-
-async function runAvatarBackfill() {
-  if (backfillRunning.value) return
-  if (!confirm('Ri-assegnare hueIndex per-categoria a tutti i membri team? L\'operazione è idempotente.')) return
-  backfillRunning.value = true
-  backfillResult.value = null
-  backfillError.value = ''
-  try {
-    const fn = httpsCallable<Record<string, never>, BackfillResult>(functions, 'backfillTeamAvatars')
-    const res = await fn({})
-    backfillResult.value = res.data
-  } catch (e: any) {
-    console.error('[backfillTeamAvatars]', e)
-    backfillError.value = e?.message || 'Errore sconosciuto. Vedi console.'
-  } finally {
-    backfillRunning.value = false
   }
 }
 </script>
@@ -178,7 +50,7 @@ async function runAvatarBackfill() {
       <button class="m-back" @click="router.push('/sidera')" aria-label="Indietro">←</button>
       <div>
         <h2 class="m-title">Manutenzione</h2>
-        <p class="m-sub">Task admin una-tantum</p>
+        <p class="m-sub">Task admin</p>
       </div>
     </header>
 
@@ -211,129 +83,6 @@ async function runAvatarBackfill() {
         <strong>Errore:</strong> {{ errorMsg }}
       </div>
     </div>
-
-    <div v-if="isAdmin" class="m-task">
-      <h3 class="m-task-title">Backfill avatar stellari</h3>
-      <p class="m-task-desc">
-        Ri-assegna <code>hueIndex</code> sequenziale per ogni categoria
-        (ordinando per email). Allinea i counter <code>counters/teamHue_${'{'}category{'}'}</code>
-        per future assunzioni. Idempotente: ri-eseguibile senza danni.
-        Da invocare una volta dopo deploy del trigger per-categoria.
-      </p>
-
-      <button class="m-btn" :disabled="backfillRunning" @click="runAvatarBackfill">
-        {{ backfillRunning ? 'In esecuzione…' : 'Esegui backfill' }}
-      </button>
-
-      <div v-if="backfillResult" class="m-result">
-        <h4>Risultato</h4>
-        <ul>
-          <li><strong>{{ backfillResult.updated }}</strong> documenti aggiornati</li>
-          <li v-for="(count, cat) in backfillResult.categoriesTouched" :key="cat">
-            <code>{{ cat }}</code>: {{ count }} membri (hueIndex 0..{{ count - 1 }})
-          </li>
-        </ul>
-      </div>
-
-      <div v-if="backfillError" class="m-error">
-        <strong>Errore:</strong> {{ backfillError }}
-      </div>
-    </div>
-
-    <div v-if="isAdmin" class="m-task">
-      <h3 class="m-task-title">Audit assignees → UID (A0)</h3>
-      <p class="m-task-desc">
-        <strong>Sola lettura.</strong> Scansiona tutte le task e classifica ogni
-        <code>assignee</code>: email migrabile (uid noto), email orfana (esterni/ex-staff),
-        già uid, o anomalia. Serve a vedere il quadro <em>prima</em> della migrazione
-        Strada B (STELLA-GRAFO). Nessuna scrittura.
-      </p>
-
-      <button class="m-btn" :disabled="auditRunning" @click="runAssigneeAudit">
-        {{ auditRunning ? 'In esecuzione…' : 'Esegui audit' }}
-      </button>
-
-      <div v-if="auditResult" class="m-result">
-        <h4>Risultato</h4>
-        <ul>
-          <li><strong>{{ auditResult.assigneeRefs }}</strong> riferimenti assignee in {{ auditResult.tasksWithAssignees }} task (su {{ auditResult.taskCount }} totali · {{ auditResult.teamMembers }} membri)</li>
-          <li><strong>{{ auditResult.emailMappable }}</strong> email migrabili (uid noto)</li>
-          <li><strong>{{ auditResult.emailOrphan }}</strong> email orfane (resteranno email) <template v-if="auditResult.orphanEmails.length">→ <code>{{ auditResult.orphanEmails.join(', ') }}</code></template></li>
-          <li><strong>{{ auditResult.alreadyUid }}</strong> già uid</li>
-          <li><strong>{{ auditResult.unknownNonEmail }}</strong> anomalie (né email né uid noto)<template v-if="auditResult.unknownRefs.length">: <code>{{ auditResult.unknownRefs.join(', ') }}</code></template></li>
-          <li>Pronto per il backfill: <strong>{{ auditResult.readyForBackfill ? 'SÌ' : 'NO (risolvi le anomalie)' }}</strong></li>
-        </ul>
-      </div>
-
-      <div v-if="auditError" class="m-error">
-        <strong>Errore:</strong> {{ auditError }}
-      </div>
-    </div>
-
-    <div v-if="isAdmin" class="m-task">
-      <h3 class="m-task-title">Backfill assignees → UID (A3)</h3>
-      <p class="m-task-desc">
-        Converte gli <code>assignees</code> email→UID su tutte le task (dove l'uid è
-        noto). <strong>Anteprima (dry-run)</strong> conta cosa cambierebbe senza scrivere;
-        <strong>Applica</strong> scrive. Idempotente: gli orfani e i già-uid restano.
-        Esegui prima l'audit, poi l'anteprima, poi applica.
-      </p>
-
-      <div style="display:flex; gap:10px; flex-wrap:wrap;">
-        <button class="m-btn m-btn--ghost" :disabled="bfRunning" @click="runAssigneeBackfill(true)">
-          {{ bfRunning ? 'In esecuzione…' : 'Anteprima (dry-run)' }}
-        </button>
-        <button class="m-btn" :disabled="bfRunning" @click="runAssigneeBackfill(false)">
-          {{ bfRunning ? 'In esecuzione…' : 'Applica backfill' }}
-        </button>
-      </div>
-
-      <div v-if="bfResult" class="m-result">
-        <h4>Risultato — {{ bfResult.dryRun ? 'ANTEPRIMA (nessuna scrittura)' : 'APPLICATO' }}</h4>
-        <ul>
-          <li><strong>{{ bfResult.tasksChanged }}</strong> task {{ bfResult.dryRun ? 'da convertire' : 'convertite' }} (su {{ bfResult.tasksScanned }} scansionate)</li>
-          <li><strong>{{ bfResult.refsConverted }}</strong> riferimenti email→uid</li>
-          <li><strong>{{ bfResult.refsUnresolved }}</strong> non risolti (restano email)<template v-if="bfResult.unresolvedSamples.length">: <code>{{ bfResult.unresolvedSamples.join(', ') }}</code></template></li>
-        </ul>
-      </div>
-
-      <div v-if="bfError" class="m-error">
-        <strong>Errore:</strong> {{ bfError }}
-      </div>
-    </div>
-
-    <div v-if="isAdmin" class="m-task">
-      <h3 class="m-task-title">Backfill members messaggi (PULSAR · N2)</h3>
-      <p class="m-task-desc">
-        Copia il campo <code>members</code> dalla chat su ogni messaggio esistente.
-        Serve alle rules del <code>collectionGroup('messages')</code> (ricerca hashtag
-        e pendenze) per concedere la lettura solo ai membri. I messaggi nuovi lo
-        scrivono già all'invio; questo allinea gli storici.
-        <strong>Anteprima (dry-run)</strong> conta senza scrivere; <strong>Applica</strong>
-        scrive. Idempotente: ri-eseguibile senza danni.
-      </p>
-
-      <div style="display:flex; gap:10px; flex-wrap:wrap;">
-        <button class="m-btn m-btn--ghost" :disabled="mbRunning" @click="runMembersBackfill(true)">
-          {{ mbRunning ? 'In esecuzione…' : 'Anteprima (dry-run)' }}
-        </button>
-        <button class="m-btn" :disabled="mbRunning" @click="runMembersBackfill(false)">
-          {{ mbRunning ? 'In esecuzione…' : 'Applica backfill' }}
-        </button>
-      </div>
-
-      <div v-if="mbResult" class="m-result">
-        <h4>Risultato — {{ mbResult.dryRun ? 'ANTEPRIMA (nessuna scrittura)' : 'APPLICATO' }}</h4>
-        <ul>
-          <li><strong>{{ mbResult.changed }}</strong> messaggi {{ mbResult.dryRun ? 'da aggiornare' : 'aggiornati' }} (su {{ mbResult.scanned }} scansionati · {{ mbResult.chatsRead }} chat lette)</li>
-          <li>{{ mbResult.skippedNoMembers }} saltati (chat senza members) · {{ mbResult.skippedNoParent }} senza parent</li>
-        </ul>
-      </div>
-
-      <div v-if="mbError" class="m-error">
-        <strong>Errore:</strong> {{ mbError }}
-      </div>
-    </div>
   </div>
 </template>
 
@@ -342,8 +91,12 @@ async function runAvatarBackfill() {
   font-family: 'Outfit', sans-serif;
   background: var(--md-sys-color-surface, #FFF8F0);
   color: var(--md-sys-color-on-surface, #1A1917);
-  min-height: 100vh;
+  height: 100%;
+  min-height: 0;
+  overflow-y: auto;
   padding: 24px 32px;
+  padding-bottom: calc(24px + env(safe-area-inset-bottom));
+  box-sizing: border-box;
 }
 .m-header { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
 .m-back {
@@ -362,7 +115,6 @@ async function runAvatarBackfill() {
 
 .m-task {
   background: var(--md-sys-color-surface-container-lowest, #FFFFFF);
-  border: 1px solid var(--md-sys-color-outline-variant, #CEC6B4);
   border-radius: 14px; padding: 24px; max-width: 640px;
 }
 .m-task-title { font-size: 16px; font-weight: 700; margin: 0 0 8px; }
@@ -384,12 +136,6 @@ async function runAvatarBackfill() {
 }
 .m-btn:hover:not(:disabled) { background: var(--md-sys-color-primary-hover, #B0A580); }
 .m-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-.m-btn--ghost {
-  background: transparent;
-  color: var(--md-sys-color-on-surface, #1A1917);
-  border: 1px solid var(--md-sys-color-outline-variant, #CEC6B4);
-}
-.m-btn--ghost:hover:not(:disabled) { background: var(--md-sys-color-surface-container, #F5EDDF); }
 
 .m-result {
   margin-top: 20px; padding: 16px;

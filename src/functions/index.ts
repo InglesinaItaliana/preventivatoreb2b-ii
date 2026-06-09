@@ -6,6 +6,7 @@ import axios from 'axios';
 import * as nodemailer from 'nodemailer';
 // Layer di fatturazione (migrazione FiC→CiC). Vedi src/functions/lib_billing/.
 import { createCicProvider, getActiveBackend } from './lib_billing';
+import { registerBugFunctions } from './lib_bugs/bugs';
 
 // Inizializza Firebase
 if (admin.apps.length === 0) {
@@ -1628,128 +1629,12 @@ exports.creaDdtCumulativo = functions
     });
 
 
-// --- FUNZIONE SEGNALAZIONE BUG NOTION ---
-exports.submitBugToNotion = functions
-    .region('europe-west1')
-    .https.onCall(async (data, context) => {
-        // 1. Verifica Autenticazione
-        if (!context.auth) {
-            throw new functions.https.HttpsError('unauthenticated', 'Devi essere loggato per segnalare un bug.');
-        }
-
-        const { title, description, category, pageUrl, technicalContext, userEmail } = data;
-        
-        try {
-            // 2. RECUPERA LE CHIAVI DAL DATABASE FIRESTORE
-            const db = admin.firestore();
-            const configDoc = await db.collection('config').doc('notion').get();
-            
-            if (!configDoc.exists) {
-                console.error("Configurazione Notion mancante nel DB (config/notion).");
-                throw new functions.https.HttpsError('internal', 'Errore configurazione server.');
-            }
-
-            const configData = configDoc.data();
-            const NOTION_API_KEY = configData?.NOTION_API_KEY; 
-            const NOTION_DB_ID = configData?.NOTION_DB_ID;
-
-            if (!NOTION_API_KEY || !NOTION_DB_ID) {
-                console.error("Chiavi Notion mancanti nel documento config/notion.");
-                throw new functions.https.HttpsError('internal', 'Errore configurazione chiavi.');
-            }
-
-            // 3. Invia a Notion
-            // FIX: Aggiunta Icona e Data Segnalazione
-            const response: any = await axios.post('https://api.notion.com/v1/pages', {
-                parent: { database_id: NOTION_DB_ID },
-                // NUOVO: Icona della pagina Notion
-                icon: {
-                    type: "emoji",
-                    emoji: "🐞"
-                },
-                properties: {
-                    "Titolo Bug": {
-                        title: [
-                            { text: { content: title } }
-                        ]
-                    },
-                    "Status": {
-                        status: { name: "Da Analizzare" }
-                    },
-                    "Categoria": {
-                        select: { name: category || "Altro" }
-                    },
-                    "Pagina/URL": {
-                        url: pageUrl
-                    },
-                    "Segnalato Da": {
-                        rich_text: [
-                            { text: { content: userEmail || "anonimo" } }
-                        ]
-                    },
-                    // NUOVO: Data Segnalazione (assicurati che la colonna in Notion si chiami esattamente così)
-                    "Data Segnalazione": {
-                        date: { start: new Date().toISOString() }
-                    },
-                    "Dettagli": { 
-                        rich_text: [
-                            // Tronchiamo a 2000 caratteri per evitare errori API sulle proprietà
-                            { text: { content: (description || "").substring(0, 2000) } }
-                        ]
-                    },
-                    "Contesto Tecnico": {
-                        rich_text: [
-                            { text: { content: JSON.stringify(technicalContext, null, 2).substring(0, 2000) } }
-                        ]
-                    },
-                    "Priorità": {
-                        select: { name: "Media" }
-                    }
-                },
-                children: [
-                    {
-                        object: "block",
-                        type: "heading_2",
-                        heading_2: {
-                            rich_text: [{ text: { content: "Descrizione Problema" } }]
-                        }
-                    },
-                    {
-                        object: "block",
-                        type: "paragraph",
-                        paragraph: {
-                            rich_text: [{ text: { content: description } }]
-                        }
-                    }
-                ]
-            }, {
-                headers: {
-                    'Authorization': `Bearer ${NOTION_API_KEY}`,
-                    'Notion-Version': '2022-06-28',
-                    'Content-Type': 'application/json'
-                }
-            });
-
-            return { success: true, notionUrl: response.data?.url };
-
-        } catch (error: any) {
-            const err = error as any;
-            let errorMsg = "Errore sconosciuto";
-
-            if (err.response && err.response.data) {
-                try {
-                    errorMsg = JSON.stringify(err.response.data);
-                } catch {
-                    errorMsg = "Errore non serializzabile";
-                }
-            } else if (err.message) {
-                errorMsg = err.message;
-            }
-
-            console.error("Errore Notion:", errorMsg);
-            throw new functions.https.HttpsError('internal', 'Errore durante l\'invio a Notion.');
-        }
-    });
+// --- Bug tracker Firestore (SIDERA CORE) — sostituisce submitBugToNotion ---
+const _bugFns = registerBugFunctions();
+exports.submitBug = _bugFns.submitBug;
+exports.updateBug = _bugFns.updateBug;
+exports.promoteBugToTask = _bugFns.promoteBugToTask;
+exports.importBugsFromNotion = _bugFns.importBugsFromNotion;
     
     // --- LISTE POP CULTURE PER PASSWORD ---
     const POP_ICONS = [

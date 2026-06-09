@@ -41,6 +41,9 @@ export interface Task {
   /** Origine PULSAR: chat/messaggio da cui l'azione è stata creata (back-link). */
   sourceChatId: string | null
   sourceMessageId: string | null
+  /** Origine bug tracker CORE (promozione bug → task). */
+  sourceBugId: string | null
+  sourceBugNumber: string | null
 }
 
 function toDate(raw: unknown): Date | null {
@@ -87,6 +90,8 @@ export function useAllTasks() {
         completedBy:        data.completedBy ?? null,
         sourceChatId:       data.sourceChatId ?? null,
         sourceMessageId:    data.sourceMessageId ?? null,
+        sourceBugId:        data.sourceBugId ?? null,
+        sourceBugNumber:    data.sourceBugNumber ?? null,
       }
     })
     loading.value = false

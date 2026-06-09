@@ -203,6 +203,31 @@
         { "fieldPath": "completedAt", "order": "ASCENDING" },
         { "fieldPath": "dueDate",     "order": "ASCENDING" }
       ]
+    },
+    {
+      "collectionGroup": "bugs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "reportedByUid", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "bugs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "bugs",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "affectedArea", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
     }
   ],
   "fieldOverrides": [
