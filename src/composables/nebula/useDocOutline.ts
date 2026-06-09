@@ -15,7 +15,10 @@ export interface OutlineItem {
   pos: number
 }
 
-export function useDocOutline(editorRef: Ref<Editor | undefined>) {
+export function useDocOutline(
+  editorRef: Ref<Editor | undefined>,
+  scrollerRef?: Ref<HTMLElement | null>,
+) {
   const headings = ref<OutlineItem[]>([])
   const activeIndex = ref(-1)
   let timer: ReturnType<typeof setTimeout> | null = null
@@ -40,8 +43,10 @@ export function useDocOutline(editorRef: Ref<Editor | undefined>) {
   /** Sezione corrente = l'ultimo heading il cui top è sopra la soglia. */
   function recomputeActive() {
     const editor = editorRef.value
-    if (!editor) return
-    const threshold = 120
+    if (!editor || !editor.view) return
+    // Soglia appena sotto il bordo superiore dell'area documento (o 120px).
+    const top0 = scroller ? scroller.getBoundingClientRect().top : 0
+    const threshold = top0 + 90
     let active = -1
     headings.value.forEach((h, i) => {
       try {
@@ -62,29 +67,40 @@ export function useDocOutline(editorRef: Ref<Editor | undefined>) {
     })
   }
 
+  function detachScroller() {
+    scroller?.removeEventListener('scroll', onScroll)
+    scroller = null
+  }
+  function attachScroller(el: HTMLElement | null) {
+    detachScroller()
+    scroller = el
+    scroller?.addEventListener('scroll', onScroll, { passive: true })
+    recomputeActive()
+  }
+
   function schedule(editor: Editor) {
     if (timer) clearTimeout(timer)
     timer = setTimeout(() => recompute(editor), 150)
   }
 
-  const stop = watch(
+  const stopEditor = watch(
     editorRef,
     (editor, _old, onCleanup) => {
       if (!editor) return
       recompute(editor)
       const handler = () => schedule(editor)
       editor.on('update', handler)
-      // Scroll-spy sul contenitore scrollabile del documento.
-      scroller = editor.view.dom.closest('.nd-root') as HTMLElement | null
-      scroller?.addEventListener('scroll', onScroll, { passive: true })
-      onCleanup(() => {
-        editor.off('update', handler)
-        scroller?.removeEventListener('scroll', onScroll)
-        scroller = null
-      })
+      onCleanup(() => editor.off('update', handler))
     },
     { immediate: true },
   )
+
+  // Aggancia lo scroll-spy quando il contenitore scrollabile è montato.
+  const stopScroller = scrollerRef
+    ? watch(scrollerRef, (el) => attachScroller(el), { immediate: true })
+    : null
+
+  window.addEventListener('resize', recomputeActive)
 
   /** Scrolla alla sezione: risolve il DOM dell'heading e lo porta in vista. */
   function scrollToHeading(pos: number) {
@@ -102,8 +118,10 @@ export function useDocOutline(editorRef: Ref<Editor | undefined>) {
 
   onUnmounted(() => {
     if (timer) clearTimeout(timer)
-    scroller?.removeEventListener('scroll', onScroll)
-    stop()
+    detachScroller()
+    window.removeEventListener('resize', recomputeActive)
+    stopEditor()
+    stopScroller?.()
   })
 
   return { headings, activeIndex, scrollToHeading }

@@ -210,8 +210,12 @@ const editor = useEditor({
 
 const editorRef = shallowRef(editor)
 
+// Contenitore scrollabile del documento (template ref). Dichiarato qui perché
+// serve sia all'indice (scroll-spy) sia al workaround scroll-checkbox più sotto.
+const ndRootRef = ref<HTMLElement | null>(null)
+
 // Indice/struttura del documento (heading → navigazione rapida + scroll-spy).
-const { headings: outlineHeadings, activeIndex: outlineActive, scrollToHeading } = useDocOutline(editor)
+const { headings: outlineHeadings, activeIndex: outlineActive, scrollToHeading } = useDocOutline(editor, ndRootRef)
 
 // ── Title init (campo scalare, NON collaborativo) ───────────────────────────
 // Il title vive nel doc Firestore (non nel Y.Doc): lo prendiamo al 1° load.
@@ -383,7 +387,7 @@ function removeLink() {
 // se l'utente non ha mai cliccato dentro il doc) → la view salta in cima.
 // Workaround: cattura scrollTop di .nd-root al change della checkbox e
 // ripristinalo in due RAF (focus-scroll iOS arriva dopo la prima paint).
-const ndRootRef = ref<HTMLElement | null>(null)
+// (ndRootRef è dichiarato sopra, vicino all'indice.)
 function preserveScrollOnCheckbox(e: Event) {
   const t = e.target as HTMLElement | null
   if (!(t instanceof HTMLInputElement) || t.type !== 'checkbox') return
