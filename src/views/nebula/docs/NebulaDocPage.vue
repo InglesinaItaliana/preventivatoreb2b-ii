@@ -733,9 +733,8 @@ void editorRef
   color: var(--md-sys-color-on-surface, #1a1a1a);
   /* Box-sizing border-box per coerenza padding ↔ max-width */
   box-sizing: border-box;
-  /* Pattern visivo allineato a CEPHEID Progetti: sfondo beige caldo per dare
-     continuità navigando lista → doc → lista (vedi piano Task 5). */
-  --page-bg: #EFE7D9;
+  /* Sfondo foglio caldo chiaro (#FFF8F0). */
+  --page-bg: #FFF8F0;
   background: var(--page-bg);
 }
 .s-surface-dark .nd-root { --page-bg: #0E0C07; }

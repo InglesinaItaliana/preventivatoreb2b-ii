@@ -22,6 +22,8 @@ export interface IconValue {
 
 const props = defineProps<{
   modelValue: IconValue | null
+  /** Nasconde la selezione colore (es. callout: il colore è fisso sul tono). */
+  hideColor?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -181,7 +183,7 @@ function isSearching() {
 
     <!-- Footer: color + fill + preview -->
     <div class="ip-footer">
-      <div class="ip-footer-row">
+      <div v-if="!hideColor" class="ip-footer-row">
         <span class="ip-footer-label">Colore</span>
         <div class="ip-colors">
           <button
