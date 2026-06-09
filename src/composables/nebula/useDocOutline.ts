@@ -1,6 +1,7 @@
 /**
  * useDocOutline — estrae la struttura (heading h1/h2/h3) di un documento TipTap
- * per la navigazione rapida (pannello indice). Reattivo all'editing (debounce).
+ * per la navigazione rapida (pannello indice). Reattivo all'editing (debounce)
+ * e tiene traccia della sezione corrente (scroll-spy) per evidenziarla.
  *
  * NON tocca lo schema: legge `editor.state.doc` e basta. Lo scroll usa
  * `editor.view.domAtPos` → niente id sugli heading (eviterebbe un attr di schema).
@@ -16,7 +17,10 @@ export interface OutlineItem {
 
 export function useDocOutline(editorRef: Ref<Editor | undefined>) {
   const headings = ref<OutlineItem[]>([])
+  const activeIndex = ref(-1)
   let timer: ReturnType<typeof setTimeout> | null = null
+  let scroller: HTMLElement | null = null
+  let rafPending = false
 
   function recompute(editor: Editor) {
     const list: OutlineItem[] = []
@@ -30,6 +34,32 @@ export function useDocOutline(editorRef: Ref<Editor | undefined>) {
       }
     })
     headings.value = list
+    recomputeActive()
+  }
+
+  /** Sezione corrente = l'ultimo heading il cui top è sopra la soglia. */
+  function recomputeActive() {
+    const editor = editorRef.value
+    if (!editor) return
+    const threshold = 120
+    let active = -1
+    headings.value.forEach((h, i) => {
+      try {
+        const top = editor.view.coordsAtPos(h.pos + 1).top
+        if (top <= threshold) active = i
+      } catch { /* pos non risolvibile */ }
+    })
+    // Sopra il primo heading → evidenzia comunque il primo.
+    activeIndex.value = active === -1 && headings.value.length ? 0 : active
+  }
+
+  function onScroll() {
+    if (rafPending) return
+    rafPending = true
+    requestAnimationFrame(() => {
+      rafPending = false
+      recomputeActive()
+    })
   }
 
   function schedule(editor: Editor) {
@@ -44,7 +74,14 @@ export function useDocOutline(editorRef: Ref<Editor | undefined>) {
       recompute(editor)
       const handler = () => schedule(editor)
       editor.on('update', handler)
-      onCleanup(() => editor.off('update', handler))
+      // Scroll-spy sul contenitore scrollabile del documento.
+      scroller = editor.view.dom.closest('.nd-root') as HTMLElement | null
+      scroller?.addEventListener('scroll', onScroll, { passive: true })
+      onCleanup(() => {
+        editor.off('update', handler)
+        scroller?.removeEventListener('scroll', onScroll)
+        scroller = null
+      })
     },
     { immediate: true },
   )
@@ -65,8 +102,9 @@ export function useDocOutline(editorRef: Ref<Editor | undefined>) {
 
   onUnmounted(() => {
     if (timer) clearTimeout(timer)
+    scroller?.removeEventListener('scroll', onScroll)
     stop()
   })
 
-  return { headings, scrollToHeading }
+  return { headings, activeIndex, scrollToHeading }
 }

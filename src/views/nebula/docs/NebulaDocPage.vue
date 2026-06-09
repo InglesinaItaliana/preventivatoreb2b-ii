@@ -210,8 +210,8 @@ const editor = useEditor({
 
 const editorRef = shallowRef(editor)
 
-// Indice/struttura del documento (heading → navigazione rapida).
-const { headings: outlineHeadings, scrollToHeading } = useDocOutline(editor)
+// Indice/struttura del documento (heading → navigazione rapida + scroll-spy).
+const { headings: outlineHeadings, activeIndex: outlineActive, scrollToHeading } = useDocOutline(editor)
 
 // ── Title init (campo scalare, NON collaborativo) ───────────────────────────
 // Il title vive nel doc Firestore (non nel Y.Doc): lo prendiamo al 1° load.
@@ -665,8 +665,8 @@ void editorRef
       <!-- Editor content -->
       <EditorContent v-if="editor" :editor="editor" class="nd-editor" />
 
-      <!-- Indice/struttura: FAB + pannello (drawer desktop / bottom-sheet mobile) -->
-      <DocOutline :headings="outlineHeadings" @select="scrollToHeading" />
+      <!-- Indice/struttura: barre laterali + card contestuale all'hover -->
+      <DocOutline :headings="outlineHeadings" :active="outlineActive" @select="scrollToHeading" />
     </template>
 
     <!-- Share modal (solo per owner) -->
