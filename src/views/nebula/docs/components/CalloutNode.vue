@@ -2,9 +2,9 @@
 /**
  * CalloutNode — NodeView Vue per `callout` (blocco evidenziato stile Notion).
  *
- * Header non-editabile: bottone icona (apre IconPicker) + 4 pill per il tono.
- * Corpo editabile via NodeViewContent (`block+`). Tono → colore/sfondo.
- * Attrs persistiti via `updateAttributes` (pattern di TaskEmbedNode).
+ * Sfondo tenue per tono (info/warn/success/danger), niente bordo né barra
+ * accent. Icona dal picker (solo il glyph: il COLORE è fisso sul tono). Il
+ * selettore di tono compare solo all'hover. Corpo editabile via NodeViewContent.
  */
 import { ref, computed } from 'vue'
 import { NodeViewWrapper, NodeViewContent } from '@tiptap/vue-3'
@@ -13,11 +13,11 @@ import IconPicker, { type IconValue } from './IconPicker.vue'
 
 type Tone = 'info' | 'warn' | 'success' | 'danger'
 
-const TONES: { key: Tone; label: string; glyph: string }[] = [
-  { key: 'info', label: 'Info', glyph: 'info' },
-  { key: 'warn', label: 'Attenzione', glyph: 'warning' },
-  { key: 'success', label: 'Successo', glyph: 'check_circle' },
-  { key: 'danger', label: 'Pericolo', glyph: 'error' },
+const TONES: { key: Tone; label: string; glyph: string; color: string }[] = [
+  { key: 'info', label: 'Info', glyph: 'info', color: '#2563EB' },
+  { key: 'warn', label: 'Attenzione', glyph: 'warning', color: '#B45309' },
+  { key: 'success', label: 'Successo', glyph: 'check_circle', color: '#15803D' },
+  { key: 'danger', label: 'Pericolo', glyph: 'error', color: '#B91C1C' },
 ]
 
 const props = defineProps<{
@@ -28,13 +28,14 @@ const props = defineProps<{
 const showPicker = ref(false)
 
 const tone = computed<Tone>(() => props.node.attrs.tone ?? 'info')
-const toneGlyph = computed(() => TONES.find(t => t.key === tone.value)?.glyph ?? 'info')
+const toneDef = computed(() => TONES.find(t => t.key === tone.value) ?? TONES[0])
 const icon = computed<IconValue | null>(() => props.node.attrs.icon ?? null)
 
 function setTone(t: Tone) {
   props.updateAttributes({ tone: t })
 }
 function onIconChange(value: IconValue | null) {
+  // Conserviamo solo il glyph/fill; il colore in render è SEMPRE quello del tono.
   props.updateAttributes({ icon: value })
 }
 </script>
@@ -46,7 +47,7 @@ function onIconChange(value: IconValue | null) {
     :class="`nd-callout--${tone}`"
     :data-tone="tone"
   >
-    <!-- Header non editabile: icona + selettore tono -->
+    <!-- Icona (colore fisso = tono) -->
     <div class="nd-callout-aside" contenteditable="false">
       <button
         type="button"
@@ -55,67 +56,62 @@ function onIconChange(value: IconValue | null) {
         @click="showPicker = !showPicker"
       >
         <MaterialIcon
-          v-if="icon"
-          :name="icon.name"
+          :name="icon?.name ?? toneDef.glyph"
           :size="22"
-          :color="icon.color ?? undefined"
-          :fill="icon.fill"
+          :color="toneDef.color"
+          :fill="icon?.fill ?? 0"
         />
-        <MaterialIcon v-else :name="toneGlyph" :size="22" />
       </button>
 
       <div v-if="showPicker" class="nd-callout-picker">
         <IconPicker
           :modelValue="icon"
+          :hideColor="true"
           @update:modelValue="onIconChange"
           @close="showPicker = false"
-        />
-      </div>
-
-      <div class="nd-callout-tones">
-        <button
-          v-for="t in TONES"
-          :key="t.key"
-          type="button"
-          class="nd-callout-tone"
-          :class="{ 'is-active': t.key === tone }"
-          :data-tone="t.key"
-          :title="t.label"
-          :aria-label="t.label"
-          @click="setTone(t.key)"
         />
       </div>
     </div>
 
     <!-- Corpo editabile -->
     <NodeViewContent class="nd-callout-body" />
+
+    <!-- Selettore tono: solo all'hover, in alto a destra -->
+    <div class="nd-callout-tones" contenteditable="false">
+      <button
+        v-for="t in TONES"
+        :key="t.key"
+        type="button"
+        class="nd-callout-tone"
+        :class="{ 'is-active': t.key === tone }"
+        :style="{ '--dot': t.color }"
+        :title="t.label"
+        :aria-label="t.label"
+        @click="setTone(t.key)"
+      />
+    </div>
   </NodeViewWrapper>
 </template>
 
 <style scoped>
 .nd-callout {
+  position: relative;
   display: flex;
-  gap: 12px;
+  gap: 10px;
   align-items: flex-start;
   margin: 0.8em 0;
   padding: 12px 14px;
   border-radius: var(--md-sys-shape-corner-medium, 12px);
-  border: 1px solid var(--tone-border);
-  border-left: 3px solid var(--tone-accent);
   background: var(--tone-bg);
 }
-/* Tone palette (sfondo tenue + accento) */
-.nd-callout--info    { --tone-accent: #2563EB; --tone-bg: color-mix(in srgb, #2563EB 8%, transparent); --tone-border: color-mix(in srgb, #2563EB 22%, transparent); }
-.nd-callout--warn    { --tone-accent: #B45309; --tone-bg: color-mix(in srgb, #B45309 9%, transparent); --tone-border: color-mix(in srgb, #B45309 24%, transparent); }
-.nd-callout--success { --tone-accent: #15803D; --tone-bg: color-mix(in srgb, #15803D 8%, transparent); --tone-border: color-mix(in srgb, #15803D 22%, transparent); }
-.nd-callout--danger  { --tone-accent: #B91C1C; --tone-bg: color-mix(in srgb, #B91C1C 8%, transparent); --tone-border: color-mix(in srgb, #B91C1C 24%, transparent); }
+/* Solo sfondo tenue per tono — niente bordo né barra accent. */
+.nd-callout--info    { --tone-accent: #2563EB; --tone-bg: color-mix(in srgb, #2563EB 9%, transparent); }
+.nd-callout--warn    { --tone-accent: #B45309; --tone-bg: color-mix(in srgb, #B45309 10%, transparent); }
+.nd-callout--success { --tone-accent: #15803D; --tone-bg: color-mix(in srgb, #15803D 9%, transparent); }
+.nd-callout--danger  { --tone-accent: #B91C1C; --tone-bg: color-mix(in srgb, #B91C1C 9%, transparent); }
 
 .nd-callout-aside {
   position: relative;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
   flex: 0 0 auto;
   user-select: none;
 }
@@ -128,13 +124,11 @@ function onIconChange(value: IconValue | null) {
   border-radius: var(--md-sys-shape-corner-small, 8px);
   border: 1px solid transparent;
   background: transparent;
-  color: var(--tone-accent);
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s;
+  transition: background 0.15s;
 }
 .nd-callout-icon-btn:hover {
-  background: color-mix(in srgb, var(--tone-accent) 12%, transparent);
-  border-color: var(--tone-border);
+  background: color-mix(in srgb, var(--tone-accent) 14%, transparent);
 }
 .nd-callout-picker {
   position: absolute;
@@ -142,27 +136,6 @@ function onIconChange(value: IconValue | null) {
   left: 0;
   z-index: 50;
 }
-.nd-callout-tones {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-.nd-callout-tone {
-  width: 12px;
-  height: 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(0, 0, 0, 0.12);
-  cursor: pointer;
-  padding: 0;
-  opacity: 0.5;
-  transition: opacity 0.15s, transform 0.15s;
-}
-.nd-callout-tone:hover { opacity: 0.85; transform: scale(1.15); }
-.nd-callout-tone.is-active { opacity: 1; box-shadow: 0 0 0 2px var(--md-sys-color-surface, #fff), 0 0 0 3px currentColor; }
-.nd-callout-tone[data-tone="info"]    { background: #2563EB; color: #2563EB; }
-.nd-callout-tone[data-tone="warn"]    { background: #B45309; color: #B45309; }
-.nd-callout-tone[data-tone="success"] { background: #15803D; color: #15803D; }
-.nd-callout-tone[data-tone="danger"]  { background: #B91C1C; color: #B91C1C; }
 
 .nd-callout-body {
   flex: 1 1 auto;
@@ -170,4 +143,37 @@ function onIconChange(value: IconValue | null) {
 }
 .nd-callout-body :deep(> :first-child) { margin-top: 0; }
 .nd-callout-body :deep(> :last-child) { margin-bottom: 0; }
+
+/* Selettore tono nascosto: compare solo all'hover sul callout. */
+.nd-callout-tones {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  display: flex;
+  gap: 5px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+.nd-callout:hover .nd-callout-tones {
+  opacity: 1;
+  pointer-events: auto;
+}
+.nd-callout-tone {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: var(--dot);
+  color: var(--dot);
+  cursor: pointer;
+  padding: 0;
+  opacity: 0.55;
+  transition: opacity 0.15s, transform 0.15s;
+}
+.nd-callout-tone:hover { opacity: 0.9; transform: scale(1.15); }
+.nd-callout-tone.is-active {
+  opacity: 1;
+  box-shadow: 0 0 0 2px var(--page-bg, #FFF8F0), 0 0 0 3px currentColor;
+}
 </style>

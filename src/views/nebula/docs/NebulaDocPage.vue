@@ -210,8 +210,12 @@ const editor = useEditor({
 
 const editorRef = shallowRef(editor)
 
-// Indice/struttura del documento (heading → navigazione rapida).
-const { headings: outlineHeadings, scrollToHeading } = useDocOutline(editor)
+// Contenitore scrollabile del documento (template ref). Dichiarato qui perché
+// serve sia all'indice (scroll-spy) sia al workaround scroll-checkbox più sotto.
+const ndRootRef = ref<HTMLElement | null>(null)
+
+// Indice/struttura del documento (heading → navigazione rapida + scroll-spy).
+const { headings: outlineHeadings, activeIndex: outlineActive, scrollToHeading } = useDocOutline(editor, ndRootRef)
 
 // ── Title init (campo scalare, NON collaborativo) ───────────────────────────
 // Il title vive nel doc Firestore (non nel Y.Doc): lo prendiamo al 1° load.
@@ -383,7 +387,7 @@ function removeLink() {
 // se l'utente non ha mai cliccato dentro il doc) → la view salta in cima.
 // Workaround: cattura scrollTop di .nd-root al change della checkbox e
 // ripristinalo in due RAF (focus-scroll iOS arriva dopo la prima paint).
-const ndRootRef = ref<HTMLElement | null>(null)
+// (ndRootRef è dichiarato sopra, vicino all'indice.)
 function preserveScrollOnCheckbox(e: Event) {
   const t = e.target as HTMLElement | null
   if (!(t instanceof HTMLInputElement) || t.type !== 'checkbox') return
@@ -665,8 +669,8 @@ void editorRef
       <!-- Editor content -->
       <EditorContent v-if="editor" :editor="editor" class="nd-editor" />
 
-      <!-- Indice/struttura: FAB + pannello (drawer desktop / bottom-sheet mobile) -->
-      <DocOutline :headings="outlineHeadings" @select="scrollToHeading" />
+      <!-- Indice/struttura: barre laterali + card contestuale all'hover -->
+      <DocOutline :headings="outlineHeadings" :active="outlineActive" @select="scrollToHeading" />
     </template>
 
     <!-- Share modal (solo per owner) -->
@@ -733,9 +737,8 @@ void editorRef
   color: var(--md-sys-color-on-surface, #1a1a1a);
   /* Box-sizing border-box per coerenza padding ↔ max-width */
   box-sizing: border-box;
-  /* Pattern visivo allineato a CEPHEID Progetti: sfondo beige caldo per dare
-     continuità navigando lista → doc → lista (vedi piano Task 5). */
-  --page-bg: #EFE7D9;
+  /* Sfondo foglio caldo chiaro (#FFF8F0). */
+  --page-bg: #FFF8F0;
   background: var(--page-bg);
 }
 .s-surface-dark .nd-root { --page-bg: #0E0C07; }
