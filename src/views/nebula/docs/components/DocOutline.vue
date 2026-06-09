@@ -7,7 +7,7 @@
  * cliccabile e scorribile; scompare quando il mouse esce. Su touch: tap sulle
  * barre per aprire/chiudere, tap fuori per chiudere.
  */
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import type { OutlineItem } from '../../../../composables/nebula/useDocOutline'
 
 defineProps<{ headings: OutlineItem[] }>()
@@ -15,6 +15,26 @@ const emit = defineEmits<{ (e: 'select', pos: number): void }>()
 
 const wrap = ref<HTMLElement | null>(null)
 const open = ref(false)   // stato per touch (desktop usa :hover CSS)
+
+// Ancoraggio al bordo sinistro dell'AREA DOCUMENTO (.nd-root), non al viewport:
+// così l'indice non finisce sopra la sidebar di SIDERA. Misurato in JS e
+// aggiornato su resize + ResizeObserver (copre anche il collapse della sidebar).
+const leftPx = ref(8)
+let rootEl: HTMLElement | null = null
+let ro: ResizeObserver | null = null
+
+function reposition() {
+  if (!rootEl) return
+  leftPx.value = Math.round(rootEl.getBoundingClientRect().left + 8)
+}
+function attach() {
+  rootEl = (wrap.value?.closest('.nd-root') as HTMLElement | null) ?? null
+  reposition()
+  if (rootEl && 'ResizeObserver' in window && !ro) {
+    ro = new ResizeObserver(() => reposition())
+    ro.observe(rootEl)
+  }
+}
 
 function pick(pos: number) {
   emit('select', pos)
@@ -26,8 +46,18 @@ function onDocClick(e: MouseEvent) {
     open.value = false
   }
 }
-onMounted(() => document.addEventListener('click', onDocClick))
-onUnmounted(() => document.removeEventListener('click', onDocClick))
+
+watch(wrap, (el) => { if (el) nextTick(attach) })
+onMounted(() => {
+  document.addEventListener('click', onDocClick)
+  window.addEventListener('resize', reposition)
+  if (wrap.value) attach()
+})
+onUnmounted(() => {
+  document.removeEventListener('click', onDocClick)
+  window.removeEventListener('resize', reposition)
+  ro?.disconnect()
+})
 </script>
 
 <template>
@@ -36,6 +66,7 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
     ref="wrap"
     class="ndo-wrap"
     :class="{ 'is-open': open }"
+    :style="{ left: leftPx + 'px' }"
   >
     <!-- Barre: indicatore leggero della struttura -->
     <div class="ndo-rail" aria-hidden="true" @click="open = !open">
@@ -66,7 +97,8 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
 <style scoped>
 .ndo-wrap {
   position: fixed;
-  left: 8px;
+  /* left impostato in JS = bordo sinistro dell'area documento (.nd-root),
+     così non si sovrappone alla sidebar di SIDERA. */
   top: 50%;
   transform: translateY(-50%);
   z-index: 30;
