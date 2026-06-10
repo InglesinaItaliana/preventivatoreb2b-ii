@@ -800,6 +800,10 @@ const roleLabel: Record<string, string> = {
                 Bug tracker
                 <span v-if="openBugCount > 0" class="s-nav-badge">{{ openBugCount > 9 ? '9+' : openBugCount }}</span>
               </RouterLink>
+              <RouterLink to="/sidera/core/ricerca-fic" class="s-nav-item" :style="{ ...activeStyle('/sidera/core/ricerca-fic', false, CORE_ACCENT), '--s-idx': 5 } as any">
+                <MIcon name="receipt_long" :size="18" :filled="isActive('/sidera/core/ricerca-fic', false)" class="s-nav-icon" :style="activeIconStyle('/sidera/core/ricerca-fic', false, CORE_ACCENT)" />
+                Ricerca FiC
+              </RouterLink>
             </div>
           </div>
         </div>

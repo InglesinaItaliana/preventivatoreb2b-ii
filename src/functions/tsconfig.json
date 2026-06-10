@@ -17,7 +17,9 @@
     "lib_billing/**/*.ts",
     "lib_md/**/*.ts",
     "lib_mcp/**/*.ts",
-    "lib_yjs/**/*.ts"
+    "lib_yjs/**/*.ts",
+    "lib_bugs/**/*.ts",
+    "lib_fic/**/*.ts"
   ],
   "exclude": [
     "**/__tests__/**"

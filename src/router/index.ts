@@ -99,6 +99,7 @@ const router = createRouter({
         { path: 'core/integrations', name: 'sidera-core-integrations', component: () => import('../views/nebula/docs/NebulaIntegrationsView.vue') },
         { path: 'core/bugs', name: 'sidera-core-bugs', component: () => import('../views/sidera/CoreBugsView.vue') },
         { path: 'core/bugs/:id', name: 'sidera-core-bug', component: () => import('../views/sidera/CoreBugDetail.vue') },
+        { path: 'core/ricerca-fic', name: 'sidera-core-fic-search', component: () => import('../views/sidera/CoreFicSearchView.vue') },
       ]
     },
     // ── PULSAR (scope mobile, montato sotto SideraLayout adattivo) ──────────

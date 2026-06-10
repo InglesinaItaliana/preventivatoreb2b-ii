@@ -46,6 +46,7 @@ const nodemailer = __importStar(require("nodemailer"));
 // Layer di fatturazione (migrazione FiC→CiC). Vedi src/functions/lib_billing/.
 const lib_billing_1 = require("./lib_billing");
 const bugs_1 = require("./lib_bugs/bugs");
+const receivedDocumentsSearch_1 = require("./lib_fic/receivedDocumentsSearch");
 // Inizializza Firebase
 if (admin.apps.length === 0) {
     admin.initializeApp();
@@ -1511,6 +1512,13 @@ exports.submitBug = _bugFns.submitBug;
 exports.updateBug = _bugFns.updateBug;
 exports.promoteBugToTask = _bugFns.promoteBugToTask;
 exports.importBugsFromNotion = _bugFns.importBugsFromNotion;
+// --- SIDERA CORE · Ricerca righe in fatture passive/spese FiC ---
+const _ficSearchFns = (0, receivedDocumentsSearch_1.registerFicSearchFunctions)({
+    getValidFicToken,
+    ficApiUrl: FIC_API_URL,
+    companyId: COMPANY_ID,
+});
+exports.searchFicReceivedItems = _ficSearchFns.searchFicReceivedItems;
 // --- LISTE POP CULTURE PER PASSWORD ---
 const POP_ICONS = [
     "Ironman", "Batman", "Spiderman", "Thor", "Hulk", "WonderWoman", "Superman",
