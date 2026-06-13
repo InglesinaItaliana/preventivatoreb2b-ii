@@ -35,11 +35,12 @@ export interface CustomerRef {
 
 /** Riga documento, prima dell'arrotondamento (prezzi unitari netti). */
 export interface LineInput {
-  code: string;            // codice prodotto (mappato su un product del backend)
+  code: string;            // codice prodotto POPS (= barCode in CiC, NON il productNumber)
   description: string;
   qty: number;
   unitNetPrice: number;
   category?: string;       // EXTRA/Spedizione/... per la logica POPS
+  cicProductId?: string | number; // productNumber CiC mappato (da products/{code}.cicProductId)
 }
 
 /** Input per creare ordine/preventivo. */

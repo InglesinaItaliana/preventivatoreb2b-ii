@@ -64,8 +64,14 @@ export class CicProvider implements BillingProvider {
     return this.createSalesDoc('/quotations', doc);
   }
 
-  private productRef(code: string) {
-    const pn = code && code.trim() ? code.trim() : this.cfg.genericProductNumber;
+  // In CiC il prodotto si referenzia col productNumber CiC (auto-assegnato), NON
+  // col codice POPS (che è il barCode). Usiamo il cicProductId mappato; se manca,
+  // fallback al prodotto generico (cfg.genericProductNumber = productNumber CiC del
+  // prodotto "VARIE", da configurare in config/cic).
+  private productRef(cicProductId?: string | number) {
+    const pn = (cicProductId != null && String(cicProductId).trim())
+      ? String(cicProductId).trim()
+      : this.cfg.genericProductNumber;
     return { productNumber: pn, self: `${this.cfg.baseUrl}/products/${encodeURIComponent(pn)}` };
   }
 
@@ -88,7 +94,7 @@ export class CicProvider implements BillingProvider {
         quantity: l.qty,
         unitNetPrice: l.unitNetPrice,
         discountPercentage: doc.discountPercentage,
-        product: this.productRef(l.code),
+        product: this.productRef(l.cicProductId),
         vatInfo: { vatAccount: { vatCode: this.cfg.vatCode } },
       })),
     };
@@ -132,9 +138,12 @@ export class CicProvider implements BillingProvider {
     const productLines = input.lines.map((l, i) => {
       const net = totals.lineNets[i];
       const vat = round2((net * this.cfg.vatRate) / 100);
-      const code = (l.code && l.code.trim()) ? l.code.trim() : this.cfg.genericProductNumber;
+      // product.id = productNumber CiC mappato (cicProductId), NON il codice POPS.
+      const pid = (l.cicProductId != null && String(l.cicProductId).trim())
+        ? String(l.cicProductId).trim()
+        : this.cfg.genericProductNumber;
       return {
-        product: { name: l.description, id: code, metaData: null },
+        product: { name: l.description, id: pid, metaData: null },
         chainId: null,
         lineNr: i + 1,
         location: null,
@@ -283,6 +292,51 @@ export class CicProvider implements BillingProvider {
     const base = ref.type === 'quotation' ? '/quotations' : '/orders';
     const res = await this.client.get(`${base}/${ref.id}`);
     return res?.pdf?.download || `${this.cfg.baseUrl}${base}/${ref.id}/pdf`;
+  }
+
+  // --- INDICI MAPPATURE (per il sync chiavi naturali → cic*, Fase 4) --------
+  // Scoperta 13/06 (sonda test-mapping.mjs): l'import nativo NON mette il codice
+  // POPS in productNumber (auto-assegnato) ma in `barCode`. La chiave naturale
+  // prodotti è quindi barCode; quella clienti è vatNumber. Carichiamo l'intero
+  // catalogo/anagrafica una volta e costruiamo le mappe in memoria (meno chiamate
+  // di una GET filtrata per record).
+
+  /** Mappa barCode(UPPER) → productNumber (id CiC del prodotto). */
+  async buildProductBarcodeIndex(): Promise<Map<string, string | number>> {
+    const map = new Map<string, string | number>();
+    let page = 0;
+    let hasMore = true;
+    while (hasMore && page < 50) {
+      const data = await this.client.get(`/products?pagesize=1000&skippages=${page}`);
+      const items = (data?.collection || []) as any[];
+      for (const p of items) {
+        if (p.barCode && p.productNumber != null) {
+          map.set(String(p.barCode).toUpperCase().trim(), p.productNumber);
+        }
+      }
+      hasMore = items.length >= 1000;
+      page++;
+    }
+    return map;
+  }
+
+  /** Mappa vatNumber → customerNumber per tutti i clienti CiC. */
+  async buildCustomerVatIndex(): Promise<Map<string, string | number>> {
+    const map = new Map<string, string | number>();
+    let page = 0;
+    let hasMore = true;
+    while (hasMore && page < 50) {
+      const data = await this.client.get(`/customers?pagesize=1000&skippages=${page}`);
+      const items = (data?.collection || []) as any[];
+      for (const c of items) {
+        if (c.vatNumber && c.customerNumber != null) {
+          map.set(String(c.vatNumber).trim(), c.customerNumber);
+        }
+      }
+      hasMore = items.length >= 1000;
+      page++;
+    }
+    return map;
   }
 
   // --- PRODOTTI (read-only check) -------------------------------------------

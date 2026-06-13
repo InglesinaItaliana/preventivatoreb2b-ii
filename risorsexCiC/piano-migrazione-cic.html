@@ -288,6 +288,8 @@
       <li><strong>IVA DDT emesso (#11)</strong>: <strong>stress test</strong> (<code>risorsexCiC/stress-ddt-iva.mjs</code>, 7 scenari coi casi di divergenza arrotondamento) → Reviso <strong>preserva la nostra IVA di testata</strong> (fiscalmente corretta: IVA sul totale) e <strong>riconcilia le righe alla testata</strong> → documento emesso sempre internamente coerente, anche sui centesimi. Nessuna modifica al payload necessaria.</li>
       <li><strong>FE-3b</strong>: <code>DeliveryView</code>/<code>useNovaSpedizioni</code>/<code>ClientDashboard</code> ora riconoscono i DDT CiC (<code>cic_ddt_*</code>) nel raggruppamento/etichette, non solo i FiC.</li>
       <li><strong>Hardening</strong>: cleanup della bozza orfana se l'emissione fallisce; <code>billingError</code> persistito sul fallimento DDT + badge in <code>DeliveryView</code>; <strong>30 test</strong> (regola totali + guardia anti-drift FE/BE + helper billing).</li>
+      <li><strong>Sync mappature (Fase 4) + scoperta chiave prodotti</strong>: sonda sul trial (<code>test-mapping.mjs</code>) → l'import nativo mette il codice POPS in <code>barCode</code>, <strong>non</strong> in <code>productNumber</code> (auto-assegnato). Chiavi naturali confermate: <strong>clienti = <code>vatNumber</code></strong>, <strong>prodotti = <code>barCode</code></strong>. Scritta la callable <code>syncCicMappings({dryRun})</code> (admin): popola <code>cicCustomerNumber</code>/<code>cicProductId</code>; <code>dryRun</code> default = solo report. Il write vero va alla <strong>Fase 4 sull'azienda definitiva</strong> (i numeri del trial non valgono in prod).</li>
+      <li><strong>Phase B (bug smascherato dalla scoperta)</strong>: il provider referenziava i prodotti col <em>codice grezzo</em> (<code>productNumber='C112'</code>) → in produzione punterebbe a un prodotto <strong>inesistente</strong>. Corretto: ordini/DDT ora referenziano il <strong><code>cicProductId</code> mappato</strong> (productNumber CiC vero), con fallback <code>VARIE</code>. Diventa effettivo dopo il sync di Fase 4. ⚠️ <code>config/cic.genericProductNumber</code> dev'essere il <strong>productNumber CiC</strong> del prodotto "VARIE", non la stringa.</li>
     </ul>
   </div>
 </section>
@@ -453,7 +455,7 @@
         <td><code>GET /products</code></td>
         <td><code>GET /products</code></td>
         <td><span class="feas yes">● Sì</span></td>
-        <td>Reviso: prezzo = <code>salesPrice</code>, codice = <code>productNumber</code>. <strong>L'IVA non sta sul prodotto</strong>, va per riga via <code>vatCode</code>.</td></tr>
+        <td>Reviso: prezzo = <code>salesPrice</code>. <strong>⚠️ Il codice POPS sta in <code>barCode</code></strong>, NON in <code>productNumber</code> (auto-assegnato dall'import) → il provider referenzia col <code>productNumber</code> mappato (vedi Phase B). <strong>L'IVA non sta sul prodotto</strong>, va per riga via <code>vatCode</code>.</td></tr>
       <tr><td><code>syncAddressesFromFiC</code></td>
         <td><code>GET /entities/clients?q=vat</code></td>
         <td><code>GET /customers?filter=vatNumber</code></td>
@@ -656,8 +658,9 @@
     <li><code>config/cic</code> (o secret env) — <code>X-AppSecretToken</code>, <code>X-AgreementGrantToken</code> della nuova azienda, più gli ID mappati: <code>vatCode22</code>, <code>numberSeries</code>, <code>unit</code> di default.</li>
     <li><code>config/billing</code> — <code>{ activeBackend: 'fic' | 'cic' }</code>: il flag del cutover + <strong>kill-switch</strong> per tornare a FiC se CiC va in crisi il giorno 1 (stesso pattern di <code>core/nebula.collabEnabled</code>).</li>
     <li><code>config/fic</code> — resta, in <strong>sola lettura</strong>, per il backlog e lo storico.</li>
-    <li>Mapping prodotti: aggiungere <code>cicProductId</code>/<code>productNumber</code> ai doc <code>products/*</code> (l'<code>id</code> attuale è l'ID FiC).</li>
-    <li>Mapping clienti: aggiungere <code>cicCustomerNumber</code> ai doc <code>users/*</code> (oggi c'è <code>ficId</code>).</li>
+    <li>Mapping prodotti: <code>cicProductId</code> (= <code>productNumber</code> CiC) ai doc <code>products/*</code>, agganciato per <strong><code>barCode</code> == codice POPS</strong> (doc id). Scritto da <code>syncCicMappings</code>.</li>
+    <li>Mapping clienti: <code>cicCustomerNumber</code> ai doc <code>users/*</code>, agganciato per <strong><code>vatNumber</code> == <code>piva</code></strong>. Scritto da <code>syncCicMappings</code>.</li>
+    <li><code>config/cic.genericProductNumber</code>: il <strong>productNumber CiC</strong> del prodotto generico "VARIE" (fallback righe senza mapping). NON la stringa "VARIE".</li>
   </ul>
 </section>
 
@@ -739,7 +742,7 @@
         <ul style="margin:0;">
           <li><strong>Clienti + prodotti</strong>: usare l'import nativo → popolano il registro vuoto della nuova azienda + risolvono il mapping IVA.</li>
           <li><strong>NON importare le fatture storiche</strong> nella nuova P.IVA (appartengono alla vecchia azienda) — salvo diversa indicazione del commercialista. I pagamenti non vengono importati comunque.</li>
-          <li><strong>Sync POPS (via API)</strong>: l'import non aggiorna Firestore → un passo di sync mappa per <em>chiave naturale</em> (P.IVA per i clienti, <code>code/productNumber</code> per i prodotti) e salva <code>cicCustomerNumber</code>/<code>cicProductId</code>. La logica di lookup esistente funziona già contro CiC dopo l'import.</li>
+          <li><strong>Sync POPS (via API)</strong> — callable <code>syncCicMappings({dryRun})</code> già scritta: l'import non aggiorna Firestore → mappa per <em>chiave naturale</em> (<strong><code>vatNumber</code></strong> per i clienti, <strong><code>barCode</code></strong> per i prodotti, confermate sul trial) e salva <code>cicCustomerNumber</code>/<code>cicProductId</code>. Lanciarla in <code>dryRun</code> per il report di match, poi <code>dryRun:false</code> sull'azienda definitiva per scrivere. ⚠️ Impostare anche <code>config/cic.genericProductNumber</code> = productNumber CiC del prodotto "VARIE".</li>
           <li>Riconciliazione: confrontare conteggi e prezzi FiC vs CiC dopo l'import.</li>
         </ul>
       </div>
@@ -882,7 +885,7 @@
   </div>
   <p class="muted">Risorse: <a href="https://api-docs.reviso.com/#tl-dr">api-docs.reviso.com</a> ·
   <a href="https://help.reviso.com/it/articles/61597-rest-api">help.reviso.com — REST API</a> ·
-  collection Postman + spike DDT (<code>test-ddt.mjs</code>, crea→emetti) + stress IVA (<code>stress-ddt-iva.mjs</code>) in <code>risorsexCiC/</code>.</p>
+  collection Postman + spike DDT (<code>test-ddt.mjs</code>, crea→emetti) + stress IVA (<code>stress-ddt-iva.mjs</code>) + sonda mappature (<code>test-mapping.mjs</code>, chiavi barCode/vatNumber) in <code>risorsexCiC/</code>.</p>
 </section>
 
 <!-- ════ 9 · DECISIONI ════ -->
