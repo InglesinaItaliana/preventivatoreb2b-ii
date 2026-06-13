@@ -256,12 +256,12 @@
       <tr><td><strong>0 · Setup & accessi</strong></td><td><span class="feas warn">▲ ~80%</span></td><td>Developer agreement + trial OK; manca attivazione (<code>api@reviso.com</code>) e grant <strong>azienda definitiva</strong>.</td></tr>
       <tr style="background:var(--s-green-glow);"><td><strong>1 · Spike totali</strong></td><td><span class="feas yes">● Completa</span></td><td>Regola half-up validata dal vivo, <strong>15/15</strong> casi-limite.</td></tr>
       <tr style="background:var(--s-green-glow);"><td><strong>2 · Astrazione BillingProvider</strong></td><td><span class="feas yes">● Completa</span></td><td>Interfaccia, FicProvider = path esistente, config/billing, billingBackend, campi cic_*.</td></tr>
-      <tr style="background:var(--s-green-glow);"><td><strong>3 · CicProvider</strong></td><td><span class="feas yes">● Completa</span></td><td>Cliente/ordine/preventivo/delete/PDF ✓ — <strong>DDT ✓</strong> (flusso crea→emetti→rileggi numero, validato trial 13/06).</td></tr>
+      <tr style="background:var(--s-green-glow);"><td><strong>3 · CicProvider</strong></td><td><span class="feas yes">● Completa</span></td><td>Cliente/ordine/preventivo/delete/PDF ✓ — <strong>DDT ✓</strong> (crea→emetti→rileggi numero + <strong>IVA emesso validata</strong> stress test, trial 13/06).</td></tr>
       <tr><td><strong>4 · Migrazione dati</strong></td><td><span class="feas rw">○ Da fare</span></td><td>Import nativo + mapping + prodotto "VARIE" → serve azienda definitiva.</td></tr>
       <tr><td><strong>5 · Test parallelo & totali</strong></td><td><span class="feas warn">▲ Parziale</span></td><td>Totali validati ✓; manca il run ampio su dati reali.</td></tr>
       <tr><td><strong>6 · Cutover</strong></td><td><span class="feas rw">○ Da fare</span></td><td>Flip <code>activeBackend='cic'</code> + kill-switch + monitoraggio.</td></tr>
       <tr><td><strong>7 · Drain / ordini aperti (variante)</strong></td><td><span class="feas rw">○ Da fare</span></td><td>Cutover netto + migrazione ordini aperti — decisione commercialista.</td></tr>
-      <tr style="background:var(--s-green-glow);"><td><strong>Frontend (FE-1/2/3/4)</strong></td><td><span class="feas yes">● Completa</span></td><td>Helper FiC/CiC, PDF POPS, wiring, badge errori, totali canonici gated. FE-3b deferita (Reviso).</td></tr>
+      <tr style="background:var(--s-green-glow);"><td><strong>Frontend (FE-1/2/3/4 + 3b)</strong></td><td><span class="feas yes">● Completa</span></td><td>Helper FiC/CiC, PDF POPS, wiring, badge errori, totali canonici gated. <strong>FE-3b ✓</strong> (13/06): DeliveryView/spedizioni riconoscono i DDT CiC.</td></tr>
     </tbody>
   </table>
   </div>
@@ -871,6 +871,9 @@
       <tr style="background:var(--s-green-glow);"><td><strong>Come si numera il DDT via API?</strong> <span class="feas yes">● Risolto</span></td>
         <td>Era il blocco della Fase 3: il POST non assegnava il numero.</td>
         <td><strong>Crea bozza → emetti</strong>: <code>POST /delivery-notes/sales/issue?filter=id$eq:{id}</code> assegna il numero dalla serie. Validato sul trial (13/06) + cablato nel <code>CicProvider</code>.</td></tr>
+      <tr style="background:var(--s-green-glow);"><td><strong>L'IVA del DDT emesso è coerente (testata vs righe)?</strong> <span class="feas yes">● Risolto</span></td>
+        <td>Un DDT con IVA incoerente sarebbe un problema fiscale.</td>
+        <td><strong>Stress test 13/06</strong> (<code>stress-ddt-iva.mjs</code>, 7 scenari coi casi di divergenza): Reviso preserva l'IVA di testata (sul totale) e riconcilia le righe → doc sempre coerente. Nessuna modifica al payload.</td></tr>
       <tr><td><strong>Rate limit Reviso?</strong></td>
         <td>I loop di sync prodotti/clienti possono sforare.</td>
         <td>Doc Reviso + test di carico leggero.</td></tr>
