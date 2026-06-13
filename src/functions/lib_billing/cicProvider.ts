@@ -115,19 +115,19 @@ export class CicProvider implements BillingProvider {
   }
 
   // --- DDT -------------------------------------------------------------------
-  // Payload allineato all'esempio ufficiale della Postman collection Reviso:
-  //  • product si referenzia con `product.id` (= productNumber), NON productNumber;
-  //  • i totali per riga vanno forniti (computeTotals);
-  //  • il numero va in numberSeries.numberSeriesSequenceElement.number.
-  // ⚠️ NUMERAZIONE: nel trial Reviso NON assegna il numero al DDT via API
-  //    (collezione number-series-sequence-elements vuota, /peek 404) anche
-  //    fornendo `number`. Gli ORDINI invece si auto-numerano. Da chiarire col
-  //    supporto Reviso (api@reviso.com) per l'agreement di produzione.
+  // Flusso CONFERMATO sul trial (2026-06-13, da risposta supporto Reviso):
+  //   1. POST /delivery-notes/sales                          → crea la BOZZA (status Draft, niente numero)
+  //   2. POST /delivery-notes/sales/issue?filter=id$eq:{id}  → EMETTE; Reviso assegna il numero dalla serie
+  //   3. GET  /delivery-notes/sales/{id}                     → rilegge il numero definitivo
+  // I DDT (come le fatture) hanno stati: il numero definitivo arriva solo con
+  // l'emissione. NON forziamo né pre-peschiamo il numero — lo assegna /issue
+  // dalla serie cfg.ddtNumberSeries. Lo stato attraversa Draft → BeingIssued →
+  // Issued (transitorio), perciò la rilettura tollera qualche tentativo.
+  // Payload riga allineato all'esempio ufficiale Postman: product via `product.id`
+  // (= productNumber), totali per riga forniti (computeTotals).
   async createDeliveryNote(input: DeliveryNoteInput): Promise<DocumentResult> {
     const ownerId = Number(input.customer.id);
     const totals = computeTotals(input.lines, 0, this.cfg.vatRate); // DDT: nessuno sconto globale
-    const year = (input.date || '').slice(0, 4);
-    const nextNum = await this.nextSeriesNumber(this.cfg.ddtNumberSeries, year);
 
     const productLines = input.lines.map((l, i) => {
       const net = totals.lineNets[i];
@@ -162,7 +162,7 @@ export class CicProvider implements BillingProvider {
       },
       notesAndAttachments: null,
       vatAmount: totals.vat, totalAmount: totals.gross,
-      deliveryNoteType: 'Sales', deliveryNoteStatus: 'Issued',
+      deliveryNoteType: 'Sales', deliveryNoteStatus: 'Draft', // bozza: l'emissione (e il numero) avviene via /issue
       owner: {
         address: null, zipCode: null, city: null,
         countryCode: { id: 'IT', metaData: null }, country: 'Italia',
@@ -171,7 +171,7 @@ export class CicProvider implements BillingProvider {
       },
       numberSeries: {
         prefix: 'DDT', sequenceType: 'Ordered',
-        numberSeriesSequenceElement: nextNum != null ? { number: nextNum, metaData: null } : null,
+        numberSeriesSequenceElement: null, // niente numero forzato: lo assegna /issue dalla serie
         id: this.cfg.ddtNumberSeries, metaData: null,
       },
       invoice: null, order: null,
@@ -190,15 +190,37 @@ export class CicProvider implements BillingProvider {
       additionalInfo: { currency: 'EUR', exchangeRate: 100.0, layout: null, project: null, tenderContractData: null },
     };
 
-    const res = await this.client.post('/delivery-notes/sales', ddt);
-    if (res?.errorCode) {
-      const msg = res.errors?.[0]?.message || res.message || res.errorCode;
-      throw new Error(`DDT CiC fallito: ${msg}`);
+    // 1) crea la BOZZA
+    const created = await this.client.post('/delivery-notes/sales', ddt);
+    if (created?.errorCode) {
+      const msg = created.errors?.[0]?.message || created.message || created.errorCode;
+      throw new Error(`DDT CiC: creazione bozza fallita: ${msg}`);
     }
-    const assigned = (res?.numberSeries?.numberSeriesSequenceElement || {}).number ?? nextNum ?? undefined;
+    const id = created?.id;
+    if (id == null) throw new Error('DDT CiC: la creazione non ha restituito un id.');
+
+    // 2) EMETTE: Reviso assegna il numero dalla serie. /issue ritorna un array;
+    //    in caso di errore torna un oggetto con errorCode (oppure il POST lancia).
+    //    Se l'emissione fallisce la BOZZA resterebbe orfana su Reviso → la
+    //    cancelliamo (best-effort) prima di propagare l'errore.
+    const filter = encodeURIComponent(`id$eq:${id}`);
+    try {
+      const issued = await this.client.post(`/delivery-notes/sales/issue?filter=${filter}`, undefined);
+      if (issued && !Array.isArray(issued) && issued.errorCode) {
+        const msg = issued.errors?.[0]?.message || issued.message || issued.errorCode;
+        throw new Error(`emissione rifiutata: ${msg}`);
+      }
+    } catch (e: any) {
+      await this.deleteDraftQuiet(id);
+      throw new Error(`DDT CiC: emissione fallita (id ${id}, bozza rimossa): ${e?.message || e}`);
+    }
+
+    // 3) rilegge il numero definitivo (tollera il transitorio BeingIssued)
+    const number = await this.readIssuedNumber(id);
+
     return {
-      id: res.id,
-      number: assigned,
+      id,
+      number: number ?? undefined,
       url: undefined,
       netAmount: totals.net,
       vatAmount: totals.vat,
@@ -206,16 +228,29 @@ export class CicProvider implements BillingProvider {
     };
   }
 
-  /** Prossimo numero della serie per l'anno (da number-series.peeks). */
-  private async nextSeriesNumber(seriesId: number, year: string): Promise<number | null> {
+  /** Cancella una bozza DDT rimasta orfana dopo un'emissione fallita (best-effort, non solleva). */
+  private async deleteDraftQuiet(id: number | string): Promise<void> {
     try {
-      const ns = await this.client.get(`/number-series/${seriesId}`);
-      const peeks = (ns?.peeks || []) as any[];
-      const pk = peeks.find((p) => (p.accountingYear || {}).year === year) || peeks[0];
-      return pk && pk.nextVoucherNumber != null ? pk.nextVoucherNumber : null;
+      await this.client.del(`/delivery-notes/sales/${id}`);
     } catch {
-      return null;
+      // best-effort: se non si riesce a pulire, l'errore principale resta quello di /issue
     }
+  }
+
+  /**
+   * Rilegge il DDT finché è `Issued` con un numero assegnato. Dopo /issue lo
+   * stato passa per `BeingIssued` (transitorio): qualche tentativo breve basta.
+   * Best-effort: ritorna il numero appena disponibile, altrimenti null.
+   */
+  private async readIssuedNumber(id: number | string): Promise<number | null> {
+    let num: number | null = null;
+    for (let attempt = 0; attempt < 4; attempt++) {
+      const dn = await this.client.get(`/delivery-notes/sales/${id}`);
+      num = dn?.numberSeries?.numberSeriesSequenceElement?.number ?? null;
+      if (num != null && dn?.deliveryNoteStatus === 'Issued') return num;
+      await new Promise((r) => setTimeout(r, 300));
+    }
+    return num;
   }
 
   // --- DELETE / URL ----------------------------------------------------------

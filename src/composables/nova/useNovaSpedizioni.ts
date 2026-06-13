@@ -17,7 +17,8 @@ export interface Spedizione {
   corriere: string
   trackingNumber: string
   dataConsegnaEffettiva: Date | null
-  fic_ddt_number?: string
+  // FE-3b: numero DDT a prescindere dal backend (FiC fic_ddt_number / CiC cic_ddt_number)
+  ddtNumber?: string | number
 }
 
 export function useNovaSpedizioni() {
@@ -50,7 +51,7 @@ export function useNovaSpedizioni() {
           corriere:              data.corriere              ?? '',
           trackingNumber:        data.trackingNumber        ?? '',
           dataConsegnaEffettiva: dataConsegna,
-          fic_ddt_number:        data.fic_ddt_number,
+          ddtNumber:             data.cic_ddt_number ?? data.fic_ddt_number,
         }
       })
 

@@ -64,11 +64,13 @@ const confermaRicezione = async (order: any) => {
     const batch = writeBatch(db);
     
     // 1. Cerchiamo se ci sono altri ordini legati allo stesso DDT (per archiviarli insieme)
+    //    FE-3b: il DDT può essere FiC (fic_ddt_id) o CiC (cic_ddt_id).
     let ordersToUpdate = [order];
-    if (order.fic_ddt_id) {
+    const ddtId = order.cic_ddt_id ?? order.fic_ddt_id;
+    if (ddtId) {
        // Filtra dalla lista locale tutti gli ordini SPEDITI con lo stesso ID DDT
-       ordersToUpdate = listaMieiPreventivi.value.filter(o => 
-          o.fic_ddt_id === order.fic_ddt_id && o.stato === 'SHIPPED'
+       ordersToUpdate = listaMieiPreventivi.value.filter(o =>
+          (o.cic_ddt_id ?? o.fic_ddt_id) === ddtId && o.stato === 'SHIPPED'
        );
     }
 

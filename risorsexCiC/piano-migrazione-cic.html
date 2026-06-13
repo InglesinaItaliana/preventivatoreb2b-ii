@@ -193,7 +193,8 @@
 <nav class="toc">
   <div class="brand"><span class="dot"></span><strong>POPS · MIGRAZIONE</strong></div>
   <div class="sub">FiC → CiC</div>
-  <a href="#sintesi" class="active">Sintesi esecutiva</a>
+  <a href="#stato" class="active">Stato avanzamento</a>
+  <a href="#sintesi">Sintesi esecutiva</a>
   <a href="#rischi">I 5 nodi critici</a>
   <div class="grp">Analisi</div>
   <a href="#inventario" class="num" data-n="1">Inventario connessioni</a>
@@ -234,6 +235,62 @@
     </div>
   </div>
 </div>
+
+<!-- ════ STATO AVANZAMENTO ════ -->
+<section id="stato" class="lead">
+  <h2><span class="kick">STATO</span>Stato avanzamento — 13/06/2026</h2>
+  <div class="box insight">
+    <div class="bt">▲ In sintesi</div>
+    <p style="margin:0;">Il layer FiC→CiC è <strong>scritto, testato e in PRODUZIONE</strong>, ma <strong>dormiente</strong>
+    (<code>config/billing.activeBackend</code> non esiste → tutto gira su FiC come prima). Commit
+    <code>038b177</code> (layer) + <code>8a638db</code> (hardening post code-review). Lato tecnico ~90% e già a bordo;
+    il <strong>numero DDT è risolto</strong> — Reviso ha confermato il flusso <em>crea bozza → emetti</em>
+    (<code>POST /delivery-notes/sales/issue</code>), <strong>validato sul trial il 13/06</strong> e cablato nel
+    <code>CicProvider</code>. Restano i passi <strong>operativi/fiscali</strong> (dati nuova azienda, cutover).</p>
+  </div>
+
+  <div class="tbl-wrap">
+  <table>
+    <thead><tr><th>Fase del piano</th><th>Stato</th><th>Note</th></tr></thead>
+    <tbody>
+      <tr><td><strong>0 · Setup & accessi</strong></td><td><span class="feas warn">▲ ~80%</span></td><td>Developer agreement + trial OK; manca attivazione (<code>api@reviso.com</code>) e grant <strong>azienda definitiva</strong>.</td></tr>
+      <tr style="background:var(--s-green-glow);"><td><strong>1 · Spike totali</strong></td><td><span class="feas yes">● Completa</span></td><td>Regola half-up validata dal vivo, <strong>15/15</strong> casi-limite.</td></tr>
+      <tr style="background:var(--s-green-glow);"><td><strong>2 · Astrazione BillingProvider</strong></td><td><span class="feas yes">● Completa</span></td><td>Interfaccia, FicProvider = path esistente, config/billing, billingBackend, campi cic_*.</td></tr>
+      <tr style="background:var(--s-green-glow);"><td><strong>3 · CicProvider</strong></td><td><span class="feas yes">● Completa</span></td><td>Cliente/ordine/preventivo/delete/PDF ✓ — <strong>DDT ✓</strong> (flusso crea→emetti→rileggi numero, validato trial 13/06).</td></tr>
+      <tr><td><strong>4 · Migrazione dati</strong></td><td><span class="feas rw">○ Da fare</span></td><td>Import nativo + mapping + prodotto "VARIE" → serve azienda definitiva.</td></tr>
+      <tr><td><strong>5 · Test parallelo & totali</strong></td><td><span class="feas warn">▲ Parziale</span></td><td>Totali validati ✓; manca il run ampio su dati reali.</td></tr>
+      <tr><td><strong>6 · Cutover</strong></td><td><span class="feas rw">○ Da fare</span></td><td>Flip <code>activeBackend='cic'</code> + kill-switch + monitoraggio.</td></tr>
+      <tr><td><strong>7 · Drain / ordini aperti (variante)</strong></td><td><span class="feas rw">○ Da fare</span></td><td>Cutover netto + migrazione ordini aperti — decisione commercialista.</td></tr>
+      <tr style="background:var(--s-green-glow);"><td><strong>Frontend (FE-1/2/3/4)</strong></td><td><span class="feas yes">● Completa</span></td><td>Helper FiC/CiC, PDF POPS, wiring, badge errori, totali canonici gated. FE-3b deferita (Reviso).</td></tr>
+    </tbody>
+  </table>
+  </div>
+
+  <h3>Coda di lavoro (in ordine)</h3>
+  <ol style="margin:0 0 8px 4px;">
+    <li><s><strong>Numero DDT + IVA DDT + FE-3b</strong></s> ✓ <strong>tutti chiusi il 13/06</strong>: numero via crea→emetti, IVA emesso validata anche sui casi-limite (stress test), FE-3b (DeliveryView/spedizioni) cablata. Vedi sotto.</li>
+    <li><strong>Dati azienda emittente</strong> reali in <code>COMPANY</code> (<code>billingPdfDraw.ts</code>) prima del cutover. <span class="muted">← prossimo passo concreto</span></li>
+    <li><strong>Fase 4</strong>: azienda CiC definitiva — grant produzione, import nativo clienti/prodotti, prodotto "VARIE", <code>config/cic</code> coi token reali.</li>
+    <li><strong>Fase 5</strong>: test parallelo ampio su dati reali.</li>
+    <li><strong>Fase 6/7</strong>: decisione commercialista (cutover netto) → flip <code>activeBackend='cic'</code> + kill-switch.</li>
+  </ol>
+  <div class="box action">
+    <div class="bt">◆ Code review (07/06/2026)</div>
+    <p style="margin:0;">Review multi-agente (27 agenti): 16 findings confermati, <strong>0 high, 0 regressioni FiC</strong>.
+    Risolti i rapidi + #1 (totali, chiuso empiricamente) + #6 (<code>netCanonico</code>) + #15/#8 (DDT senza prezzi).
+    Resta solo <strong>#10 (dati azienda)</strong>. <strong>#12 (numero DDT)</strong> e <strong>#11 (IVA DDT)</strong> chiusi il 13/06 (vedi sotto).</p>
+  </div>
+
+  <div class="box insight">
+    <div class="bt">▲ Sessione 13/06/2026 — DDT chiuso end-to-end (branch <code>feature/cic-ddt-issue</code>)</div>
+    <ul style="margin:0;">
+      <li><strong>Numero DDT (#12)</strong>: risposta supporto Reviso → i DDT hanno stati, il numero arriva con l'<strong>emissione</strong>. Flusso <em>crea bozza → <code>POST /delivery-notes/sales/issue?filter=id$eq:{id}</code> → rileggi numero</em>. Cablato nel <code>CicProvider</code> (rimosso il pre-peek della serie, che era il bug). Spike <code>risorsexCiC/test-ddt.mjs</code>.</li>
+      <li><strong>IVA DDT emesso (#11)</strong>: <strong>stress test</strong> (<code>risorsexCiC/stress-ddt-iva.mjs</code>, 7 scenari coi casi di divergenza arrotondamento) → Reviso <strong>preserva la nostra IVA di testata</strong> (fiscalmente corretta: IVA sul totale) e <strong>riconcilia le righe alla testata</strong> → documento emesso sempre internamente coerente, anche sui centesimi. Nessuna modifica al payload necessaria.</li>
+      <li><strong>FE-3b</strong>: <code>DeliveryView</code>/<code>useNovaSpedizioni</code>/<code>ClientDashboard</code> ora riconoscono i DDT CiC (<code>cic_ddt_*</code>) nel raggruppamento/etichette, non solo i FiC.</li>
+      <li><strong>Hardening</strong>: cleanup della bozza orfana se l'emissione fallisce; <code>billingError</code> persistito sul fallimento DDT + badge in <code>DeliveryView</code>; <strong>30 test</strong> (regola totali + guardia anti-drift FE/BE + helper billing).</li>
+    </ul>
+  </div>
+</section>
 
 <!-- ════ SINTESI ════ -->
 <section id="sintesi" class="lead">
@@ -381,7 +438,7 @@
         <td><code>GET /issued_documents/join</code> + <code>POST</code> delivery_note</td>
         <td><code>POST /delivery-notes/sales</code><br>(assemblato da Firestore)</td>
         <td><span class="feas rw">◐ Riscrittura</span></td>
-        <td><strong>Reviso non ha il "join" ordini→DDT.</strong> Ma POPS ha già tutte le righe in Firestore: si costruisce un unico DDT direttamente. <strong>Spike (trial IT):</strong> DDT creabile (serie 29, modello legacy con riferimenti <code>id</code>). Non auto-arrotonda né auto-totalizza, ma <strong>è irrilevante</strong>: il DDT è un documento di trasporto, <strong>i prezzi normalmente non si mettono</strong> → POPS lo crea con prodotto + quantità. La precisione fiscale dei totali vive su ordine (verificato ✓) e fattura. → §3, §4</td></tr>
+        <td><strong>Reviso non ha il "join" ordini→DDT.</strong> Ma POPS ha già tutte le righe in Firestore: si costruisce un unico DDT direttamente. <strong>Spike (trial IT):</strong> DDT creabile (serie 29, modello legacy con riferimenti <code>id</code>). <strong>Numerazione risolta (13/06):</strong> il DDT nasce in <em>bozza</em> e si <strong>emette</strong> con <code>POST /delivery-notes/sales/issue?filter=id$eq:{id}</code> → Reviso assegna il numero dalla serie (validato sul trial: numero 1, status <code>Issued</code>). Il DDT è un documento di trasporto, <strong>i prezzi normalmente non si mettono</strong> → POPS lo crea con prodotto + quantità. La precisione fiscale dei totali vive su ordine (verificato ✓) e fattura. → §3, §4</td></tr>
       <tr><td><code>cancelOrder</code> / <code>resetOrderState</code></td>
         <td><code>DELETE /issued_documents/{id}</code></td>
         <td><code>DELETE /orders/{n}</code><br><code>DELETE /delivery-notes/sales/{id}</code></td>
@@ -766,7 +823,13 @@
       (errore <code>S_V_87</code>) → prima de-archiviare (PUT <code>isArchived:false</code>) poi DELETE. Un <strong>prodotto referenziato
       non si elimina</strong> (403 "in use"). I <strong>DDT vivono su un microservizio separato</strong>
       (<code>reviso-delivery-note-app.azurewebsites.net</code> nel loro <code>self</code>): per le chiamate usare
-      <code>rest.reviso.com/delivery-notes/sales/{id}</code>, non il self.</span></span></li>
+      <code>rest.reviso.com/delivery-notes/sales/{id}</code>, non il self. <strong>Numerazione (13/06, da supporto Reviso):</strong>
+      i DDT — come le fatture — hanno <em>stati</em>; il numero definitivo arriva solo all'<strong>emissione</strong>. Flusso:
+      <code>POST /delivery-notes/sales</code> (bozza, <code>deliveryNoteStatus:'Draft'</code>, niente numero) →
+      <code>POST /delivery-notes/sales/issue?filter=id$eq:{id}</code> (Reviso assegna il numero dalla serie) →
+      <code>GET</code> per rileggerlo (lo stato passa per <code>BeingIssued</code> → <code>Issued</code>, transitorio).
+      <strong>Sul trial il DELETE di un DDT emesso è passato</strong> — ma in produzione le regole fiscali possono irrigidirsi (verificare).
+      Gli ORDINI invece non hanno stati → numero subito, nessun sezionale.</span></span></li>
     <li><span class="ic must">F</span><span class="tx"><strong>Metodi/termini di pagamento</strong>
       <span>FiC li usava in <code>payments_list</code>. Su Reviso stanno sul cliente (<code>paymentTerms</code>). Se servono scadenze in fattura, mappare; altrimenti default semplice.</span></span></li>
     <li><span class="ic info">G</span><span class="tx"><strong>Errori non più silenziosi</strong>
@@ -805,6 +868,9 @@
       <tr style="background:var(--s-green-glow);"><td><strong>Lo sconto: come riprodurlo?</strong> <span class="feas yes">● Risolto</span></td>
         <td>Riprodurre <code>totaleScontato</code> al centesimo.</td>
         <td><strong>Confermato</strong>: <code>discountPercentage</code> per riga esiste (test demo). Stessa % su ogni riga = sconto globale esatto. Residuo → <code>roundingAmount</code>.</td></tr>
+      <tr style="background:var(--s-green-glow);"><td><strong>Come si numera il DDT via API?</strong> <span class="feas yes">● Risolto</span></td>
+        <td>Era il blocco della Fase 3: il POST non assegnava il numero.</td>
+        <td><strong>Crea bozza → emetti</strong>: <code>POST /delivery-notes/sales/issue?filter=id$eq:{id}</code> assegna il numero dalla serie. Validato sul trial (13/06) + cablato nel <code>CicProvider</code>.</td></tr>
       <tr><td><strong>Rate limit Reviso?</strong></td>
         <td>I loop di sync prodotti/clienti possono sforare.</td>
         <td>Doc Reviso + test di carico leggero.</td></tr>
@@ -813,7 +879,7 @@
   </div>
   <p class="muted">Risorse: <a href="https://api-docs.reviso.com/#tl-dr">api-docs.reviso.com</a> ·
   <a href="https://help.reviso.com/it/articles/61597-rest-api">help.reviso.com — REST API</a> ·
-  collection Postman in <code>risorsexCiC/</code>.</p>
+  collection Postman + spike DDT (<code>test-ddt.mjs</code>, crea→emetti) + stress IVA (<code>stress-ddt-iva.mjs</code>) in <code>risorsexCiC/</code>.</p>
 </section>
 
 <!-- ════ 9 · DECISIONI ════ -->

@@ -515,12 +515,19 @@ const closeTrip = async () => {
   confirmModal.show = true;
 };
 
+// FE-3b: un DDT può essere FiC (fic_ddt_*) o CiC (cic_ddt_*). Helper unificanti
+// per raggruppare/etichettare a prescindere dal backend (un ordine porta solo
+// uno dei due set valorizzato).
+const ddtIdOf = (o: any): string | number | undefined => o?.cic_ddt_id ?? o?.fic_ddt_id;
+const ddtNumberOf = (o: any): string | number | undefined => o?.cic_ddt_number ?? o?.fic_ddt_number;
+
 const groupedTripStops = computed(() => {
   const groups: any[] = [];
   const processedKeys = new Set<string>();
 
   tripOrders.value.forEach(order => {
-    const key = order.fic_ddt_id ? `DDT_${order.fic_ddt_id}` : `ORD_${order.id}`;
+    const ddtId = ddtIdOf(order);
+    const key = ddtId ? `DDT_${ddtId}` : `ORD_${order.id}`;
 
     if (processedKeys.has(key)) return;
     processedKeys.add(key);
@@ -549,8 +556,8 @@ const groupedTripStops = computed(() => {
     let groupOrders: any[] = [];
     let firstOrder: any = order;
 
-    if (order.fic_ddt_id) {
-      groupOrders = tripOrders.value.filter(o => o.fic_ddt_id === order.fic_ddt_id);
+    if (ddtId) {
+      groupOrders = tripOrders.value.filter(o => ddtIdOf(o) === ddtId);
       firstOrder = groupOrders[0]!;
       totColli = groupOrders.reduce((s, o) => s + (Number(o.colli)||1), 0);
     } else {
@@ -559,20 +566,21 @@ const groupedTripStops = computed(() => {
     }
 
     groups.push({
-      type: order.fic_ddt_id ? 'DDT' : 'ORDER',
+      type: ddtId ? 'DDT' : 'ORDER',
       key,
-      
+
       cliente: firstOrder.cliente || 'Cliente',
       indirizzo: finalAddress, // <--- ORA È POPOLATO
-      commessa: order.fic_ddt_id ? `DDT #${firstOrder.fic_ddt_number || '?'}` : `Commessa ${firstOrder.commessa}`,
-      
+      commessa: ddtId ? `DDT #${ddtNumberOf(firstOrder) || '?'}` : `Commessa ${firstOrder.commessa}`,
+
       primaryOrder: firstOrder,
       orders: groupOrders,
       ids: groupOrders.map(o => o.id),
+      billingError: groupOrders.find(o => o.billingError)?.billingError,
       status: groupOrders.every(o => o.stato === 'DELIVERED') ? 'DELIVERED' : 'OPEN',
-      
+
       totalColli: totColli,
-      infoColli: order.fic_ddt_id 
+      infoColli: ddtId
           ? `${groupOrders.length} Ordini • ${totColli} Colli`
           : `1 Ordine • ${totColli} Colli`
     });
@@ -587,8 +595,9 @@ const getShipments = (list: Order[]) => {
   const ddtMap = new Map<string, Order[]>();
 
   list.forEach(o => {
-    if (o.fic_ddt_id) {
-      const key = String(o.fic_ddt_id);
+    const ddtId = ddtIdOf(o);
+    if (ddtId) {
+      const key = String(ddtId);
       if (!ddtMap.has(key)) ddtMap.set(key, []);
       ddtMap.get(key)!.push(o);
     } else {
@@ -600,7 +609,8 @@ const getShipments = (list: Order[]) => {
         info: `Ref: ${o.commessa}`,
         colli: Number(o.colli) || 1,
         citta: o.citta,
-        provincia: o.provincia
+        provincia: o.provincia,
+        billingError: o.billingError,
       });
     }
   });
@@ -617,10 +627,11 @@ const getShipments = (list: Order[]) => {
       key: `DDT_${ddtId}`,
       ids: orders.map(o => o.id),
       cliente: first.cliente,
-      info: `DDT #${first.fic_ddt_number} • ${orders.length} Ordini`,
+      info: `DDT #${ddtNumberOf(first)} • ${orders.length} Ordini`,
       colli: totColli,
       citta: first.citta,
-      provincia: first.provincia
+      provincia: first.provincia,
+      billingError: orders.find(o => o.billingError)?.billingError,
     });
   });
 
@@ -727,7 +738,10 @@ const isSelected = (ids: string[]) => {
                               <div class="flex-1 min-w-0">
                                   <div class="flex justify-between items-center mb-1">
                                       <h4 class="font-bold text-slate-900 truncate text-sm">{{ shipment.cliente }}</h4>
-                                      <span v-if="shipment.isDdt" class="ml-2 text-[9px] font-black bg-slate-900 text-white px-1.5 py-0.5 rounded uppercase tracking-wider shrink-0 shadow-sm">DDT</span>
+                                      <div class="flex items-center gap-1 shrink-0">
+                                        <span v-if="shipment.billingError" :title="shipment.billingError" class="text-[9px] font-black bg-red-100 text-red-700 border border-red-200 px-1.5 py-0.5 rounded uppercase tracking-wider">⚠ Errore</span>
+                                        <span v-if="shipment.isDdt" class="text-[9px] font-black bg-slate-900 text-white px-1.5 py-0.5 rounded uppercase tracking-wider shadow-sm">DDT</span>
+                                      </div>
                                   </div>
                                   <div class="flex items-center gap-2 text-xs text-slate-500">
                                       <span class="truncate">{{ shipment.citta }}</span>
@@ -893,6 +907,7 @@ const isSelected = (ids: string[]) => {
                         </p>
                         
                         <div class="flex items-center flex-wrap gap-2 mb-4">
+                           <span v-if="stop.billingError" :title="stop.billingError" class="text-[10px] font-black bg-red-100 text-red-700 border border-red-200 px-2 py-1 rounded-lg uppercase tracking-wider">⚠ Errore fatturazione</span>
                            <span v-if="stop.type === 'DDT'" class="text-[10px] font-black bg-slate-900 text-white px-2 py-1 rounded-lg uppercase tracking-wider shadow-sm">DDT</span>
                            <span class="text-xs font-bold bg-slate-100 text-slate-600 px-2.5 py-1 rounded-lg border border-slate-200">{{ stop.commessa }}</span>
                            <span class="text-xs font-medium text-slate-400 px-1">{{ stop.infoColli }}</span>

@@ -1404,6 +1404,7 @@ async function creaDdtCumulativoCiC(
                 corriere: tipoTrasporto === 'COURIER' ? corriere : null,
                 trackingCode: tipoTrasporto === 'COURIER' ? tracking : null,
                 dataSpedizione: admin.firestore.FieldValue.serverTimestamp(),
+                billingError: admin.firestore.FieldValue.delete(), // pulisce un errore di un tentativo precedente
             });
         }
         await batch.commit();
@@ -1411,7 +1412,19 @@ async function creaDdtCumulativoCiC(
         return { success: true, cic_id: ddt.id };
     } catch (error: any) {
         console.error('❌ [CIC DDT] Errore:', error?.response ? JSON.stringify(error.response.data) : error?.message);
-        return { success: false, message: 'Errore CiC: ' + (error?.message || 'sconosciuto') };
+        const msg = 'Errore CiC: ' + (error?.message || 'sconosciuto');
+        // Persistiamo l'errore sugli ordini coinvolti così la failure è DUREVOLE
+        // (visibile in Admin e nella vista logistica, non solo nella modale).
+        try {
+            const errBatch = db.batch();
+            for (const id of orderIds) {
+                errBatch.update(db.collection('preventivi').doc(id), { billingError: msg });
+            }
+            await errBatch.commit();
+        } catch (e) {
+            console.error('⚠️ [CIC DDT] Impossibile persistere billingError:', (e as any)?.message);
+        }
+        return { success: false, message: msg };
     }
 }
 
