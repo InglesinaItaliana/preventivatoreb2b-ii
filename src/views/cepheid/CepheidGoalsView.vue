@@ -11,6 +11,8 @@ import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
 import { useCan } from '../../composables/sidera/useCan'
 import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
 import { yearToDates } from '../../composables/cepheid/usePeriods'
+import { writeBatch, doc } from 'firebase/firestore'
+import { db } from '../../firebase'
 
 const scrollEl = ref<HTMLElement | null>(null)
 const { hidden: headerHidden } = useAutoHideHeader(scrollEl)
@@ -18,7 +20,7 @@ const { hidden: headerHidden } = useAutoHideHeader(scrollEl)
 const route  = useRoute()
 const router = useRouter()
 const scopeBase = computed(() => route.path.startsWith('/sidera') ? '/sidera' : '/cepheid')
-const { obiettiviAttivi, loading, createObiettivo, updateObiettivo, deleteObiettivo } = useObiettivi()
+const { obiettiviAttivi, loading, createObiettivo, updateObiettivo } = useObiettivi()
 
 // Obiettivi riservati a chi può gestirli (solo ADMIN). Accesso diretto degli
 // altri ruoli → rimando alla root del modulo. Attende currentUser (async-auth).
@@ -110,10 +112,17 @@ async function submitGoal() {
 async function deleteGoal(g: Obiettivo) {
   if (!isAdmin.value) return
   if (!confirm('Eliminare definitivamente questo obiettivo? I progetti collegati restano, ma non saranno più associati.')) return
-  for (const p of linkedFor(g.id)) {
-    await updateProject(p.id, { obiettivoId: null })
+  try {
+    // Atomico: scollega i progetti (obiettivoId:null) ed elimina l'obiettivo in un solo
+    // commit → niente obiettivoId "dangling" se l'operazione si interrompe a metà.
+    const batch = writeBatch(db)
+    for (const p of linkedFor(g.id)) batch.update(doc(db, 'projects', p.id), { obiettivoId: null })
+    batch.delete(doc(db, 'obiettivi', g.id))
+    await batch.commit()
+  } catch (e) {
+    console.error('[CEPHEID] deleteGoal error', e)
+    alert("Impossibile eliminare l'obiettivo. Riprova.")
   }
-  await deleteObiettivo(g.id)
 }
 
 // ── Collega progetti (modal) ────────────────────────────────────────────────
@@ -126,7 +135,11 @@ function openLinkModal(g: Obiettivo) {
 }
 async function linkProject(projectId: string) {
   if (!linkTargetId.value) return
-  await updateProject(projectId, { obiettivoId: linkTargetId.value })
+  try {
+    await updateProject(projectId, { obiettivoId: linkTargetId.value })
+  } catch (e) {
+    console.error('[CEPHEID] linkProject error', e)
+  }
 }
 
 function openProject(id: string) {

@@ -110,10 +110,6 @@ export function useObiettivi() {
     await updateDoc(doc(db, 'obiettivi', id), payload)
   }
 
-  async function archiveObiettivo(id: string) {
-    await updateDoc(doc(db, 'obiettivi', id), { stato: 'archiviato' })
-  }
-
   async function deleteObiettivo(id: string) {
     await deleteDoc(doc(db, 'obiettivi', id))
   }
@@ -122,5 +118,5 @@ export function useObiettivi() {
     obiettivi.value.filter(o => o.stato !== 'archiviato')
   )
 
-  return { obiettivi, obiettiviAttivi, loading, createObiettivo, updateObiettivo, archiveObiettivo, deleteObiettivo }
+  return { obiettivi, obiettiviAttivi, loading, createObiettivo, updateObiettivo, deleteObiettivo }
 }
