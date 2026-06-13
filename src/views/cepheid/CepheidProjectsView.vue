@@ -94,7 +94,12 @@ async function confirmDelete(id: string, e: Event) {
   e.stopPropagation()
   if (!confirm("Eliminare il progetto e tutte le sue azioni? L'operazione è irreversibile.")) return
   menuOpen.value = null
-  await deleteProject(id)
+  try {
+    await deleteProject(id)
+  } catch (err) {
+    console.error('[CEPHEID] deleteProject error', err)
+    alert("Impossibile eliminare il progetto. Riprova.")
+  }
 }
 
 function obiettivoFor(id: string | null) {
@@ -132,15 +137,22 @@ function openEditProjModal(p: Project, e: Event) {
   projForm.value = {
     name:        p.name,
     description: p.description,
-    dueDate:     p.dueDate ? p.dueDate.toISOString().split('T')[0] : '',
+    dueDate:     p.dueDate ? toDateInput(p.dueDate) : '',
     obiettivoId: p.obiettivoId ?? '',
   }
   showProjModal.value = true
 }
 
-function parseDateInput(s: string): Date {
+function parseDateInput(s: string): Date | null {
   const [y, m, d] = s.split('-').map(Number)
-  return new Date(y, m - 1, d)
+  if (!y || !m || !d) return null
+  const dt = new Date(y, m - 1, d)
+  return isNaN(dt.getTime()) ? null : dt
+}
+// YYYY-MM-DD in ora LOCALE (toISOString è UTC → sfasa di -1 giorno a ovest di UTC)
+function toDateInput(d: Date): string {
+  const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
 }
 
 async function submitProject() {

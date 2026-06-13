@@ -57,18 +57,25 @@ const avColors = computed<Record<string, { bg: string; name: string }>>(() => {
 
 <style scoped>
 .avg { display: flex; align-items: center; flex-wrap: wrap; gap: 4px; flex: 0 1 auto; cursor: pointer; }
-.avg.is-open, .avg:hover { gap: 6px; }
+.avg.is-open { gap: 6px; }
 /* Il bordo avvolge l'INTERA pillola (avatar + nome): in stato espanso non deve
    chiudersi attorno al cerchio dell'avatar. Quindi il ring lo mette la pillola
    e l'avatar dentro lo annulla (box-shadow:none, vince per specificità sul
    ring globale di StarAvatar). */
 .av-pill { display: inline-flex; align-items: center; background: #05090F; border-radius: 999px; border: 1px solid var(--md-sys-color-outline-variant); transition: padding-right .2s ease; }
-.avg.is-open .av-pill, .avg:hover .av-pill { padding-right: 10px; }
+.avg.is-open .av-pill { padding-right: 10px; }
 .av-pill .av { border-radius: 50%; flex: 0 0 auto; box-shadow: none; }
 .av-name {
   max-width: 0; overflow: hidden; white-space: nowrap; opacity: 0; padding-left: 0;
   color: #fff; font-size: 11px; font-weight: 500; line-height: 1;
   transition: max-width .22s ease, opacity .15s ease, padding-left .2s ease;
 }
-.avg.is-open .av-name, .avg:hover .av-name { max-width: 160px; opacity: 1; padding-left: 4px; }
+.avg.is-open .av-name { max-width: 160px; opacity: 1; padding-left: 4px; }
+/* Espansione al passaggio del mouse SOLO su device con hover reale: su iOS il
+   :hover si "incolla" al primo tap e confliggerebbe col toggle .is-open (tap). */
+@media (hover: hover) {
+  .avg:hover { gap: 6px; }
+  .avg:hover .av-pill { padding-right: 10px; }
+  .avg:hover .av-name { max-width: 160px; opacity: 1; padding-left: 4px; }
+}
 </style>

@@ -22,7 +22,7 @@ const { currentUser } = useCurrentUser()
 const { can } = useCan()
 watch(currentUser, (u) => { if (u && !can('canTriage')) router.replace('/cepheid') }, { immediate: true })
 
-const { tasks, loading, updateTask, deleteTask, fileStandaloneTask, attachToDeliverable } = useAllTasks()
+const { tasks, loading, updateTask, deleteTask, fileStandaloneTask, attachToDeliverable, detachFromDeliverable } = useAllTasks()
 const { activeProjects } = useProjects()
 const { members } = useTeamMembers()
 
@@ -47,6 +47,13 @@ async function onSmista(task: Task, d: { assignees: string[]; priority: 'alta' |
       await updateTask(null, task.id, { assignees, priority: d.priority, triaged: true })
     } else {
       await updateTask(task.projectId, task.id, { assignees, priority: d.priority, triaged: true, milestoneId: d.deliverableId ? null : (d.milestoneId || null) })
+      // Stacca la task da eventuali deliverable che la referenziano già (≠ destinazione)
+      // per non lasciarla agganciata in due fasi diverse.
+      for (const del of deliverables.value) {
+        if (del.projectId === task.projectId && del.id !== d.deliverableId && del.deliverableTaskIds.includes(task.id)) {
+          await detachFromDeliverable(task.projectId, del.id, task.id)
+        }
+      }
       if (d.deliverableId) await attachToDeliverable(task.projectId, d.deliverableId, task.id)
     }
   } catch (e) { console.error('[SMISTAMENTO] errore smista', e) }

@@ -18,9 +18,10 @@ const { projects, activeProjects, updateProject } = useProjects()
 
 const goal = computed(() => obiettivi.value.find(o => o.id === goalId.value))
 
-// Tutti i progetti collegati (non archiviati)
+// Progetti collegati — stesso filtro di GoalsView (non archiviati E attivi),
+// così conteggi e percentuale coincidono tra lista obiettivi e dettaglio.
 const linkedProjects = computed(() =>
-  projects.value.filter(p => !p.archived && p.obiettivoId === goalId.value)
+  projects.value.filter(p => !p.archived && p.active !== false && p.obiettivoId === goalId.value)
 )
 
 const unlinkedProjects = computed(() =>
@@ -37,25 +38,33 @@ const stats = computed(() => {
     progetti:   linkedProjects.value.length,
     taskTotali,
     taskDone,
-    percentuale: taskTotali > 0 ? Math.round((taskDone / taskTotali) * 100) : 0,
+    percentuale: taskTotali > 0 ? Math.min(100, Math.round((taskDone / taskTotali) * 100)) : 0,
   }
 })
 
 function pct(p: { taskCount: number; doneCount: number }) {
   if (!p.taskCount) return 0
-  return Math.round((p.doneCount / p.taskCount) * 100)
+  return Math.min(100, Math.max(0, Math.round((p.doneCount / p.taskCount) * 100)))
 }
 
 // ── Collega progetto modal ────────────────────────────────────────────────
 const showLinkModal = ref(false)
 
 async function linkProject(projectId: string) {
-  await updateProject(projectId, { obiettivoId: goalId.value })
-  showLinkModal.value = false
+  try {
+    await updateProject(projectId, { obiettivoId: goalId.value })
+    showLinkModal.value = false
+  } catch (e) {
+    console.error('[CEPHEID] linkProject error', e)
+  }
 }
 
 async function unlinkProject(projectId: string) {
-  await updateProject(projectId, { obiettivoId: null })
+  try {
+    await updateProject(projectId, { obiettivoId: null })
+  } catch (e) {
+    console.error('[CEPHEID] unlinkProject error', e)
+  }
 }
 
 const descExpanded = ref(false)

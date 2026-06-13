@@ -124,6 +124,17 @@ export function isOwnTask(task: TaskLike, _myEmail?: string | null, myUid?: stri
   return false
 }
 
+/** True se la task va nella vista "Le mie azioni" (semantica *strict*, branch
+ *  cepheid-mie-strict): assegnata a me, OPPURE creata da me ma SENZA assegnatari
+ *  (es. quick-add, finché non viene smistata). Le azioni che ho creato e delegato
+ *  ad altri NON sono "mie". Definizione canonica condivisa da Azioni e Scadenze. */
+export function isMyAction(task: TaskLike, myUid?: string | null): boolean {
+  const assignees = task.assignees ?? []
+  if (!myUid) return false
+  if (assignees.includes(myUid)) return true
+  return task.createdBy === myUid && assignees.length === 0
+}
+
 /** Può editare/eliminare i campi della task. */
 export function canEditTask(caps: Capabilities, task: TaskLike, myEmail?: string | null, myUid?: string | null): boolean {
   if (caps.canEditAnyTask) return true
