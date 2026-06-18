@@ -66,10 +66,14 @@ const tabDefs = computed(() => [
 const grouped = computed(() => {
   const map: Record<string, typeof tasks.value> = {}
   for (const s of states.value) map[s.id] = []
+  const fallback = states.value[0]?.id ?? 'todo'
   for (const t of taskItems.value) {
     if (t.completedAt) continue
-    if (!map[t.status]) map[t.status] = []
-    map[t.status].push(t)
+    // status orfano (rimosso dalla config del progetto): dirottato sulla prima colonna
+    // così il task NON sparisce dal Kanban (resta coerente col taskCount).
+    const key = map[t.status] ? t.status : fallback
+    if (!map[key]) map[key] = []
+    map[key].push(t)
   }
   return map
 })
@@ -83,21 +87,38 @@ function formatDue(d: Date | null) {
   return new Intl.DateTimeFormat('it-IT', { day: 'numeric', month: 'short' }).format(d)
 }
 
-function pct(p: { taskCount: number; doneCount: number }) {
-  if (!p.taskCount) return 0
-  return Math.round((p.doneCount / p.taskCount) * 100)
-}
+// Progresso "lavoro" LIVE = task completati / task totali, calcolato dai doc reali
+// (taskItems) e NON dai contatori denormalizzati doneCount/taskCount (che driftano).
+// Stessa definizione di useProjectTimeline.realTasks → coincide con la barra della card.
+const liveProgress = computed(() => {
+  const total = taskItems.value.length
+  const done = taskItems.value.filter(t => !!t.completedAt).length
+  return { total, done, pct: total ? Math.round((done / total) * 100) : 0 }
+})
 
 const pendingDone = ref<Set<string>>(new Set())
+function setWithout(s: Set<string>, id: string): Set<string> {
+  const n = new Set(s); n.delete(id); return n
+}
 
 async function doComplete(t: { id: string }) {
   if (pendingDone.value.has(t.id)) return
   pendingDone.value = new Set([...pendingDone.value, t.id])
-  await completeTask(t.id)
+  try {
+    await completeTask(t.id)
+  } catch (e) {
+    console.error('[CEPHEID] complete error', e)
+    pendingDone.value = setWithout(pendingDone.value, t.id)   // rollback: la spunta non resta bloccata
+  }
 }
 
 async function doUncomplete(t: { id: string }) {
-  await uncompleteTask(t.id)
+  pendingDone.value = setWithout(pendingDone.value, t.id)     // ripulisce il flag ottimistico
+  try {
+    await uncompleteTask(t.id)
+  } catch (e) {
+    console.error('[CEPHEID] uncomplete error', e)
+  }
 }
 
 const showDone = ref(false)
@@ -111,7 +132,11 @@ function openStatusMenu(id: string) {
 }
 async function changeStatus(taskId: string, newStatus: string) {
   movingTaskId.value = ''
-  await updateTaskStatus(taskId, newStatus)
+  try {
+    await updateTaskStatus(taskId, newStatus)
+  } catch (e) {
+    console.error('[CEPHEID] changeStatus error', e)
+  }
 }
 
 // ── MILESTONE ─────────────────────────────────────────────────────────────
@@ -188,8 +213,12 @@ let notesTimer: ReturnType<typeof setTimeout> | null = null
   try {
     const snap = await getDoc(doc(db, 'projects', projectId))
     if (snap.exists()) notesDraft.value = snap.data().notes ?? ''
-  } catch (_) { /* ignore */ }
-  finally { notesLoaded = true }
+    // Abilita l'autosave SOLO dopo una lettura riuscita: se la getDoc fallisce non
+    // sblocchiamo il salvataggio, così un draft vuoto non sovrascrive note esistenti.
+    notesLoaded = true
+  } catch (e) {
+    console.error('[CEPHEID notes] load error — autosave disabilitato per non sovrascrivere', e)
+  }
 })()
 
 function onNotesInput() {
@@ -237,7 +266,7 @@ if (newTaskTick) {
     <MdPageHeader
       v-if="project"
       :title="project.name"
-      :subtitle="`${project.doneCount}/${project.taskCount} azioni · ${pct(project)}%`"
+      :subtitle="`${liveProgress.done}/${liveProgress.total} azioni · ${liveProgress.pct}%`"
       :accent-color="project.color"
     >
       <template #tools>

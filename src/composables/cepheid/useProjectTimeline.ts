@@ -21,6 +21,16 @@ function startOfDay(d: Date) { const x = new Date(d); x.setHours(0, 0, 0, 0); re
 const byDueThenCreated = (a: ProjectTask, b: ProjectTask) =>
   (a.dueDate?.getTime() ?? Infinity) - (b.dueDate?.getTime() ?? Infinity)
   || a.createdAt.getTime() - b.createdAt.getTime()
+// Sequenza fasi: rispetta `order` esplicito quando presente (entrambi numerici),
+// altrimenti ricade su data→creazione. Un deliverable con order viene prima di uno senza.
+const byOrderThenDue = (a: ProjectTask, b: ProjectTask) => {
+  const oa = typeof a.order === 'number' ? a.order : null
+  const ob = typeof b.order === 'number' ? b.order : null
+  if (oa !== null && ob !== null && oa !== ob) return oa - ob
+  if (oa !== null && ob === null) return -1
+  if (oa === null && ob !== null) return 1
+  return byDueThenCreated(a, b)
+}
 
 /* ============================ view-model ============================ */
 export type MarkerState = 'done' | 'late' | 'timed' | 'untimed'
@@ -148,8 +158,8 @@ export function useProjectTimeline(
       if (d.milestoneId && delivByM.has(d.milestoneId)) delivByM.get(d.milestoneId)!.push(d)
       else noneDelivs.push(d)
     })
-    delivByM.forEach(arr => arr.sort(byDueThenCreated))
-    noneDelivs.sort(byDueThenCreated)
+    delivByM.forEach(arr => arr.sort(byOrderThenDue))
+    noneDelivs.sort(byOrderThenDue)
 
     // ordine globale dei deliverable + ref milestone
     const ordered: { milestoneId: string; m: ProjectTask | null; delivs: ProjectTask[] }[] = []
@@ -252,15 +262,20 @@ export function useProjectTimeline(
   })
 
   /* ---------------- barre top ---------------- */
+  // "Lavoro" = completamento LIVE su TUTTI i task reali del progetto (non solo
+  // quelli dentro una fase): fonte unica condivisa con l'header del dettaglio
+  // progetto. I marker restano le fasi, posizionati sulla stessa scala (task in
+  // fase cumulati / totale task) → con task sciolti gli ultimi pip non toccano il
+  // 100%, e questo è corretto: la barra rappresenta tutto il lavoro, non solo le fasi.
   const workBar = computed(() => {
-    const all = phasesFlat.value.reduce((s, p) => s + p.tasks.length, 0)
-    const done = phasesFlat.value.reduce((s, p) => s + p.tasks.filter(t => t.done).length, 0)
+    const total = realTasks.value.length
+    const done = realTasks.value.filter(t => !!t.completedAt).length
     let cum = 0
     const marks = phasesFlat.value.map(p => {
       cum += p.tasks.length
-      return { pct: all ? cum / all * 100 : 0, reached: p.ready, label: p.delivName }
+      return { pct: total ? cum / total * 100 : 0, reached: p.ready, label: p.delivName }
     })
-    return { done, total: all, pct: all ? Math.round(done / all * 100) : 0, marks }
+    return { done, total, pct: total ? Math.round(done / total * 100) : 0, marks }
   })
 
   const projectEnd = computed<Date>(() => {
@@ -306,14 +321,26 @@ export function useProjectTimeline(
     return null
   }
 
+  /* ---------------- gating (difesa logica, non solo CSS) ---------------- */
+  // Una fase/task "locked" (la milestone precedente non è raggiunta) non deve essere
+  // mutabile: i controlli sono già nascosti in UI, ma le funzioni vanno protette anche
+  // a livello logico (pointer-events:none è aggirabile). Orfani/sconosciuti = non locked.
+  function isTaskLocked(taskId: string): boolean {
+    for (const p of phasesFlat.value) if (p.tasks.some(t => t.id === taskId)) return !p.unlocked
+    for (const g of groups.value) if (g.directTasks.some(t => t.id === taskId)) return !g.unlocked
+    return false
+  }
+
   /* ---------------- azioni ---------------- */
   async function toggleDone(taskId: string) {
+    if (isTaskLocked(taskId)) return
     const t = tasks.value.find(x => x.id === taskId); if (!t) return
     if (t.completedAt) await writers.uncompleteTask(taskId)
     else await writers.completeTask(taskId)
   }
 
   async function toggleTimed(taskId: string) {
+    if (isTaskLocked(taskId)) return
     const t = tasks.value.find(x => x.id === taskId); if (!t) return
     const ctx = contextOf(taskId)
     if (t.startDate && t.dueDate) {
@@ -326,6 +353,7 @@ export function useProjectTimeline(
   }
 
   async function commitDrag(taskId: string, s: number, d: number) {
+    if (isTaskLocked(taskId)) return
     const ctx = contextOf(taskId); if (!ctx) return
     const startDate = addD(ctx.windowStart, s)
     const dueDate = addD(ctx.windowStart, s + d)
@@ -333,6 +361,8 @@ export function useProjectTimeline(
   }
 
   async function setPhaseDue(phase: PhaseVM, iso: string) {
+    // fase bloccata o già approvata: la scadenza non si tocca (coerente con la UI)
+    if (!phase.unlocked || phase.approved) return
     const nd = startOfDay(parseISO(iso))
     const min = addD(phase.windowStart, 1)
     const max = startOfDay(parseISO(phase.maxDueIso))
@@ -349,7 +379,12 @@ export function useProjectTimeline(
     await writers.updateProject(project.value.id, { startDate, dueDate })
   }
 
-  const approve = (id: string) => writers.approvePhase(id)
+  // Approva solo se la fase è effettivamente approvabile (sbloccata, pronta, non già approvata)
+  const approve = (id: string) => {
+    const ph = phasesFlat.value.find(p => p.id === id)
+    if (ph && !ph.canApprove) return Promise.resolve()
+    return writers.approvePhase(id)
+  }
   const unapprove = (id: string) => writers.unapprovePhase(id)
 
   const projectStartTs = computed(() => projectStart.value.getTime())

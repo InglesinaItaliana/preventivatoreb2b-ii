@@ -81,6 +81,7 @@ function onUp() {
   else dx.value = 0
 }
 function flyOut(dir: 'left' | 'right') {
+  if (leaving.value) return   // guard: evita doppia emissione (doppio tap / swipe+click)
   leaving.value = dir
   setTimeout(() => { dir === 'right' ? doSmista() : emit('delete') }, 200)
 }

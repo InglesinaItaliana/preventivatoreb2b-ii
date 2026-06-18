@@ -6,6 +6,8 @@ import { useAllTasks, createStandaloneTask } from '../../composables/sidera/useA
 import CepheidActionCard from '../../components/cepheid/CepheidActionCard.vue'
 import { useProjects } from '../../composables/sidera/useProjects'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
+import { useCan } from '../../composables/sidera/useCan'
+import { isMyAction, canCompleteTask } from '../../router/permissions'
 import { useTeamMembers, displayName, starAvatarProps, toUids } from '../../composables/sidera/useTeamMembers'
 import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
 
@@ -16,7 +18,13 @@ import StarAvatar from '../../components/shared/StarAvatar.vue'
 const { tasks, loading, completeTask } = useAllTasks()
 const { activeProjects } = useProjects()
 const { currentUser } = useCurrentUser()
+const { caps } = useCan()
 const { members } = useTeamMembers()
+
+// Permessi CEPHEID per ruolo (POLARIS Az.9) — allineati a CepheidActionsView.
+const canCreate = computed(() => caps.value.canCreateTasks)
+const myEmail = computed(() => currentUser.value?.email ?? '')
+const myUid   = computed(() => currentUser.value?.uid ?? '')
 
 function projectName(id: string) {
   return activeProjects.value.find(p => p.id === id)?.name ?? ''
@@ -26,21 +34,28 @@ function projectColor(id: string) {
 }
 
 const pendingDone = ref<Set<string>>(new Set())
-async function doComplete(t: { id: string; projectId: string }) {
+async function doComplete(t: { id: string; projectId: string; assignees?: string[]; createdBy?: string }) {
   if (pendingDone.value.has(t.id)) return
+  if (!canCompleteTask(caps.value, t, myEmail.value, myUid.value)) return
   pendingDone.value = new Set([...pendingDone.value, t.id])
-  await completeTask(t.projectId, t.id)
+  try {
+    await completeTask(t.projectId, t.id)
+  } catch (e) {
+    console.error('[CEPHEID/due] complete error', e)
+    const n = new Set(pendingDone.value); n.delete(t.id); pendingDone.value = n   // rollback ottimistico
+  }
 }
 
 // Bucket per scadenza
 const buckets = computed(() => {
-  const myUid   = currentUser.value?.uid ?? ''
+  const uid = myUid.value
 
   const now = new Date()
   const today = new Date(now); today.setHours(0, 0, 0, 0)
   const tomorrow = new Date(today); tomorrow.setDate(today.getDate() + 1)
   const dayAfter = new Date(tomorrow); dayAfter.setDate(tomorrow.getDate() + 1)
-  const weekEnd  = new Date(today); weekEnd.setDate(today.getDate() + 7)
+  // +8: include l'INTERA giornata del 7° giorno (il copy dice "prossimi 7 giorni")
+  const weekEnd  = new Date(today); weekEnd.setDate(today.getDate() + 8)
 
   const overdue: typeof tasks.value = []
   const todayList: typeof tasks.value = []
@@ -51,8 +66,8 @@ const buckets = computed(() => {
     if (t.type && t.type !== 'task') continue
     if (t.completedAt || pendingDone.value.has(t.id)) continue
     if (!t.dueDate) continue
-    // Mostro solo task mie (assegnatario o creatore)
-    if (!t.assignees.includes(myUid) && t.createdBy !== myUid) continue
+    // Mostro solo le mie azioni — definizione canonica condivisa con Azioni (isMyAction)
+    if (!isMyAction(t, uid)) continue
 
     if (t.dueDate < today) overdue.push(t)
     else if (t.dueDate < tomorrow) todayList.push(t)
@@ -93,6 +108,7 @@ const prioOptions = [
 ] as const
 
 function openTaskModal() {
+  if (!canCreate.value) return
   taskForm.value = {
     title:     '',
     projectId: '',
@@ -109,13 +125,16 @@ function toggleTaskAssignee(email: string) {
   else taskForm.value.assignees.splice(idx, 1)
 }
 
-function parseDateInput(s: string): Date {
+function parseDateInput(s: string): Date | null {
   const [y, m, d] = s.split('-').map(Number)
-  return new Date(y, m - 1, d)
+  if (!y || !m || !d) return null
+  const dt = new Date(y, m - 1, d)
+  return isNaN(dt.getTime()) ? null : dt
 }
 
 async function submitTask() {
   if (!taskForm.value.title.trim() || taskSaving.value) return
+  if (!canCreate.value) return
   taskSaving.value = true
   try {
     const dueDate = taskForm.value.dueDate ? parseDateInput(taskForm.value.dueDate) : null
@@ -125,6 +144,7 @@ async function submitTask() {
       priority:  taskForm.value.priority,
       dueDate,
       assignees: toUids(taskForm.value.assignees, members.value),
+      triaged:   true,   // azione configurata dal modal: non passa dallo Smistamento
     })
     showTaskModal.value = false
   } catch (e) {
@@ -158,7 +178,7 @@ onMounted(() => {
       :hidden="headerHidden"
     >
       <template #cta>
-        <button class="md-btn md-btn--filled md-btn--sm md-btn--square" @click="openTaskModal">
+        <button v-if="canCreate" class="md-btn md-btn--filled md-btn--sm md-btn--square" @click="openTaskModal">
           <MIcon name="add" :size="16" /> Nuova azione
         </button>
       </template>
@@ -187,6 +207,7 @@ onMounted(() => {
           :task="t"
           :members="members"
           :current-user-email="currentUser?.email"
+          :current-user-uid="myUid"
           :project-name="projectName(t.projectId)"
           :project-color="projectColor(t.projectId)"
           :pending="pendingDone.has(t.id)"
@@ -327,50 +348,6 @@ onMounted(() => {
   padding: 1px 7px;
   border-radius: var(--md-sys-shape-corner-full);
 }
-
-/* flat: niente bordo/ombra; priorità = pallino accanto al titolo (.row-prio-dot) */
-.task-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 12px 14px;
-  background: var(--md-sys-color-surface);
-  border-radius: 16px;
-  margin-bottom: 6px;
-  transition: background var(--md-sys-motion-duration-short3) var(--md-sys-motion-easing-standard);
-}
-.task-row:hover {
-  background: var(--md-sys-color-primary-state-hover);
-}
-
-.row-prio-dot {
-  display: inline-block; width: 8px; height: 8px; border-radius: 50%;
-  margin-right: 8px; vertical-align: middle; flex-shrink: 0;
-}
-
-.checkbox {
-  width: 18px; height: 18px;
-  border-radius: var(--md-sys-shape-corner-extra-small);
-  border: 1.5px solid var(--md-sys-color-outline);
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0; cursor: pointer;
-  transition: all 0.15s;
-}
-
-.checkbox:hover { border-color: var(--md-sys-color-primary); }
-.check-icon { color: var(--md-sys-color-primary); }
-
-.row-body { flex: 1; min-width: 0; }
-.row-title { font-size: 14px; color: var(--md-sys-color-on-surface); }
-.row-meta { margin-top: 3px; display: flex; gap: 6px; }
-.row-proj { font-size: 10px; font-weight: 600; padding: 1px 6px; border-radius: var(--md-sys-shape-corner-extra-small); }
-
-.row-due {
-  font-size: 11px; color: var(--md-sys-color-on-surface-variant);
-  display: flex; align-items: center; gap: 3px;
-  flex-shrink: 0;
-}
-.row-due.is-overdue { color: var(--md-sys-color-error); font-weight: 600; }
 
 /* Modal */
 .modal-backdrop {

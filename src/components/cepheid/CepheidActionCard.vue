@@ -26,6 +26,8 @@ const props = withDefaults(defineProps<{
   task: TaskLike
   members?: TeamMember[]
   currentUserEmail?: string | null
+  /** UID dell'utente corrente: gli assignees sono uid post-backfill (STELLA-GRAFO). */
+  currentUserUid?: string | null
   projectName?: string
   projectColor?: string
   pending?: boolean
@@ -52,8 +54,13 @@ const visibleAssignees = computed(() => {
   if (!props.showAssignees) return []
   const a = props.task.assignees ?? []
   if (!a.length) return []
-  if (props.hideSoleSelfAssignee && a.length === 1
-      && a[0]?.toLowerCase() === (props.currentUserEmail ?? '').toLowerCase()) return []
+  // assignees[0] è uno UID (post-backfill); tolleriamo anche email legacy.
+  if (props.hideSoleSelfAssignee && a.length === 1) {
+    const sole = (a[0] ?? '').toLowerCase()
+    const uid = (props.currentUserUid ?? '').toLowerCase()
+    const email = (props.currentUserEmail ?? '').toLowerCase()
+    if (sole && (sole === uid || sole === email)) return []
+  }
   return a
 })
 

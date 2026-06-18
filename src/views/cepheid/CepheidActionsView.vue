@@ -8,7 +8,7 @@ import { useAllTasks, createStandaloneTask } from '../../composables/sidera/useA
 import { useProjects } from '../../composables/sidera/useProjects'
 import { useCurrentUser } from '../../composables/sidera/useCurrentUser'
 import { useCan } from '../../composables/sidera/useCan'
-import { isOwnTask, canEditTask, canCompleteTask } from '../../router/permissions'
+import { isOwnTask, isMyAction, canEditTask, canCompleteTask } from '../../router/permissions'
 import { useTeamMembers, displayName, starAvatarProps, toUids, toEmails } from '../../composables/sidera/useTeamMembers'
 import { useAutoHideHeader } from '../../composables/shared/useAutoHideHeader'
 
@@ -75,18 +75,34 @@ const pendingUndo = ref<Set<string>>(new Set())
 
 type CompletableTask = { id: string; projectId: string; assignees?: string[]; createdBy?: string }
 
+function setWithout(s: Set<string>, id: string): Set<string> {
+  const n = new Set(s); n.delete(id); return n
+}
+
 async function doComplete(t: CompletableTask) {
   if (pendingDone.value.has(t.id)) return
   if (!canCompleteTask(caps.value, t, myEmail.value, myUid.value)) return
   pendingDone.value = new Set([...pendingDone.value, t.id])
-  await completeTask(t.projectId, t.id)
+  pendingUndo.value = setWithout(pendingUndo.value, t.id)   // annulla un eventuale undo ottimistico opposto
+  try {
+    await completeTask(t.projectId, t.id)
+  } catch (e) {
+    console.error('[CEPHEID] complete error', e)
+    pendingDone.value = setWithout(pendingDone.value, t.id) // rollback: la spunta torna indietro
+  }
 }
 
 async function doUncomplete(t: CompletableTask) {
   if (pendingUndo.value.has(t.id)) return
   if (!canCompleteTask(caps.value, t, myEmail.value, myUid.value)) return
   pendingUndo.value = new Set([...pendingUndo.value, t.id])
-  await uncompleteTask(t.projectId, t.id)
+  pendingDone.value = setWithout(pendingDone.value, t.id)   // ripulisce il flag done → riappare tra le attive
+  try {
+    await uncompleteTask(t.projectId, t.id)
+  } catch (e) {
+    console.error('[CEPHEID] uncomplete error', e)
+    pendingUndo.value = setWithout(pendingUndo.value, t.id)
+  }
 }
 
 const realTasks = computed(() => {
@@ -104,10 +120,8 @@ const visibleOpen = computed(() => {
   const base = activeTasks.value
   if (filter.value === 'late') return base.filter(t => t.dueDate && t.dueDate < oggi)
   if (filter.value === 'all')  return base
-  // "Le mie" = azioni assegnate a me (uid), oppure create da me ma SENZA assegnatario
-  // (es. quelle del quick-add, che restano visibili finché non vengono smistate/assegnate).
-  // Le azioni che ho creato ma assegnato ad altri NON compaiono qui.
-  if (filter.value === 'mine') return base.filter(t => t.assignees.includes(myUid) || (t.createdBy === myUid && t.assignees.length === 0))
+  // "Le mie" = definizione canonica condivisa con Scadenze (isMyAction).
+  if (filter.value === 'mine') return base.filter(t => isMyAction(t, myUid))
   return []
 })
 
@@ -144,8 +158,14 @@ const groups = computed<{ key: GroupKey; label: string; color: string }[]>(() =>
   ]
 })
 
+// Pre-raggruppa una sola volta (evita 3 .filter() per gruppo ad ogni render)
+const openByGroup = computed(() => {
+  const m = { late: [], oggi: [], week: [], later: [], nodate: [] } as Record<GroupKey, typeof visibleOpen.value>
+  for (const t of visibleOpen.value) m[taskGroup(t.dueDate)].push(t)
+  return m
+})
 function tasksInGroup(key: GroupKey) {
-  return visibleOpen.value.filter(t => taskGroup(t.dueDate) === key)
+  return openByGroup.value[key]
 }
 
 function projectName(id: string) {
@@ -209,7 +229,7 @@ function openEditTaskModal(t: TaskLike) {
     title:     t.title,
     projectId: t.projectId ?? '',
     priority:  t.priority,
-    dueDate:   t.dueDate ? t.dueDate.toISOString().split('T')[0] : '',
+    dueDate:   t.dueDate ? toDateInput(t.dueDate) : '',
     assignees: toEmails(t.assignees, members.value),   // uid→email per le chip (post-backfill)
   }
   showTaskModal.value = true
@@ -221,9 +241,16 @@ function toggleTaskAssignee(email: string) {
   else taskForm.value.assignees.splice(idx, 1)
 }
 
-function parseDateInput(s: string): Date {
+function parseDateInput(s: string): Date | null {
   const [y, m, d] = s.split('-').map(Number)
-  return new Date(y, m - 1, d)
+  if (!y || !m || !d) return null
+  const dt = new Date(y, m - 1, d)
+  return isNaN(dt.getTime()) ? null : dt
+}
+// Formatta una Date come YYYY-MM-DD in ora LOCALE (no toISOString che è UTC → -1 giorno a ovest)
+function toDateInput(d: Date): string {
+  const y = d.getFullYear(), m = String(d.getMonth() + 1).padStart(2, '0'), day = String(d.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
 }
 
 async function submitTask() {
@@ -247,6 +274,7 @@ async function submitTask() {
         priority:  taskForm.value.priority,
         dueDate,
         assignees: toUids(taskForm.value.assignees, members.value),
+        triaged:   true,   // azione configurata dal modal completo: non passa dallo Smistamento
       })
     }
     showTaskModal.value = false
@@ -361,6 +389,7 @@ onMounted(() => {
               :task="t"
               :members="members"
               :current-user-email="myEmail"
+              :current-user-uid="myUid"
               :project-name="projectName(t.projectId)"
               :project-color="projectColor(t.projectId)"
               :pending="pendingDone.has(t.id)"

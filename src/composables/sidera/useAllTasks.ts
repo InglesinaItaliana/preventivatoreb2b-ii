@@ -1,7 +1,7 @@
 import { ref, onUnmounted } from 'vue'
 import {
   collectionGroup, query, orderBy, onSnapshot,
-  addDoc, updateDoc, deleteDoc, doc, collection, serverTimestamp, increment, arrayUnion,
+  addDoc, updateDoc, deleteDoc, doc, collection, serverTimestamp, increment, arrayUnion, arrayRemove,
 } from 'firebase/firestore'
 import { db, auth } from '../../firebase'
 
@@ -216,6 +216,12 @@ export function useAllTasks() {
     await updateDoc(doc(db, 'projects', projectId, 'tasks', deliverableId), { deliverableTaskIds: arrayUnion(taskId) })
   }
 
+  // Stacca un task dal deliverableTaskIds di un deliverable (per evitare doppie referenze
+  // quando si ri-smista una task verso un deliverable diverso).
+  async function detachFromDeliverable(projectId: string, deliverableId: string, taskId: string) {
+    await updateDoc(doc(db, 'projects', projectId, 'tasks', deliverableId), { deliverableTaskIds: arrayRemove(taskId) })
+  }
+
   async function deleteTask(projectId: string | null, taskId: string, wasCompleted: boolean) {
     const realTask = isRealTask(taskId)
     if (projectId) {
@@ -230,7 +236,7 @@ export function useAllTasks() {
     }
   }
 
-  return { tasks, loading, completeTask, uncompleteTask, createTask, updateTask, deleteTask, fileStandaloneTask, attachToDeliverable }
+  return { tasks, loading, completeTask, uncompleteTask, createTask, updateTask, deleteTask, fileStandaloneTask, attachToDeliverable, detachFromDeliverable }
 }
 
 export async function createStandaloneTask(data: {
@@ -241,6 +247,9 @@ export async function createStandaloneTask(data: {
   assignees: string[]
   type?: TaskType
   deliverableTaskIds?: string[]
+  /** Se valorizzato, scrive esplicitamente lo stato di smistamento. Omesso: il
+   *  reader lo inferisce (triaged = ha assegnatari) — comportamento storico PULSAR. */
+  triaged?: boolean
   /** Origine PULSAR: chat/messaggio da cui nasce l'azione (back-link). */
   source?: { chatId: string; messageId: string }
 }): Promise<string> {
@@ -255,6 +264,8 @@ export async function createStandaloneTask(data: {
     projectId:          data.projectId ?? null,
     type,
     deliverableTaskIds: data.deliverableTaskIds ?? [],
+    // triaged scritto solo se esplicito; altrimenti il reader inferisce (no override del flusso PULSAR)
+    ...(data.triaged !== undefined ? { triaged: data.triaged } : {}),
     createdBy:          auth.currentUser?.uid ?? '',
     createdByEmail:     auth.currentUser?.email ?? '',
     createdAt:          serverTimestamp(),
