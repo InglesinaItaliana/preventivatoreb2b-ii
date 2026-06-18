@@ -7,7 +7,7 @@ import { db } from '../firebase';
 import { ARCHIVE_STATUSES, STATUS_DETAILS } from '../types';
 import { useRouter } from 'vue-router';
 import { resolveBackend } from '../lib/billing';
-import { openDdtPdf } from '../lib/billingPdf';
+import { openDdtPdf, openOrderPdf } from '../lib/billingPdf';
 
 const props = defineProps<{
   show: boolean;
@@ -71,6 +71,12 @@ const openDdt = (order: any) => {
   // CiC: PDF POPS (Opzione B). FiC: invariato.
   if (resolveBackend(order) === 'cic') { openDdtPdf(order); return; }
   if (order?.fic_ddt_url) window.open(order.fic_ddt_url, '_blank');
+};
+
+const openOrdine = (order: any) => {
+  // CiC: PDF ordine POPS. FiC: link al documento FiC.
+  if (resolveBackend(order) === 'cic') { openOrderPdf(order); return; }
+  if (order?.fic_order_url) window.open(order.fic_order_url, '_blank');
 };
 </script>
 
@@ -154,14 +160,24 @@ const openDdt = (order: any) => {
                     <div class="text-right">
                       <div class="font-bold text-gray-900">{{ (order.totaleScontato || order.totaleImponibile || 0).toFixed(2) }} €</div>
                       <div v-if="isAdmin" class="text-xs text-blue-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity">VEDI ></div>
-                      <button 
-                          v-if="order.fic_ddt_url || order.cic_ddt_id"
-                          @click.stop="openDdt(order)"
-                          class="flex items-center gap-1 text-sm font-bold text-amber-950 bg-amber-400 border border-amber-500 px-8 py-0.5 rounded-full hover:bg-amber-300 transition-colors"
-                          title="Visualizza DDT"
-                        >
-                          <DocumentTextIcon class="w-3 h-3" /> DDT
-                        </button>
+                      <div class="flex items-center justify-end gap-2 mt-1">
+                        <button
+                            v-if="order.cic_order_id || order.fic_order_id"
+                            @click.stop="openOrdine(order)"
+                            class="flex items-center gap-1 text-sm font-bold text-amber-950 bg-amber-400 border border-amber-500 px-8 py-0.5 rounded-full hover:bg-amber-300 transition-colors"
+                            title="Visualizza Ordine"
+                          >
+                            <DocumentTextIcon class="w-3 h-3" /> ORDINE
+                          </button>
+                        <button
+                            v-if="order.fic_ddt_url || order.cic_ddt_id"
+                            @click.stop="openDdt(order)"
+                            class="flex items-center gap-1 text-sm font-bold text-amber-950 bg-amber-400 border border-amber-500 px-8 py-0.5 rounded-full hover:bg-amber-300 transition-colors"
+                            title="Visualizza DDT"
+                          >
+                            <DocumentTextIcon class="w-3 h-3" /> DDT
+                          </button>
+                      </div>
                     </div>
                   </div>
                 </div>

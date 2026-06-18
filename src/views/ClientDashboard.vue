@@ -469,7 +469,7 @@ const confermaRicezione = async (order: any) => {
   });
   
   const ordiniSpediti = computed(() => {
-    const customOrder = ['SHIPPED','DELIVERY', 'READY', 'DELIVERED'];
+    const customOrder = ['SHIPPED','DELIVERY', 'READY'];
     const filtered = listaMieiPreventivi.value.filter(p => customOrder.includes(p.stato));
     return sortByOrder([...filtered], customOrder);
   });
