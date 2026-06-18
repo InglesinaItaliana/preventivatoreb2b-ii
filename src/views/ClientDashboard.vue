@@ -10,7 +10,7 @@
   import "@sjmc11/tourguidejs/dist/css/tour.min.css"; // Importazione CSS Stile
   import { httpsCallable } from 'firebase/functions';
   import { resolveBackend } from '../lib/billing';
-  import { openDdtPdf, openQuotationPdf } from '../lib/billingPdf';
+  import { openDdtPdf, openQuotationPdf, openOrderPdf } from '../lib/billingPdf';
   import { 
     DocumentTextIcon, 
     CheckCircleIcon,
@@ -300,11 +300,19 @@ const confermaRicezione = async (order: any) => {
   
   const gestisciAzioneOrdine = (p: any) => {
     selectedOrder.value = p;
-    
+
     if (p.stato === 'WAITING_SIGN') {
       modalMode.value = 'SIGN';
       showModals.value = true;
     }
+  };
+
+  // Stampa documento: PDF PREVENTIVO finché è un preventivo/richiesta, PDF ORDINE
+  // da WAITING_SIGN in poi. Non disponibile in PENDING_VAL (gestito col v-if nei bottoni).
+  const STATI_PREVENTIVO = ['DRAFT', 'QUOTE_READY', 'ORDER_REQ'];
+  const stampaDoc = (p: any) => {
+    if (STATI_PREVENTIVO.includes(p.stato)) openQuotationPdf(p);
+    else openOrderPdf(p);
   };
   
   const openConfirmModal = (p: any) => {
@@ -461,7 +469,7 @@ const confermaRicezione = async (order: any) => {
   });
   
   const ordiniSpediti = computed(() => {
-    const customOrder = ['SHIPPED','DELIVERY', 'READY'];
+    const customOrder = ['SHIPPED','DELIVERY', 'READY', 'DELIVERED'];
     const filtered = listaMieiPreventivi.value.filter(p => customOrder.includes(p.stato));
     return sortByOrder([...filtered], customOrder);
   });
@@ -672,7 +680,7 @@ const confermaRicezione = async (order: any) => {
                       APRI
                     </button>
 
-                    <button @click="openQuotationPdf(p)" title="Stampa preventivo" class="border border-gray-300 text-gray-600 px-4 py-2 rounded-full font-bold text-xs hover:bg-gray-50 inline-flex items-center justify-center">
+                    <button v-if="p.stato !== 'PENDING_VAL'" @click="stampaDoc(p)" title="Stampa documento" class="border border-gray-300 text-gray-600 px-4 py-2 rounded-full font-bold text-xs hover:bg-gray-50 inline-flex items-center justify-center">
                       <PrinterIcon class="h-4 w-4" />
                     </button>
 
@@ -734,6 +742,9 @@ const confermaRicezione = async (order: any) => {
                 <button @click="vaiAlBuilder(p.codice)" class="border border-gray-300 text-gray-600 px-4 py-2 rounded-full font-bold text-xs hover:bg-gray-50 h-full">
                     APRI
                   </button>
+                <button @click="stampaDoc(p)" title="Stampa documento" class="border border-gray-300 text-gray-600 px-4 py-2 rounded-full font-bold text-xs hover:bg-gray-50 inline-flex items-center justify-center h-full">
+                  <PrinterIcon class="h-4 w-4" />
+                </button>
                 </div>
   
               </div>
@@ -777,6 +788,7 @@ const confermaRicezione = async (order: any) => {
                   <div class="text-xs text-gray-600">Importo netto</div>
                 </div>
                 <button @click="vaiAlBuilder(p.codice)" class="border border-gray-300 text-gray-600 px-4 py-2 rounded-full font-bold text-xs hover:bg-gray-50">APRI</button>
+                <button @click="stampaDoc(p)" title="Stampa documento" class="border border-gray-300 text-gray-600 px-4 py-2 rounded-full font-bold text-xs hover:bg-gray-50 inline-flex items-center justify-center"><PrinterIcon class="h-4 w-4" /></button>
               </div>
             </div>
           </div>
@@ -850,6 +862,7 @@ const confermaRicezione = async (order: any) => {
                       VEDI DDT {{ (p.fic_ddt_number || p.cic_ddt_number) ? '#' + (p.fic_ddt_number || p.cic_ddt_number) : '' }}
                     </button>   
                   <button @click="vaiAlBuilder(p.codice)" class="border border-gray-300 text-gray-600 px-4 py-2 rounded-full font-bold text-xs hover:bg-gray-50">APRI</button>
+                <button @click="stampaDoc(p)" title="Stampa documento" class="border border-gray-300 text-gray-600 px-4 py-2 rounded-full font-bold text-xs hover:bg-gray-50 inline-flex items-center justify-center"><PrinterIcon class="h-4 w-4" /></button>
                 </div>             
               </div>
             </div>

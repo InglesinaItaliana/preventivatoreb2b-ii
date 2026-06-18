@@ -104,16 +104,23 @@ export function drawBillingDocument(doc: any, data: PdfDocData, logoDataUrl?: st
 
   // Azienda emittente (alto-dx)
   if (logoDataUrl) {
-    try { doc.addImage(logoDataUrl, 'PNG', RIGHT - 34, 13, 34, 12); } catch { /* no logo */ }
+    // Mantieni l'aspect ratio reale del logo entro un box max (niente stretch).
+    let lw = 40, lh = 14;
+    try { const pr = doc.getImageProperties(logoDataUrl); const r = (pr.width || 1) / (pr.height || 1); lh = lw / r; if (lh > 16) { lh = 16; lw = lh * r; } } catch { /* dims di default */ }
+    try { doc.addImage(logoDataUrl, 'PNG', RIGHT - lw, 12, lw, lh); } catch { /* no logo */ }
   } else {
     doc.setFont('helvetica', 'bold'); doc.setFontSize(13); setText(INK);
     doc.text('INGLESINA ITALIANA', RIGHT, 19, { align: 'right' });
   }
-  const cy = logoDataUrl ? 30 : 25;
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(8); setText(MID);
+  const cy = logoDataUrl ? 29 : 25;
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); setText(INK);
   doc.text(COMPANY.name, RIGHT, cy, { align: 'right' });
-  doc.text(`${COMPANY.address}  ·  ${COMPANY.piva}`, RIGHT, cy + 3.6, { align: 'right' });
-  doc.text(`Tel. ${COMPANY.tel}  ·  ${COMPANY.email}`, RIGHT, cy + 7.2, { align: 'right' });
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(6.8); setText(MID);
+  let ay = cy + 3.3;
+  // indirizzo wrappato (max 92mm → resta nella metà destra, non tocca N./Data)
+  for (const ln of doc.splitTextToSize(COMPANY.address, 92) as string[]) { doc.text(ln, RIGHT, ay, { align: 'right' }); ay += 2.9; }
+  doc.text(`${COMPANY.piva}  ·  Tel. ${COMPANY.tel}`, RIGHT, ay, { align: 'right' }); ay += 2.9;
+  doc.text(COMPANY.email, RIGHT, ay, { align: 'right' });
 
   // linea accent
   let y = 44;

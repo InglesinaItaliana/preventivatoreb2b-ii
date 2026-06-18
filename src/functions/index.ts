@@ -1303,17 +1303,21 @@ async function generaOrdineCiC(
         const cicProdMap = await resolveCicProductIds(lines.map((l: any) => l.code));
         for (const l of lines as any[]) { if (l.code) l.cicProductId = cicProdMap.get(l.code); }
 
+        const orderDate = newData.dataConsegnaPrevista || new Date().toISOString().split('T')[0];
         const result = await provider.createOrder({
             customer,
-            date: newData.dataConsegnaPrevista || new Date().toISOString().split('T')[0],
+            date: orderDate,
             lines,
             discountPercentage: Number(newData.scontoPercentuale) || 0,
             visibleSubject: newData.commessa || `Rif: ${newData.codice}`,
         });
 
-        // id salvato SUBITO → blocca i ri-trigger (anti-duplicato)
+        // id salvato SUBITO → blocca i ri-trigger (anti-duplicato).
+        // Salvo anche numero e data CiC veri → il PDF ordine mostra quelli (non il codice/data preventivo).
         await change.after.ref.update({
             cic_order_id: result.id,
+            cic_order_number: result.number ?? null,
+            cic_order_date: orderDate,
             cic_order_url: result.url || null,
             billingBackend: 'cic',
             billingError: admin.firestore.FieldValue.delete(),

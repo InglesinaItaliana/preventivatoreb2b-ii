@@ -22,10 +22,15 @@ async function loadLogoPng(): Promise<string | undefined> {
     const url = 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(svg)));
     const img = new Image();
     await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = () => rej(new Error('logo')); img.src = url; });
-    const scale = 4;
+    // Gli attributi width/height del SVG sono inaffidabili (height="0.9" → logo schiacciato):
+    // usiamo l'aspect ratio reale dal viewBox.
+    let vw = 628, vh = 172;
+    const vb = svg.match(/viewBox="([\d.\-\s]+)"/);
+    if (vb) { const p = vb[1].trim().split(/\s+/).map(Number); if (p[2] > 0 && p[3] > 0) { vw = p[2]; vh = p[3]; } }
+    const scale = 2;
     const canvas = document.createElement('canvas');
-    canvas.width = (img.width || 120) * scale;
-    canvas.height = (img.height || 48) * scale;
+    canvas.width = vw * scale;
+    canvas.height = vh * scale;
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('no ctx');
     ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
@@ -73,9 +78,15 @@ export function buildPdfData(p: PreventivoLike, kind: PdfKind): PdfDocData {
   });
   return {
     kind,
-    number: isDdt ? (p.cic_ddt_number ?? p.fic_ddt_number ?? p.codice) : p.codice,
+    number: isDdt
+      ? (p.cic_ddt_number ?? p.fic_ddt_number ?? p.codice)
+      : kind === 'order'
+      ? (p.cic_order_number ?? p.codice)   // ordine: numero CiC vero (fallback codice)
+      : p.codice,                           // preventivo: codice POPS
     date: fmtDate(isDdt
       ? (p.dataSpedizione || p.dataConsegnaPrevista || p.dataConferma || p.dataCreazione)
+      : kind === 'order'
+      ? (p.cic_order_date || p.dataConferma || p.dataCreazione)   // ordine: data CiC vera
       : (p.dataConferma || p.dataCreazione)),
     customer: {
       name: p.cliente || p.ragioneSociale || '—',
