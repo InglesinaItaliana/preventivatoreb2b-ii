@@ -563,9 +563,15 @@ if (!COMPANY_ID || !FIC_CLIENT_ID || !FIC_CLIENT_SECRET) {
     console.warn("⚠️ Attenzione: Credenziali FiC mancanti nel file .env");
 }
 const DELIVERY_TARIFF_CODES = [
-    'Consegna Diretta V1', 
-    'Consegna Diretta V2', 
-    'Consegna Diretta V3', 
+    'Consegna Diretta V1',
+    'Consegna Diretta V2',
+    'Consegna Diretta V3',
+    'Consegna Diretta V4',
+    'Consegna Diretta V5',
+    'Consegna Diretta V6',
+    'Consegna Diretta V7',
+    'Consegna Diretta V8',
+    'Ritiro in sede',
     'Spedizione'
 ];
 const VAT_ID = 0;   

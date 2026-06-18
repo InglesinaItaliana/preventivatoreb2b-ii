@@ -6,12 +6,11 @@
 // Unità: mm, formato A4 (210×297). Il `doc` va creato con { unit:'mm', format:'a4' }.
 // ============================================================================
 
-// Dati azienda emittente. TODO: sono della VECCHIA Inglesina (FiC) — aggiornare
-// alla nuova società (CiC) al cutover. P.IVA/indirizzo da completare.
+// Dati azienda emittente — nuova società CiC (aggiornati al cutover FiC→CiC).
 export const COMPANY = {
-  name: 'Inglesina Italiana S.r.l.',
-  address: 'Via — , 00000 Città (PR)',
-  piva: 'P.IVA / C.F. —',
+  name: 'Inglesina Italiana Srl',
+  address: 'Via Cavalier Angelo Manzoni 18, Zona industriale Maiano, 26866 Sant\'Angelo Lodigiano (LO)',
+  piva: 'P.IVA 14614580968',
   tel: '+39 348 7293897',
   email: 'info@inglesinaitaliana.it',
   web: 'preventivatoreb2b-ii.web.app',

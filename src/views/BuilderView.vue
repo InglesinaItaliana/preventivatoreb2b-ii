@@ -452,7 +452,13 @@ const CODICI_SPEDIZIONE: Record<string, string> = {
   'Consegna Diretta V1': 'L001',
   'Consegna Diretta V2': 'L002',
   'Consegna Diretta V3': 'L003',
-  'Spedizione': 'L004'
+  'Spedizione': 'L004',
+  'Consegna Diretta V4': 'L005',
+  'Consegna Diretta V5': 'L006',
+  'Consegna Diretta V6': 'L007',
+  'Consegna Diretta V7': 'L008',
+  'Consegna Diretta V8': 'L009',
+  'Ritiro in sede': 'L010'
 };
 
 const updateShippingLine = (costo: number, nomeTariffa: string) => {
