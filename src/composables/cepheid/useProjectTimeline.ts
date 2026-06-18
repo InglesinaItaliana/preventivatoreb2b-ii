@@ -262,15 +262,20 @@ export function useProjectTimeline(
   })
 
   /* ---------------- barre top ---------------- */
+  // "Lavoro" = completamento LIVE su TUTTI i task reali del progetto (non solo
+  // quelli dentro una fase): fonte unica condivisa con l'header del dettaglio
+  // progetto. I marker restano le fasi, posizionati sulla stessa scala (task in
+  // fase cumulati / totale task) → con task sciolti gli ultimi pip non toccano il
+  // 100%, e questo è corretto: la barra rappresenta tutto il lavoro, non solo le fasi.
   const workBar = computed(() => {
-    const all = phasesFlat.value.reduce((s, p) => s + p.tasks.length, 0)
-    const done = phasesFlat.value.reduce((s, p) => s + p.tasks.filter(t => t.done).length, 0)
+    const total = realTasks.value.length
+    const done = realTasks.value.filter(t => !!t.completedAt).length
     let cum = 0
     const marks = phasesFlat.value.map(p => {
       cum += p.tasks.length
-      return { pct: all ? cum / all * 100 : 0, reached: p.ready, label: p.delivName }
+      return { pct: total ? cum / total * 100 : 0, reached: p.ready, label: p.delivName }
     })
-    return { done, total: all, pct: all ? Math.round(done / all * 100) : 0, marks }
+    return { done, total, pct: total ? Math.round(done / total * 100) : 0, marks }
   })
 
   const projectEnd = computed<Date>(() => {

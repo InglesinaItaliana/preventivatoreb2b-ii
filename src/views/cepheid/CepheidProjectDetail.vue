@@ -87,11 +87,14 @@ function formatDue(d: Date | null) {
   return new Intl.DateTimeFormat('it-IT', { day: 'numeric', month: 'short' }).format(d)
 }
 
-function pct(p: { taskCount: number; doneCount: number }) {
-  if (!p.taskCount) return 0
-  // clamp 0–100: i contatori denormalizzati possono driftare (op non atomiche) → no >100%
-  return Math.min(100, Math.max(0, Math.round((p.doneCount / p.taskCount) * 100)))
-}
+// Progresso "lavoro" LIVE = task completati / task totali, calcolato dai doc reali
+// (taskItems) e NON dai contatori denormalizzati doneCount/taskCount (che driftano).
+// Stessa definizione di useProjectTimeline.realTasks → coincide con la barra della card.
+const liveProgress = computed(() => {
+  const total = taskItems.value.length
+  const done = taskItems.value.filter(t => !!t.completedAt).length
+  return { total, done, pct: total ? Math.round((done / total) * 100) : 0 }
+})
 
 const pendingDone = ref<Set<string>>(new Set())
 function setWithout(s: Set<string>, id: string): Set<string> {
@@ -263,7 +266,7 @@ if (newTaskTick) {
     <MdPageHeader
       v-if="project"
       :title="project.name"
-      :subtitle="`${project.doneCount}/${project.taskCount} azioni · ${pct(project)}%`"
+      :subtitle="`${liveProgress.done}/${liveProgress.total} azioni · ${liveProgress.pct}%`"
       :accent-color="project.color"
     >
       <template #tools>

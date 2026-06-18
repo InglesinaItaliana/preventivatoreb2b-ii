@@ -43,15 +43,16 @@ lasciata aperta (vedi note).
 | 12 | ✅ | `CepheidAssigneePills.vue` | `:hover` non gate-ato → su iOS si "incollava" al tap, in conflitto col toggle. Spostato dentro `@media (hover: hover)`. |
 | 18 | ✅ | `GoalProgressBar.vue`, `useObiettivi.ts`, `CepheidDueView.vue` | Rimossi orfani/codice morto: componente `GoalProgressBar` (mai importato), export `archiveObiettivo` (feature rimossa), blocco CSS `.task-row/.row-*` non più usato in Scadenze. |
 | P1 | ✅ | `CepheidActionsView.vue` | `tasksInGroup` faceva 3 `.filter()` per gruppo ad ogni render. Pre-raggruppato una volta in un `computed`. |
+| 10 | ✅ | `useProjectTimeline.ts`, `CepheidProjectDetail.vue` | **Opzione A**: metrica di progresso progetto unificata. La barra "lavoro" (`workBar`) e l'header del dettaglio ora calcolano entrambi **live** = task completati / **tutti** i task reali (prima: workBar solo task-in-fase, header `doneCount/taskCount` denormalizzati e drift-prone). Stessa definizione `realTasks`/`taskItems` → numero identico ovunque, niente drift. I marker fase restano, posizionati sulla stessa scala. |
 
-## ⏳ Lasciati aperti (decisione di prodotto, NON modificati)
+## ⏳ Lasciati aperti
 
-- **#10 — Metrica di progresso progetto incoerente.** La card lista mostra il
-  progresso derivato dalla timeline (fasi/deliverable); il dettaglio usa
-  `doneCount/taskCount`. Sono due definizioni diverse di "% completamento".
-  Va deciso quale è la fonte di verità prima di unificarle (lato Obiettivi
-  l'incoerenza è stata risolta rimuovendo l'orfano `GoalProgressBar` e
-  allineando il filtro progetti). *Nessun cambiamento di comportamento fatto.*
+- **Stat per-progetto nelle viste Obiettivi** (`CepheidGoalCard`, `CepheidGoalDetail`,
+  `CepheidGoalsView`): mostrano ancora `doneCount/taskCount` (contatori
+  denormalizzati) perché le viste Obiettivi NON caricano i task dei singoli
+  progetti. Possono quindi differire leggermente dalla % live del progetto
+  (#10). Allinearle richiederebbe caricare i task per ogni progetto collegato —
+  fuori dallo scope di questa PR. *Da valutare se vale il costo.*
 - **Chevron** (`CepheidGoalCard`): segnalati dall'analisi come fuori linea
   guida, ma confermati OK dall'utente. Lasciati.
 
