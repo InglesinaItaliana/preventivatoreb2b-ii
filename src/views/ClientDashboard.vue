@@ -787,8 +787,10 @@ const confermaRicezione = async (order: any) => {
                   <div class="text-xl font-bold font-heading text-gray-600">{{ (p.totaleScontato || p.totaleImponibile || 0).toFixed(2) }} €</div>
                   <div class="text-xs text-gray-600">Importo netto</div>
                 </div>
-                <button @click="vaiAlBuilder(p.codice)" class="border border-gray-300 text-gray-600 px-4 py-2 rounded-full font-bold text-xs hover:bg-gray-50">APRI</button>
-                <button @click="stampaDoc(p)" title="Stampa documento" class="border border-gray-300 text-gray-600 px-4 py-2 rounded-full font-bold text-xs hover:bg-gray-50 inline-flex items-center justify-center"><PrinterIcon class="h-4 w-4" /></button>
+                <div class="flex items-center gap-2">
+                  <button @click="vaiAlBuilder(p.codice)" class="border border-gray-300 text-gray-600 px-4 py-2 rounded-full font-bold text-xs hover:bg-gray-50">APRI</button>
+                  <button @click="stampaDoc(p)" title="Stampa documento" class="border border-gray-300 text-gray-600 px-4 py-2 rounded-full font-bold text-xs hover:bg-gray-50 inline-flex items-center justify-center"><PrinterIcon class="h-4 w-4" /></button>
+                </div>
               </div>
             </div>
           </div>
