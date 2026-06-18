@@ -21,10 +21,20 @@
 // ============================================================================
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.round2 = round2;
+exports.roundTo10 = roundTo10;
 exports.computeTotals = computeTotals;
 /** Half-up a 2 decimali, robusto all'errore di virgola mobile (match Reviso). */
 function round2(n) {
     return Math.round((n + (n >= 0 ? 1e-9 : -1e-9)) * 100) / 100;
+}
+/**
+ * Pulisce gli artefatti binari di virgola mobile portando il numero a max 10
+ * decimali. Reviso RIFIUTA (400 E04740) `unitNetPrice` con >10 decimali: un
+ * prezzo POPS come 8,40 può arrivare come 8.399999999999999 (16 decimali) e va
+ * normalizzato prima dell'invio. Non altera il valore reale (prezzi unitari ≪ 9e5).
+ */
+function roundTo10(n) {
+    return Math.round(n * 1e10) / 1e10;
 }
 /**
  * Calcola i totali canonici di un documento.

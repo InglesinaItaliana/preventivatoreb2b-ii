@@ -47,8 +47,14 @@ class CicProvider {
     async createQuotation(doc) {
         return this.createSalesDoc('/quotations', doc);
     }
-    productRef(code) {
-        const pn = code && code.trim() ? code.trim() : this.cfg.genericProductNumber;
+    // In CiC il prodotto si referenzia col productNumber CiC (auto-assegnato), NON
+    // col codice POPS (che è il barCode). Usiamo il cicProductId mappato; se manca,
+    // fallback al prodotto generico (cfg.genericProductNumber = productNumber CiC del
+    // prodotto "VARIE", da configurare in config/cic).
+    productRef(cicProductId) {
+        const pn = (cicProductId != null && String(cicProductId).trim())
+            ? String(cicProductId).trim()
+            : this.cfg.genericProductNumber;
         return { productNumber: pn, self: `${this.cfg.baseUrl}/products/${encodeURIComponent(pn)}` };
     }
     async createSalesDoc(path, doc) {
@@ -61,9 +67,9 @@ class CicProvider {
                 lineNumber: i + 1,
                 description: l.description,
                 quantity: l.qty,
-                unitNetPrice: l.unitNetPrice,
+                unitNetPrice: (0, rounding_1.roundTo10)(l.unitNetPrice),
                 discountPercentage: doc.discountPercentage,
-                product: this.productRef(l.code),
+                product: this.productRef(l.cicProductId),
                 vatInfo: { vatAccount: { vatCode: this.cfg.vatCode } },
             })) });
         const res = await this.client.post(path, payload);
@@ -87,26 +93,29 @@ class CicProvider {
         };
     }
     // --- DDT -------------------------------------------------------------------
-    // Payload allineato all'esempio ufficiale della Postman collection Reviso:
-    //  • product si referenzia con `product.id` (= productNumber), NON productNumber;
-    //  • i totali per riga vanno forniti (computeTotals);
-    //  • il numero va in numberSeries.numberSeriesSequenceElement.number.
-    // ⚠️ NUMERAZIONE: nel trial Reviso NON assegna il numero al DDT via API
-    //    (collezione number-series-sequence-elements vuota, /peek 404) anche
-    //    fornendo `number`. Gli ORDINI invece si auto-numerano. Da chiarire col
-    //    supporto Reviso (api@reviso.com) per l'agreement di produzione.
+    // Flusso CONFERMATO sul trial (2026-06-13, da risposta supporto Reviso):
+    //   1. POST /delivery-notes/sales                          → crea la BOZZA (status Draft, niente numero)
+    //   2. POST /delivery-notes/sales/issue?filter=id$eq:{id}  → EMETTE; Reviso assegna il numero dalla serie
+    //   3. GET  /delivery-notes/sales/{id}                     → rilegge il numero definitivo
+    // I DDT (come le fatture) hanno stati: il numero definitivo arriva solo con
+    // l'emissione. NON forziamo né pre-peschiamo il numero — lo assegna /issue
+    // dalla serie cfg.ddtNumberSeries. Lo stato attraversa Draft → BeingIssued →
+    // Issued (transitorio), perciò la rilettura tollera qualche tentativo.
+    // Payload riga allineato all'esempio ufficiale Postman: product via `product.id`
+    // (= productNumber), totali per riga forniti (computeTotals).
     async createDeliveryNote(input) {
-        var _a, _b, _c, _d, _e, _f;
+        var _a, _b, _c, _d, _e;
         const ownerId = Number(input.customer.id);
         const totals = (0, rounding_1.computeTotals)(input.lines, 0, this.cfg.vatRate); // DDT: nessuno sconto globale
-        const year = (input.date || '').slice(0, 4);
-        const nextNum = await this.nextSeriesNumber(this.cfg.ddtNumberSeries, year);
         const productLines = input.lines.map((l, i) => {
             const net = totals.lineNets[i];
             const vat = (0, rounding_1.round2)((net * this.cfg.vatRate) / 100);
-            const code = (l.code && l.code.trim()) ? l.code.trim() : this.cfg.genericProductNumber;
+            // product.id = productNumber CiC mappato (cicProductId), NON il codice POPS.
+            const pid = (l.cicProductId != null && String(l.cicProductId).trim())
+                ? String(l.cicProductId).trim()
+                : this.cfg.genericProductNumber;
             return {
-                product: { name: l.description, id: code, metaData: null },
+                product: { name: l.description, id: pid, metaData: null },
                 chainId: null,
                 lineNr: i + 1,
                 location: null,
@@ -114,7 +123,7 @@ class CicProvider {
                 vatInfo: { vatAccount: { id: this.cfg.vatCode, metaData: null }, vatRate: this.cfg.vatRate },
                 quantity: l.qty,
                 unit: null,
-                unitNetPrice: l.unitNetPrice,
+                unitNetPrice: (0, rounding_1.roundTo10)(l.unitNetPrice),
                 unitGrossPrice: (0, rounding_1.round2)(l.unitNetPrice * (1 + this.cfg.vatRate / 100)),
                 totalNetAmount: net,
                 totalGrossAmount: (0, rounding_1.round2)(net + vat),
@@ -133,7 +142,7 @@ class CicProvider {
             },
             notesAndAttachments: null,
             vatAmount: totals.vat, totalAmount: totals.gross,
-            deliveryNoteType: 'Sales', deliveryNoteStatus: 'Issued',
+            deliveryNoteType: 'Sales', deliveryNoteStatus: 'Draft', // bozza: l'emissione (e il numero) avviene via /issue
             owner: {
                 address: null, zipCode: null, city: null,
                 countryCode: { id: 'IT', metaData: null }, country: 'Italia',
@@ -142,7 +151,7 @@ class CicProvider {
             },
             numberSeries: {
                 prefix: 'DDT', sequenceType: 'Ordered',
-                numberSeriesSequenceElement: nextNum != null ? { number: nextNum, metaData: null } : null,
+                numberSeriesSequenceElement: null, // niente numero forzato: lo assegna /issue dalla serie
                 id: this.cfg.ddtNumberSeries, metaData: null,
             },
             invoice: null, order: null,
@@ -160,32 +169,67 @@ class CicProvider {
             additionalExpenses: null, date: input.date,
             additionalInfo: { currency: 'EUR', exchangeRate: 100.0, layout: null, project: null, tenderContractData: null },
         };
-        const res = await this.client.post('/delivery-notes/sales', ddt);
-        if (res === null || res === void 0 ? void 0 : res.errorCode) {
-            const msg = ((_c = (_b = res.errors) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.message) || res.message || res.errorCode;
-            throw new Error(`DDT CiC fallito: ${msg}`);
+        // 1) crea la BOZZA
+        const created = await this.client.post('/delivery-notes/sales', ddt);
+        if (created === null || created === void 0 ? void 0 : created.errorCode) {
+            const msg = ((_c = (_b = created.errors) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.message) || created.message || created.errorCode;
+            throw new Error(`DDT CiC: creazione bozza fallita: ${msg}`);
         }
-        const assigned = (_f = (_e = (((_d = res === null || res === void 0 ? void 0 : res.numberSeries) === null || _d === void 0 ? void 0 : _d.numberSeriesSequenceElement) || {}).number) !== null && _e !== void 0 ? _e : nextNum) !== null && _f !== void 0 ? _f : undefined;
+        const id = created === null || created === void 0 ? void 0 : created.id;
+        if (id == null)
+            throw new Error('DDT CiC: la creazione non ha restituito un id.');
+        // 2) EMETTE: Reviso assegna il numero dalla serie. /issue ritorna un array;
+        //    in caso di errore torna un oggetto con errorCode (oppure il POST lancia).
+        //    Se l'emissione fallisce la BOZZA resterebbe orfana su Reviso → la
+        //    cancelliamo (best-effort) prima di propagare l'errore.
+        const filter = encodeURIComponent(`id$eq:${id}`);
+        try {
+            const issued = await this.client.post(`/delivery-notes/sales/issue?filter=${filter}`, undefined);
+            if (issued && !Array.isArray(issued) && issued.errorCode) {
+                const msg = ((_e = (_d = issued.errors) === null || _d === void 0 ? void 0 : _d[0]) === null || _e === void 0 ? void 0 : _e.message) || issued.message || issued.errorCode;
+                throw new Error(`emissione rifiutata: ${msg}`);
+            }
+        }
+        catch (e) {
+            await this.deleteDraftQuiet(id);
+            throw new Error(`DDT CiC: emissione fallita (id ${id}, bozza rimossa): ${(e === null || e === void 0 ? void 0 : e.message) || e}`);
+        }
+        // 3) rilegge il numero definitivo (tollera il transitorio BeingIssued)
+        const number = await this.readIssuedNumber(id);
         return {
-            id: res.id,
-            number: assigned,
+            id,
+            number: number !== null && number !== void 0 ? number : undefined,
             url: undefined,
             netAmount: totals.net,
             vatAmount: totals.vat,
             grossAmount: totals.gross,
         };
     }
-    /** Prossimo numero della serie per l'anno (da number-series.peeks). */
-    async nextSeriesNumber(seriesId, year) {
+    /** Cancella una bozza DDT rimasta orfana dopo un'emissione fallita (best-effort, non solleva). */
+    async deleteDraftQuiet(id) {
         try {
-            const ns = await this.client.get(`/number-series/${seriesId}`);
-            const peeks = ((ns === null || ns === void 0 ? void 0 : ns.peeks) || []);
-            const pk = peeks.find((p) => (p.accountingYear || {}).year === year) || peeks[0];
-            return pk && pk.nextVoucherNumber != null ? pk.nextVoucherNumber : null;
+            await this.client.del(`/delivery-notes/sales/${id}`);
         }
         catch (_a) {
-            return null;
+            // best-effort: se non si riesce a pulire, l'errore principale resta quello di /issue
         }
+    }
+    /**
+     * Rilegge il DDT finché è `Issued` con un numero assegnato. Dopo /issue lo
+     * stato passa per `BeingIssued` (transitorio): qualche tentativo breve basta.
+     * Best-effort: ritorna il numero appena disponibile, altrimenti null.
+     */
+    async readIssuedNumber(id) {
+        var _a, _b, _c;
+        let num = null;
+        for (let attempt = 0; attempt < 4; attempt++) {
+            const dn = await this.client.get(`/delivery-notes/sales/${id}`);
+            num = (_c = (_b = (_a = dn === null || dn === void 0 ? void 0 : dn.numberSeries) === null || _a === void 0 ? void 0 : _a.numberSeriesSequenceElement) === null || _b === void 0 ? void 0 : _b.number) !== null && _c !== void 0 ? _c : null;
+            if (num != null && (dn === null || dn === void 0 ? void 0 : dn.deliveryNoteStatus) === 'Issued')
+                return num;
+            await new Promise((r) => setTimeout(r, 300));
+        }
+        return num;
     }
     // --- DELETE / URL ----------------------------------------------------------
     async deleteDocument(ref) {
@@ -219,6 +263,48 @@ class CicProvider {
         const base = ref.type === 'quotation' ? '/quotations' : '/orders';
         const res = await this.client.get(`${base}/${ref.id}`);
         return ((_a = res === null || res === void 0 ? void 0 : res.pdf) === null || _a === void 0 ? void 0 : _a.download) || `${this.cfg.baseUrl}${base}/${ref.id}/pdf`;
+    }
+    // --- INDICI MAPPATURE (per il sync chiavi naturali → cic*, Fase 4) --------
+    // Scoperta 13/06 (sonda test-mapping.mjs): l'import nativo NON mette il codice
+    // POPS in productNumber (auto-assegnato) ma in `barCode`. La chiave naturale
+    // prodotti è quindi barCode; quella clienti è vatNumber. Carichiamo l'intero
+    // catalogo/anagrafica una volta e costruiamo le mappe in memoria (meno chiamate
+    // di una GET filtrata per record).
+    /** Mappa barCode(UPPER) → productNumber (id CiC del prodotto). */
+    async buildProductBarcodeIndex() {
+        const map = new Map();
+        let page = 0;
+        let hasMore = true;
+        while (hasMore && page < 50) {
+            const data = await this.client.get(`/products?pagesize=1000&skippages=${page}`);
+            const items = ((data === null || data === void 0 ? void 0 : data.collection) || []);
+            for (const p of items) {
+                if (p.barCode && p.productNumber != null) {
+                    map.set(String(p.barCode).toUpperCase().trim(), p.productNumber);
+                }
+            }
+            hasMore = items.length >= 1000;
+            page++;
+        }
+        return map;
+    }
+    /** Mappa vatNumber → customerNumber per tutti i clienti CiC. */
+    async buildCustomerVatIndex() {
+        const map = new Map();
+        let page = 0;
+        let hasMore = true;
+        while (hasMore && page < 50) {
+            const data = await this.client.get(`/customers?pagesize=1000&skippages=${page}`);
+            const items = ((data === null || data === void 0 ? void 0 : data.collection) || []);
+            for (const c of items) {
+                if (c.vatNumber && c.customerNumber != null) {
+                    map.set(String(c.vatNumber).trim(), c.customerNumber);
+                }
+            }
+            hasMore = items.length >= 1000;
+            page++;
+        }
+        return map;
     }
     // --- PRODOTTI (read-only check) -------------------------------------------
     async syncProducts(codes) {

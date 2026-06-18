@@ -553,6 +553,12 @@ const DELIVERY_TARIFF_CODES = [
     'Consegna Diretta V1',
     'Consegna Diretta V2',
     'Consegna Diretta V3',
+    'Consegna Diretta V4',
+    'Consegna Diretta V5',
+    'Consegna Diretta V6',
+    'Consegna Diretta V7',
+    'Consegna Diretta V8',
+    'Ritiro in sede',
     'Spedizione'
 ];
 const VAT_ID = 0;
@@ -1172,6 +1178,25 @@ async function resolveBillingBackend(_newData) {
 // billingBackend === 'cic'. Anti-duplicato: scrive cic_order_id appena disponibile
 // (il guard di re-entry blocca i ri-trigger). In caso di errore PRIMA di avere l'id
 // NON scrive nulla sul doc (come il path FiC) → niente loop, niente ordini doppi.
+/**
+ * Mappa codice POPS → cicProductId (productNumber CiC) leggendo products/{code}.
+ * In CiC il prodotto si referenzia col productNumber (auto), NON col codice POPS
+ * (che sta in barCode). La mappatura è popolata da syncCicMappings. Codici senza
+ * mappa → undefined → il provider userà il prodotto generico (VARIE).
+ */
+async function resolveCicProductIds(codes) {
+    const db = admin.firestore();
+    const uniq = [...new Set(codes.filter(Boolean).map((c) => c.toUpperCase().trim()))];
+    const map = new Map();
+    await Promise.all(uniq.map(async (code) => {
+        var _a;
+        const snap = await db.collection('products').doc(code).get();
+        const pid = snap.exists ? (_a = snap.data()) === null || _a === void 0 ? void 0 : _a.cicProductId : undefined;
+        if (pid != null)
+            map.set(code, pid);
+    }));
+    return map;
+}
 async function generaOrdineCiC(change, newData, clienteUID) {
     try {
         const userDoc = await admin.firestore().collection('users').doc(clienteUID).get();
@@ -1205,6 +1230,12 @@ async function generaOrdineCiC(change, newData, clienteUID) {
                 category: item.categoria,
             };
         });
+        // Aggancia il productNumber CiC mappato a ogni riga (per codice POPS).
+        const cicProdMap = await resolveCicProductIds(lines.map((l) => l.code));
+        for (const l of lines) {
+            if (l.code)
+                l.cicProductId = cicProdMap.get(l.code);
+        }
         const result = await provider.createOrder({
             customer,
             date: newData.dataConsegnaPrevista || new Date().toISOString().split('T')[0],
@@ -1299,6 +1330,12 @@ async function creaDdtCumulativoCiC(orderIds, data) {
         }
         if (lines.length === 0)
             return { success: false, message: 'Nessuna riga merce da spedire.' };
+        // Aggancia il productNumber CiC mappato a ogni riga (per codice POPS).
+        const cicProdMap = await resolveCicProductIds(lines.map((l) => l.code));
+        for (const l of lines) {
+            if (l.code)
+                l.cicProductId = cicProdMap.get(l.code);
+        }
         const ddt = await provider.createDeliveryNote({
             customer,
             date,
@@ -1326,6 +1363,7 @@ async function creaDdtCumulativoCiC(orderIds, data) {
                 corriere: tipoTrasporto === 'COURIER' ? corriere : null,
                 trackingCode: tipoTrasporto === 'COURIER' ? tracking : null,
                 dataSpedizione: admin.firestore.FieldValue.serverTimestamp(),
+                billingError: admin.firestore.FieldValue.delete(), // pulisce un errore di un tentativo precedente
             });
         }
         await batch.commit();
@@ -1333,7 +1371,20 @@ async function creaDdtCumulativoCiC(orderIds, data) {
     }
     catch (error) {
         console.error('❌ [CIC DDT] Errore:', (error === null || error === void 0 ? void 0 : error.response) ? JSON.stringify(error.response.data) : error === null || error === void 0 ? void 0 : error.message);
-        return { success: false, message: 'Errore CiC: ' + ((error === null || error === void 0 ? void 0 : error.message) || 'sconosciuto') };
+        const msg = 'Errore CiC: ' + ((error === null || error === void 0 ? void 0 : error.message) || 'sconosciuto');
+        // Persistiamo l'errore sugli ordini coinvolti così la failure è DUREVOLE
+        // (visibile in Admin e nella vista logistica, non solo nella modale).
+        try {
+            const errBatch = db.batch();
+            for (const id of orderIds) {
+                errBatch.update(db.collection('preventivi').doc(id), { billingError: msg });
+            }
+            await errBatch.commit();
+        }
+        catch (e) {
+            console.error('⚠️ [CIC DDT] Impossibile persistere billingError:', e === null || e === void 0 ? void 0 : e.message);
+        }
+        return { success: false, message: msg };
     }
 }
 // --- FUNZIONE CREAZIONE DDT (UNIFICATA) ---
@@ -1504,6 +1555,87 @@ exports.creaDdtCumulativo = functions
             : (((_g = (_f = (_e = error.response) === null || _e === void 0 ? void 0 : _e.data) === null || _f === void 0 ? void 0 : _f.error) === null || _g === void 0 ? void 0 : _g.message) || error.message);
         return { success: false, message: "Errore FiC: " + dettagliErrore };
     }
+});
+// --- SYNC MAPPATURE POPS↔CiC (chiavi naturali → cic*) — task Fase 4 ---------
+// Popola cicCustomerNumber su users/* (match per P.IVA = vatNumber CiC) e
+// cicProductId su products/* (match per codice = barCode CiC; il productNumber
+// CiC è auto-assegnato e NON è il codice — scoperto con la sonda test-mapping.mjs).
+// dryRun (DEFAULT true): non scrive, ritorna solo il report (quanti matchano).
+// Il write vero (dryRun:false) va fatto contro l'azienda DEFINITIVA: i numeri del
+// trial NON valgono in produzione.
+exports.syncCicMappings = functions
+    .region('europe-west1')
+    .runWith({ timeoutSeconds: 540, memory: '512MB' })
+    .https.onCall(async (data, context) => {
+    var _a, _b, _c, _d, _e, _f;
+    const callerEmail = (((_b = (_a = context.auth) === null || _a === void 0 ? void 0 : _a.token) === null || _b === void 0 ? void 0 : _b.email) || '').toLowerCase().trim();
+    const callerRole = (_d = (_c = context.auth) === null || _c === void 0 ? void 0 : _c.token) === null || _d === void 0 ? void 0 : _d.role;
+    const isAdminCaller = callerRole === 'ADMIN' || callerEmail === 'info@inglesinaitaliana.it';
+    if (!context.auth || !isAdminCaller) {
+        throw new functions.https.HttpsError('permission-denied', 'Riservato agli amministratori.');
+    }
+    const dryRun = (data === null || data === void 0 ? void 0 : data.dryRun) !== false; // default: sola lettura
+    const db = admin.firestore();
+    const up = (s) => String(s !== null && s !== void 0 ? s : '').toUpperCase().trim();
+    const provider = await (0, lib_billing_1.createCicProvider)();
+    const [prodIdx, custIdx] = await Promise.all([
+        provider.buildProductBarcodeIndex(),
+        provider.buildCustomerVatIndex(),
+    ]);
+    const report = {
+        dryRun,
+        cicCatalog: { products: prodIdx.size, customers: custIdx.size },
+        products: { total: 0, matched: 0, written: 0, missing: [] },
+        customers: { total: 0, matched: 0, written: 0, missing: [] },
+    };
+    let batch = db.batch();
+    let pending = 0;
+    const queueUpdate = async (ref, obj) => {
+        batch.update(ref, obj);
+        if (++pending >= 450) {
+            await batch.commit();
+            batch = db.batch();
+            pending = 0;
+        }
+    };
+    // PRODOTTI: doc id = codice POPS (uppercase) → barCode CiC → productNumber
+    const prodSnap = await db.collection('products').get();
+    for (const doc of prodSnap.docs) {
+        report.products.total++;
+        const pn = prodIdx.get(up(doc.id));
+        if (pn != null) {
+            report.products.matched++;
+            if (!dryRun) {
+                await queueUpdate(doc.ref, { cicProductId: pn });
+                report.products.written++;
+            }
+        }
+        else if (report.products.missing.length < 100) {
+            report.products.missing.push(doc.id);
+        }
+    }
+    // CLIENTI: users.piva → vatNumber CiC → customerNumber
+    const userSnap = await db.collection('users').get();
+    for (const doc of userSnap.docs) {
+        const piva = String((_f = (_e = doc.data()) === null || _e === void 0 ? void 0 : _e.piva) !== null && _f !== void 0 ? _f : '').trim();
+        if (!piva)
+            continue;
+        report.customers.total++;
+        const cn = custIdx.get(piva);
+        if (cn != null) {
+            report.customers.matched++;
+            if (!dryRun) {
+                await queueUpdate(doc.ref, { cicCustomerNumber: cn });
+                report.customers.written++;
+            }
+        }
+        else if (report.customers.missing.length < 100) {
+            report.customers.missing.push(piva);
+        }
+    }
+    if (!dryRun && pending > 0)
+        await batch.commit();
+    return Object.assign({ success: true }, report);
 });
 // --- Bug tracker Firestore (SIDERA CORE) — sostituisce submitBugToNotion ---
 const _bugFns = (0, bugs_1.registerBugFunctions)();

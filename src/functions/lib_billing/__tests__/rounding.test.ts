@@ -5,7 +5,7 @@
 // ============================================================================
 
 import { describe, it, expect } from 'vitest';
-import { round2, computeTotals } from '../rounding';
+import { round2, computeTotals, roundTo10 } from '../rounding';
 
 describe('round2 — half-up decimale (match Reviso, robusto all\'errore binario)', () => {
   // Casi .xx5 dove Math.round ingenuo sbaglia per l'errore di virgola mobile.
@@ -31,6 +31,28 @@ describe('round2 — half-up decimale (match Reviso, robusto all\'errore binario
     expect(round2(-1.005)).toBe(-1.01);
     expect(round2(-42.315)).toBe(-42.32);
     expect(round2(-0.014)).toBe(-0.01);
+  });
+});
+
+describe('roundTo10 — pulizia artefatti float per unitNetPrice (Reviso max 10 decimali)', () => {
+  // Reviso rifiuta unitNetPrice con >10 decimali (400 E04740): questi prezzi POPS
+  // arrivano con artefatti binari e vanno normalizzati senza alterarne il valore.
+  const cases: Array<[number, number]> = [
+    [8.399999999999999, 8.4],
+    [31.679999999999996, 31.68],
+    [13.44, 13.44],
+    [23.04, 23.04],
+    [48, 48],
+    [0, 0],
+  ];
+  it.each(cases)('roundTo10(%f) = %f', (input, expected) => {
+    expect(roundTo10(input)).toBe(expected);
+  });
+  it('non lascia mai più di 10 decimali', () => {
+    for (const v of [8.399999999999999, 31.679999999999996, 17.279999999999998]) {
+      const decimals = (String(roundTo10(v)).split('.')[1] || '').length;
+      expect(decimals).toBeLessThanOrEqual(10);
+    }
   });
 });
 

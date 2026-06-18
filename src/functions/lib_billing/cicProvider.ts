@@ -15,7 +15,7 @@
 
 import { CicClient } from './cicClient';
 import { CicConfig, getCicConfig } from './cicConfig';
-import { computeTotals, round2 } from './rounding';
+import { computeTotals, round2, roundTo10 } from './rounding';
 import {
   BillingProvider, CustomerInput, CustomerRef, DocumentInput, DocumentResult,
   DeliveryNoteInput, DocRef, SyncResult,
@@ -92,7 +92,7 @@ export class CicProvider implements BillingProvider {
         lineNumber: i + 1,
         description: l.description,
         quantity: l.qty,
-        unitNetPrice: l.unitNetPrice,
+        unitNetPrice: roundTo10(l.unitNetPrice),
         discountPercentage: doc.discountPercentage,
         product: this.productRef(l.cicProductId),
         vatInfo: { vatAccount: { vatCode: this.cfg.vatCode } },
@@ -151,7 +151,7 @@ export class CicProvider implements BillingProvider {
         vatInfo: { vatAccount: { id: this.cfg.vatCode, metaData: null }, vatRate: this.cfg.vatRate },
         quantity: l.qty,
         unit: null,
-        unitNetPrice: l.unitNetPrice,
+        unitNetPrice: roundTo10(l.unitNetPrice),
         unitGrossPrice: round2(l.unitNetPrice * (1 + this.cfg.vatRate / 100)),
         totalNetAmount: net,
         totalGrossAmount: round2(net + vat),

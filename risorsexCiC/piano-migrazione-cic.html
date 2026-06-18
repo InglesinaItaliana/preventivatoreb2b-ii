@@ -238,7 +238,7 @@
 
 <!-- ════ STATO AVANZAMENTO ════ -->
 <section id="stato" class="lead">
-  <h2><span class="kick">STATO</span>Stato avanzamento — 13/06/2026</h2>
+  <h2><span class="kick">STATO</span>Stato avanzamento — 18/06/2026</h2>
   <div class="box insight">
     <div class="bt">▲ In sintesi</div>
     <p style="margin:0;">Il layer FiC→CiC è <strong>scritto, testato e in PRODUZIONE</strong>, ma <strong>dormiente</strong>
@@ -246,19 +246,32 @@
     <code>038b177</code> (layer) + <code>8a638db</code> (hardening post code-review). Lato tecnico ~90% e già a bordo;
     il <strong>numero DDT è risolto</strong> — Reviso ha confermato il flusso <em>crea bozza → emetti</em>
     (<code>POST /delivery-notes/sales/issue</code>), <strong>validato sul trial il 13/06</strong> e cablato nel
-    <code>CicProvider</code>. Restano i passi <strong>operativi/fiscali</strong> (dati nuova azienda, cutover).</p>
+    <code>CicProvider</code>. Restano i passi <strong>operativi/fiscali</strong> (validazione ampia, cutover).</p>
+  </div>
+
+  <div class="box action">
+    <div class="bt">◆ Aggiornamento 18/06/2026 — azienda definitiva configurata, Fase 4 chiusa</div>
+    <ul style="margin:0;">
+      <li><strong>Fase 0 completa</strong>: attivazione API Reviso + grant <strong>azienda definitiva</strong> (Inglesina Italiana Srl, P.IVA 14614580968) ottenuti.</li>
+      <li><strong>Credenziali CiC (era un blocco latente)</strong>: <code>config/cic</code> aveva i token nei campi <code>secret</code>/<code>agreement</code> ma il codice legge <code>appSecretToken</code>/<code>agreementGrantToken</code> → in prod <code>getCicConfig()</code> avrebbe lanciato "Credenziali mancanti". <strong>Risolto</strong>: doc riscritto con gli 11 campi corretti + ID rilevati (V022/layout9/serie29/payTerm11/zone1/group1) + prodotto generico <strong>VARIE</strong> creato.</li>
+      <li><strong>#10 dati emittente</strong>: <code>COMPANY</code> in <code>billingPdfDraw.ts</code> coi dati reali della nuova società.</li>
+      <li><strong>Import verificato 100%</strong>: 40/40 prodotti, 119/119 clienti. 3 clienti sistemati (prefisso IT, P.IVA divergente, cliente assente creato).</li>
+      <li><strong>Consegne mappate "ognuna al suo prodotto"</strong>: le 10 tariffe (8 dirette + Ritiro + Spedizione) agganciate a prodotti CiC dedicati (L001–L010); test reale → prezzi al centesimo + IVA 22% ✓.</li>
+      <li><strong>Fase 4 chiusa</strong>: <code>syncCicMappings({dryRun:false})</code> eseguito → <code>cicProductId</code>/<code>cicCustomerNumber</code> scritti su tutto il catalogo.</li>
+      <li><strong>Deploy fatto</strong> (functions+hosting, branch mergiato in <code>main</code> e pushato). CiC resta dormiente.</li>
+    </ul>
   </div>
 
   <div class="tbl-wrap">
   <table>
     <thead><tr><th>Fase del piano</th><th>Stato</th><th>Note</th></tr></thead>
     <tbody>
-      <tr><td><strong>0 · Setup & accessi</strong></td><td><span class="feas warn">▲ ~80%</span></td><td>Developer agreement + trial OK; manca attivazione (<code>api@reviso.com</code>) e grant <strong>azienda definitiva</strong>.</td></tr>
+      <tr style="background:var(--s-green-glow);"><td><strong>0 · Setup & accessi</strong></td><td><span class="feas yes">● Completa</span></td><td>Attivazione API + grant <strong>azienda definitiva</strong> (P.IVA 14614580968) ottenuti (18/06).</td></tr>
       <tr style="background:var(--s-green-glow);"><td><strong>1 · Spike totali</strong></td><td><span class="feas yes">● Completa</span></td><td>Regola half-up validata dal vivo, <strong>15/15</strong> casi-limite.</td></tr>
       <tr style="background:var(--s-green-glow);"><td><strong>2 · Astrazione BillingProvider</strong></td><td><span class="feas yes">● Completa</span></td><td>Interfaccia, FicProvider = path esistente, config/billing, billingBackend, campi cic_*.</td></tr>
       <tr style="background:var(--s-green-glow);"><td><strong>3 · CicProvider</strong></td><td><span class="feas yes">● Completa</span></td><td>Cliente/ordine/preventivo/delete/PDF ✓ — <strong>DDT ✓</strong> (crea→emetti→rileggi numero + <strong>IVA emesso validata</strong> stress test, trial 13/06).</td></tr>
-      <tr><td><strong>4 · Migrazione dati</strong></td><td><span class="feas rw">○ Da fare</span></td><td>Import nativo + mapping + prodotto "VARIE" → serve azienda definitiva.</td></tr>
-      <tr><td><strong>5 · Test parallelo & totali</strong></td><td><span class="feas warn">▲ Parziale</span></td><td>Totali validati ✓; manca il run ampio su dati reali.</td></tr>
+      <tr style="background:var(--s-green-glow);"><td><strong>4 · Migrazione dati</strong></td><td><span class="feas yes">● Completa</span></td><td>Import 40/40 prodotti + 119/119 clienti, VARIE + consegne mappate, <code>syncCicMappings({dryRun:false})</code> eseguito (cicProductId/cicCustomerNumber scritti) — 18/06.</td></tr>
+      <tr><td><strong>5 · Test parallelo & totali</strong></td><td><span class="feas warn">▲ Parziale</span></td><td>Totali ✓ + consegne validate al centesimo (10/10 tariffe, 18/06); manca il run ampio su ordini reali validato dall'ufficio.</td></tr>
       <tr><td><strong>6 · Cutover</strong></td><td><span class="feas rw">○ Da fare</span></td><td>Flip <code>activeBackend='cic'</code> + kill-switch + monitoraggio.</td></tr>
       <tr><td><strong>7 · Drain / ordini aperti (variante)</strong></td><td><span class="feas rw">○ Da fare</span></td><td>Cutover netto + migrazione ordini aperti — decisione commercialista.</td></tr>
       <tr style="background:var(--s-green-glow);"><td><strong>Frontend (FE-1/2/3/4 + 3b)</strong></td><td><span class="feas yes">● Completa</span></td><td>Helper FiC/CiC, PDF POPS, wiring, badge errori, totali canonici gated. <strong>FE-3b ✓</strong> (13/06): DeliveryView/spedizioni riconoscono i DDT CiC.</td></tr>
