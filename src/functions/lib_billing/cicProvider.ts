@@ -21,6 +21,18 @@ import {
   DeliveryNoteInput, DocRef, SyncResult,
 } from './types';
 
+/** Anagrafica cliente CiC normalizzata, per l'import in POPS (users/*). */
+export interface CicCustomerRecord {
+  customerNumber: string | number;
+  name: string;
+  vatNumber: string;   // senza prefisso 'IT'
+  taxCode: string;
+  email: string;
+  address: string;
+  zip: string;
+  city: string;
+}
+
 export class CicProvider implements BillingProvider {
   readonly backend = 'cic' as const;
 
@@ -53,6 +65,32 @@ export class CicProvider implements BillingProvider {
       ...(input.city ? { city: input.city } : {}),
     });
     return { id: created.customerNumber, name: created.name, piva: created.vatNumber || piva };
+  }
+
+  // Recupera l'anagrafica COMPLETA di un cliente CiC per P.IVA (per l'import in
+  // POPS). Ritorna null se assente. NB: in CiC la P.IVA è memorizzata SENZA il
+  // prefisso 'IT' (vedi risorsexCiC/fix-customers.mjs) → lo togliamo, così la
+  // ricerca esatta `vatNumber$eq:` fa match anche se l'operatore digita 'IT...'.
+  // La provincia su Reviso è un ProvinceReference (non una stringa) → non la
+  // esponiamo qui (l'import la lascia vuota).
+  async fetchCustomerByVat(piva: string): Promise<CicCustomerRecord | null> {
+    const clean = (piva || '').trim().replace(/^IT/i, '');
+    if (!clean) return null;
+    const filter = encodeURIComponent(`vatNumber$eq:${clean}`);
+    const found = await this.client.get(`/customers?filter=${filter}`);
+    const list = (found?.collection || []) as any[];
+    if (list.length === 0) return null;
+    const c = list[0];
+    return {
+      customerNumber: c.customerNumber,
+      name: c.name || '',
+      vatNumber: c.vatNumber || clean,
+      taxCode: c.corporateIdentificationNumber || '',
+      email: c.email || '',
+      address: c.address || '',
+      zip: c.zip || '',
+      city: c.city || '',
+    };
   }
 
   // --- ORDINI / PREVENTIVI ---------------------------------------------------

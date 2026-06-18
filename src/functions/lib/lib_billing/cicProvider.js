@@ -40,6 +40,33 @@ class CicProvider {
         const created = await this.client.post('/customers', Object.assign(Object.assign(Object.assign(Object.assign(Object.assign({ name: input.name, vatNumber: piva, currency: 'EUR', customerGroup: { customerGroupNumber: this.cfg.customerGroupNumber }, vatZone: { vatZoneNumber: this.cfg.domesticVatZone }, paymentTerms: { paymentTermsNumber: this.cfg.defaultPaymentTermsNumber } }, (input.taxCode ? { corporateIdentificationNumber: input.taxCode } : {})), (input.email ? { email: input.email } : {})), (input.address ? { address: input.address } : {})), (input.zip ? { zip: input.zip } : {})), (input.city ? { city: input.city } : {})));
         return { id: created.customerNumber, name: created.name, piva: created.vatNumber || piva };
     }
+    // Recupera l'anagrafica COMPLETA di un cliente CiC per P.IVA (per l'import in
+    // POPS). Ritorna null se assente. NB: in CiC la P.IVA è memorizzata SENZA il
+    // prefisso 'IT' (vedi risorsexCiC/fix-customers.mjs) → lo togliamo, così la
+    // ricerca esatta `vatNumber$eq:` fa match anche se l'operatore digita 'IT...'.
+    // La provincia su Reviso è un ProvinceReference (non una stringa) → non la
+    // esponiamo qui (l'import la lascia vuota).
+    async fetchCustomerByVat(piva) {
+        const clean = (piva || '').trim().replace(/^IT/i, '');
+        if (!clean)
+            return null;
+        const filter = encodeURIComponent(`vatNumber$eq:${clean}`);
+        const found = await this.client.get(`/customers?filter=${filter}`);
+        const list = ((found === null || found === void 0 ? void 0 : found.collection) || []);
+        if (list.length === 0)
+            return null;
+        const c = list[0];
+        return {
+            customerNumber: c.customerNumber,
+            name: c.name || '',
+            vatNumber: c.vatNumber || clean,
+            taxCode: c.corporateIdentificationNumber || '',
+            email: c.email || '',
+            address: c.address || '',
+            zip: c.zip || '',
+            city: c.city || '',
+        };
+    }
     // --- ORDINI / PREVENTIVI ---------------------------------------------------
     async createOrder(doc) {
         return this.createSalesDoc('/orders', doc);

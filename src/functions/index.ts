@@ -1926,7 +1926,95 @@ async function fetchFicClientByVat(vatNumber: string, token: string) {
                 throw new functions.https.HttpsError('internal', e.message);
             }
         });
-    
+
+    // --- FUNZIONE 1-bis: IMPORTAZIONE MASSIVA DA CONTABILITÀ IN CLOUD (CiC/Reviso) ---
+    // Gemella di importClientsFromFiC ma legge l'anagrafica da CiC. In CiC la P.IVA
+    // è salvata SENZA il prefisso 'IT'; fetchCustomerByVat lo strippa comunque, ma
+    // l'operatore deve digitarla senza 'IT'. Popola anche cicCustomerNumber (la
+    // chiave di mappatura POPS↔CiC). Non invia mail: crea anagrafiche "dormienti".
+    exports.importClientsFromCiC = functions
+        .region('europe-west1')
+        .runWith({ timeoutSeconds: 540 })
+        .https.onCall(async (data, context) => {
+            if (!context.auth) throw new functions.https.HttpsError('unauthenticated', 'Richiesto login');
+
+            const vatNumbers: string[] = data.vatNumbers || [];
+            const results = { success: 0, failed: 0, errors: [] as string[] };
+
+            try {
+                const provider = await createCicProvider();
+                const db = admin.firestore();
+                const auth = admin.auth();
+
+                for (const piva of vatNumbers) {
+                    // 1. Cerca su CiC (per P.IVA, senza 'IT')
+                    const cicClient = await provider.fetchCustomerByVat(piva);
+
+                    if (!cicClient) {
+                        results.failed++;
+                        results.errors.push(`${piva}: Non trovato su Contabilità in Cloud`);
+                        continue;
+                    }
+
+                    const email = cicClient.email;
+                    if (!email) {
+                        results.failed++;
+                        results.errors.push(`${piva} (${cicClient.name}): Email mancante su CiC`);
+                        continue;
+                    }
+
+                    // 2. Crea/Recupera Utente Firebase
+                    let uid;
+                    try {
+                        const userRecord = await auth.getUserByEmail(email);
+                        uid = userRecord.uid;
+                    } catch (e: any) {
+                        if (e.code === 'auth/user-not-found') {
+                            const newUser = await auth.createUser({
+                                email: email,
+                                displayName: cicClient.name,
+                                disabled: true
+                            });
+                            uid = newUser.uid;
+                        } else {
+                            throw e;
+                        }
+                    }
+
+                    // 3. Salva Anagrafica su Firestore (cicCustomerNumber = mappatura POPS↔CiC)
+                    const userData: any = {
+                        ragioneSociale: cicClient.name,
+                        piva: cicClient.vatNumber,
+                        codiceFiscale: cicClient.taxCode || '',
+                        email: email,
+                        indirizzo: cicClient.address || '',
+                        cap: cicClient.zip || '',
+                        citta: cicClient.city || '',
+                        cicCustomerNumber: cicClient.customerNumber,
+                        dataImportazione: admin.firestore.FieldValue.serverTimestamp()
+                    };
+
+                    const userRef = db.collection('users').doc(uid);
+                    const userSnap = await userRef.get();
+
+                    if (!userSnap.exists) {
+                        userData.status = 'PENDING_INVITE';
+                        userData.mustChangePassword = true;
+                    }
+
+                    await userRef.set(userData, { merge: true });
+
+                    results.success++;
+                }
+
+                return results;
+
+            } catch (e: any) {
+                console.error("Errore importazione CiC", e);
+                throw new functions.https.HttpsError('internal', e.message);
+            }
+        });
+
     // --- FUNZIONE 2: INVIO INVITI (ATTIVAZIONE) ---
     // Genera password, abilita account, invia mail
     exports.sendInvitesToClients = functions

@@ -393,7 +393,7 @@ const catalogStore = useCatalogStore();
   let allErrors: string[] = [];
 
   try {
-    const importFn = httpsCallable(functions, 'importClientsFromFiC');
+    const importFn = httpsCallable(functions, 'importClientsFromCiC');
 
     // Ciclo sui blocchi
     for (let i = 0; i < total; i += BATCH_SIZE) {
@@ -878,8 +878,8 @@ const catalogStore = useCatalogStore();
            <div class="flex items-center gap-3 mb-6">
               <div class="h-12 w-12 rounded-full bg-amber-100 flex items-center justify-center text-amber-600"><CloudArrowUpIcon class="h-6 w-6"/></div>
               <div>
-                 <h2 class="text-xl font-bold text-slate-900">Importa Clienti da FiC</h2>
-                 <p class="text-xs text-slate-500">Sincronizzazione tramite P.IVA</p>
+                 <h2 class="text-xl font-bold text-slate-900">Importa Clienti da CiC</h2>
+                 <p class="text-xs text-slate-500">Sincronizzazione tramite P.IVA (Contabilità in Cloud)</p>
               </div>
            </div>
   
@@ -894,7 +894,8 @@ const catalogStore = useCatalogStore();
   
               <div>
                  <label class="block text-xs font-black uppercase text-slate-400 mb-2">Singola P.IVA</label>
-                 <input v-model="clientImportForm.manualPiva" type="text" placeholder="IT00000000000" class="w-full bg-white border-2 border-slate-200 rounded-xl p-3 text-lg font-mono font-bold text-slate-700 focus:border-amber-400 focus:ring-0 outline-none">
+                 <input v-model="clientImportForm.manualPiva" type="text" placeholder="00000000000" class="w-full bg-white border-2 border-slate-200 rounded-xl p-3 text-lg font-mono font-bold text-slate-700 focus:border-amber-400 focus:ring-0 outline-none">
+                 <p class="text-[10px] text-amber-600 font-bold mt-2">Inserisci solo le cifre della P.IVA, senza il prefisso "IT" (in CiC è memorizzata senza).</p>
                  
                  <div v-if="clientImportForm.manualPiva" class="mt-3 flex items-center gap-3 bg-amber-50 p-3 rounded-xl border border-amber-100">
                     <input v-model="clientImportForm.sendNow" type="checkbox" class="h-5 w-5 text-amber-500 rounded border-gray-300 focus:ring-amber-400 cursor-pointer">
