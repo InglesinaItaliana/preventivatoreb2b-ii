@@ -8,7 +8,8 @@
   import { 
   UserPlusIcon, PencilSquareIcon, MagnifyingGlassIcon, PhoneIcon, EnvelopeIcon,
   UsersIcon, BuildingOfficeIcon, CloudArrowUpIcon, PaperAirplaneIcon, CheckCircleIcon, ExclamationTriangleIcon,
-  XCircleIcon, Cog6ToothIcon, TruckIcon, ClockIcon, CurrencyEuroIcon, TagIcon, MapPinIcon, IdentificationIcon
+  XCircleIcon, Cog6ToothIcon, TruckIcon, ClockIcon, CurrencyEuroIcon, TagIcon, MapPinIcon, IdentificationIcon,
+  LockClosedIcon, LockOpenIcon
 } from '@heroicons/vue/24/solid';
   
   // --- TIPI ---
@@ -214,6 +215,7 @@ const saveSettings = async () => {
   const listinoLoaded = ref(false);
   const listinoLoading = ref(false);
   const savingListino = ref(false);
+  const listinoLocked = ref(true); // prezzi in sola lettura finché non si sblocca il lucchetto
   const listinoSearch = ref('');
   const catalogSource = ref<'sheet' | 'firestore'>('sheet'); // flag settings/pricing.catalogSource
   const originalPrices = ref<Record<string, number>>({});
@@ -239,7 +241,7 @@ const saveSettings = async () => {
     }
   };
 
-  const openListino = () => { activeTab.value = 'LISTINO'; loadListino(); };
+  const openListino = () => { activeTab.value = 'LISTINO'; listinoLocked.value = true; loadListino(); };
 
   // Righe modificate (Object.is così I132=NaN "a richiesta" non risulta sempre dirty).
   const dirtyRows = computed(() => baseRows.value.filter((r) => !Object.is(r.prezzo, originalPrices.value[r.cod])));
@@ -277,6 +279,7 @@ const saveSettings = async () => {
         originalPrices.value[r.cod] = prezzo;
       }
       showCustomToast(`Listino aggiornato (${changed.length} prezzi)`);
+      listinoLocked.value = true; // ri-blocca dopo il salvataggio
     } catch (e) {
       console.error('[listino] salvataggio fallito', e);
       showCustomToast('Errore salvataggio listino');
@@ -907,12 +910,23 @@ const catalogStore = useCatalogStore();
                   <input v-model="listinoSearch" type="text" placeholder="Cerca per codice, modello, finitura, sezione..."
                     class="w-full bg-slate-50 border-2 border-slate-200 rounded-xl pl-10 pr-3 py-2.5 text-sm text-slate-700 focus:border-amber-400 focus:ring-0 outline-none" />
                 </div>
-                <button @click="saveListino" :disabled="savingListino || dirtyRows.length === 0"
+                <button @click="listinoLocked = !listinoLocked"
+                  class="px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-colors border-2 active:scale-95"
+                  :class="listinoLocked ? 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200' : 'bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200'">
+                  <LockClosedIcon v-if="listinoLocked" class="w-5 h-5" />
+                  <LockOpenIcon v-else class="w-5 h-5" />
+                  {{ listinoLocked ? 'Sblocca' : 'Modifica attiva' }}
+                </button>
+                <button @click="saveListino" :disabled="savingListino || listinoLocked || dirtyRows.length === 0"
                   class="bg-slate-900 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-black shadow-lg disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2 transition-transform active:scale-95">
                   <span v-if="savingListino" class="animate-spin h-4 w-4 border-2 border-white/30 border-t-white rounded-full"></span>
                   {{ savingListino ? 'Salvataggio...' : (dirtyRows.length ? `Salva (${dirtyRows.length})` : 'Salva') }}
                 </button>
               </div>
+
+              <p v-if="listinoLocked" class="text-xs text-slate-400 flex items-center gap-1.5">
+                <LockClosedIcon class="w-3.5 h-3.5" /> Prezzi bloccati in sola lettura — clicca <span class="font-bold">Sblocca</span> per modificarli.
+              </p>
 
               <div v-if="listinoLoading" class="text-center py-12 text-slate-400 text-sm">Caricamento listino…</div>
               <div v-else-if="baseRows.length === 0" class="text-center py-12 text-slate-400 text-sm">Listino vuoto.</div>
@@ -930,9 +944,9 @@ const catalogStore = useCatalogStore();
                       </div>
                       <div class="relative shrink-0">
                         <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">€</span>
-                        <input v-model.number="r.prezzo" type="number" step="0.01" inputmode="decimal"
-                          class="w-28 bg-slate-50 border-2 rounded-xl pl-7 pr-2 py-1.5 text-right font-mono font-bold text-slate-700 focus:ring-0 outline-none"
-                          :class="rowDirty(r) ? 'border-amber-400' : 'border-slate-200 focus:border-amber-400'" />
+                        <input v-model.number="r.prezzo" type="number" step="0.01" inputmode="decimal" :disabled="listinoLocked"
+                          class="w-28 border-2 rounded-xl pl-7 pr-2 py-1.5 text-right font-mono font-bold focus:ring-0 outline-none"
+                          :class="listinoLocked ? 'bg-slate-100 text-slate-500 border-slate-200 cursor-not-allowed' : (rowDirty(r) ? 'bg-white text-slate-700 border-amber-400' : 'bg-slate-50 text-slate-700 border-slate-200 focus:border-amber-400')" />
                       </div>
                     </div>
                   </div>
