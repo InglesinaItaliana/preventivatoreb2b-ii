@@ -89,6 +89,19 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
+    // LISTINO (interno a POPS, Fase 1). Letto da tutti gli autenticati (il
+    // preventivatore), scritto solo dagli admin (tab Listino).
+    //  • catalogo     = struttura del menu (389 righe, prezzo ereditato)
+    //  • listino_base = i 48 prezzi base (= CONFIG_PREZZI), fonte dei prezzi
+    match /catalogo/{docId} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+    match /listino_base/{docId} {
+      allow read: if request.auth != null;
+      allow write: if isAdmin();
+    }
+
     // FUNZIONI/MANSIONI (etichette → categoria + ruolo). Gestite in CORE.
     match /funzioni/{id} {
       allow read:  if request.auth != null;
