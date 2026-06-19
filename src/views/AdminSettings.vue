@@ -8,7 +8,8 @@
   import { 
   UserPlusIcon, PencilSquareIcon, MagnifyingGlassIcon, PhoneIcon, EnvelopeIcon,
   UsersIcon, BuildingOfficeIcon, CloudArrowUpIcon, PaperAirplaneIcon, CheckCircleIcon, ExclamationTriangleIcon,
-  XCircleIcon, Cog6ToothIcon, TruckIcon, ClockIcon, CurrencyEuroIcon, TagIcon, MapPinIcon, IdentificationIcon
+  XCircleIcon, Cog6ToothIcon, TruckIcon, ClockIcon, CurrencyEuroIcon, TagIcon, MapPinIcon, IdentificationIcon,
+  LockClosedIcon, LockOpenIcon
 } from '@heroicons/vue/24/solid';
   
   // --- TIPI ---
@@ -81,7 +82,7 @@ const globalPricing = reactive<{
   });
   
   // --- STATO ---
-  const activeTab = ref<'TEAM' | 'CLIENTI' | 'VARIE'>('TEAM');
+  const activeTab = ref<'TEAM' | 'CLIENTI' | 'VARIE' | 'LISTINO'>('TEAM');
   const minDays = ref(14);
   const members = ref<TeamMember[]>([]);
   const clients = ref<ClientUser[]>([]);
@@ -196,9 +197,94 @@ const saveSettings = async () => {
       }, { merge: true });
 
       showCustomToast("Impostazioni salvate!");
-    } catch (e) { 
+    } catch (e) {
       console.error(e);
-      showCustomToast("Errore salvataggio"); 
+      showCustomToast("Errore salvataggio");
+    }
+  };
+
+  // --- TAB LISTINO (Fase 1: modifica dei 48 prezzi base = CONFIG_PREZZI) ----
+  // Si editano i 48 codici base (listino_base); le 389 varianti del menu
+  // EREDITANO il prezzo dal codice (vedi catalog.ts). Una modifica = tutte le
+  // figlie aggiornate, esattamente come la scheda CONFIG_PREZZI del Google Sheet.
+  interface BaseRow {
+    cod: string; prezzo: number; sezione: string;
+    modello: string; dimensione: string; finitura: string; unita?: string; ord?: number;
+  }
+  const baseRows = ref<BaseRow[]>([]);
+  const listinoLoaded = ref(false);
+  const listinoLoading = ref(false);
+  const savingListino = ref(false);
+  const listinoLocked = ref(true); // prezzi in sola lettura finché non si sblocca il lucchetto
+  const listinoSearch = ref('');
+  const catalogSource = ref<'sheet' | 'firestore'>('sheet'); // flag settings/pricing.catalogSource
+  const originalPrices = ref<Record<string, number>>({});
+
+  const loadListino = async () => {
+    if (listinoLoaded.value || listinoLoading.value) return;
+    listinoLoading.value = true;
+    try {
+      const pSnap = await getDoc(doc(db, 'settings', 'pricing'));
+      catalogSource.value = pSnap.exists() && pSnap.data()?.catalogSource === 'firestore' ? 'firestore' : 'sheet';
+
+      const snap = await getDocs(query(collection(db, 'listino_base'), orderBy('ord')));
+      baseRows.value = snap.docs.map((d) => ({ ...(d.data() as any) })) as BaseRow[];
+      const orig: Record<string, number> = {};
+      baseRows.value.forEach((r) => { orig[r.cod] = r.prezzo; });
+      originalPrices.value = orig;
+      listinoLoaded.value = true;
+    } catch (e) {
+      console.error('[listino] caricamento fallito', e);
+      showCustomToast('Errore caricamento listino');
+    } finally {
+      listinoLoading.value = false;
+    }
+  };
+
+  const openListino = () => { activeTab.value = 'LISTINO'; listinoLocked.value = true; loadListino(); };
+
+  // Righe modificate (Object.is così I132=NaN "a richiesta" non risulta sempre dirty).
+  const dirtyRows = computed(() => baseRows.value.filter((r) => !Object.is(r.prezzo, originalPrices.value[r.cod])));
+  const rowDirty = (r: BaseRow) => !Object.is(r.prezzo, originalPrices.value[r.cod]);
+  const baseLabel = (r: BaseRow) => [r.modello, r.dimensione, r.finitura].filter((x) => x && x !== 'x' && x !== 'TUTTE').join(' · ') || r.cod;
+
+  const SECTION_LABELS: Record<string, string> = {
+    GRIGLIA: 'Griglia (Inglesine)', DUPLEX: 'Duplex', MUNTIN: 'Muntin', CANALINO: 'Canalino',
+    SUPPLEMENTI: 'Supplementi', EXTRA: 'Extra', CONSEGNA: 'Consegna',
+  };
+  const SECTION_ORDER = ['GRIGLIA', 'DUPLEX', 'MUNTIN', 'CANALINO', 'SUPPLEMENTI', 'EXTRA', 'CONSEGNA'];
+  const listinoGrouped = computed(() => {
+    const q = listinoSearch.value.trim().toUpperCase();
+    const rows = q
+      ? baseRows.value.filter((r) =>
+          [r.cod, r.modello, r.dimensione, r.finitura, r.sezione].some((f) => String(f || '').toUpperCase().includes(q)))
+      : baseRows.value;
+    const bySez: Record<string, BaseRow[]> = {};
+    for (const r of rows) (bySez[r.sezione] ||= []).push(r);
+    const ord = (s: string) => { const i = SECTION_ORDER.indexOf(s); return i === -1 ? 99 : i; };
+    return Object.keys(bySez).sort((a, b) => ord(a) - ord(b)).map((sezione) => ({
+      sezione, label: SECTION_LABELS[sezione] || sezione, rows: bySez[sezione],
+    }));
+  });
+
+  const saveListino = async () => {
+    const changed = dirtyRows.value;
+    if (changed.length === 0) return showCustomToast('Nessuna modifica da salvare');
+    savingListino.value = true;
+    try {
+      for (const r of changed) {
+        const prezzo = Number(r.prezzo);
+        if (Number.isNaN(prezzo)) { showCustomToast(`Prezzo non valido su ${r.cod}`); continue; }
+        await updateDoc(doc(db, 'listino_base', r.cod), { prezzo });
+        originalPrices.value[r.cod] = prezzo;
+      }
+      showCustomToast(`Listino aggiornato (${changed.length} prezzi)`);
+      listinoLocked.value = true; // ri-blocca dopo il salvataggio
+    } catch (e) {
+      console.error('[listino] salvataggio fallito', e);
+      showCustomToast('Errore salvataggio listino');
+    } finally {
+      savingListino.value = false;
     }
   };
 
@@ -505,6 +591,9 @@ const catalogStore = useCatalogStore();
             <button @click="activeTab = 'CLIENTI'" class="px-6 py-2 rounded-full text-sm font-bold transition-all flex items-center gap-2" :class="activeTab === 'CLIENTI' ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'">
               <BuildingOfficeIcon class="h-4 w-4" /> Clienti B2B
             </button>
+            <button @click="openListino" class="px-6 py-2 rounded-full text-sm font-bold transition-all flex items-center gap-2" :class="activeTab === 'LISTINO' ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'">
+              <TagIcon class="h-4 w-4" /> Listino
+            </button>
             <button @click="activeTab = 'VARIE'" class="px-6 py-2 rounded-full text-sm font-bold transition-all flex items-center gap-2" :class="activeTab === 'VARIE' ? 'bg-slate-900 text-white shadow-md' : 'text-slate-500 hover:bg-slate-50'">
               <Cog6ToothIcon class="h-4 w-4" /> Varie
             </button>
@@ -790,6 +879,80 @@ const catalogStore = useCatalogStore();
 
             </div>
 
+          </div>
+        </div>
+
+        <!-- ===================== TAB LISTINO (Fase 1) ===================== -->
+        <div v-if="activeTab === 'LISTINO'" class="max-w-5xl mx-auto space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          <div class="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden flex flex-col">
+            <div class="bg-slate-50/50 px-8 py-5 border-b border-slate-100 flex items-center justify-between gap-3 flex-wrap">
+              <div class="flex items-center gap-3">
+                <div class="bg-amber-100 p-2.5 rounded-xl text-amber-600 shadow-sm"><TagIcon class="w-6 h-6" /></div>
+                <div>
+                  <h3 class="font-bold text-lg text-slate-800">Listino prezzi</h3>
+                  <p class="text-xs text-slate-500">Prezzi base — le varianti del menu ereditano automaticamente</p>
+                </div>
+              </div>
+              <div>
+                <span v-if="catalogSource === 'firestore'" class="inline-flex items-center gap-1.5 text-xs font-bold text-green-700 bg-green-50 border border-green-200 px-3 py-1.5 rounded-full">
+                  <CheckCircleIcon class="w-4 h-4" /> Listino interno ATTIVO
+                </span>
+                <span v-else class="inline-flex items-center gap-1.5 text-xs font-bold text-amber-800 bg-amber-50 border border-amber-200 px-3 py-1.5 rounded-full">
+                  <ExclamationTriangleIcon class="w-4 h-4" /> Sorgente attiva: Google Sheet — le modifiche non sono ancora live
+                </span>
+              </div>
+            </div>
+
+            <div class="p-6 space-y-4">
+              <div class="flex gap-3 items-center">
+                <div class="relative flex-1">
+                  <MagnifyingGlassIcon class="w-5 h-5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input v-model="listinoSearch" type="text" placeholder="Cerca per codice, modello, finitura, sezione..."
+                    class="w-full bg-slate-50 border-2 border-slate-200 rounded-xl pl-10 pr-3 py-2.5 text-sm text-slate-700 focus:border-amber-400 focus:ring-0 outline-none" />
+                </div>
+                <button @click="listinoLocked = !listinoLocked"
+                  class="px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-colors border-2 active:scale-95"
+                  :class="listinoLocked ? 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200' : 'bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200'">
+                  <LockClosedIcon v-if="listinoLocked" class="w-5 h-5" />
+                  <LockOpenIcon v-else class="w-5 h-5" />
+                  {{ listinoLocked ? 'Sblocca' : 'Modifica attiva' }}
+                </button>
+                <button @click="saveListino" :disabled="savingListino || listinoLocked || dirtyRows.length === 0"
+                  class="bg-slate-900 text-white px-6 py-2.5 rounded-xl font-bold hover:bg-black shadow-lg disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-2 transition-transform active:scale-95">
+                  <span v-if="savingListino" class="animate-spin h-4 w-4 border-2 border-white/30 border-t-white rounded-full"></span>
+                  {{ savingListino ? 'Salvataggio...' : (dirtyRows.length ? `Salva (${dirtyRows.length})` : 'Salva') }}
+                </button>
+              </div>
+
+              <p v-if="listinoLocked" class="text-xs text-slate-400 flex items-center gap-1.5">
+                <LockClosedIcon class="w-3.5 h-3.5" /> Prezzi bloccati in sola lettura — clicca <span class="font-bold">Sblocca</span> per modificarli.
+              </p>
+
+              <div v-if="listinoLoading" class="text-center py-12 text-slate-400 text-sm">Caricamento listino…</div>
+              <div v-else-if="baseRows.length === 0" class="text-center py-12 text-slate-400 text-sm">Listino vuoto.</div>
+              <div v-else class="space-y-5">
+                <div v-for="g in listinoGrouped" :key="g.sezione">
+                  <h4 class="text-xs font-black uppercase tracking-wider text-slate-400 mb-2 ml-1">
+                    {{ g.label }} <span class="text-slate-300">· {{ g.rows.length }}</span>
+                  </h4>
+                  <div class="rounded-2xl border border-slate-200 divide-y divide-slate-100 overflow-hidden">
+                    <div v-for="r in g.rows" :key="r.cod" class="flex items-center gap-3 px-4 py-2.5 transition-colors"
+                      :class="rowDirty(r) ? 'bg-amber-50/70' : 'hover:bg-slate-50'">
+                      <div class="flex-1 min-w-0">
+                        <p class="text-sm font-bold text-slate-700 truncate">{{ baseLabel(r) }}</p>
+                        <p class="text-[11px] text-slate-400 font-mono">cod {{ r.cod }}<span v-if="r.unita"> · {{ r.unita }}</span></p>
+                      </div>
+                      <div class="relative shrink-0">
+                        <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">€</span>
+                        <input v-model.number="r.prezzo" type="number" step="0.01" inputmode="decimal" :disabled="listinoLocked"
+                          class="w-28 border-2 rounded-xl pl-7 pr-2 py-1.5 text-right font-mono font-bold focus:ring-0 outline-none"
+                          :class="listinoLocked ? 'bg-slate-100 text-slate-500 border-slate-200 cursor-not-allowed' : (rowDirty(r) ? 'bg-white text-slate-700 border-amber-400' : 'bg-slate-50 text-slate-700 border-slate-200 focus:border-amber-400')" />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
