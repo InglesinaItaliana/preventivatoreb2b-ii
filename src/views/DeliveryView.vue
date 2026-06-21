@@ -1,17 +1,19 @@
 <script setup lang="ts">
   import { ref, onMounted, computed, reactive, watch } from 'vue';
-  import { 
+  import {
   collection, query, where, getDocs, getDoc, orderBy, onSnapshot, // <--- Aggiunto getDoc
-  addDoc, updateDoc, doc, serverTimestamp, writeBatch 
+  addDoc, updateDoc, doc, serverTimestamp, writeBatch, deleteDoc, deleteField
 } from 'firebase/firestore';
   import { db, auth, storage } from '../firebase';
   import { dedupeTeamDocs } from '../composables/sidera/useTeamMembers';
   import DeliveryModal from '../components/DeliveryModal.vue';
+  import TripManageModal from '../components/delivery/TripManageModal.vue';
   import NovaVehiclePicker from '../components/nova/NovaVehiclePicker.vue';
   import { useVehicles } from '../composables/shared/useVehicles';
-  import { 
-    TruckIcon, MapPinIcon, 
-    MapIcon, CheckCircleIcon, InboxStackIcon, PlusIcon,ChevronUpIcon, ChevronDownIcon
+  import {
+    TruckIcon, MapPinIcon,
+    MapIcon, CheckCircleIcon, InboxStackIcon, PlusIcon,ChevronUpIcon, ChevronDownIcon,
+    SparklesIcon, Cog6ToothIcon
   } from '@heroicons/vue/24/solid';
   import { ref as storageRef, uploadString, getDownloadURL } from 'firebase/storage';
   
@@ -386,17 +388,37 @@ const loadMyTrip = async () => {
   });
 };
   
+// Sede aziendale: fallback per il punto di partenza del navigatore
+// quando la geolocalizzazione non è disponibile o viene negata.
+const SEDE_ORIGIN = "Via Cav. Angelo Manzoni 18, Sant'Angelo Lodigiano";
+
+// Restituisce la posizione attuale come stringa "lat,lng" (accettata da Google Maps),
+// oppure l'indirizzo sede se il GPS non è disponibile / il permesso è negato / scade il timeout.
+const getCurrentOrigin = (): Promise<string> => new Promise((resolve) => {
+  if (!navigator.geolocation) return resolve(SEDE_ORIGIN);
+  navigator.geolocation.getCurrentPosition(
+    (pos) => resolve(`${pos.coords.latitude},${pos.coords.longitude}`),
+    () => resolve(SEDE_ORIGIN),
+    { enableHighAccuracy: true, timeout: 8000, maximumAge: 60000 }
+  );
+});
+
+// Indica che stiamo attendendo la posizione GPS (disabilita il bottone "Avvia Navigatore").
+const navigating = ref(false);
+
 // GENERATORE LINK GOOGLE MAPS
 // GENERATORE LINK GOOGLE MAPS (Versione Corretta)
-const openNavigator = () => {
+const openNavigator = async () => {
   // 1. Usiamo groupedTripStops perché contiene gli indirizzi CORRETTI (presi da users)
   // Non usare tripOrders perché lì l'indirizzo spesso manca!
   const stops = groupedTripStops.value;
 
   if (stops.length === 0) return;
 
-  // 2. Definisci l'origine (La tua sede)
-  const origin = "Via Cav. Angelo Manzoni 18, Sant'Angelo Lodigiano";
+  // 2. Origine = posizione attuale di chi avvia (fallback: sede)
+  navigating.value = true;
+  const origin = await getCurrentOrigin();
+  navigating.value = false;
 
   // 3. L'ultima tappa è la DESTINAZIONE finale
   const lastStop = stops[stops.length - 1];
@@ -611,6 +633,7 @@ const getShipments = (list: Order[]) => {
         citta: o.citta,
         provincia: o.provincia,
         billingError: o.billingError,
+        delivered: o.stato === 'DELIVERED',
       });
     }
   });
@@ -632,10 +655,127 @@ const getShipments = (list: Order[]) => {
       citta: first.citta,
       provincia: first.provincia,
       billingError: orders.find(o => o.billingError)?.billingError,
+      delivered: orders.every(o => o.stato === 'DELIVERED'),
     });
   });
 
   return groups.sort((a, b) => a.cliente.localeCompare(b.cliente));
+};
+
+// --- GESTIONE VIAGGIO (Modal admin: autista/mezzo, aggiungi/rimuovi ordini, elimina) ---
+const showManageModal = ref(false);
+const manageTrip = ref<Trip | null>(null);
+const manageTripOrders = ref<Order[]>([]);
+
+// Tappe correnti del viaggio in gestione, raggruppate (con flag `delivered`)
+const manageTripShipments = computed(() => getShipments(manageTripOrders.value));
+// Ordini liberi nel pool (riusa la stessa logica del pannello principale)
+const poolShipments = computed(() => getShipments(poolOrders.value));
+
+const openManage = async (trip: Trip) => {
+  manageTrip.value = trip;
+  try {
+    const promises = trip.stops.map(oid =>
+      getDocs(query(collection(db, 'preventivi'), where('__name__', '==', oid)))
+    );
+    const results = await Promise.all(promises);
+    manageTripOrders.value = results
+      .map(r => !r.empty ? { ...r.docs[0]!.data(), id: r.docs[0]!.id } : null)
+      .filter(o => o !== null) as Order[];
+    showManageModal.value = true;
+  } catch (e) {
+    console.error('Errore apertura gestione viaggio:', e);
+    alert('Impossibile caricare i dettagli del viaggio.');
+  }
+};
+
+const closeManage = () => {
+  showManageModal.value = false;
+  manageTrip.value = null;
+  manageTripOrders.value = [];
+};
+
+const saveTripChanges = async (payload: { driverId: string; vehicleId: string; addIds: string[]; removeIds: string[] }) => {
+  if (!manageTrip.value) return;
+  const tripId = manageTrip.value.id;
+  try {
+    const driver = drivers.value.find(d => d.id === payload.driverId);
+    const vehicle = deliveryVehicles.value.find(v => v.id === payload.vehicleId);
+
+    // Nuovo elenco tappe: rimuovo quelle deselezionate, aggiungo quelle nuove
+    const newStops = [
+      ...manageTrip.value.stops.filter(id => !payload.removeIds.includes(id)),
+      ...payload.addIds.filter(id => !manageTrip.value!.stops.includes(id)),
+    ];
+
+    const tripUpdate: Record<string, unknown> = {
+      driverId: payload.driverId,
+      driverName: driver ? `${driver.firstName} ${driver.lastName}` : (manageTrip.value.driverName ?? 'Autista'),
+      stops: newStops,
+    };
+    if (payload.vehicleId) {
+      tripUpdate.vehicleId = payload.vehicleId;
+      tripUpdate.vehiclePlate = vehicle?.plate ?? '';
+    } else {
+      tripUpdate.vehicleId = deleteField();
+      tripUpdate.vehiclePlate = deleteField();
+    }
+    await updateDoc(doc(db, 'trips', tripId), tripUpdate);
+
+    // Aggiorna gli ordini coinvolti
+    if (payload.addIds.length || payload.removeIds.length) {
+      const batch = writeBatch(db);
+      payload.addIds.forEach(id => {
+        batch.update(doc(db, 'preventivi', id), { assignedToTrip: true, tripId });
+      });
+      payload.removeIds.forEach(id => {
+        batch.update(doc(db, 'preventivi', id), { assignedToTrip: false, tripId: deleteField() });
+      });
+      await batch.commit();
+    }
+
+    closeManage();
+  } catch (e) {
+    console.error('Errore salvataggio modifiche viaggio:', e);
+    alert('Errore durante il salvataggio delle modifiche.');
+  }
+};
+
+const requestDeleteTrip = () => {
+  if (!manageTrip.value) return;
+  // Nascondo il modal di gestione (z-index più alto) per mostrare la conferma sopra
+  showManageModal.value = false;
+  confirmModal.message = 'Eliminare questo viaggio? Gli ordini non ancora consegnati torneranno nel pool.';
+  confirmModal.onConfirm = async () => {
+    await deleteTrip();
+    confirmModal.show = false;
+    manageTrip.value = null;
+    manageTripOrders.value = [];
+  };
+  confirmModal.show = true;
+};
+
+const deleteTrip = async () => {
+  if (!manageTrip.value) return;
+  const trip = manageTrip.value;
+  try {
+    // Riporta nel pool solo gli ordini NON consegnati
+    const deliveredIds = new Set(
+      manageTripOrders.value.filter(o => o.stato === 'DELIVERED').map(o => o.id)
+    );
+    const toReset = trip.stops.filter(id => !deliveredIds.has(id));
+    if (toReset.length) {
+      const batch = writeBatch(db);
+      toReset.forEach(id => {
+        batch.update(doc(db, 'preventivi', id), { assignedToTrip: false, tripId: deleteField() });
+      });
+      await batch.commit();
+    }
+    await deleteDoc(doc(db, 'trips', trip.id));
+  } catch (e) {
+    console.error('Errore eliminazione viaggio:', e);
+    alert('Errore durante l\'eliminazione del viaggio.');
+  }
 };
 
 // Funzione di selezione modificata per accettare array di ID
@@ -783,9 +923,14 @@ const isSelected = (ids: string[]) => {
                                      <span v-if="trip.vehiclePlate"> • {{ trip.vehiclePlate }}</span>
                                  </div>
                              </div>
-                             <button @click="inspectTrip(trip)" class="bg-white text-slate-600 border border-slate-200 hover:border-slate-900 hover:text-slate-900 p-1.5 rounded-lg transition-colors">
-                               <MapIcon class="w-4 h-4"/>
-                             </button>
+                             <div class="flex items-center gap-1.5">
+                               <button @click="openManage(trip)" title="Gestisci viaggio" class="bg-white text-slate-600 border border-slate-200 hover:border-amber-500 hover:text-amber-600 p-1.5 rounded-lg transition-colors">
+                                 <Cog6ToothIcon class="w-4 h-4"/>
+                               </button>
+                               <button @click="inspectTrip(trip)" title="Ispeziona" class="bg-white text-slate-600 border border-slate-200 hover:border-slate-900 hover:text-slate-900 p-1.5 rounded-lg transition-colors">
+                                 <MapIcon class="w-4 h-4"/>
+                               </button>
+                             </div>
                          </div>
                      </div>
                  </div>
@@ -861,8 +1006,8 @@ const isSelected = (ids: string[]) => {
                           </div>
                       </div>
                       
-                      <button @click="openNavigator" class="w-full bg-amber-400 hover:bg-amber-300 text-amber-950 font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-lg shadow-amber-900/20">
-                          <MapIcon class="w-5 h-5"/> Avvia Navigatore
+                      <button @click="openNavigator" :disabled="navigating" class="w-full bg-amber-400 hover:bg-amber-300 disabled:opacity-60 disabled:cursor-wait text-amber-950 font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2 transition-all active:scale-[0.98] shadow-lg shadow-amber-900/20">
+                          <MapIcon class="w-5 h-5"/> {{ navigating ? 'Localizzazione…' : 'Avvia Navigatore' }}
                       </button>
                   </div>
               </div>
@@ -948,11 +1093,22 @@ const isSelected = (ids: string[]) => {
 
     </main>
 
-    <DeliveryModal 
-      :show="showDeliveryModal" 
-      :order="selectedOrderForDelivery" 
+    <DeliveryModal
+      :show="showDeliveryModal"
+      :order="selectedOrderForDelivery"
       @close="showDeliveryModal = false"
       @confirm="handleConfirmDelivery"
+    />
+
+    <TripManageModal
+      :show="showManageModal"
+      :trip="manageTrip"
+      :drivers="drivers"
+      :trip-shipments="manageTripShipments"
+      :pool-shipments="poolShipments"
+      @close="closeManage"
+      @save="saveTripChanges"
+      @delete="requestDeleteTrip"
     />
 
     <div v-if="confirmModal.show" class="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
