@@ -25,6 +25,7 @@ export interface PdfLine {
   unitNetPrice?: number;
   discountPct?: number;
   totalNet?: number;
+  group?: string; // intestazione di gruppo (DDT cumulativo: ordine di provenienza)
 }
 
 export interface PdfDocData {
@@ -205,8 +206,19 @@ export function drawBillingDocument(doc: any, data: PdfDocData, logoDataUrl?: st
   drawHead();
 
   doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+  let currentGroup: string | undefined;
   for (const l of data.lines) {
     if (y > 262) { doc.addPage(); y = 18; drawHead(); doc.setFont('helvetica', 'normal'); doc.setFontSize(9); }
+    // Intestazione di gruppo (DDT cumulativo): una banda per ogni ordine.
+    if (l.group && l.group !== currentGroup) {
+      currentGroup = l.group;
+      if (y > 256) { doc.addPage(); y = 18; drawHead(); }
+      setFill(TINT); doc.rect(M, y, RIGHT - M, 6, 'F');
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(8); setText(INK);
+      doc.text(currentGroup, xCode + 1, y + 4.2);
+      y += 6;
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(9);
+    }
     const descLines: string[] = doc.splitTextToSize(l.description || '', (priced ? xQtaR - 8 : xQtaR - 30) - xDesc);
     const rowH = Math.max(7, descLines.length * 4.2 + 2.8);
     setText(MID); doc.setFontSize(8);

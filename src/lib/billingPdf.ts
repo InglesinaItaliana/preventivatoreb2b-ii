@@ -5,13 +5,36 @@
 // ============================================================================
 
 import { jsPDF } from 'jspdf';
+import { doc as fsDoc, getDoc } from 'firebase/firestore';
 import { drawBillingDocument, type PdfDocData, type PdfKind, type PdfLine } from './billingPdfDraw';
 import { computeTotals } from './billingTotals';
+import { db } from '../firebase';
 import type { PreventivoDocumento } from '../types';
 
 const VAT_RATE = 22;
 
 type PreventivoLike = Partial<PreventivoDocumento> & Record<string, any>;
+
+// L'anagrafica cliente completa (denominazione, P.IVA, indirizzo) vive su
+// users/{clienteUID}, NON sul preventivo. Per i PDF generati da POPS la
+// recuperiamo e la usiamo come fallback dei campi mancanti sul preventivo.
+async function loadClientAnagrafica(uid?: string): Promise<Record<string, any> | null> {
+  if (!uid) return null;
+  try {
+    const snap = await getDoc(fsDoc(db, 'users', uid));
+    return snap.exists() ? (snap.data() as Record<string, any>) : null;
+  } catch {
+    return null;
+  }
+}
+
+// Etichetta di gruppo per il DDT cumulativo: identifica l'ordine di provenienza
+// delle righe (numero ordine CiC + commessa), così dal DDT si risale agli ordini.
+function orderGroupLabel(o: PreventivoLike): string {
+  const num = o.cic_order_number ?? o.cic_order_id ?? o.codice ?? '—';
+  const ref = o.commessa;
+  return `Ordine ${num}${ref ? ` · ${ref}` : ''}`;
+}
 
 // ── Logo: SVG → PNG (cache) ───────────────────────────────────────────────
 let logoCache: string | null | undefined;
@@ -69,6 +92,7 @@ export function buildPdfData(p: PreventivoLike, kind: PdfKind): PdfDocData {
     }
     // Il DDT non porta prezzi: solo merce + quantità.
     const base: PdfLine = { code: e.codice || '', description: desc, qty: Number(e.quantita) || 1 };
+    if (isDdt && e.__group) base.group = e.__group; // raggruppamento per ordine (DDT cumulativo)
     if (!isDdt) {
       base.unitNetPrice = Number(e.prezzo_unitario) || 0;
       base.discountPct = sconto || undefined;
@@ -122,7 +146,22 @@ export async function openBillingPdf(p: PreventivoLike, kind: PdfKind): Promise<
   // la blocca perché window.open arriverebbe dopo l'await del logo).
   const win = window.open('', '_blank');
   try {
-    const data = buildPdfData(p, kind);
+    // Arricchisce i dati cliente (denominazione, P.IVA, indirizzo) da users/{uid}:
+    // sul preventivo questi campi non sono salvati. I valori già presenti su `p`
+    // restano prioritari; quelli dell'anagrafica fanno da fallback.
+    const u = await loadClientAnagrafica(p.clienteUID);
+    const enriched: PreventivoLike = u ? {
+      ...p,
+      cliente: p.cliente || u.ragioneSociale,
+      ragioneSociale: p.ragioneSociale ?? u.ragioneSociale,
+      clientePiva: p.clientePiva ?? p.piva ?? u.piva,
+      piva: p.piva ?? u.piva,
+      indirizzo: p.indirizzo ?? u.indirizzo,
+      cap: p.cap ?? u.cap,
+      citta: p.citta ?? u.citta,
+      provincia: p.provincia ?? u.provincia,
+    } : p;
+    const data = buildPdfData(enriched, kind);
     const logo = await loadLogoPng();
     const doc = new jsPDF({ unit: 'mm', format: 'a4' });
     drawBillingDocument(doc, data, logo);
@@ -147,9 +186,17 @@ export function openDdtPdf(p: PreventivoLike | PreventivoLike[]): Promise<void> 
   if (arr.length > 1 && arr.some((x) => ddtKey(x) !== ddtKey(first))) {
     console.warn('[billingPdf] DDT cumulativo: ordini con ddt_id diversi', arr.map(ddtKey));
   }
+  // DDT cumulativo (più ordini): tagga ogni riga con l'ordine di provenienza,
+  // così nel PDF compare un'intestazione di gruppo per ciascun ordine.
+  const multi = arr.length > 1;
   const merged: PreventivoLike = {
     ...first,
-    elementi: arr.flatMap((x) => (Array.isArray(x.elementi) ? x.elementi : [])),
+    elementi: arr.flatMap((x) => {
+      const elementi = Array.isArray(x.elementi) ? x.elementi : [];
+      if (!multi) return elementi;
+      const label = orderGroupLabel(x);
+      return elementi.map((e: any) => ({ ...e, __group: label }));
+    }),
   };
   return openBillingPdf(merged, 'ddt');
 }
