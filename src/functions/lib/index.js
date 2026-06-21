@@ -1285,7 +1285,7 @@ async function generaOrdineCiC(change, newData, clienteUID) {
 // assembla le righe dai preventivi in Firestore. Il DDT è un documento di
 // trasporto → elenca la MERCE (righe non-EXTRA); i prezzi non sono rilevanti.
 async function creaDdtCumulativoCiC(orderIds, data) {
-    var _a, _b;
+    var _a, _b, _c, _d, _e;
     const { date, colli, weight, tipoTrasporto, corriere, tracking } = data;
     const db = admin.firestore();
     try {
@@ -1315,14 +1315,26 @@ async function creaDdtCumulativoCiC(orderIds, data) {
             province: userData === null || userData === void 0 ? void 0 : userData.provincia,
         });
         // Righe = merce trasportata (escludo gli EXTRA: spedizione/lavorazioni).
+        // DDT cumulativo (piu' ordini): la prima riga di ogni ordine porta in
+        // descrizione il riferimento all'ordine (numero CiC + commessa), cosi'
+        // dal DDT si risale ai singoli ordini raggruppati.
+        const isCumulativo = orders.length > 1;
         const lines = [];
         for (const o of orders) {
+            const cicNum = (_c = (_b = (_a = o.data.cic_order_number) !== null && _a !== void 0 ? _a : o.data.cic_order_id) !== null && _b !== void 0 ? _b : o.data.codice) !== null && _c !== void 0 ? _c : '';
+            const commessa = o.data.commessa ? ` - ${o.data.commessa}` : '';
+            const groupLabel = `[Ordine ${cicNum}${commessa}]`;
+            let firstOfOrder = true;
             for (const item of (o.data.elementi || [])) {
                 if (item.categoria === 'EXTRA')
                     continue;
                 let desc = item.descrizioneCompleta || 'Articolo Vetrata';
                 if (item.base_mm > 0 || item.altezza_mm > 0) {
                     desc += ` - Dim: ${item.base_mm}x${item.altezza_mm} mm`;
+                }
+                if (isCumulativo && firstOfOrder) {
+                    desc = `${groupLabel} ${desc}`;
+                    firstOfOrder = false;
                 }
                 lines.push({
                     code: item.codice ? String(item.codice).toUpperCase().trim() : '',
@@ -1359,8 +1371,8 @@ async function creaDdtCumulativoCiC(orderIds, data) {
             const ref = db.collection('preventivi').doc(o.firestoreId);
             batch.update(ref, {
                 cic_ddt_id: ddt.id,
-                cic_ddt_number: (_a = ddt.number) !== null && _a !== void 0 ? _a : null,
-                cic_ddt_url: (_b = ddt.url) !== null && _b !== void 0 ? _b : null,
+                cic_ddt_number: (_d = ddt.number) !== null && _d !== void 0 ? _d : null,
+                cic_ddt_url: (_e = ddt.url) !== null && _e !== void 0 ? _e : null,
                 stato: nuovoStato,
                 dataConsegnaPrevista: date,
                 colli: colli != null ? Number(colli) : null,
