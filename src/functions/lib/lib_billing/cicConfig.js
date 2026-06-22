@@ -55,9 +55,10 @@ const DEFAULTS = {
     domesticVatZone: 1,
     customerGroupNumber: 1,
     genericProductNumber: 'VARIE',
+    productGroupNumber: 3,
 };
 async function getCicConfig() {
-    var _a, _b, _c, _d, _e, _f;
+    var _a, _b, _c, _d, _e, _f, _g;
     const snap = await admin.firestore().collection('config').doc('cic').get();
     const d = (snap.exists ? snap.data() : {});
     const appSecretToken = process.env.REVISO_APP_SECRET || d.appSecretToken;
@@ -77,6 +78,7 @@ async function getCicConfig() {
         domesticVatZone: (_e = d.domesticVatZone) !== null && _e !== void 0 ? _e : DEFAULTS.domesticVatZone,
         customerGroupNumber: (_f = d.customerGroupNumber) !== null && _f !== void 0 ? _f : DEFAULTS.customerGroupNumber,
         genericProductNumber: d.genericProductNumber || DEFAULTS.genericProductNumber,
+        productGroupNumber: (_g = d.productGroupNumber) !== null && _g !== void 0 ? _g : DEFAULTS.productGroupNumber,
     };
 }
 /** Backend attivo per i NUOVI documenti. Default 'fic' finché non si flippa al cutover. */

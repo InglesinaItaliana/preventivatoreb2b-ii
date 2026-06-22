@@ -333,6 +333,32 @@ class CicProvider {
         }
         return map;
     }
+    // --- CREAZIONE PRODOTTO (Fase 2: nuovi articoli del listino da POPS) -------
+    /** Cerca un prodotto CiC per barCode (= codice POPS). Ritorna il productNumber o null. */
+    async findProductByBarcode(code) {
+        var _a;
+        const filter = encodeURIComponent(`barCode$eq:${code}`);
+        const found = await this.client.get(`/products?filter=${filter}`);
+        const list = ((found === null || found === void 0 ? void 0 : found.collection) || []);
+        return list.length > 0 ? ((_a = list[0].productNumber) !== null && _a !== void 0 ? _a : null) : null;
+    }
+    /**
+     * Crea un prodotto su Reviso con barCode = codice POPS (chiave naturale).
+     * Idempotente: se esiste già un prodotto con quel barCode lo riusa (retry-safe).
+     * Ritorna il productNumber CiC (da salvare come cicProductId in products/code).
+     */
+    async createProduct(input) {
+        var _a, _b;
+        const existing = await this.findProductByBarcode(input.code);
+        if (existing != null)
+            return existing;
+        const created = await this.client.post('/products', Object.assign({ productNumber: input.code, name: input.name, barCode: input.code, productGroup: { productGroupNumber: this.cfg.productGroupNumber } }, (input.salesPrice != null ? { salesPrice: input.salesPrice } : {})));
+        if ((created === null || created === void 0 ? void 0 : created.errorCode) || (created === null || created === void 0 ? void 0 : created.productNumber) == null) {
+            const msg = ((_b = (_a = created === null || created === void 0 ? void 0 : created.errors) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.message) || (created === null || created === void 0 ? void 0 : created.message) || (created === null || created === void 0 ? void 0 : created.errorCode) || 'risposta senza productNumber';
+            throw new Error(`Creazione prodotto CiC fallita (${input.code}): ${msg}`);
+        }
+        return created.productNumber;
+    }
     // --- PRODOTTI (read-only check) -------------------------------------------
     async syncProducts(codes) {
         const found = new Set();

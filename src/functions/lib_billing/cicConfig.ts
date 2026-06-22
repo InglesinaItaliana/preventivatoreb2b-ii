@@ -23,6 +23,7 @@ export interface CicConfig {
   domesticVatZone: number;     // vatZone domestica (= 1)
   customerGroupNumber: number; // gruppo clienti di default (= 1)
   genericProductNumber: string;// prodotto generico per righe senza codice (Spedizione/Extra)
+  productGroupNumber: number;  // gruppo prodotti IVA 22% per i prodotti creati da POPS (= 3)
 }
 
 const DEFAULTS = {
@@ -35,6 +36,7 @@ const DEFAULTS = {
   domesticVatZone: 1,
   customerGroupNumber: 1,
   genericProductNumber: 'VARIE',
+  productGroupNumber: 3,
 };
 
 export async function getCicConfig(): Promise<CicConfig> {
@@ -59,6 +61,7 @@ export async function getCicConfig(): Promise<CicConfig> {
     domesticVatZone: d.domesticVatZone ?? DEFAULTS.domesticVatZone,
     customerGroupNumber: d.customerGroupNumber ?? DEFAULTS.customerGroupNumber,
     genericProductNumber: d.genericProductNumber || DEFAULTS.genericProductNumber,
+    productGroupNumber: d.productGroupNumber ?? DEFAULTS.productGroupNumber,
   };
 }
 

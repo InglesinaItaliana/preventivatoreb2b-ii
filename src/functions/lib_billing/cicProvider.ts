@@ -377,6 +377,37 @@ export class CicProvider implements BillingProvider {
     return map;
   }
 
+  // --- CREAZIONE PRODOTTO (Fase 2: nuovi articoli del listino da POPS) -------
+  /** Cerca un prodotto CiC per barCode (= codice POPS). Ritorna il productNumber o null. */
+  async findProductByBarcode(code: string): Promise<string | number | null> {
+    const filter = encodeURIComponent(`barCode$eq:${code}`);
+    const found = await this.client.get(`/products?filter=${filter}`);
+    const list = (found?.collection || []) as any[];
+    return list.length > 0 ? (list[0].productNumber ?? null) : null;
+  }
+
+  /**
+   * Crea un prodotto su Reviso con barCode = codice POPS (chiave naturale).
+   * Idempotente: se esiste già un prodotto con quel barCode lo riusa (retry-safe).
+   * Ritorna il productNumber CiC (da salvare come cicProductId in products/code).
+   */
+  async createProduct(input: { code: string; name: string; salesPrice?: number }): Promise<string | number> {
+    const existing = await this.findProductByBarcode(input.code);
+    if (existing != null) return existing;
+    const created = await this.client.post('/products', {
+      productNumber: input.code,
+      name: input.name,
+      barCode: input.code,
+      productGroup: { productGroupNumber: this.cfg.productGroupNumber },
+      ...(input.salesPrice != null ? { salesPrice: input.salesPrice } : {}),
+    });
+    if (created?.errorCode || created?.productNumber == null) {
+      const msg = created?.errors?.[0]?.message || created?.message || created?.errorCode || 'risposta senza productNumber';
+      throw new Error(`Creazione prodotto CiC fallita (${input.code}): ${msg}`);
+    }
+    return created.productNumber;
+  }
+
   // --- PRODOTTI (read-only check) -------------------------------------------
   async syncProducts(codes: string[]): Promise<SyncResult> {
     const found = new Set<string>();

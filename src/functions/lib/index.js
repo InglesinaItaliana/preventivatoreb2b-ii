@@ -46,6 +46,8 @@ const nodemailer = __importStar(require("nodemailer"));
 // Layer di fatturazione (migrazione FiC→CiC). Vedi src/functions/lib_billing/.
 const lib_billing_1 = require("./lib_billing");
 const bugs_1 = require("./lib_bugs/bugs");
+// Generatore codici listino (Fase 2 nuovi prodotti). Vedi src/functions/lib_listino/.
+const codici_1 = require("./lib_listino/codici");
 // Inizializza Firebase
 if (admin.apps.length === 0) {
     admin.initializeApp();
@@ -1886,6 +1888,120 @@ exports.importClientsFromCiC = functions
         console.error("Errore importazione CiC", e);
         throw new functions.https.HttpsError('internal', e.message);
     }
+});
+// --- LISTINO FASE 2: AGGIUNTA NUOVI PRODOTTI (tier + colori) ---
+// Crea nuovi TIER (codice generato + prodotto su CiC + products/{cod} +
+// listino_base/{cod}) e nuovi COLORI (righe catalogo che ereditano il tier).
+// Payload: { categoria, modello, newTiers:[{dimensione,tipoFinitura,prezzo,unita}],
+//            newColors:[{dimensione,tipoFinitura,colore}] }
+// I colori possono riferirsi a un tier esistente o a uno appena creato in newTiers.
+exports.manageListino = functions
+    .region('europe-west1')
+    .runWith({ timeoutSeconds: 300 })
+    .https.onCall(async (data, context) => {
+    var _a, _b, _c, _d, _e;
+    const callerEmail = (((_b = (_a = context.auth) === null || _a === void 0 ? void 0 : _a.token) === null || _b === void 0 ? void 0 : _b.email) || '').toLowerCase().trim();
+    const callerRole = (_d = (_c = context.auth) === null || _c === void 0 ? void 0 : _c.token) === null || _d === void 0 ? void 0 : _d.role;
+    const isAdminCaller = callerRole === 'ADMIN' || callerEmail === 'info@inglesinaitaliana.it';
+    if (!context.auth || !isAdminCaller) {
+        throw new functions.https.HttpsError('permission-denied', 'Riservato agli amministratori.');
+    }
+    const categoria = String((data === null || data === void 0 ? void 0 : data.categoria) || '').trim().toUpperCase();
+    const modello = String((data === null || data === void 0 ? void 0 : data.modello) || '').trim();
+    const newTiers = Array.isArray(data === null || data === void 0 ? void 0 : data.newTiers) ? data.newTiers : [];
+    const newColors = Array.isArray(data === null || data === void 0 ? void 0 : data.newColors) ? data.newColors : [];
+    if (!categoria || !modello)
+        throw new functions.https.HttpsError('invalid-argument', 'categoria e modello sono obbligatori.');
+    if (newTiers.length === 0 && newColors.length === 0)
+        throw new functions.https.HttpsError('invalid-argument', 'Niente da aggiungere.');
+    const db = admin.firestore();
+    const UPP = (s) => String(s !== null && s !== void 0 ? s : '').trim().toUpperCase();
+    const SEZIONE = { INGLESINA: 'GRIGLIA', DUPLEX: 'DUPLEX', MUNTIN: 'MUNTIN', CANALINO: 'CANALINO' };
+    const sezione = SEZIONE[categoria] || categoria;
+    // 1) carica listino_base (generatore + risoluzione tier→cod) + max ord
+    const baseSnap = await db.collection('listino_base').get();
+    const existing = baseSnap.docs.map((d) => { const r = d.data(); return { cod: r.cod, modello: r.modello, dimensione: r.dimensione }; });
+    let maxOrd = 0;
+    baseSnap.docs.forEach((d) => { const o = Number(d.data().ord) || 0; if (o > maxOrd)
+        maxOrd = o; });
+    // mappa (dim||tier) → cod per i tier ESISTENTI di questo modello
+    const tierCodMap = new Map();
+    const tierPrezzo = new Map();
+    for (const d of baseSnap.docs) {
+        const r = d.data();
+        if (UPP(r.modello) === UPP(modello)) {
+            tierCodMap.set(`${UPP(r.dimensione)}||${UPP(r.finitura)}`, r.cod);
+            tierPrezzo.set(r.cod, Number(r.prezzo));
+        }
+    }
+    // 2) genera i codici per i nuovi tier (accumulo) + valida prezzi
+    let coded = [];
+    try {
+        const specs = newTiers.map((t) => ({ categoria, modello, dimensione: String(t.dimensione || '').trim(), tipoFinitura: String(t.tipoFinitura || '').trim() }));
+        coded = (0, codici_1.nextCodiciForTiers)(specs, existing).map((c, i) => ({
+            dimensione: c.dimensione, tipoFinitura: c.tipoFinitura, cod: c.cod,
+            prezzo: Number(newTiers[i].prezzo), unita: String(newTiers[i].unita || 'ml'),
+        }));
+    }
+    catch (e) {
+        throw new functions.https.HttpsError('failed-precondition', e.message);
+    }
+    for (const t of coded) {
+        if (!t.dimensione || !t.tipoFinitura)
+            throw new functions.https.HttpsError('invalid-argument', 'dimensione e tipoFinitura obbligatori per ogni tier.');
+        if (Number.isNaN(t.prezzo))
+            throw new functions.https.HttpsError('invalid-argument', `Prezzo non valido per ${t.tipoFinitura} ${t.dimensione}.`);
+    }
+    // 3) CiC FIRST (idempotente): se fallisce, niente è ancora scritto su Firestore
+    const provider = await (0, lib_billing_1.createCicProvider)();
+    const tierWrites = [];
+    for (const t of coded) {
+        const name = `${modello} ${t.dimensione} ${t.tipoFinitura}`.replace(/\s+/g, ' ').trim();
+        const cicProductId = await provider.createProduct({ code: t.cod, name, salesPrice: t.prezzo });
+        tierWrites.push(Object.assign(Object.assign({}, t), { name, cicProductId }));
+        tierCodMap.set(`${UPP(t.dimensione)}||${UPP(t.tipoFinitura)}`, t.cod);
+        tierPrezzo.set(t.cod, t.prezzo);
+    }
+    const ops = [];
+    for (const t of tierWrites) {
+        ops.push({ ref: db.collection('products').doc(t.cod), merge: true, data: {
+                code: t.cod, name: t.name, cicProductId: t.cicProductId, category: categoria,
+                net_price: t.prezzo, lastSync: admin.firestore.FieldValue.serverTimestamp(),
+            } });
+        ops.push({ ref: db.collection('listino_base').doc(t.cod), merge: false, data: {
+                cod: t.cod, prezzo: t.prezzo, sezione, modello, dimensione: t.dimensione,
+                finitura: t.tipoFinitura, unita: t.unita, ord: ++maxOrd,
+            } });
+    }
+    const slug = (s) => UPP(s).replace(/[^A-Z0-9]+/g, '-').replace(/^-|-$/g, '') || 'X';
+    const maxCatSnap = await db.collection('catalogo').orderBy('ord', 'desc').limit(1).get();
+    let catOrd = (maxCatSnap.empty ? 0 : Number(maxCatSnap.docs[0].data().ord) || 0);
+    let coloriAggiunti = 0;
+    for (const c of newColors) {
+        const dim = String(c.dimensione || '').trim();
+        const tier = String(c.tipoFinitura || '').trim();
+        const colore = String(c.colore || '').trim();
+        if (!colore)
+            continue;
+        const cod = tierCodMap.get(`${UPP(dim)}||${UPP(tier)}`);
+        if (!cod)
+            throw new functions.https.HttpsError('failed-precondition', `Tier inesistente per il colore "${colore}" (${dim} / ${tier}). Crea prima il tier.`);
+        const prezzo = (_e = tierPrezzo.get(cod)) !== null && _e !== void 0 ? _e : 0;
+        const id = slug(`${categoria}|${modello}|${dim}|${colore}|${cod}`);
+        ops.push({ ref: db.collection('catalogo').doc(id), merge: false, data: {
+                categoria, modello: UPP(modello), dimensione: UPP(dim), finitura: UPP(colore),
+                tipoFinitura: tier, cod, prezzo, ord: ++catOrd,
+            } });
+        coloriAggiunti++;
+    }
+    // 5) commit a chunk (limite 500 op/batch)
+    for (let i = 0; i < ops.length; i += 450) {
+        const batch = db.batch();
+        for (const op of ops.slice(i, i + 450))
+            batch.set(op.ref, op.data, { merge: op.merge });
+        await batch.commit();
+    }
+    return { success: true, codiciCreati: tierWrites.map((t) => t.cod), coloriAggiunti };
 });
 // --- FUNZIONE 2: INVIO INVITI (ATTIVAZIONE) ---
 // Genera password, abilita account, invia mail
