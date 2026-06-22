@@ -263,7 +263,8 @@ const saveSettings = async () => {
     for (const r of rows) (bySez[r.sezione] ||= []).push(r);
     const ord = (s: string) => { const i = SECTION_ORDER.indexOf(s); return i === -1 ? 99 : i; };
     return Object.keys(bySez).sort((a, b) => ord(a) - ord(b)).map((sezione) => ({
-      sezione, label: SECTION_LABELS[sezione] || sezione, rows: bySez[sezione],
+      sezione, label: SECTION_LABELS[sezione] || sezione,
+      rows: bySez[sezione].slice().sort((a, b) => String(a.cod).localeCompare(String(b.cod))), // ordine per codice nella sezione
     }));
   });
 
@@ -314,6 +315,16 @@ const saveSettings = async () => {
   const dimsPerMod = (cat: string, mod: string) => uq(catRows.value.filter((r) => r.categoria === cat && r.modello === mod).map((r) => r.dimensione));
   const tiersPerModDim = (cat: string, mod: string, dim: string) => uq(catRows.value.filter((r) => r.categoria === cat && r.modello === mod && r.dimensione === dim).map((r) => r.tipoFinitura));
   const tiersPerMod = (cat: string, mod: string) => uq(catRows.value.filter((r) => r.categoria === cat && r.modello === mod).map((r) => r.tipoFinitura));
+  // tier del modello ORDINATI per codice rappresentativo (così le nuove dimensioni
+  // ottengono le stesse cifre finitura delle dimensioni esistenti)
+  const tiersPerModOrdered = (cat: string, mod: string) => {
+    const minCod = new Map<string, string>();
+    for (const r of catRows.value.filter((x) => x.categoria === cat && x.modello === mod)) {
+      const cur = minCod.get(r.tipoFinitura);
+      if (cur == null || String(r.cod).localeCompare(cur) < 0) minCod.set(r.tipoFinitura, String(r.cod));
+    }
+    return [...minCod.entries()].sort((a, b) => a[1].localeCompare(b[1])).map((e) => e[0]);
+  };
   const coloriLib = (mod: string, tier: string) => uq(catRows.value.filter((r) => r.modello === mod && r.tipoFinitura === tier).map((r) => r.finitura));
   const coloriPresenti = (cat: string, mod: string, dim: string, tier: string) =>
     catRows.value.filter((r) => r.categoria === cat && r.modello === mod && r.dimensione === dim && r.tipoFinitura === tier).map((r) => r.finitura);
@@ -341,7 +352,7 @@ const saveSettings = async () => {
 
   // sincronizza i tier proposti per i blocchi dimensione quando si sceglie il modello
   const prefillBlockTiers = () => {
-    const tiers = addForm.modello ? tiersPerMod(addForm.categoria, addForm.modello) : [];
+    const tiers = addForm.modello ? tiersPerModOrdered(addForm.categoria, addForm.modello) : [];
     addForm.blocks.forEach((b) => { if (b.tiers.length === 1 && !b.tiers[0].tipoFinitura && !b.tiers[0].prezzo) b.tiers = tiers.length ? tiers.map((t) => newTier(t)) : [newTier()]; });
   };
 
@@ -1142,7 +1153,7 @@ const catalogStore = useCatalogStore();
                 </div>
                 <label class="block text-xs font-black uppercase text-slate-400 mt-3 mb-1">…oppure nuovi colori (uno per riga)</label>
                 <textarea v-model="addForm.nuoviColori" rows="2" placeholder="VERDE BOTTIGLIA 6005&#10;BLU NOTTE"
-                  class="w-full bg-slate-50 border-2 border-slate-200 rounded-xl p-3 text-sm text-slate-700 focus:border-amber-400 focus:ring-0 outline-none"></textarea>
+                  class="w-full bg-slate-50 border-2 border-slate-200 rounded-xl p-3 text-sm text-slate-700 focus:border-amber-400 focus:ring-0 outline-none uppercase"></textarea>
               </div>
             </template>
 
@@ -1175,7 +1186,7 @@ const catalogStore = useCatalogStore();
                     </label>
                   </div>
                   <textarea v-model="t.nuoviColori" rows="2" placeholder="Colori (uno per riga)"
-                    class="w-full bg-white border-2 border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-700 focus:border-amber-400 focus:ring-0 outline-none"></textarea>
+                    class="w-full bg-white border-2 border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-700 focus:border-amber-400 focus:ring-0 outline-none uppercase"></textarea>
                 </div>
                 <button @click="b.tiers.push(newTier())" class="text-xs font-bold text-amber-600 hover:text-amber-700">+ Aggiungi tier</button>
               </div>
