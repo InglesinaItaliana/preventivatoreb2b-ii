@@ -9,7 +9,7 @@
   UserPlusIcon, PencilSquareIcon, MagnifyingGlassIcon, PhoneIcon, EnvelopeIcon,
   UsersIcon, BuildingOfficeIcon, CloudArrowUpIcon, PaperAirplaneIcon, CheckCircleIcon, ExclamationTriangleIcon,
   XCircleIcon, Cog6ToothIcon, TruckIcon, ClockIcon, CurrencyEuroIcon, TagIcon, MapPinIcon, IdentificationIcon,
-  LockClosedIcon, LockOpenIcon
+  LockClosedIcon, LockOpenIcon, PlusIcon, TrashIcon
 } from '@heroicons/vue/24/solid';
   
   // --- TIPI ---
@@ -285,6 +285,115 @@ const saveSettings = async () => {
       showCustomToast('Errore salvataggio listino');
     } finally {
       savingListino.value = false;
+    }
+  };
+
+  // --- MODALE NUOVI PRODOTTI (Fase 2) -------------------------------------
+  // Carica catalogo (righe colore) per i picker di riuso; deriva categorie/
+  // modelli/dimensioni/tier/colori esistenti.
+  const GEOM_CATS = ['INGLESINA', 'DUPLEX', 'MUNTIN', 'CANALINO'];
+  interface CatRow { categoria: string; modello: string; dimensione: string; finitura: string; tipoFinitura: string; cod: string; }
+  const catRows = ref<CatRow[]>([]);
+  const catLoaded = ref(false);
+  const showAddModal = ref(false);
+  const addOp = ref<'finitura' | 'dimensione' | 'tipologia'>('finitura');
+  const addBusy = ref(false);
+
+  interface TierForm { tipoFinitura: string; prezzo: number | null; colori: string[]; nuoviColori: string; }
+  interface DimBlock { dimensione: string; tiers: TierForm[]; }
+  const newTier = (tipo = ''): TierForm => ({ tipoFinitura: tipo, prezzo: null, colori: [], nuoviColori: '' });
+  const newBlock = (): DimBlock => ({ dimensione: '', tiers: [newTier()] });
+  const addForm = reactive<{
+    categoria: string; modello: string; dimensione: string; tier: string;
+    colori: string[]; nuoviColori: string; nuovoModello: string; blocks: DimBlock[];
+  }>({ categoria: '', modello: '', dimensione: '', tier: '', colori: [], nuoviColori: '', nuovoModello: '', blocks: [newBlock()] });
+
+  const uq = (arr: string[]) => [...new Set(arr)].sort();
+  const catCategorie = computed(() => GEOM_CATS.filter((c) => catRows.value.some((r) => r.categoria === c)));
+  const modelliPerCat = (cat: string) => uq(catRows.value.filter((r) => r.categoria === cat).map((r) => r.modello));
+  const dimsPerMod = (cat: string, mod: string) => uq(catRows.value.filter((r) => r.categoria === cat && r.modello === mod).map((r) => r.dimensione));
+  const tiersPerModDim = (cat: string, mod: string, dim: string) => uq(catRows.value.filter((r) => r.categoria === cat && r.modello === mod && r.dimensione === dim).map((r) => r.tipoFinitura));
+  const tiersPerMod = (cat: string, mod: string) => uq(catRows.value.filter((r) => r.categoria === cat && r.modello === mod).map((r) => r.tipoFinitura));
+  const coloriLib = (mod: string, tier: string) => uq(catRows.value.filter((r) => r.modello === mod && r.tipoFinitura === tier).map((r) => r.finitura));
+  const coloriPresenti = (cat: string, mod: string, dim: string, tier: string) =>
+    catRows.value.filter((r) => r.categoria === cat && r.modello === mod && r.dimensione === dim && r.tipoFinitura === tier).map((r) => r.finitura);
+  const parseColori = (s: string) => (s || '').split(/[\n,;]+/).map((x) => x.trim()).filter(Boolean);
+
+  const loadCatRows = async () => {
+    if (catLoaded.value) return;
+    const snap = await getDocs(collection(db, 'catalogo'));
+    catRows.value = snap.docs.map((d) => d.data() as CatRow);
+    catLoaded.value = true;
+  };
+
+  const openAddModal = async () => {
+    Object.assign(addForm, { categoria: '', modello: '', dimensione: '', tier: '', colori: [], nuoviColori: '', nuovoModello: '', blocks: [newBlock()] });
+    addOp.value = 'finitura';
+    showAddModal.value = true;
+    await loadCatRows();
+  };
+
+  const addOps = ['finitura', 'dimensione', 'tipologia'] as const;
+  const selectCategoria = (c: string) => { addForm.categoria = c; addForm.modello = ''; addForm.dimensione = ''; addForm.tier = ''; };
+  const selectModello = (m: string) => { addForm.modello = m; addForm.dimensione = ''; addForm.tier = ''; if (addOp.value === 'dimensione') prefillBlockTiers(); };
+  const selectTierColore = (t: string) => { addForm.tier = t; addForm.colori = []; };
+  const giaPresente = (col: string) => coloriPresenti(addForm.categoria, addForm.modello, addForm.dimensione, addForm.tier).some((x) => x.toUpperCase() === col.toUpperCase());
+
+  // sincronizza i tier proposti per i blocchi dimensione quando si sceglie il modello
+  const prefillBlockTiers = () => {
+    const tiers = addForm.modello ? tiersPerMod(addForm.categoria, addForm.modello) : [];
+    addForm.blocks.forEach((b) => { if (b.tiers.length === 1 && !b.tiers[0].tipoFinitura && !b.tiers[0].prezzo) b.tiers = tiers.length ? tiers.map((t) => newTier(t)) : [newTier()]; });
+  };
+
+  const buildPayload = (): { categoria: string; modello: string; newTiers: any[]; newColors: any[] } | string => {
+    const cat = addForm.categoria;
+    if (!cat) return 'Scegli una categoria.';
+    if (addOp.value === 'finitura') {
+      if (!addForm.modello || !addForm.dimensione || !addForm.tier) return 'Scegli modello, dimensione e tipo finitura.';
+      const presenti = new Set(coloriPresenti(cat, addForm.modello, addForm.dimensione, addForm.tier).map((c) => c.toUpperCase()));
+      const colori = uq([...addForm.colori, ...parseColori(addForm.nuoviColori)]).filter((c) => !presenti.has(c.toUpperCase()));
+      if (colori.length === 0) return 'Aggiungi almeno un colore nuovo.';
+      return { categoria: cat, modello: addForm.modello, newTiers: [], newColors: colori.map((c) => ({ dimensione: addForm.dimensione, tipoFinitura: addForm.tier, colore: c })) };
+    }
+    // dimensione | tipologia → blocchi
+    const modello = addOp.value === 'tipologia' ? addForm.nuovoModello.trim() : addForm.modello;
+    if (!modello) return addOp.value === 'tipologia' ? 'Inserisci il nome della nuova tipologia.' : 'Scegli il modello.';
+    const blocks = addOp.value === 'dimensione' ? [addForm.blocks[0]] : addForm.blocks;
+    const newTiers: any[] = []; const newColors: any[] = [];
+    for (const b of blocks) {
+      const dim = (b.dimensione || '').trim();
+      if (!dim) return 'Inserisci la dimensione.';
+      const tiersValid = b.tiers.filter((t) => (t.tipoFinitura || '').trim());
+      if (tiersValid.length === 0) return `Aggiungi almeno un tier per la dimensione ${dim}.`;
+      for (const t of tiersValid) {
+        const tipo = (t.tipoFinitura || '').trim();
+        if (t.prezzo == null || Number.isNaN(Number(t.prezzo))) return `Inserisci il prezzo per ${tipo} (${dim}).`;
+        const colori = uq([...t.colori, ...parseColori(t.nuoviColori)]);
+        if (colori.length === 0) return `Aggiungi almeno un colore per ${tipo} (${dim}).`;
+        newTiers.push({ dimensione: dim, tipoFinitura: tipo, prezzo: Number(t.prezzo), unita: 'ml' });
+        colori.forEach((c) => newColors.push({ dimensione: dim, tipoFinitura: tipo, colore: c }));
+      }
+    }
+    return { categoria: cat, modello, newTiers, newColors };
+  };
+
+  const submitAdd = async () => {
+    const payload = buildPayload();
+    if (typeof payload === 'string') return showCustomToast(payload);
+    addBusy.value = true;
+    try {
+      const fn = httpsCallable(functions, 'manageListino');
+      const res: any = await fn(payload);
+      const d = res.data || {};
+      showCustomToast(`Aggiunto: ${(d.codiciCreati || []).length} codici, ${d.coloriAggiunti || 0} colori`);
+      showAddModal.value = false;
+      catLoaded.value = false; listinoLoaded.value = false;
+      await Promise.all([loadCatRows(), loadListino()]);
+    } catch (e: any) {
+      console.error('[listino] creazione fallita', e);
+      showCustomToast('Errore: ' + (e?.message || 'creazione fallita'));
+    } finally {
+      addBusy.value = false;
     }
   };
 
@@ -910,6 +1019,10 @@ const catalogStore = useCatalogStore();
                   <input v-model="listinoSearch" type="text" placeholder="Cerca per codice, modello, finitura, sezione..."
                     class="w-full bg-slate-50 border-2 border-slate-200 rounded-xl pl-10 pr-3 py-2.5 text-sm text-slate-700 focus:border-amber-400 focus:ring-0 outline-none" />
                 </div>
+                <button @click="openAddModal"
+                  class="px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 border-2 border-amber-400 bg-amber-400 text-amber-950 hover:bg-amber-300 active:scale-95 transition-transform">
+                  <PlusIcon class="w-5 h-5" /> Aggiungi
+                </button>
                 <button @click="listinoLocked = !listinoLocked"
                   class="px-4 py-2.5 rounded-xl font-bold flex items-center gap-2 transition-colors border-2 active:scale-95"
                   :class="listinoLocked ? 'bg-slate-100 text-slate-600 border-slate-200 hover:bg-slate-200' : 'bg-amber-100 text-amber-800 border-amber-300 hover:bg-amber-200'">
@@ -956,6 +1069,130 @@ const catalogStore = useCatalogStore();
           </div>
         </div>
       </div>
+      <!-- ===================== MODALE AGGIUNGI PRODOTTO (Fase 2) ===================== -->
+      <div v-if="showAddModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm" @click="!addBusy && (showAddModal = false)"></div>
+        <div class="relative bg-white rounded-[2rem] shadow-2xl w-full max-w-2xl flex flex-col animate-in fade-in zoom-in duration-200" style="max-height:92dvh">
+          <div class="px-8 pt-7 pb-4 border-b border-slate-100">
+            <div class="flex items-center gap-3">
+              <div class="h-11 w-11 rounded-full bg-amber-100 flex items-center justify-center text-amber-600"><PlusIcon class="h-6 w-6" /></div>
+              <div>
+                <h2 class="text-xl font-bold text-slate-900">Aggiungi al listino</h2>
+                <p class="text-[11px] text-slate-400">Nuova categoria? In arrivo con la gestione del calcolo dedicata.</p>
+              </div>
+            </div>
+            <div class="flex gap-2 mt-4">
+              <button v-for="op in addOps" :key="op" @click="addOp = op"
+                class="px-4 py-2 rounded-full text-sm font-bold capitalize transition-colors"
+                :class="addOp === op ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'">{{ op }}</button>
+            </div>
+          </div>
+
+          <div class="px-8 py-5 overflow-y-auto space-y-5">
+            <!-- CATEGORIA -->
+            <div>
+              <label class="block text-xs font-black uppercase text-slate-400 mb-2">Categoria</label>
+              <div class="flex flex-wrap gap-2">
+                <button v-for="c in catCategorie" :key="c" @click="selectCategoria(c)"
+                  class="px-3 py-1.5 rounded-full text-sm font-bold transition-colors"
+                  :class="addForm.categoria === c ? 'bg-amber-400 text-amber-950' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'">{{ c }}</button>
+              </div>
+            </div>
+
+            <!-- MODELLO -->
+            <div v-if="addForm.categoria && addOp !== 'tipologia'">
+              <label class="block text-xs font-black uppercase text-slate-400 mb-2">Modello</label>
+              <div class="flex flex-wrap gap-2">
+                <button v-for="m in modelliPerCat(addForm.categoria)" :key="m" @click="selectModello(m)"
+                  class="px-3 py-1.5 rounded-full text-sm font-bold transition-colors"
+                  :class="addForm.modello === m ? 'bg-amber-400 text-amber-950' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'">{{ m }}</button>
+              </div>
+            </div>
+            <div v-if="addForm.categoria && addOp === 'tipologia'">
+              <label class="block text-xs font-black uppercase text-slate-400 mb-2">Nuova tipologia</label>
+              <input v-model="addForm.nuovoModello" type="text" placeholder="Es. ROMANA"
+                class="w-full bg-slate-50 border-2 border-slate-200 rounded-xl p-3 font-bold text-slate-700 focus:border-amber-400 focus:ring-0 outline-none uppercase" />
+            </div>
+
+            <!-- FLOW FINITURA -->
+            <template v-if="addOp === 'finitura' && addForm.modello">
+              <div>
+                <label class="block text-xs font-black uppercase text-slate-400 mb-2">Dimensione</label>
+                <div class="flex flex-wrap gap-2">
+                  <button v-for="d in dimsPerMod(addForm.categoria, addForm.modello)" :key="d" @click="addForm.dimensione = d; addForm.tier = '';"
+                    class="px-3 py-1.5 rounded-full text-sm font-bold" :class="addForm.dimensione === d ? 'bg-amber-400 text-amber-950' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'">{{ d }}</button>
+                </div>
+              </div>
+              <div v-if="addForm.dimensione">
+                <label class="block text-xs font-black uppercase text-slate-400 mb-2">Tipo finitura (tier)</label>
+                <div class="flex flex-wrap gap-2">
+                  <button v-for="t in tiersPerModDim(addForm.categoria, addForm.modello, addForm.dimensione)" :key="t" @click="selectTierColore(t)"
+                    class="px-3 py-1.5 rounded-full text-sm font-bold" :class="addForm.tier === t ? 'bg-amber-400 text-amber-950' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'">{{ t }}</button>
+                </div>
+              </div>
+              <div v-if="addForm.tier">
+                <label class="block text-xs font-black uppercase text-slate-400 mb-2">Colori — riusa dagli esistenti</label>
+                <div class="rounded-2xl border border-slate-200 divide-y divide-slate-100 max-h-56 overflow-y-auto">
+                  <label v-for="col in coloriLib(addForm.modello, addForm.tier)" :key="col" class="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 cursor-pointer">
+                    <input type="checkbox" :value="col" v-model="addForm.colori" :disabled="giaPresente(col)" class="h-5 w-5 rounded text-amber-500 focus:ring-amber-400" />
+                    <span class="text-sm font-bold text-slate-700">{{ col }}</span>
+                    <span v-if="giaPresente(col)" class="ml-auto text-[10px] font-bold text-slate-400 uppercase">già presente</span>
+                  </label>
+                  <p v-if="coloriLib(addForm.modello, addForm.tier).length === 0" class="px-4 py-3 text-xs text-slate-400">Nessun colore in libreria per questo tier.</p>
+                </div>
+                <label class="block text-xs font-black uppercase text-slate-400 mt-3 mb-1">…oppure nuovi colori (uno per riga)</label>
+                <textarea v-model="addForm.nuoviColori" rows="2" placeholder="VERDE BOTTIGLIA 6005&#10;BLU NOTTE"
+                  class="w-full bg-slate-50 border-2 border-slate-200 rounded-xl p-3 text-sm text-slate-700 focus:border-amber-400 focus:ring-0 outline-none"></textarea>
+              </div>
+            </template>
+
+            <!-- FLOW DIMENSIONE / TIPOLOGIA -->
+            <template v-if="(addOp === 'dimensione' && addForm.modello) || (addOp === 'tipologia' && addForm.nuovoModello)">
+              <div v-for="(b, bi) in (addOp === 'dimensione' ? addForm.blocks.slice(0, 1) : addForm.blocks)" :key="bi" class="rounded-2xl border-2 border-slate-100 p-4 space-y-4">
+                <div class="flex items-center gap-3">
+                  <div class="flex-1">
+                    <label class="block text-xs font-black uppercase text-slate-400 mb-1">Dimensione</label>
+                    <input v-model="b.dimensione" type="text" placeholder="Es. 60"
+                      class="w-full bg-slate-50 border-2 border-slate-200 rounded-xl p-2.5 font-bold text-slate-700 focus:border-amber-400 focus:ring-0 outline-none uppercase" />
+                  </div>
+                  <button v-if="addOp === 'tipologia' && addForm.blocks.length > 1" @click="addForm.blocks.splice(bi, 1)" class="mt-5 p-2 text-slate-300 hover:text-red-500"><TrashIcon class="w-5 h-5" /></button>
+                </div>
+                <div v-for="(t, ti) in b.tiers" :key="ti" class="rounded-xl bg-slate-50/70 p-3 space-y-2">
+                  <div class="flex items-center gap-2">
+                    <input v-model="t.tipoFinitura" type="text" placeholder="Tipo finitura (es. COLORE STANDARD)"
+                      class="flex-1 bg-white border-2 border-slate-200 rounded-lg px-3 py-2 text-sm font-bold text-slate-700 focus:border-amber-400 focus:ring-0 outline-none uppercase" />
+                    <div class="relative w-28">
+                      <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm">€</span>
+                      <input v-model.number="t.prezzo" type="number" step="0.01" placeholder="0,00"
+                        class="w-full bg-white border-2 border-slate-200 rounded-lg pl-6 pr-2 py-2 text-right font-mono font-bold text-slate-700 focus:border-amber-400 focus:ring-0 outline-none" />
+                    </div>
+                    <button v-if="b.tiers.length > 1" @click="b.tiers.splice(ti, 1)" class="p-1.5 text-slate-300 hover:text-red-500"><TrashIcon class="w-4 h-4" /></button>
+                  </div>
+                  <div v-if="addOp === 'dimensione' && t.tipoFinitura && coloriLib(addForm.modello, t.tipoFinitura).length" class="rounded-lg border border-slate-200 bg-white divide-y divide-slate-100 max-h-40 overflow-y-auto">
+                    <label v-for="col in coloriLib(addForm.modello, t.tipoFinitura)" :key="col" class="flex items-center gap-2 px-3 py-1.5 hover:bg-slate-50 cursor-pointer">
+                      <input type="checkbox" :value="col" v-model="t.colori" class="h-4 w-4 rounded text-amber-500 focus:ring-amber-400" />
+                      <span class="text-xs font-bold text-slate-600">{{ col }}</span>
+                    </label>
+                  </div>
+                  <textarea v-model="t.nuoviColori" rows="2" placeholder="Colori (uno per riga)"
+                    class="w-full bg-white border-2 border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-700 focus:border-amber-400 focus:ring-0 outline-none"></textarea>
+                </div>
+                <button @click="b.tiers.push(newTier())" class="text-xs font-bold text-amber-600 hover:text-amber-700">+ Aggiungi tier</button>
+              </div>
+              <button v-if="addOp === 'tipologia'" @click="addForm.blocks.push(newBlock())" class="text-sm font-bold text-amber-600 hover:text-amber-700">+ Aggiungi dimensione</button>
+            </template>
+          </div>
+
+          <div class="px-8 py-4 border-t border-slate-100 flex justify-end gap-3">
+            <button @click="showAddModal = false" :disabled="addBusy" class="px-5 py-3 rounded-xl font-bold text-slate-500 hover:bg-slate-100">Annulla</button>
+            <button @click="submitAdd" :disabled="addBusy" class="px-8 py-3 rounded-xl bg-slate-900 text-white font-bold hover:bg-black shadow-lg disabled:opacity-50 flex items-center gap-2">
+              <span v-if="addBusy" class="animate-spin h-4 w-4 border-2 border-white/30 border-t-white rounded-full"></span>
+              {{ addBusy ? 'Creazione...' : 'Crea' }}
+            </button>
+          </div>
+        </div>
+      </div>
+
       <div v-if="showMemberModal" class="fixed inset-0 z-50 flex items-center justify-center p-4">
         <div class="absolute inset-0 bg-slate-900/40 backdrop-blur-sm transition-opacity" @click="showMemberModal = false"></div>
         <div class="relative bg-white rounded-[2rem] shadow-2xl w-full max-w-lg p-8 animate-in fade-in zoom-in duration-200">
