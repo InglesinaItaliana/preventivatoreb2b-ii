@@ -216,6 +216,7 @@ const saveSettings = async () => {
   const listinoLoading = ref(false);
   const savingListino = ref(false);
   const listinoLocked = ref(true); // prezzi in sola lettura finché non si sblocca il lucchetto
+  const listinoSubTab = ref<'PREZZI' | 'FINITURE'>('PREZZI');
   const listinoSearch = ref('');
   const catalogSource = ref<'sheet' | 'firestore'>('sheet'); // flag settings/pricing.catalogSource
   const originalPrices = ref<Record<string, number>>({});
@@ -241,7 +242,7 @@ const saveSettings = async () => {
     }
   };
 
-  const openListino = () => { activeTab.value = 'LISTINO'; listinoLocked.value = true; loadListino(); };
+  const openListino = () => { activeTab.value = 'LISTINO'; listinoLocked.value = true; listinoSubTab.value = 'PREZZI'; loadListino(); loadCatRows(); };
 
   // Righe modificate (Object.is così I132=NaN "a richiesta" non risulta sempre dirty).
   const dirtyRows = computed(() => baseRows.value.filter((r) => !Object.is(r.prezzo, originalPrices.value[r.cod])));
@@ -296,6 +297,7 @@ const saveSettings = async () => {
   interface CatRow { categoria: string; modello: string; dimensione: string; finitura: string; tipoFinitura: string; cod: string; }
   const catRows = ref<CatRow[]>([]);
   const catLoaded = ref(false);
+  const matrixCat = ref(''); // categoria selezionata nella sotto-tab Finiture
   const showAddModal = ref(false);
   const addOp = ref<'finitura' | 'dimensione' | 'tipologia'>('finitura');
   const addBusy = ref(false);
@@ -335,6 +337,42 @@ const saveSettings = async () => {
     const snap = await getDocs(collection(db, 'catalogo'));
     catRows.value = snap.docs.map((d) => d.data() as CatRow);
     catLoaded.value = true;
+    if (!matrixCat.value && catCategorie.value.length) matrixCat.value = catCategorie.value[0];
+  };
+
+  // --- Matrice Finiture (sotto-tab Finiture, sola lettura) ---
+  // Per la categoria selezionata: colonne = (modello, dimensione) ordinati per
+  // codice; righe = colori raggruppati per tier; cella = presente/assente.
+  const matrixData = computed(() => {
+    const cat = matrixCat.value;
+    const rr = cat ? catRows.value.filter((r) => r.categoria === cat) : [];
+    const colMap = new Map<string, string>();
+    for (const r of rr) {
+      const k = `${r.modello}|||${r.dimensione}`;
+      const cur = colMap.get(k);
+      if (cur == null || String(r.cod).localeCompare(cur) < 0) colMap.set(k, String(r.cod));
+    }
+    const columns = [...colMap.entries()].sort((a, b) => a[1].localeCompare(b[1]))
+      .map(([k]) => { const [modello, dimensione] = k.split('|||'); return { modello, dimensione, key: k }; });
+    const tierMap = new Map<string, { minCod: string; colors: Set<string> }>();
+    for (const r of rr) {
+      let e = tierMap.get(r.tipoFinitura);
+      if (!e) { e = { minCod: String(r.cod), colors: new Set() }; tierMap.set(r.tipoFinitura, e); }
+      if (String(r.cod).localeCompare(e.minCod) < 0) e.minCod = String(r.cod);
+      e.colors.add(r.finitura);
+    }
+    const tiers = [...tierMap.entries()].sort((a, b) => a[1].minCod.localeCompare(b[1].minCod))
+      .map(([tier, e]) => ({ tier, colori: [...e.colors].sort() }));
+    const present = new Map<string, string>();
+    for (const r of rr) present.set(`${r.modello}|||${r.dimensione}|||${r.finitura}`, String(r.cod));
+    return { columns, tiers, present };
+  });
+  const cellCod = (mod: string, dim: string, color: string) => matrixData.value.present.get(`${mod}|||${dim}|||${color}`) || null;
+  const cellTitle = (mod: string, dim: string, color: string) => {
+    const cod = cellCod(mod, dim, color);
+    if (!cod) return '';
+    const p = originalPrices.value[cod];
+    return p != null ? `${cod} · € ${p}` : cod;
   };
 
   const openAddModal = async () => {
@@ -1023,7 +1061,15 @@ const catalogStore = useCatalogStore();
               </div>
             </div>
 
-            <div class="p-6 space-y-4">
+            <!-- sotto-tab Prezzi / Finiture -->
+            <div class="px-6 pt-4">
+              <div class="inline-flex bg-slate-100 p-1 rounded-full">
+                <button @click="listinoSubTab = 'PREZZI'" class="px-5 py-1.5 rounded-full text-sm font-bold transition-colors" :class="listinoSubTab === 'PREZZI' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'">Prezzi</button>
+                <button @click="listinoSubTab = 'FINITURE'" class="px-5 py-1.5 rounded-full text-sm font-bold transition-colors" :class="listinoSubTab === 'FINITURE' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'">Finiture</button>
+              </div>
+            </div>
+
+            <div v-show="listinoSubTab === 'PREZZI'" class="p-6 space-y-4">
               <div class="flex gap-3 items-center">
                 <div class="relative flex-1">
                   <MagnifyingGlassIcon class="w-5 h-5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -1075,6 +1121,47 @@ const catalogStore = useCatalogStore();
                     </div>
                   </div>
                 </div>
+              </div>
+            </div>
+
+            <!-- ===== SOTTO-TAB FINITURE (matrice, sola lettura) ===== -->
+            <div v-show="listinoSubTab === 'FINITURE'" class="p-6 space-y-4">
+              <div class="flex flex-wrap gap-2">
+                <button v-for="c in catCategorie" :key="c" @click="matrixCat = c"
+                  class="px-3 py-1.5 rounded-full text-sm font-bold transition-colors"
+                  :class="matrixCat === c ? 'bg-amber-400 text-amber-950' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'">{{ c }}</button>
+              </div>
+              <p class="text-xs text-slate-400">Spunta verde = finitura disponibile per quella tipologia/dimensione. Passa il mouse sulla spunta per codice e prezzo.</p>
+
+              <div v-if="!catLoaded" class="text-center py-12 text-slate-400 text-sm">Caricamento…</div>
+              <div v-else-if="matrixData.columns.length === 0" class="text-center py-12 text-slate-400 text-sm">Nessun dato per questa categoria.</div>
+              <div v-else class="matrix-scroll overflow-auto rounded-2xl border border-slate-200" style="max-height:70vh">
+                <table class="border-collapse text-sm">
+                  <thead>
+                    <tr>
+                      <th class="sticky left-0 top-0 z-30 bg-slate-100 px-3 py-2 text-left text-xs font-black uppercase text-slate-400 border-b border-r border-slate-200">Finitura</th>
+                      <th v-for="col in matrixData.columns" :key="col.key"
+                        class="sticky top-0 z-20 bg-slate-100 px-3 py-2 text-center text-xs font-bold text-slate-600 border-b border-r border-slate-100 whitespace-nowrap">
+                        <div>{{ col.modello }}</div>
+                        <div class="text-[10px] text-slate-400 font-mono">{{ col.dimensione }}</div>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <template v-for="grp in matrixData.tiers" :key="grp.tier">
+                      <tr>
+                        <td :colspan="matrixData.columns.length + 1" class="sticky left-0 z-10 bg-amber-50/70 px-3 py-1.5 text-[11px] font-black uppercase tracking-wider text-amber-700 border-b border-slate-100">{{ grp.tier }}</td>
+                      </tr>
+                      <tr v-for="color in grp.colori" :key="grp.tier + '|' + color" class="hover:bg-slate-50/60">
+                        <td class="sticky left-0 z-10 bg-white px-3 py-1.5 font-bold text-slate-700 border-b border-r border-slate-100 whitespace-nowrap">{{ color }}</td>
+                        <td v-for="col in matrixData.columns" :key="col.key" class="text-center border-b border-r border-slate-100 px-2 py-1.5" :title="cellTitle(col.modello, col.dimensione, color)">
+                          <CheckCircleIcon v-if="cellCod(col.modello, col.dimensione, color)" class="w-5 h-5 text-green-500 inline" />
+                          <span v-else class="text-slate-200">·</span>
+                        </td>
+                      </tr>
+                    </template>
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
@@ -1387,3 +1474,13 @@ const catalogStore = useCatalogStore();
     </div>
 
   </template>
+
+<style scoped>
+/* Scrollbar della matrice Finiture: sempre visibile e con spazio proprio,
+   così non galleggia sopra le celle (overlay) rendendole meno leggibili. */
+.matrix-scroll { scrollbar-gutter: stable; }
+.matrix-scroll::-webkit-scrollbar { width: 12px; height: 12px; }
+.matrix-scroll::-webkit-scrollbar-track { background: #f1f5f9; }
+.matrix-scroll::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 8px; border: 3px solid #f1f5f9; }
+.matrix-scroll::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+</style>
