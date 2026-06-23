@@ -643,14 +643,17 @@ const getShipments = (list: Order[]) => {
     // --- FIX: Controllo di sicurezza ---
     if (!first) return; 
 
-    const totColli = orders.reduce((acc, curr) => acc + (Number(curr.colli) || 1), 0);
+    // I colli sono il totale del DDT, replicato su OGNI ordine in fase di creazione
+    // (vedi creaDdtCumulativoCiC): non vanno sommati, è già il totale. Prendo il
+    // primo valore valorizzato (difensivo: ordini più vecchi potrebbero non averlo).
+    const ddtColli = Number(orders.find(o => o.colli != null)?.colli) || 1;
     groups.push({
       isDdt: true,
       key: `DDT_${ddtId}`,
       ids: orders.map(o => o.id),
       cliente: first.cliente,
       info: `DDT #${ddtNumberOf(first)} • ${orders.length} Ordini`,
-      colli: totColli,
+      colli: ddtColli,
       citta: first.citta,
       provincia: first.provincia,
       billingError: orders.find(o => o.billingError)?.billingError,

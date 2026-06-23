@@ -1391,27 +1391,22 @@ async function creaDdtCumulativoCiC(
         });
 
         // Righe = merce trasportata (escludo gli EXTRA: spedizione/lavorazioni).
-        // DDT cumulativo (piu' ordini): la prima riga di ogni ordine porta in
-        // descrizione il riferimento all'ordine (numero CiC + commessa), cosi'
-        // dal DDT si risale ai singoli ordini raggruppati.
+        // DDT cumulativo (piu' ordini): prima degli articoli di ogni ordine si
+        // inserisce una RIGA DESCRITTIVA separata col riferimento all'ordine
+        // (numero CiC + commessa), cosi' dal DDT si risale ai singoli ordini.
         const isCumulativo = orders.length > 1;
         const lines: any[] = [];
         for (const o of orders) {
             const cicNum = o.data.cic_order_number ?? o.data.cic_order_id ?? o.data.codice ?? '';
             const commessa = o.data.commessa ? ` - ${o.data.commessa}` : '';
-            const groupLabel = `[Ordine ${cicNum}${commessa}]`;
-            let firstOfOrder = true;
+            const orderItems: any[] = [];
             for (const item of (o.data.elementi || [])) {
                 if (item.categoria === 'EXTRA') continue;
                 let desc = item.descrizioneCompleta || 'Articolo Vetrata';
                 if (item.base_mm > 0 || item.altezza_mm > 0) {
                     desc += ` - Dim: ${item.base_mm}x${item.altezza_mm} mm`;
                 }
-                if (isCumulativo && firstOfOrder) {
-                    desc = `${groupLabel} ${desc}`;
-                    firstOfOrder = false;
-                }
-                lines.push({
+                orderItems.push({
                     code: item.codice ? String(item.codice).toUpperCase().trim() : '',
                     description: desc,
                     qty: item.quantita || 1,
@@ -1419,6 +1414,18 @@ async function creaDdtCumulativoCiC(
                     category: item.categoria,
                 });
             }
+            // Intestazione ordine come riga a sé (solo se il DDT ha merce da quell'ordine).
+            if (isCumulativo && orderItems.length > 0) {
+                lines.push({
+                    code: '',
+                    description: `Ordine ${cicNum}${commessa}`,
+                    qty: 0,
+                    unitNetPrice: 0,
+                    category: 'HEADER',
+                    isDescriptive: true,
+                });
+            }
+            lines.push(...orderItems);
         }
         if (lines.length === 0) return { success: false, message: 'Nessuna riga merce da spedire.' };
 
