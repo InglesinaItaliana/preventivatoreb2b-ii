@@ -174,6 +174,17 @@ export class CicProvider implements BillingProvider {
     const totals = computeTotals(input.lines, 0, this.cfg.vatRate); // DDT: nessuno sconto globale
 
     const productLines = input.lines.map((l, i) => {
+      // Riga descrittiva (intestazione ordine nel DDT cumulativo): solo testo,
+      // nessun prodotto/quantità/prezzo. Reviso la accetta come "text line".
+      if (l.isDescriptive) {
+        return {
+          product: null, chainId: null, lineNr: i + 1, location: null,
+          description: l.description, vatInfo: null, quantity: null, unit: null,
+          unitNetPrice: null, unitGrossPrice: null, totalNetAmount: null,
+          totalGrossAmount: null, unitCostPrice: null, discountPercentage: null,
+          totalVatAmount: null, manuallyEditedSalesPrice: false,
+        };
+      }
       const net = totals.lineNets[i];
       const vat = round2((net * this.cfg.vatRate) / 100);
       // product.id = productNumber CiC mappato (cicProductId), NON il codice POPS.

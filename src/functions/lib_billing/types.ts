@@ -41,6 +41,7 @@ export interface LineInput {
   unitNetPrice: number;
   category?: string;       // EXTRA/Spedizione/... per la logica POPS
   cicProductId?: string | number; // productNumber CiC mappato (da products/{code}.cicProductId)
+  isDescriptive?: boolean; // riga di solo testo (nessun prodotto/quantità/prezzo): intestazione ordine nel DDT cumulativo
 }
 
 /** Input per creare ordine/preventivo. */

@@ -67,10 +67,28 @@ const openOrder = (codice: string) => {
   router.push(url);
 };
 
-const openDdt = (order: any) => {
-  // CiC: PDF POPS (Opzione B). FiC: invariato.
-  if (resolveBackend(order) === 'cic') { openDdtPdf(order); return; }
-  if (order?.fic_ddt_url) window.open(order.fic_ddt_url, '_blank');
+const openDdt = async (order: any) => {
+  // FiC: link al documento FiC (invariato).
+  if (resolveBackend(order) !== 'cic') {
+    if (order?.fic_ddt_url) window.open(order.fic_ddt_url, '_blank');
+    return;
+  }
+  // CiC: il PDF POPS deve essere fedele al DDT, cioè contenere TUTTI gli ordini
+  // del DDT cumulativo (N ordini che condividono cic_ddt_id), non solo questo.
+  // Un DDT cumulativo è per singolo cliente → vincolo su clienteUID (anche per le
+  // regole Firestore lato cliente).
+  try {
+    if (order?.cic_ddt_id != null) {
+      const constraints: any[] = [where('cic_ddt_id', '==', order.cic_ddt_id)];
+      if (!props.isAdmin && props.clientUid) constraints.unshift(where('clienteUID', '==', props.clientUid));
+      const snap = await getDocs(query(collection(db, 'preventivi'), ...constraints));
+      const orders = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      if (orders.length > 1) { openDdtPdf(orders); return; }
+    }
+  } catch (e) {
+    console.error('Errore raccolta ordini del DDT, ripiego sul singolo ordine:', e);
+  }
+  openDdtPdf(order);
 };
 
 const openOrdine = (order: any) => {

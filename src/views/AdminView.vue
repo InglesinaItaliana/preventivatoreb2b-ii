@@ -1017,7 +1017,7 @@ onUnmounted(() => {
                 <h2 class="text-lg font-bold text-gray-900 font-heading uppercase flex items-center gap-2">
                   {{ getStatusLabel(gruppo.stato) }}
                   <span class="bg-gray-100 text-gray-600 text-xs px-2.5 py-0.5 rounded-full border border-gray-200 font-sans shadow-sm">
-                    {{ gruppo.lista.length }}
+                    {{ gruppo.stato === 'DELIVERY' ? raggruppaPerDdt(gruppo.lista).length : gruppo.lista.length }}
                   </span>
                 </h2>              
               </div>
