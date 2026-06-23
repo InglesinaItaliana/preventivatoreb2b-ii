@@ -352,25 +352,24 @@ const inspectTrip = async (trip: Trip) => {
 const loadMyTrip = async () => {
   if (!currentUser.value || !currentUser.value.email) return;
 
-  // CORREZIONE: Usiamo l'email minuscola, non l'UID
+  // I viaggi sono salvati con driverId = id del doc team, che a seconda dello
+  // stato della migrazione STELLA-GRAFO è l'UID (doc re-keyati) oppure l'email
+  // (doc vecchi). Cerchiamo per ENTRAMBE le identità così ogni autista vede i
+  // suoi viaggi. Lo status OPEN lo filtriamo lato client → niente indice composito.
   const myEmail = currentUser.value.email.toLowerCase().trim();
-  
-  const q = query(
-    collection(db, 'trips'),
-    where('driverId', '==', myEmail), // <--- ORA CERCA L'EMAIL CORRETTA
-    where('status', '==', 'OPEN')
-  );
-  
+  const myUid = currentUser.value.uid;
+  const myIds = [myEmail, myUid].filter(Boolean);
+
+  const q = query(collection(db, 'trips'), where('driverId', 'in', myIds));
+
   onSnapshot(q, async (snap) => {
-    // ... (il resto della funzione rimane identico) ...
-    if (!snap.empty) {
-      const docData = snap.docs[0]!.data();
-      const currentTrip = { id: snap.docs[0]!.id, ...docData } as Trip;
+    const openDoc = snap.docs.find(d => (d.data() as { status?: string }).status === 'OPEN');
+    if (openDoc) {
+      const currentTrip = { id: openDoc.id, ...openDoc.data() } as Trip;
       activeTrip.value = currentTrip;
-      
+
       if (currentTrip.stops && currentTrip.stops.length > 0) {
-        // ... caricamento ordini ...
-        const promises = currentTrip.stops.map(oid => 
+        const promises = currentTrip.stops.map(oid =>
            getDocs(query(collection(db, 'preventivi'), where('__name__', '==', oid)))
         );
         const results = await Promise.all(promises);
