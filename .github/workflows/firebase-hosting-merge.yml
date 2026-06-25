@@ -41,7 +41,17 @@ jobs:
       # `firebase hosting:channel:deploy <id>`.
       - name: Deploy Functions + Hosting
         run: |
-          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT_PREVENTIVATOREB2B_II }}' > sa-key.json
-          export GOOGLE_APPLICATION_CREDENTIALS=sa-key.json
-          firebase deploy --only functions,hosting --project preventivatoreb2b-ii
-          rm sa-key.json
+          # Path ASSOLUTO: se firebase fa cd nelle functions durante il predeploy,
+          # un path relativo per le credenziali non si risolverebbe piu'.
+          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT_PREVENTIVATOREB2B_II }}' > "$GITHUB_WORKSPACE/sa-key.json"
+          export GOOGLE_APPLICATION_CREDENTIALS="$GITHUB_WORKSPACE/sa-key.json"
+          # Retry x3: un eventuale "Failed to authenticate" transitorio si auto-ripara.
+          # --debug stampa l'errore vero sotto al messaggio generico (toglibile dopo la diagnosi).
+          ok=""
+          for attempt in 1 2 3; do
+            echo "::group::Deploy attempt $attempt"
+            if firebase deploy --only functions,hosting --project preventivatoreb2b-ii --non-interactive --debug; then ok=1; echo "::endgroup::"; break; fi
+            echo "::endgroup::"; echo "tentativo $attempt fallito, retry tra 20s..."; sleep 20
+          done
+          rm -f "$GITHUB_WORKSPACE/sa-key.json"
+          [ -n "$ok" ] || { echo "tutti i tentativi di deploy falliti"; exit 1; }
