@@ -5,7 +5,11 @@ on:
       - main
 jobs:
   build_and_deploy:
-    runs-on: ubuntu-latest
+    # Pin a 22.04: l'immagine ubuntu-24.04 20260622.220 rompe il fetch del token
+    # OAuth (https://www.googleapis.com/oauth2/v4/token: "Premature close") in fase
+    # di deploy. La 24.04 20260615.205 funzionava: regressione dell'immagine runner,
+    # non pinnabile a sotto-release → si esce sul lineage 22.04 (stabile).
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v5
 
