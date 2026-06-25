@@ -29,7 +29,10 @@ jobs:
 
       # --- NUOVO STEP AGGIUNTO: Deploy delle Functions (Metodo Ufficiale) ---
       - name: Install Firebase CLI
-        run: npm install -g firebase-tools
+        # Pin esatto: la 15.22.2 (24/06/2026) ha rotto l'auth via service account
+        # (GOOGLE_APPLICATION_CREDENTIALS) -> "Failed to authenticate". La 15.22.1
+        # e' l'ultima funzionante. Rialzare quando una release successiva lo risolve.
+        run: npm install -g firebase-tools@15.22.1
 
       # Deploy Functions + Hosting via Firebase CLI (un unico metodo, niente action di terze parti).
       # Sostituisce FirebaseExtended/action-hosting-deploy@v0 (deprecata, runtime Node 20).
