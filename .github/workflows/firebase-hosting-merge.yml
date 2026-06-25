@@ -45,6 +45,10 @@ jobs:
           # un path relativo per le credenziali non si risolverebbe piu'.
           echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT_PREVENTIVATOREB2B_II }}' > "$GITHUB_WORKSPACE/sa-key.json"
           export GOOGLE_APPLICATION_CREDENTIALS="$GITHUB_WORKSPACE/sa-key.json"
+          # L'immagine runner ubuntu-24.04 20260622.220 ha introdotto "Premature close"
+          # sul fetch di https://www.googleapis.com/oauth2/v4/token (problema IPv6/Happy-Eyeballs
+          # nello stack di rete Node): forziamo la risoluzione IPv4.
+          export NODE_OPTIONS="--dns-result-order=ipv4first"
           # Retry x3: un eventuale "Failed to authenticate" transitorio si auto-ripara.
           # --debug stampa l'errore vero sotto al messaggio generico (toglibile dopo la diagnosi).
           ok=""
