@@ -238,10 +238,21 @@ export class CicProvider implements BillingProvider {
         priceInGross: false, defaultDiscountPercentage: 0.0, productLines,
       },
       deliveryDetails: {
-        deliveredBy: input.shipping.transportType === 'COURIER' ? 'Carrier' : 'Self',
+        // Reviso accetta SOLO 'Self' su deliveredBy ('Carrier' → 400 E00500,
+        // verificato sul prod 2026-06-25). Il trasporto a mezzo corriere si
+        // esprime valorizzando carrierInfo (con deliveredBy:'Self').
+        deliveredBy: 'Self',
         reasonForDelivery: null, deliveryTerms: null, deliveryStartDate: null, deliveryEndDate: null,
         numberOfPackages: input.shipping.packages, descriptionOfPackages: null,
-        netWeight: null, grossWeight: input.shipping.weight ?? null, carrierInfo: null,
+        netWeight: null, grossWeight: input.shipping.weight ?? null,
+        carrierInfo: input.shipping.transportType === 'COURIER' && input.shipping.carrier
+          ? {
+              name: input.shipping.carrier,
+              notes: input.shipping.tracking ?? null,
+              address: null, city: null, zipCode: null, country: null,
+              phoneNumber: null, email: null, id: null, metaData: null, self: null,
+            }
+          : null,
         id: null, metaData: null,
       },
       additionalExpenses: null, date: input.date,

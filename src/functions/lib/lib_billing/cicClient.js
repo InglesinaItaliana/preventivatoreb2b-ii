@@ -20,20 +20,40 @@ class CicClient {
             'Content-Type': 'application/json',
         };
     }
-    async get(path) {
-        const res = await axios_1.default.get(`${this.cfg.baseUrl}${path}`, { headers: this.headers() });
-        return res.data;
+    /**
+     * Esegue la chiamata REST e, su errore HTTP, propaga il CORPO di Reviso
+     * (errorCode + message) invece del generico "Request failed with status code N"
+     * di axios. Conserva `err.response.data` per chi vuole ispezionare il payload.
+     */
+    async request(method, path, body) {
+        var _a, _b, _c;
+        try {
+            const res = await axios_1.default.request(Object.assign({ method, url: `${this.cfg.baseUrl}${path}`, headers: this.headers() }, (body !== undefined ? { data: body } : {})));
+            return res.data;
+        }
+        catch (e) {
+            const err = e;
+            const data = (_a = err === null || err === void 0 ? void 0 : err.response) === null || _a === void 0 ? void 0 : _a.data;
+            if (data) {
+                const detail = (data && (data.message || data.errorCode)) || JSON.stringify(data);
+                const wrapped = new Error(`CiC ${(_b = err.response) === null || _b === void 0 ? void 0 : _b.status}: ${detail}`);
+                wrapped.response = { status: (_c = err.response) === null || _c === void 0 ? void 0 : _c.status, data };
+                throw wrapped;
+            }
+            throw err;
+        }
     }
-    async post(path, body) {
-        const res = await axios_1.default.post(`${this.cfg.baseUrl}${path}`, body, { headers: this.headers() });
-        return res.data;
+    get(path) {
+        return this.request('get', path);
     }
-    async put(path, body) {
-        const res = await axios_1.default.put(`${this.cfg.baseUrl}${path}`, body, { headers: this.headers() });
-        return res.data;
+    post(path, body) {
+        return this.request('post', path, body);
+    }
+    put(path, body) {
+        return this.request('put', path, body);
     }
     async del(path) {
-        await axios_1.default.delete(`${this.cfg.baseUrl}${path}`, { headers: this.headers() });
+        await this.request('delete', path);
     }
 }
 exports.CicClient = CicClient;

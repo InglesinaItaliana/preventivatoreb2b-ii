@@ -131,10 +131,21 @@ class CicProvider {
     // Payload riga allineato all'esempio ufficiale Postman: product via `product.id`
     // (= productNumber), totali per riga forniti (computeTotals).
     async createDeliveryNote(input) {
-        var _a, _b, _c, _d, _e;
+        var _a, _b, _c, _d, _e, _f;
         const ownerId = Number(input.customer.id);
         const totals = (0, rounding_1.computeTotals)(input.lines, 0, this.cfg.vatRate); // DDT: nessuno sconto globale
         const productLines = input.lines.map((l, i) => {
+            // Riga descrittiva (intestazione ordine nel DDT cumulativo): solo testo,
+            // nessun prodotto/quantità/prezzo. Reviso la accetta come "text line".
+            if (l.isDescriptive) {
+                return {
+                    product: null, chainId: null, lineNr: i + 1, location: null,
+                    description: l.description, vatInfo: null, quantity: null, unit: null,
+                    unitNetPrice: null, unitGrossPrice: null, totalNetAmount: null,
+                    totalGrossAmount: null, unitCostPrice: null, discountPercentage: null,
+                    totalVatAmount: null, manuallyEditedSalesPrice: false,
+                };
+            }
             const net = totals.lineNets[i];
             const vat = (0, rounding_1.round2)((net * this.cfg.vatRate) / 100);
             // product.id = productNumber CiC mappato (cicProductId), NON il codice POPS.
@@ -187,10 +198,21 @@ class CicProvider {
                 priceInGross: false, defaultDiscountPercentage: 0.0, productLines,
             },
             deliveryDetails: {
-                deliveredBy: input.shipping.transportType === 'COURIER' ? 'Carrier' : 'Self',
+                // Reviso accetta SOLO 'Self' su deliveredBy ('Carrier' → 400 E00500,
+                // verificato sul prod 2026-06-25). Il trasporto a mezzo corriere si
+                // esprime valorizzando carrierInfo (con deliveredBy:'Self').
+                deliveredBy: 'Self',
                 reasonForDelivery: null, deliveryTerms: null, deliveryStartDate: null, deliveryEndDate: null,
                 numberOfPackages: input.shipping.packages, descriptionOfPackages: null,
-                netWeight: null, grossWeight: (_a = input.shipping.weight) !== null && _a !== void 0 ? _a : null, carrierInfo: null,
+                netWeight: null, grossWeight: (_a = input.shipping.weight) !== null && _a !== void 0 ? _a : null,
+                carrierInfo: input.shipping.transportType === 'COURIER' && input.shipping.carrier
+                    ? {
+                        name: input.shipping.carrier,
+                        notes: (_b = input.shipping.tracking) !== null && _b !== void 0 ? _b : null,
+                        address: null, city: null, zipCode: null, country: null,
+                        phoneNumber: null, email: null, id: null, metaData: null, self: null,
+                    }
+                    : null,
                 id: null, metaData: null,
             },
             additionalExpenses: null, date: input.date,
@@ -199,7 +221,7 @@ class CicProvider {
         // 1) crea la BOZZA
         const created = await this.client.post('/delivery-notes/sales', ddt);
         if (created === null || created === void 0 ? void 0 : created.errorCode) {
-            const msg = ((_c = (_b = created.errors) === null || _b === void 0 ? void 0 : _b[0]) === null || _c === void 0 ? void 0 : _c.message) || created.message || created.errorCode;
+            const msg = ((_d = (_c = created.errors) === null || _c === void 0 ? void 0 : _c[0]) === null || _d === void 0 ? void 0 : _d.message) || created.message || created.errorCode;
             throw new Error(`DDT CiC: creazione bozza fallita: ${msg}`);
         }
         const id = created === null || created === void 0 ? void 0 : created.id;
@@ -213,7 +235,7 @@ class CicProvider {
         try {
             const issued = await this.client.post(`/delivery-notes/sales/issue?filter=${filter}`, undefined);
             if (issued && !Array.isArray(issued) && issued.errorCode) {
-                const msg = ((_e = (_d = issued.errors) === null || _d === void 0 ? void 0 : _d[0]) === null || _e === void 0 ? void 0 : _e.message) || issued.message || issued.errorCode;
+                const msg = ((_f = (_e = issued.errors) === null || _e === void 0 ? void 0 : _e[0]) === null || _f === void 0 ? void 0 : _f.message) || issued.message || issued.errorCode;
                 throw new Error(`emissione rifiutata: ${msg}`);
             }
         }
