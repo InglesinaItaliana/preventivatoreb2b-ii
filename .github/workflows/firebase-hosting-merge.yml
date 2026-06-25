@@ -53,12 +53,11 @@ jobs:
           # sul fetch di https://www.googleapis.com/oauth2/v4/token (problema IPv6/Happy-Eyeballs
           # nello stack di rete Node): forziamo la risoluzione IPv4.
           export NODE_OPTIONS="--dns-result-order=ipv4first"
-          # Retry x3: un eventuale "Failed to authenticate" transitorio si auto-ripara.
-          # --debug stampa l'errore vero sotto al messaggio generico (toglibile dopo la diagnosi).
+          # Retry x3: un eventuale errore transitorio di rete/auth si auto-ripara.
           ok=""
           for attempt in 1 2 3; do
             echo "::group::Deploy attempt $attempt"
-            if firebase deploy --only functions,hosting --project preventivatoreb2b-ii --non-interactive --debug; then ok=1; echo "::endgroup::"; break; fi
+            if firebase deploy --only functions,hosting --project preventivatoreb2b-ii --non-interactive; then ok=1; echo "::endgroup::"; break; fi
             echo "::endgroup::"; echo "tentativo $attempt fallito, retry tra 20s..."; sleep 20
           done
           rm -f "$GITHUB_WORKSPACE/sa-key.json"
