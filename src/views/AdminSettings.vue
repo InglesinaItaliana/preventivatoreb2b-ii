@@ -307,15 +307,13 @@ const saveSettings = async () => {
   const newTier = (tipo = ''): TierForm => ({ tipoFinitura: tipo, prezzo: null, colori: [], nuoviColori: '' });
   const newBlock = (): DimBlock => ({ dimensione: '', tiers: [newTier()] });
   const addForm = reactive<{
-    categoria: string; modello: string; dimensione: string; tier: string;
+    categoria: string; modello: string; dimensioni: string[]; tier: string;
     colori: string[]; nuoviColori: string; nuovoModello: string; blocks: DimBlock[];
-  }>({ categoria: '', modello: '', dimensione: '', tier: '', colori: [], nuoviColori: '', nuovoModello: '', blocks: [newBlock()] });
+  }>({ categoria: '', modello: '', dimensioni: [], tier: '', colori: [], nuoviColori: '', nuovoModello: '', blocks: [newBlock()] });
 
   const uq = (arr: string[]) => [...new Set(arr)].sort();
   const catCategorie = computed(() => GEOM_CATS.filter((c) => catRows.value.some((r) => r.categoria === c)));
   const modelliPerCat = (cat: string) => uq(catRows.value.filter((r) => r.categoria === cat).map((r) => r.modello));
-  const dimsPerMod = (cat: string, mod: string) => uq(catRows.value.filter((r) => r.categoria === cat && r.modello === mod).map((r) => r.dimensione));
-  const tiersPerModDim = (cat: string, mod: string, dim: string) => uq(catRows.value.filter((r) => r.categoria === cat && r.modello === mod && r.dimensione === dim).map((r) => r.tipoFinitura));
   const tiersPerMod = (cat: string, mod: string) => uq(catRows.value.filter((r) => r.categoria === cat && r.modello === mod).map((r) => r.tipoFinitura));
   // tier del modello ORDINATI per codice rappresentativo (così le nuove dimensioni
   // ottengono le stesse cifre finitura delle dimensioni esistenti)
@@ -376,17 +374,23 @@ const saveSettings = async () => {
   };
 
   const openAddModal = async () => {
-    Object.assign(addForm, { categoria: '', modello: '', dimensione: '', tier: '', colori: [], nuoviColori: '', nuovoModello: '', blocks: [newBlock()] });
+    Object.assign(addForm, { categoria: '', modello: '', dimensioni: [], tier: '', colori: [], nuoviColori: '', nuovoModello: '', blocks: [newBlock()] });
     addOp.value = 'finitura';
     showAddModal.value = true;
     await loadCatRows();
   };
 
   const addOps = ['finitura', 'dimensione', 'tipologia'] as const;
-  const selectCategoria = (c: string) => { addForm.categoria = c; addForm.modello = ''; addForm.dimensione = ''; addForm.tier = ''; };
-  const selectModello = (m: string) => { addForm.modello = m; addForm.dimensione = ''; addForm.tier = ''; if (addOp.value === 'dimensione') prefillBlockTiers(); };
-  const selectTierColore = (t: string) => { addForm.tier = t; addForm.colori = []; };
-  const giaPresente = (col: string) => coloriPresenti(addForm.categoria, addForm.modello, addForm.dimensione, addForm.tier).some((x) => x.toUpperCase() === col.toUpperCase());
+  const selectCategoria = (c: string) => { addForm.categoria = c; addForm.modello = ''; addForm.dimensioni = []; addForm.tier = ''; addForm.colori = []; };
+  const selectModello = (m: string) => { addForm.modello = m; addForm.dimensioni = []; addForm.tier = ''; addForm.colori = []; if (addOp.value === 'dimensione') prefillBlockTiers(); };
+  // flusso Finitura: scelto il TIER, le dimensioni disponibili sono quelle che hanno quel tier
+  const selectTierColore = (t: string) => { addForm.tier = t; addForm.colori = []; addForm.dimensioni = []; };
+  const dimsForTier = (cat: string, mod: string, tier: string) => uq(catRows.value.filter((r) => r.categoria === cat && r.modello === mod && r.tipoFinitura === tier).map((r) => r.dimensione));
+  const toggleDim = (d: string) => { const i = addForm.dimensioni.indexOf(d); if (i >= 0) addForm.dimensioni.splice(i, 1); else addForm.dimensioni.push(d); };
+  const toggleAllDims = () => {
+    const all = dimsForTier(addForm.categoria, addForm.modello, addForm.tier);
+    addForm.dimensioni = addForm.dimensioni.length === all.length ? [] : [...all];
+  };
 
   // sincronizza i tier proposti per i blocchi dimensione quando si sceglie il modello
   const prefillBlockTiers = () => {
@@ -398,11 +402,18 @@ const saveSettings = async () => {
     const cat = addForm.categoria;
     if (!cat) return 'Scegli una categoria.';
     if (addOp.value === 'finitura') {
-      if (!addForm.modello || !addForm.dimensione || !addForm.tier) return 'Scegli modello, dimensione e tipo finitura.';
-      const presenti = new Set(coloriPresenti(cat, addForm.modello, addForm.dimensione, addForm.tier).map((c) => c.toUpperCase()));
-      const colori = uq([...addForm.colori, ...parseColori(addForm.nuoviColori)]).filter((c) => !presenti.has(c.toUpperCase()));
-      if (colori.length === 0) return 'Aggiungi almeno un colore nuovo.';
-      return { categoria: cat, modello: addForm.modello, newTiers: [], newColors: colori.map((c) => ({ dimensione: addForm.dimensione, tipoFinitura: addForm.tier, colore: c })) };
+      if (!addForm.modello || !addForm.tier) return 'Scegli modello e tipo finitura.';
+      if (addForm.dimensioni.length === 0) return 'Seleziona almeno una dimensione.';
+      const colori = uq([...addForm.colori, ...parseColori(addForm.nuoviColori)]);
+      if (colori.length === 0) return 'Aggiungi almeno un colore.';
+      // fan-out: per ogni dimensione selezionata × colore, saltando quelli già presenti
+      const newColors: any[] = [];
+      for (const dim of addForm.dimensioni) {
+        const presenti = new Set(coloriPresenti(cat, addForm.modello, dim, addForm.tier).map((c) => c.toUpperCase()));
+        for (const c of colori) if (!presenti.has(c.toUpperCase())) newColors.push({ dimensione: dim, tipoFinitura: addForm.tier, colore: c });
+      }
+      if (newColors.length === 0) return 'Quei colori sono già presenti nelle dimensioni selezionate.';
+      return { categoria: cat, modello: addForm.modello, newTiers: [], newColors };
     }
     // dimensione | tipologia → blocchi
     const modello = addOp.value === 'tipologia' ? addForm.nuovoModello.trim() : addForm.modello;
@@ -1215,32 +1226,37 @@ const catalogStore = useCatalogStore();
             <!-- FLOW FINITURA -->
             <template v-if="addOp === 'finitura' && addForm.modello">
               <div>
-                <label class="block text-xs font-black uppercase text-slate-400 mb-2">Dimensione</label>
-                <div class="flex flex-wrap gap-2">
-                  <button v-for="d in dimsPerMod(addForm.categoria, addForm.modello)" :key="d" @click="addForm.dimensione = d; addForm.tier = '';"
-                    class="px-3 py-1.5 rounded-full text-sm font-bold" :class="addForm.dimensione === d ? 'bg-amber-400 text-amber-950' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'">{{ d }}</button>
-                </div>
-              </div>
-              <div v-if="addForm.dimensione">
                 <label class="block text-xs font-black uppercase text-slate-400 mb-2">Tipo finitura (tier)</label>
                 <div class="flex flex-wrap gap-2">
-                  <button v-for="t in tiersPerModDim(addForm.categoria, addForm.modello, addForm.dimensione)" :key="t" @click="selectTierColore(t)"
+                  <button v-for="t in tiersPerMod(addForm.categoria, addForm.modello)" :key="t" @click="selectTierColore(t)"
                     class="px-3 py-1.5 rounded-full text-sm font-bold" :class="addForm.tier === t ? 'bg-amber-400 text-amber-950' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'">{{ t }}</button>
                 </div>
               </div>
               <div v-if="addForm.tier">
+                <div class="flex items-center justify-between mb-2">
+                  <label class="block text-xs font-black uppercase text-slate-400">Dimensioni <span class="text-slate-300">· {{ addForm.dimensioni.length }} selez.</span></label>
+                  <button @click="toggleAllDims" class="text-xs font-bold text-amber-600 hover:text-amber-700">
+                    {{ addForm.dimensioni.length === dimsForTier(addForm.categoria, addForm.modello, addForm.tier).length ? 'Deseleziona tutte' : 'Tutte' }}
+                  </button>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                  <button v-for="d in dimsForTier(addForm.categoria, addForm.modello, addForm.tier)" :key="d" @click="toggleDim(d)"
+                    class="px-3 py-1.5 rounded-full text-sm font-bold transition-colors" :class="addForm.dimensioni.includes(d) ? 'bg-amber-400 text-amber-950' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'">{{ d }}</button>
+                </div>
+              </div>
+              <div v-if="addForm.tier && addForm.dimensioni.length">
                 <label class="block text-xs font-black uppercase text-slate-400 mb-2">Colori — riusa dagli esistenti</label>
                 <div class="rounded-2xl border border-slate-200 divide-y divide-slate-100 max-h-56 overflow-y-auto">
                   <label v-for="col in coloriLib(addForm.modello, addForm.tier)" :key="col" class="flex items-center gap-3 px-4 py-2.5 hover:bg-slate-50 cursor-pointer">
-                    <input type="checkbox" :value="col" v-model="addForm.colori" :disabled="giaPresente(col)" class="h-5 w-5 rounded text-amber-500 focus:ring-amber-400" />
+                    <input type="checkbox" :value="col" v-model="addForm.colori" class="h-5 w-5 rounded text-amber-500 focus:ring-amber-400" />
                     <span class="text-sm font-bold text-slate-700">{{ col }}</span>
-                    <span v-if="giaPresente(col)" class="ml-auto text-[10px] font-bold text-slate-400 uppercase">già presente</span>
                   </label>
                   <p v-if="coloriLib(addForm.modello, addForm.tier).length === 0" class="px-4 py-3 text-xs text-slate-400">Nessun colore in libreria per questo tier.</p>
                 </div>
                 <label class="block text-xs font-black uppercase text-slate-400 mt-3 mb-1">…oppure nuovi colori (uno per riga)</label>
                 <textarea v-model="addForm.nuoviColori" rows="2" placeholder="VERDE BOTTIGLIA 6005&#10;BLU NOTTE"
                   class="w-full bg-slate-50 border-2 border-slate-200 rounded-xl p-3 text-sm text-slate-700 focus:border-amber-400 focus:ring-0 outline-none uppercase"></textarea>
+                <p class="text-[11px] text-slate-400 mt-2">I colori verranno applicati alle {{ addForm.dimensioni.length }} dimensioni selezionate (saltando quelli già presenti).</p>
               </div>
             </template>
 
