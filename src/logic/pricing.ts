@@ -133,10 +133,13 @@ export function calculatePrice(input: PricingInput, activeList: string = '2026-a
   if (!catalog.isLoaded) return { prezzo_unitario: 0, prezzo_totale: 0 };
 
   // 1. SE È IL LISTINO VECCHIO -> Delega al file esterno
-  if (activeList === '2025x') {
+  // NB: tolleriamo sia '2025x' (pricelistOptions globale) sia '2025-x' (valore
+  // salvato dal modale cliente, opzione "LEALI") — erano disallineati e i clienti
+  // LEALI cadevano nel default 2026 (prezzo sbagliato).
+  if (activeList === '2025x' || activeList === '2025-x') {
     return calculateLogic2025x(input);
   }
-  
+
   if (activeList === '2025-a') {
     return calculateLogic2025(input);
   }
