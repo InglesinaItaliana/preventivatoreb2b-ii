@@ -11,10 +11,11 @@ export function calculateLogic2025x(input: PricingInput) {
   const catalog = useCatalogStore();
   if (!catalog.isLoaded) return { prezzo_unitario: 0, prezzo_totale: 0 };
 
-  // --- PUNTO CHIAVE: MAGGIORAZIONE DI 1€ ---
-  // Definiamo i nuovi prezzi base unitari
-  const pGrigliaAumentato = input.prezzo_unitario_griglia + 1.00;
-  const pCanalinoAumentato = input.prezzo_unitario_canalino + 1.00;
+  // --- MAGGIORAZIONE LEALI (+€/ml su griglia e canalino) ---
+  // DISATTIVATA (0) il 2026-06-26 su richiesta. Per RIATTIVARLA rimettere 1.00.
+  const MAGGIORAZIONE_LEALI = 0; // era 1.00
+  const pGrigliaAumentato = input.prezzo_unitario_griglia + MAGGIORAZIONE_LEALI;
+  const pCanalinoAumentato = input.prezzo_unitario_canalino + MAGGIORAZIONE_LEALI;
   // ----------------------------------------
 
   // Normalizzazione Misure
