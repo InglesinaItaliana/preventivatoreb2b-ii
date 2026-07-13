@@ -50,7 +50,7 @@ const gioco = ref(DEFAULT_GIOCO);
 const kerf = ref(DEFAULT_KERF);
 const margineMinimo = ref(DEFAULT_MARGINE_MINIMO);
 const lunghezzaMinima = ref(DEFAULT_LUNGHEZZA_MINIMA);
-const pesoBarraKgM = ref<number | null>(null);
+const pesoBarraKgM = ref<number | null>(BARRA.pesoKgM);
 
 // Su una griglia a rombi le barre non corrono parallele al bordo: il "vuoto
 // contro il bordo" non esiste come grandezza, e i vuoti uguali non hanno senso.
@@ -457,13 +457,16 @@ const kg = (v: number) => `${nf2.format(v)} kg`;
               <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Peso barra 18×8 (kg/m)</label>
               <input v-model.number="pesoBarraKgM" type="number" min="0" step="0.001" placeholder="da definire"
                 class="w-full p-2 border border-gray-200 rounded-lg text-sm" />
-              <p class="text-[10px] text-gray-400 italic mt-0.5">Senza questo, il peso totale non viene calcolato.</p>
+              <p class="text-[10px] text-gray-400 italic mt-0.5">
+                Di serie {{ nf2.format(BARRA.pesoKgM) }} kg/m (profilo cavo). Svuotando il campo,
+                il peso totale non viene calcolato invece di essere inventato.
+              </p>
             </div>
 
             <div class="bg-gray-50 border border-gray-200 rounded-lg p-3 text-[11px] text-gray-500 space-y-0.5">
               <p class="font-bold text-gray-700 uppercase text-[10px] mb-1">Materiali (fissi)</p>
               <p>Profilo a U {{ PROFILO_U.lato }}×{{ PROFILO_U.lato }}×{{ nf.format(PROFILO_U.spessore) }} · stecca {{ m(PROFILO_U.stecca) }} · {{ nf2.format(PROFILO_U.pesoKgM) }} kg/m</p>
-              <p>Barra {{ BARRA.larghezza }}×{{ BARRA.spessore }} · stecca {{ m(BARRA.stecca) }}</p>
+              <p>Barra {{ BARRA.larghezza }}×{{ BARRA.spessore }} · stecca {{ m(BARRA.stecca) }} · {{ nf2.format(BARRA.pesoKgM) }} kg/m</p>
               <p>Canale interno {{ mm(CANALE_INTERNO) }} · profondità {{ mm(PROFONDITA_CANALE) }}</p>
               <p class="italic pt-1">Due barre sovrapposte fanno {{ BARRA.spessore * 2 }} mm: il canale da {{ CANALE_INTERNO }} le riceve con 1 mm di gioco.</p>
             </div>

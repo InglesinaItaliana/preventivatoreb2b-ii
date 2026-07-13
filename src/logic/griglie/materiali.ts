@@ -12,11 +12,20 @@ export const PROFILO_U = {
   pesoKgM: 0.300,
 } as const;
 
-/** Barra piatta della griglia: 18 mm di larghezza, 8 mm di spessore, stecche da 3 m. */
+/**
+ * Barra della griglia: 18 mm di larghezza, 8 mm di spessore, stecche da 3 m.
+ *
+ * 85 g/m: è un peso da profilo CAVO. Un pieno 18×8 in alluminio ne peserebbe ~390,
+ * in acciaio oltre 1100 — quindi la sezione utile è di una trentina di mm², cioè
+ * un tubolare a parete sottile. Per la geometria non cambia nulla (gli 8 mm sono
+ * l'ingombro in profondità, ed è quello che conta per il canale): cambia solo il
+ * peso. Il valore è modificabile nei parametri d'officina.
+ */
 export const BARRA = {
   larghezza: 18,
   spessore: 8,
   stecca: 3000,
+  pesoKgM: 0.085,
 } as const;
 
 /**
