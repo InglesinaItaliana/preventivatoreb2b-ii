@@ -72,7 +72,8 @@ export interface PezzoBarra {
 export interface SegmentoBarra {
   x1: number; y1: number;
   x2: number; y2: number;
-  famiglia: 'V' | 'O' | 'A' | 'B';
+  famiglia: 'V' | 'O' | 'A' | 'B';   // decide la tinta (le due famiglie si distinguono)
+  tipo: string;                      // etichetta del pezzo in distinta: serve all'hover
 }
 
 export interface Progetto {
@@ -274,8 +275,12 @@ function calcolaLondra(c: ConfigGriglia): Progetto {
 
   const disegno = {
     barre: [
-      ...oriz.assi.map((y): SegmentoBarra => ({ x1: testa, y1: y, x2: c.larghezza - testa, y2: y, famiglia: 'O' })),
-      ...vert.assi.map((x): SegmentoBarra => ({ x1: x, y1: testa, x2: x, y2: c.altezza - testa, famiglia: 'V' })),
+      ...oriz.assi.map((y): SegmentoBarra => ({
+        x1: testa, y1: y, x2: c.larghezza - testa, y2: y, famiglia: 'O', tipo: 'Barra orizzontale',
+      })),
+      ...vert.assi.map((x): SegmentoBarra => ({
+        x1: x, y1: testa, x2: x, y2: c.altezza - testa, famiglia: 'V', tipo: 'Barra verticale',
+      })),
     ],
     rivetti: vert.assi.flatMap((x) => oriz.assi.map((y): Punto => ({ x, y }))),
   };
@@ -356,6 +361,8 @@ function calcolaRombi(c: ConfigGriglia, rapporto: number): Progetto {
   // schemi per niente. Quindi le portiamo tutte nello stesso verso (foro più
   // vicino verso la testa) e poi accorpiamo.
   const perSchema = new Map<string, PezzoBarra>();
+  const chiaveDi: string[] = [];   // la chiave di ogni barra DISEGNATA, nello stesso ordine
+
   for (const b of d.barre) {
     let fori = b.fori;
     let primo = fori[0] ?? 0;
@@ -372,6 +379,7 @@ function calcolaRombi(c: ConfigGriglia, rapporto: number): Progetto {
       Math.round(primo * 10),
       fori.length,
     ].join('|');
+    chiaveDi.push(chiave);
 
     const esistente = perSchema.get(chiave);
     if (esistente) {
@@ -394,6 +402,11 @@ function calcolaRombi(c: ConfigGriglia, rapporto: number): Progetto {
   // Dalla più lunga alla più corta: è l'ordine in cui si taglia.
   const barre = [...perSchema.values()].sort((a, b) => b.lunghezza - a.lunghezza);
   barre.forEach((b, i) => { b.etichetta = `Barra tipo ${String.fromCharCode(65 + i)}`; });
+
+  // Ogni barra disegnata sa a quale tipo appartiene: è così che l'hover sulla
+  // distinta accende i pezzi giusti nell'anteprima.
+  const etichettaPerChiave = new Map<string, string>();
+  for (const [chiave, pezzo] of perSchema) etichettaPerChiave.set(chiave, pezzo.etichetta);
 
   const bordi: PezzoBordo[] = c.conBordo ? [
     { etichetta: 'Montante orizzontale (sopra/sotto)', lunghezza: c.larghezza, quantitaPerTelaio: 2, taglio: '45° alle due estremità' },
@@ -439,7 +452,11 @@ function calcolaRombi(c: ConfigGriglia, rapporto: number): Progetto {
     testa,
     spessorePannello: c.conBordo ? SPESSORE_PANNELLO : BARRA.spessore * 2,
     disegno: {
-      barre: d.barre.map((b) => ({ ...b.segmento, famiglia: b.famiglia })),
+      barre: d.barre.map((b, i): SegmentoBarra => ({
+        ...b.segmento,
+        famiglia: b.famiglia,
+        tipo: etichettaPerChiave.get(chiaveDi[i]!) ?? '',
+      })),
       rivetti: d.rivetti,
     },
     bordi,

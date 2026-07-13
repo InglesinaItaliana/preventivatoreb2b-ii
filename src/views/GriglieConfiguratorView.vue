@@ -145,14 +145,10 @@ const finitureDisponibili = computed(() => {
 const foriEstesi = ref(false);
 
 // --- Aggancio anteprima ↔ distinta -----------------------------------------
-// Solo su LONDRA: lì una riga di distinta È una famiglia di barre. Sui rombi un
-// "tipo" raccoglie barre di entrambe le famiglie, quindi non c'è niente da
-// accendere in blocco.
+// Ogni barra disegnata porta con sé l'etichetta del suo tipo, quindi l'hover su
+// una riga di distinta accende esattamente i pezzi di quella riga — su Londra
+// come sui rombi, dove un tipo raccoglie barre di entrambe le famiglie.
 const evidenzia = ref<string | null>(null);
-const famigliaDi = (etichetta: string): string | null => {
-  if (aRombi.value) return null;
-  return etichetta.includes('verticale') ? 'V' : 'O';
-};
 
 // --- Formattazione ----------------------------------------------------------
 const nf = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 1 });
@@ -552,7 +548,7 @@ const kg = (v: number) => `${nf2.format(v)} kg`;
               <tbody class="divide-y divide-gray-100">
                 <tr
                   v-for="b in progetto.barre" :key="b.etichetta"
-                  @mouseenter="evidenzia = famigliaDi(b.etichetta)"
+                  @mouseenter="evidenzia = b.etichetta"
                   @mouseleave="evidenzia = null"
                   class="hover:bg-amber-50/60 transition-colors cursor-default"
                 >
@@ -592,7 +588,7 @@ const kg = (v: number) => `${nf2.format(v)} kg`;
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div
               v-for="b in progetto.barre" :key="b.etichetta"
-              @mouseenter="evidenzia = famigliaDi(b.etichetta)"
+              @mouseenter="evidenzia = b.etichetta"
               @mouseleave="evidenzia = null"
               class="border border-gray-200 rounded-xl p-4 bg-white"
             >

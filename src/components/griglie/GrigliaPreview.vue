@@ -7,7 +7,7 @@ import { coloreFinitura, tinta } from '../../logic/griglie/finiture';
 const props = defineProps<{
   progetto: Progetto;
   finitura: string;
-  evidenzia?: string | null;   // famiglia da accendere: 'V' | 'O' | 'A' | 'B'
+  evidenzia?: string | null;   // etichetta del TIPO da accendere (es. "Barra tipo B")
 }>();
 
 const W = computed(() => props.progetto.config.larghezza);
@@ -42,8 +42,12 @@ function poligono(b: SegmentoBarra): string {
   ].join(' ');
 }
 
+// Si accende il TIPO, non la famiglia: sui rombi un tipo raccoglie barre di
+// entrambe le famiglie, e sono proprio quelle che l'officina taglia insieme.
 const riempimento = (b: SegmentoBarra) =>
-  props.evidenzia === b.famiglia ? EVIDENZA : tinta(colore.value, tinte[b.famiglia] ?? -0.2);
+  props.evidenzia && props.evidenzia === b.tipo
+    ? EVIDENZA
+    : tinta(colore.value, tinte[b.famiglia] ?? -0.2);
 
 const telaio = computed(() => {
   const w = W.value, h = H.value, l = lato.value;
