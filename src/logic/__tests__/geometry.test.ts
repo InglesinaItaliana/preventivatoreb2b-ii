@@ -61,4 +61,15 @@ describe('la colonna "m" riconcilia col totale riga', () => {
 
     expect(totaleRiga / metriTotaliRiga).toBeCloseTo(tariffa, 10);
   });
+
+  it('solo canalino: totale ÷ metri di perimetro = moltiplicatore del codice', () => {
+    const qty = 2;
+    const perimetroPezzo = metriPerimetro(1000, 1000); // 4,00 m
+    const metriTotaliRiga = perimetroPezzo * qty;
+
+    const moltiplicatore = 2.5; // C211
+    const totaleRiga = (perimetroPezzo * moltiplicatore) * qty;
+
+    expect(totaleRiga / metriTotaliRiga).toBeCloseTo(moltiplicatore, 10);
+  });
 });
