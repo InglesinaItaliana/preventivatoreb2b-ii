@@ -53,8 +53,13 @@ export const DEFAULT_KERF = 2;           // mm, spessore della lama
 export const DEFAULT_MARGINE_MINIMO = 10; // mm fra il filo interno della cornice e il bordo dell'ultima barra
 
 /**
- * Sotto questa lunghezza la barretta d'angolo di una griglia a rombi si omette.
- * A prescindere da questo valore, una barra senza NESSUN incrocio viene sempre
- * scartata: non c'è nulla che la tenga ferma, cadrebbe.
+ * Filtro ESTETICO facoltativo: sotto questa lunghezza la barretta d'angolo di una
+ * griglia a rombi si omette. Di serie 0, cioè si tiene tutto.
+ *
+ * Se una barra ha un foro, ha un aggancio: buttarla è una scelta, non una
+ * necessità. E col telaio anche una barra senza NESSUN incrocio è tenuta, perché
+ * le sue teste sono infilate nel canale della U, che le trattiene. L'unico caso
+ * davvero impossibile è la griglia nuda con zero incroci — quella cade per terra,
+ * e viene tolta comunque.
  */
-export const DEFAULT_LUNGHEZZA_MINIMA = 80;
+export const DEFAULT_LUNGHEZZA_MINIMA = 0;

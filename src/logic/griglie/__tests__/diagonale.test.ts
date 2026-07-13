@@ -13,7 +13,8 @@ const BASE: ConfigGriglia = {
   gioco: 1,
   margineMinimo: 10,
   conBordo: true,
-  lunghezzaMinima: 80,
+  lunghezzaMinima: 0,
+  famigliaAVista: 'A',
 };
 
 /**
@@ -105,7 +106,9 @@ describe('MILANO — foratura', () => {
     // 1000 × 1600, rombo 200: la differenza fra i lati (600) è un multiplo esatto
     // della diagonale del rombo, e questo rende simmetriche anche le barre
     // d'angolo. È una coincidenza delle misure, non una proprietà della griglia.
-    for (const b of p.barre) expect(b.primoForo).toBeCloseTo(b.codaForo, 3);
+    for (const b of p.barre.filter((x) => x.nFori > 0)) {
+      expect(b.primoForo).toBeCloseTo(b.codaForo, 3);
+    }
   });
 
   it('basta cambiare l\'altezza e le barre d\'angolo diventano ASIMMETRICHE', () => {
@@ -116,26 +119,20 @@ describe('MILANO — foratura', () => {
     expect(asimmetriche.length).toBeGreaterThan(0);
   });
 
-  it('le barre speculari NON diventano due tipi: sono lo stesso pezzo girato', () => {
-    // Senza normalizzare il verso, una barra coi fori a 94/129 e la sua speculare
-    // a 129/94 sembrerebbero due pezzi diversi, e l'officina taglierebbe il doppio
-    // degli schemi per niente.
+  it('le barre speculari sono lo stesso pezzo girato: un tipo solo', () => {
+    // Una barra coi fori a 94/129 e la sua speculare a 129/94 sono lo stesso pezzo
+    // montato al contrario: normalizzando il verso restano un tipo solo.
     const s = calcolaProgetto({ ...BASE, altezza: 1550 });
-    const perLunghezza = new Map<number, number>();
-    for (const b of s.barre) {
-      const k = Math.round(b.lunghezza * 10);
-      perLunghezza.set(k, (perLunghezza.get(k) ?? 0) + 1);
-    }
-    // A parità di lunghezza esiste UN SOLO schema di foratura.
-    for (const [, n] of perLunghezza) expect(n).toBe(1);
-
-    // E la quantità totale continua a tornare.
     const totale = s.barre.reduce((t, b) => t + b.quantitaPerTelaio, 0);
     expect(totale).toBe(s.disegno.barre.length);
   });
 
-  it('ogni barra ha almeno un foro: una barra senza incroci cadrebbe', () => {
-    for (const b of p.barre) expect(b.nFori).toBeGreaterThanOrEqual(1);
+  it('col telaio, una barra senza incroci si TIENE: le teste sono nel canale', () => {
+    // Correzione a una regola che avevo sbagliato: se una barra ha un foro ha un
+    // aggancio, e col telaio anche una senza fori è trattenuta dal canale della U.
+    // L'unico caso impossibile è la griglia nuda con zero incroci.
+    const nuda = calcolaProgetto({ ...BASE, conBordo: false });
+    for (const b of nuda.barre) expect(b.nFori).toBeGreaterThanOrEqual(1);
   });
 });
 
@@ -206,9 +203,106 @@ describe('VENEZIA — stesso reticolo, rombi allungati', () => {
   });
 });
 
+describe('rombi — nessun foro orfano', () => {
+  // L'INVARIANTE che regge tutto: ogni rivetto unisce esattamente due barre,
+  // quindi la somma di TUTTI i fori deve fare esattamente il DOPPIO dei rivetti.
+  // Se non torna, da qualche parte c'è un foro senza partner sotto — un buco nel
+  // vuoto che l'officina farebbe e che indebolisce la barra per niente.
+  const foriTotali = (p: ReturnType<typeof calcolaProgetto>) =>
+    p.barre.reduce((t, b) => t + b.nFori * b.quantitaPerTelaio, 0);
+
+  it('col telaio, di serie: nessuno scarto e nessun orfano', () => {
+    const p = calcolaProgetto(BASE);
+    expect(p.barreScartate).toBe(0);          // col telaio le teste sono nel canale: si tiene tutto
+    expect(foriTotali(p)).toBe(2 * p.nRivetti);
+  });
+
+  it('con il filtro estetico acceso, i fori delle barre tolte spariscono dai compagni', () => {
+    const p = calcolaProgetto({ ...BASE, lunghezzaMinima: 500 });
+    expect(p.barreScartate).toBeGreaterThan(0);
+    expect(foriTotali(p)).toBe(2 * p.nRivetti);
+  });
+
+  it('griglia nuda: si scarta solo l\'impossibile, e neanche lì restano orfani', () => {
+    const p = calcolaProgetto({ ...BASE, conBordo: false });
+    expect(foriTotali(p)).toBe(2 * p.nRivetti);
+    for (const b of p.barre) expect(b.nFori).toBeGreaterThanOrEqual(1); // senza telaio, zero incroci = cade
+  });
+
+  it('anche su Venezia, e con misure sfortunate', () => {
+    for (const cfg of [
+      { ...BASE, stile: 'VENEZIA' as const },
+      { ...BASE, altezza: 1550 },
+      { ...BASE, stile: 'VENEZIA' as const, altezza: 1330, passoOrizzontale: 150 },
+      { ...BASE, conBordo: false, lunghezzaMinima: 300 },
+    ]) {
+      const p = calcolaProgetto(cfg);
+      expect(foriTotali(p), JSON.stringify({ h: cfg.altezza, s: cfg.stile })).toBe(2 * p.nRivetti);
+    }
+  });
+
+  it('i fori restano equidistanti anche dopo aver tolto gli orfani', () => {
+    const p = calcolaProgetto({ ...BASE, lunghezzaMinima: 500 });
+    for (const b of p.barre) {
+      for (let i = 1; i < b.posizioni.length; i++) {
+        expect(b.posizioni[i]! - b.posizioni[i - 1]!).toBeCloseTo(b.interasse, 6);
+      }
+    }
+  });
+});
+
+describe('foratura: i pezzi si tagliano identici, si forano in due modi', () => {
+  // Le due famiglie di diagonali sono l'una l'IMMAGINE SPECULARE dell'altra (lo
+  // specchio verticale del pannello manda la A nella B, e il reticolo è ancorato
+  // al centro). Ne segue una proprietà forte: ogni forma esce in quantità PARI e
+  // si divide ESATTAMENTE a metà fra i due strati. Non è una coincidenza delle
+  // misure — è una simmetria. Per questo la foratura non separa i pezzi in
+  // distinta: si tagliano uguali, e solo dopo metà vanno passanti e metà ciechi.
+
+  it('ogni forma esce in quantità PARI, divisa esattamente a metà', () => {
+    for (const cfg of [
+      BASE,
+      { ...BASE, altezza: 1550 },
+      { ...BASE, stile: 'VENEZIA' as const },
+      { ...BASE, conBordo: false },
+      { ...BASE, passoOrizzontale: 150, altezza: 1330 },
+    ]) {
+      const p = calcolaProgetto(cfg);
+      for (const b of p.barre) {
+        expect(b.quantitaPerTelaio % 2, `${b.etichetta} ha quantità dispari`).toBe(0);
+        expect(b.quantitaCieca).toBe(b.quantitaPassante);
+        expect(b.quantitaCieca + b.quantitaPassante).toBe(b.quantitaPerTelaio);
+      }
+    }
+  });
+
+  it('cambiando lo strato a vista, i totali si scambiano', () => {
+    const a = calcolaProgetto(BASE);
+    const b = calcolaProgetto({ ...BASE, famigliaAVista: 'B' });
+    const somma = (p: typeof a, k: 'quantitaCieca' | 'quantitaPassante') =>
+      p.barre.reduce((t, x) => t + x[k], 0);
+
+    // Essendo 50/50 per simmetria, invertire lo strato non cambia i totali...
+    expect(somma(a, 'quantitaCieca')).toBe(somma(b, 'quantitaCieca'));
+    // ...ma cambia QUALI barre vanno cieche: il disegno mette l'altra famiglia sopra.
+    expect(a.disegno.barre[a.disegno.barre.length - 1]!.famiglia)
+      .not.toBe(b.disegno.barre[b.disegno.barre.length - 1]!.famiglia);
+  });
+
+  it('a parità di lunghezza esiste UN SOLO tipo: il taglio non si sdoppia', () => {
+    const p = calcolaProgetto({ ...BASE, altezza: 1550 });
+    const perLunghezza = new Map<number, number>();
+    for (const b of p.barre) {
+      const k = Math.round(b.lunghezza * 10);
+      perLunghezza.set(k, (perLunghezza.get(k) ?? 0) + 1);
+    }
+    for (const [, n] of perLunghezza) expect(n).toBe(1);
+  });
+});
+
 describe('rombi — casi che salvano materiale', () => {
-  it('le barre senza incroci non finiscono in distinta: cadrebbero', () => {
-    const p = calcolaProgetto({ ...BASE, lunghezzaMinima: 0 });
+  it('senza telaio, le barre senza incroci non finiscono in distinta: cadrebbero', () => {
+    const p = calcolaProgetto({ ...BASE, conBordo: false, lunghezzaMinima: 0 });
     for (const b of p.barre) expect(b.nFori).toBeGreaterThanOrEqual(1);
   });
 

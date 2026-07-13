@@ -82,12 +82,14 @@ export interface ParametriDiagonale {
   rapporto: number;         // 1 = MILANO (rombi quadrati) · 2 = VENEZIA
   diagonale: number;        // Δ: diagonale orizzontale del rombo (il "passo")
   testa: number;            // quanto la barra può spingersi oltre il filo (fondo canale − gioco)
-  lunghezzaMinima: number;  // sotto questa, la barra si scarta
+  lunghezzaMinima: number;  // filtro facoltativo: sotto questa la barretta si omette
+  conBordo: boolean;        // col telaio le teste sono infilate nel canale, che le TRATTIENE
 }
 
 export interface RisultatoDiagonale {
   barre: BarraDiagonale[];
-  scartate: number;         // barre omesse: troppo corte o senza nessun incrocio
+  scartate: number;         // barre omesse (solo l'impossibile, o il filtro estetico)
+  pivotanti: number;        // barre tenute da UN SOLO rivetto: agganciate, ma girano
   rivetti: Punto[];
   perpendicolare: number;   // distanza fra due barre parallele (asse-asse)
   vuoto: number;            // la luce che si vede fra due barre parallele
@@ -115,6 +117,7 @@ export function calcolaDiagonale(p: ParametriDiagonale): RisultatoDiagonale {
   const risultato: RisultatoDiagonale = {
     barre: [],
     scartate: 0,
+    pivotanti: 0,
     rivetti: [],
     perpendicolare,
     vuoto: perpendicolare - BARRA.larghezza,
@@ -191,13 +194,6 @@ export function calcolaDiagonale(p: ParametriDiagonale): RisultatoDiagonale {
     fori.sort((a, b) => a - b);
     puntiFori.sort((a, b) => (a.y - b.y) || (a.x - b.x));
 
-    // Una barra senza incroci non ha NIENTE che la tenga: non è una barra, è uno
-    // scarto. Va tolta comunque, a prescindere dalla lunghezza minima.
-    if (fori.length === 0 || lunghezza < p.lunghezzaMinima) {
-      risultato.scartate++;
-      continue;
-    }
-
     candidate.push({
       famiglia: retta.famiglia,
       segmento: { x1: testaP.x, y1: testaP.y, x2: codaP.x, y2: codaP.y },
@@ -209,20 +205,70 @@ export function calcolaDiagonale(p: ParametriDiagonale): RisultatoDiagonale {
     });
   }
 
-  risultato.barre = candidate;
-
-  // Un rivetto per ogni incrocio che cade su DUE barre davvero esistenti.
+  // ┌── CHI SI SCARTA, E PERCHÉ ────────────────────────────────────────────────
+  // Il pezzo delicato, e per un po' l'ho sbagliato.
+  //
+  // Se una barra ha un foro, ha un aggancio: NON va buttata. E col telaio anche
+  // una barra senza nessun incrocio è tenuta, perché le sue due teste sono
+  // infilate nel canale della U, che le trattiene. L'unico caso davvero
+  // impossibile è la GRIGLIA NUDA con ZERO incroci: quella cade per terra.
+  //
+  // La lunghezza minima resta, ma è un filtro estetico facoltativo (di serie 0,
+  // cioè si tiene tutto). E qualunque cosa venga tolta, i suoi fori spariscono
+  // anche dalle barre che la incrociavano: un foro senza partner sotto è un buco
+  // nel vuoto, che l'officina farebbe e che indebolisce la barra per niente.
+  //
+  // Togliere una barra può lasciarne un'altra senza incroci, che a sua volta va
+  // rivalutata: si itera fino a quando la situazione non si stabilizza.
   const chiave = (q: Punto) => `${Math.round(q.x * 100)}|${Math.round(q.y * 100)}`;
-  const conteggio = new Map<string, { punto: Punto; n: number }>();
-  for (const b of candidate) {
-    for (const q of b.puntiFori) {
-      const k = chiave(q);
-      const e = conteggio.get(k);
-      if (e) e.n++;
-      else conteggio.set(k, { punto: q, n: 1 });
+  let vive = candidate;
+
+  for (let giro = 0; giro < 20; giro++) {
+    // Un rivetto esiste solo dove DUE barre vive si incrociano.
+    const conteggio = new Map<string, { punto: Punto; n: number }>();
+    for (const b of vive) {
+      for (const q of b.puntiFori) {
+        const k = chiave(q);
+        const e = conteggio.get(k);
+        if (e) e.n++;
+        else conteggio.set(k, { punto: q, n: 1 });
+      }
     }
+    const rivetti = new Set(
+      [...conteggio.entries()].filter(([, e]) => e.n >= 2).map(([k]) => k),
+    );
+
+    // Ogni barra tiene solo i fori che hanno davvero un partner.
+    for (const b of vive) {
+      const tenuti: number[] = [];
+      const punti: Punto[] = [];
+      for (let i = 0; i < b.puntiFori.length; i++) {
+        if (rivetti.has(chiave(b.puntiFori[i]!))) {
+          tenuti.push(b.fori[i]!);
+          punti.push(b.puntiFori[i]!);
+        }
+      }
+      b.fori = tenuti;
+      b.puntiFori = punti;
+      b.codaForo = b.lunghezza - (tenuti[tenuti.length - 1] ?? 0);
+    }
+
+    const sopravvissute = vive.filter((b) =>
+      b.lunghezza >= p.lunghezzaMinima &&      // filtro estetico (di serie: nessuno)
+      (p.conBordo || b.fori.length > 0)        // senza telaio, zero incroci = cade
+    );
+
+    if (sopravvissute.length === vive.length) {
+      vive = sopravvissute;
+      risultato.rivetti = [...conteggio.values()].filter((e) => e.n >= 2).map((e) => e.punto);
+      break;
+    }
+    vive = sopravvissute;
   }
-  risultato.rivetti = [...conteggio.values()].filter((e) => e.n >= 2).map((e) => e.punto);
+
+  risultato.barre = vive;
+  risultato.scartate = candidate.length - vive.length;
+  risultato.pivotanti = vive.filter((b) => b.fori.length === 1).length;
 
   return risultato;
 }
