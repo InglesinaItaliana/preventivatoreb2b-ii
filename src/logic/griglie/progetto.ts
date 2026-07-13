@@ -13,16 +13,35 @@ import {
 
 export type Stile = 'LONDRA' | 'MILANO' | 'VENEZIA';
 
+/**
+ * Due modi di distribuire le barre, per due esigenze opposte.
+ *
+ * PASSO_FISSO — l'interasse chiesto viene rispettato ESATTAMENTE, la griglia si
+ *   centra, e il vuoto contro il bordo è quello che avanza (diverso da quelli
+ *   interni). Serve quando il passo è un vincolo: pannelli affiancati che devono
+ *   continuarsi l'uno nell'altro, o un interasse imposto dal cliente.
+ *
+ * SPAZI_UGUALI — tutti i vuoti IDENTICI, quello contro il bordo compreso. Qui
+ *   l'interasse non è un dato ma una conseguenza: lo decide la geometria del
+ *   pannello. Serve quando il pannello vive da solo e deve essere regolare.
+ *   Il passo chiesto diventa un desiderata: si sceglie il numero di barre che ci
+ *   va più vicino, poi si ridistribuisce in parti uguali.
+ */
+export type Distribuzione = 'PASSO_FISSO' | 'SPAZI_UGUALI';
+
 export interface ConfigGriglia {
   stile: Stile;
+  distribuzione: Distribuzione;
   larghezza: number;          // ingombro ESTERNO
   altezza: number;            // ingombro ESTERNO
-  passoOrizzontale: number;   // interasse fra le barre verticali
-  passoVerticale: number;     // interasse fra le barre orizzontali
+  passoOrizzontale: number;   // interasse fra le barre verticali (desiderato, in SPAZI_UGUALI)
+  passoVerticale: number;     // interasse fra le barre orizzontali (idem)
   quantita: number;           // telai identici
   gioco: number;              // mm per lato: infilaggio della barra nel canale
-  margineMinimo: number;      // mm fra il filo interno della cornice e il bordo dell'ultima barra
+  margineMinimo: number;      // vuoto minimo ammesso contro il bordo
   conBordo: boolean;          // false = griglia nuda, senza telaio perimetrale
+  nBarreVerticali?: number | null;   // forzatura manuale del numero di barre (SPAZI_UGUALI)
+  nBarreOrizzontali?: number | null;
 }
 
 /** Un pezzo del telaio (profilo a U). */
@@ -51,8 +70,12 @@ export interface Progetto {
   // Geometria d'insieme
   luceX: number;              // luce interna in larghezza (fra i fili interni della cornice)
   luceY: number;
-  margineX: number;           // dal filo interno della cornice al bordo della prima barra verticale
+  margineX: number;           // vuoto contro il bordo (dal filo interno della cornice al bordo della prima barra)
   margineY: number;
+  vuotoX: number;             // vuoto fra due barre verticali contigue (la luce che si vede)
+  vuotoY: number;
+  passoEffettivoX: number;    // interasse REALE (in SPAZI_UGUALI ≠ da quello chiesto)
+  passoEffettivoY: number;
   assiVerticali: number[];    // x degli assi delle barre verticali, dal filo ESTERNO
   assiOrizzontali: number[];  // y degli assi delle barre orizzontali, dal filo ESTERNO
   latoTelaio: number;         // 0 se senza bordo perimetrale
@@ -78,23 +101,31 @@ export interface Progetto {
  * La regola concordata: il passo comanda, la griglia si centra, e il margine
  * che avanza è quello che viene (purché non scenda sotto il minimo).
  */
-function distribuisci(
-  ingombro: number,
-  margineMinimo: number,
-  passo: number,
-  latoTelaio: number,
-): { n: number; assi: number[]; margine: number; luce: number } {
+interface Distribuita {
+  n: number;
+  assi: number[];
+  margine: number;   // vuoto contro il bordo (dal filo interno del telaio al bordo della barra)
+  vuoto: number;     // vuoto fra due barre contigue (luce netta, quella che si vede)
+  passo: number;     // interasse EFFETTIVO (in SPAZI_UGUALI è derivato, non quello chiesto)
+  luce: number;
+}
+
+const VUOTA: Distribuita = { n: 0, assi: [], margine: 0, vuoto: 0, passo: 0, luce: 0 };
+
+/**
+ * PASSO_FISSO: il passo comanda, la griglia si centra, il margine è quello che avanza.
+ */
+function distribuisciAPasso(
+  ingombro: number, margineMinimo: number, passo: number, latoTelaio: number,
+): Distribuita {
   const luce = ingombro - 2 * latoTelaio;
   const mezzaBarra = BARRA.larghezza / 2;
 
-  // Spazio in cui possono cadere gli ASSI: la barra più esterna deve restare
-  // dentro la luce, staccata almeno del margine minimo dalla cornice.
-  // Senza telaio (latoTelaio = 0) la luce è tutto il pannello.
   const primoAsseMin = latoTelaio + margineMinimo + mezzaBarra;
   const ultimoAsseMax = ingombro - latoTelaio - margineMinimo - mezzaBarra;
   const corsa = ultimoAsseMax - primoAsseMin;
 
-  if (corsa < 0 || passo <= 0) return { n: 0, assi: [], margine: 0, luce };
+  if (corsa < 0 || passo <= 0) return { ...VUOTA, luce };
 
   const n = Math.floor(corsa / passo) + 1;
   const span = (n - 1) * passo;
@@ -103,8 +134,69 @@ function distribuisci(
   const assi: number[] = [];
   for (let i = 0; i < n; i++) assi.push(primoAsse + i * passo);
 
-  const margine = (primoAsse - mezzaBarra) - latoTelaio;
-  return { n, assi, margine, luce };
+  return {
+    n, assi,
+    margine: (primoAsse - mezzaBarra) - latoTelaio,
+    vuoto: passo - BARRA.larghezza,
+    passo,
+    luce,
+  };
+}
+
+/**
+ * SPAZI_UGUALI: n barre dividono la luce in n+1 vuoti TUTTI IDENTICI — quello
+ * contro il bordo vale quanto quelli interni. Il vuoto è la luce che si vede,
+ * cioè da bordo a bordo di barra:
+ *
+ *     luce = (n + 1) × vuoto + n × larghezza_barra
+ *
+ * Il passo chiesto è solo un desiderata: si prende l'n che produce l'interasse
+ * più vicino. (Con nForzato si salta la scelta e si usa quello.)
+ */
+function distribuisciAVuotiUguali(
+  ingombro: number, vuotoMinimo: number, passoDesiderato: number, latoTelaio: number,
+  nForzato?: number | null,
+): Distribuita {
+  const luce = ingombro - 2 * latoTelaio;
+  const larghezza = BARRA.larghezza;
+  const mezzaBarra = larghezza / 2;
+
+  const vuotoDi = (n: number) => (luce - n * larghezza) / (n + 1);
+
+  // n ammissibili: il vuoto che ne esce non deve scendere sotto il minimo.
+  const nMax = Math.floor((luce - vuotoMinimo) / (larghezza + vuotoMinimo));
+  if (nMax < 1 || passoDesiderato <= 0) return { ...VUOTA, luce };
+
+  let n: number;
+  if (nForzato != null) {
+    n = Math.max(1, Math.min(nMax, Math.round(nForzato)));
+  } else {
+    // L'interasse prodotto da n barre è vuoto(n) + larghezza: prendiamo l'n che
+    // avvicina di più il passo chiesto.
+    n = 1;
+    let scarto = Infinity;
+    for (let k = 1; k <= nMax; k++) {
+      const s = Math.abs((vuotoDi(k) + larghezza) - passoDesiderato);
+      if (s < scarto) { scarto = s; n = k; }
+    }
+  }
+
+  const vuoto = vuotoDi(n);
+  const passo = vuoto + larghezza;
+  const primoAsse = latoTelaio + vuoto + mezzaBarra;
+
+  const assi: number[] = [];
+  for (let i = 0; i < n; i++) assi.push(primoAsse + i * passo);
+
+  return { n, assi, margine: vuoto, vuoto, passo, luce };
+}
+
+function distribuisci(
+  c: ConfigGriglia, ingombro: number, passo: number, latoTelaio: number, nForzato?: number | null,
+): Distribuita {
+  return c.distribuzione === 'SPAZI_UGUALI'
+    ? distribuisciAVuotiUguali(ingombro, c.margineMinimo, passo, latoTelaio, nForzato)
+    : distribuisciAPasso(ingombro, c.margineMinimo, passo, latoTelaio);
 }
 
 function calcolaLondra(c: ConfigGriglia): Progetto {
@@ -117,8 +209,8 @@ function calcolaLondra(c: ConfigGriglia): Progetto {
 
   // Le barre VERTICALI si distribuiscono in larghezza (passo orizzontale) e
   // corrono in altezza. E viceversa.
-  const vert = distribuisci(c.larghezza, c.margineMinimo, c.passoOrizzontale, latoTelaio);
-  const oriz = distribuisci(c.altezza, c.margineMinimo, c.passoVerticale, latoTelaio);
+  const vert = distribuisci(c, c.larghezza, c.passoOrizzontale, latoTelaio, c.nBarreVerticali);
+  const oriz = distribuisci(c, c.altezza, c.passoVerticale, latoTelaio, c.nBarreOrizzontali);
 
   // Con il bordo, la barra va a battuta sul fondo del canale meno il gioco.
   const lunghezzaVerticale = c.altezza - 2 * testa;
@@ -136,6 +228,9 @@ function calcolaLondra(c: ConfigGriglia): Progetto {
   ] : [];
 
   const barre: PezzoBarra[] = [];
+  // NB: l'interasse dei fori è quello EFFETTIVO. In SPAZI_UGUALI il passo chiesto
+  // col cursore è solo un desiderata: chi fora deve leggere il passo vero, non
+  // quello che è stato digitato.
   if (vert.n > 0) {
     barre.push({
       etichetta: 'Barra verticale',
@@ -143,7 +238,7 @@ function calcolaLondra(c: ConfigGriglia): Progetto {
       quantitaPerTelaio: vert.n,
       taglio: '90°',
       primoForo: foriSuVerticale[0] ?? 0,
-      interasse: c.passoVerticale,
+      interasse: oriz.passo,
       nFori: oriz.n,
       posizioni: foriSuVerticale,
     });
@@ -155,7 +250,7 @@ function calcolaLondra(c: ConfigGriglia): Progetto {
       quantitaPerTelaio: oriz.n,
       taglio: '90°',
       primoForo: foriSuOrizzontale[0] ?? 0,
-      interasse: c.passoOrizzontale,
+      interasse: vert.passo,
       nFori: vert.n,
       posizioni: foriSuOrizzontale,
     });
@@ -172,7 +267,7 @@ function calcolaLondra(c: ConfigGriglia): Progetto {
     avvisi.push(`Un lato del telaio supera i ${PROFILO_U.stecca / 1000} m della stecca di profilo a U.`);
   }
   if (!c.conBordo) {
-    avvisi.push('Senza bordo perimetrale: le barre restano a vista e la griglia è centrata sull\'ingombro. Se le barre esterne devono invece stare a filo del bordo, il passo non può essere rispettato esattamente — dimmelo e cambio la regola.');
+    avvisi.push('Griglia nuda: le teste delle barre sporgono oltre l\'ultima barra incrociata, come d\'uso nelle griglie da giardino. Se non le vuoi a vista, metti il bordo perimetrale.');
   }
   if (vert.n > 0 && vert.margine < c.margineMinimo - 0.001) {
     avvisi.push('Il margine laterale è sotto il minimo impostato.');
@@ -190,6 +285,10 @@ function calcolaLondra(c: ConfigGriglia): Progetto {
     luceY: oriz.luce,
     margineX: vert.margine,
     margineY: oriz.margine,
+    vuotoX: vert.vuoto,
+    vuotoY: oriz.vuoto,
+    passoEffettivoX: vert.passo,
+    passoEffettivoY: oriz.passo,
     assiVerticali: vert.assi,
     assiOrizzontali: oriz.assi,
     latoTelaio,

@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router';
 import { ChevronLeftIcon, ExclamationTriangleIcon, Squares2X2Icon } from '@heroicons/vue/24/solid';
 import { useCatalogStore } from '../Data/catalog';
 import GrigliaPreview from '../components/griglie/GrigliaPreview.vue';
-import { calcolaProgetto, calcolaImballaggio, type ConfigGriglia, type Stile } from '../logic/griglie/progetto';
+import { calcolaProgetto, calcolaImballaggio, type ConfigGriglia, type Stile, type Distribuzione } from '../logic/griglie/progetto';
 import { pianificaTaglio, type PezzoDaTagliare } from '../logic/griglie/nesting';
 import { appartiene, coloreFinitura, type FamigliaFinitura } from '../logic/griglie/finiture';
 import {
@@ -24,6 +24,22 @@ const passoOrizzontaleCm = ref(10);
 const passoVerticaleCm = ref(10);
 const quantita = ref(1);
 const conBordo = ref(true);
+const distribuzione = ref<Distribuzione>('PASSO_FISSO');
+
+// In SPAZI_UGUALI il cursore è un desiderata: il numero di barre lo sceglie il
+// calcolo. Questi override esistono per ritoccarlo a mano (+/−); muovere il
+// cursore li azzera, così la fonte di verità resta una sola.
+const nVertOverride = ref<number | null>(null);
+const nOrizOverride = ref<number | null>(null);
+const ritocca = (asse: 'v' | 'o', delta: number) => {
+  const p = progetto.value;
+  if (!p) return;
+  const attuale = asse === 'v' ? p.assiVerticali.length : p.assiOrizzontali.length;
+  const target = Math.max(1, attuale + delta);
+  if (asse === 'v') nVertOverride.value = target;
+  else nOrizOverride.value = target;
+};
+const azzeraRitocchi = () => { nVertOverride.value = null; nOrizOverride.value = null; };
 
 const tipoFinitura = ref<FamigliaFinitura>('VERNICIATO');
 const finitura = ref('');
@@ -47,6 +63,9 @@ const passoVerticaleEffettivo = computed(() => {
 
 const config = computed<ConfigGriglia>(() => ({
   stile: stile.value,
+  distribuzione: distribuzione.value,
+  nBarreVerticali: distribuzione.value === 'SPAZI_UGUALI' ? nVertOverride.value : null,
+  nBarreOrizzontali: distribuzione.value === 'SPAZI_UGUALI' ? nOrizOverride.value : null,
   larghezza: larghezzaCm.value * 10,
   altezza: altezzaCm.value * 10,
   passoOrizzontale: passoOrizzontaleCm.value * 10,
@@ -223,29 +242,98 @@ const kg = (v: number) => `${nf2.format(v)} kg`;
             {{ conBordo ? 'Ingombro esterno, telaio compreso.' : 'Ingombro della griglia nuda.' }}
           </p>
 
+          <!-- Distribuzione -->
+          <div>
+            <label class="block text-[10px] font-bold text-gray-500 uppercase mb-2">Distribuzione</label>
+            <div class="grid grid-cols-2 gap-2">
+              <button
+                @click="distribuzione = 'PASSO_FISSO'; azzeraRitocchi()"
+                class="py-2 rounded-lg text-[11px] font-bold border transition-all"
+                :class="distribuzione === 'PASSO_FISSO'
+                  ? 'bg-gray-900 border-gray-900 text-white shadow-md'
+                  : 'bg-white border-gray-200 text-gray-500 hover:border-gray-400'"
+              >PASSO FISSO</button>
+              <button
+                @click="distribuzione = 'SPAZI_UGUALI'; azzeraRitocchi()"
+                class="py-2 rounded-lg text-[11px] font-bold border transition-all"
+                :class="distribuzione === 'SPAZI_UGUALI'
+                  ? 'bg-gray-900 border-gray-900 text-white shadow-md'
+                  : 'bg-white border-gray-200 text-gray-500 hover:border-gray-400'"
+              >SPAZI UGUALI</button>
+            </div>
+            <p class="text-[10px] text-gray-400 mt-1.5 italic leading-snug">
+              <template v-if="distribuzione === 'PASSO_FISSO'">
+                L'interasse è rispettato esattamente; il vuoto contro il bordo è quello che avanza.
+                Per pannelli affiancati che devono continuarsi.
+              </template>
+              <template v-else>
+                Tutti i vuoti identici, quello contro il bordo compreso. L'interasse diventa
+                una conseguenza: il cursore è un valore desiderato.
+              </template>
+            </p>
+          </div>
+
           <!-- Passi -->
           <div>
             <div class="flex justify-between items-baseline mb-1">
-              <label class="text-[10px] font-bold text-gray-500 uppercase">Passo orizzontale</label>
+              <label class="text-[10px] font-bold text-gray-500 uppercase">
+                Passo orizzontale
+                <span v-if="distribuzione === 'SPAZI_UGUALI'" class="text-gray-300 normal-case">(desiderato)</span>
+              </label>
               <span class="text-sm font-bold text-amber-600 tabular-nums">{{ nf.format(passoOrizzontaleCm) }} cm</span>
             </div>
             <input v-model.number="passoOrizzontaleCm" type="range" min="2" max="50" step="0.5"
-              class="w-full accent-amber-400" />
+              @input="azzeraRitocchi()" class="w-full accent-amber-400" />
             <p class="text-[10px] text-gray-400 italic">Interasse fra le barre verticali.</p>
           </div>
 
           <div>
             <div class="flex justify-between items-baseline mb-1">
-              <label class="text-[10px] font-bold text-gray-500 uppercase">Passo verticale</label>
+              <label class="text-[10px] font-bold text-gray-500 uppercase">
+                Passo verticale
+                <span v-if="distribuzione === 'SPAZI_UGUALI' && !passoVerticaleBloccato" class="text-gray-300 normal-case">(desiderato)</span>
+              </label>
               <span class="text-sm font-bold tabular-nums" :class="passoVerticaleBloccato ? 'text-gray-400' : 'text-amber-600'">
                 {{ nf.format(passoVerticaleEffettivo) }} cm
               </span>
             </div>
             <input v-model.number="passoVerticaleCm" type="range" min="2" max="50" step="0.5"
-              :disabled="passoVerticaleBloccato" class="w-full accent-amber-400 disabled:opacity-40" />
+              :disabled="passoVerticaleBloccato" @input="azzeraRitocchi()"
+              class="w-full accent-amber-400 disabled:opacity-40" />
             <p class="text-[10px] text-gray-400 italic">
               <template v-if="passoVerticaleBloccato">Derivato dallo stile: non è libero.</template>
               <template v-else>Interasse fra le barre orizzontali.</template>
+            </p>
+          </div>
+
+          <!-- Il risultato reale: in SPAZI_UGUALI non coincide col cursore -->
+          <div v-if="progetto" class="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
+            <p class="text-[10px] font-bold uppercase text-gray-500">Risultato</p>
+
+            <div v-for="asse in ([
+                { k: 'v' as const, nome: 'Barre verticali', n: progetto.assiVerticali.length, passo: progetto.passoEffettivoX, vuoto: progetto.vuotoX },
+                { k: 'o' as const, nome: 'Barre orizzontali', n: progetto.assiOrizzontali.length, passo: progetto.passoEffettivoY, vuoto: progetto.vuotoY },
+              ])" :key="asse.k"
+              class="flex items-center justify-between gap-2"
+            >
+              <div class="min-w-0">
+                <p class="text-[11px] font-bold text-gray-700">{{ asse.nome }}</p>
+                <p class="text-[10px] text-gray-500 tabular-nums">
+                  interasse {{ nf.format(asse.passo / 10) }} cm · vuoto {{ nf.format(asse.vuoto / 10) }} cm
+                </p>
+              </div>
+              <div class="flex items-center gap-1 shrink-0">
+                <button v-if="distribuzione === 'SPAZI_UGUALI'" @click="ritocca(asse.k, -1)"
+                  class="h-6 w-6 rounded border border-gray-200 bg-white text-gray-500 hover:border-amber-400 hover:text-amber-600 font-bold leading-none">−</button>
+                <span class="w-7 text-center font-bold text-sm tabular-nums">{{ asse.n }}</span>
+                <button v-if="distribuzione === 'SPAZI_UGUALI'" @click="ritocca(asse.k, +1)"
+                  class="h-6 w-6 rounded border border-gray-200 bg-white text-gray-500 hover:border-amber-400 hover:text-amber-600 font-bold leading-none">+</button>
+              </div>
+            </div>
+
+            <p v-if="distribuzione === 'SPAZI_UGUALI'" class="text-[10px] text-gray-400 italic pt-1 border-t border-gray-200">
+              L'interasse non sarà quasi mai tondo: è il prezzo dei vuoti tutti uguali.
+              I fori si tracciano al millimetro comunque.
             </p>
           </div>
 

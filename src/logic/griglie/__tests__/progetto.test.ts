@@ -16,6 +16,7 @@ import { BARRA, PROFILO_U } from '../materiali';
 //   primo foro su verticale = 100 (primo asse orizzontale) − 2,5 = 97,5
 const BASE: ConfigGriglia = {
   stile: 'LONDRA',
+  distribuzione: 'PASSO_FISSO',
   larghezza: 1000,
   altezza: 2000,
   passoOrizzontale: 100,
@@ -184,6 +185,97 @@ describe('nesting — piano di taglio dalla stecca', () => {
     const piano = pianificaTaglio([{ etichetta: 'enorme', lunghezza: 3500, quantita: 2 }], 3000, 2);
     expect(piano.nonRicavabili).toHaveLength(1);
     expect(piano.nStecche).toBe(0);
+  });
+});
+
+describe('LONDRA — distribuzione a SPAZI UGUALI', () => {
+  // Stesso pannello di prima (luce 960), passo CHIESTO 100.
+  //
+  // Il passo è un desiderata: si sceglie il numero di barre che produce
+  // l'interasse più vicino a quello chiesto.
+  //    9 barre → vuoto (960 − 162)/10 = 79,8  → interasse 97,8  (scarto 2,2)
+  //   10 barre → vuoto (960 − 180)/11 = 70,9  → interasse 88,9  (scarto 11,1)
+  // Vincono le 9: la griglia regolare più vicina a quello che hai chiesto.
+  const p = calcolaProgetto({ ...BASE, distribuzione: 'SPAZI_UGUALI' });
+
+  /** I vuoti VISTI: bordo→prima barra, poi fra barra e barra, poi ultima barra→bordo. */
+  const vuotiVisti = (assi: number[], ingombro: number, latoTelaio: number) => {
+    const mezza = BARRA.larghezza / 2;
+    const vuoti = [assi[0]! - mezza - latoTelaio];
+    for (let i = 1; i < assi.length; i++) vuoti.push((assi[i]! - mezza) - (assi[i - 1]! + mezza));
+    vuoti.push((ingombro - latoTelaio) - (assi[assi.length - 1]! + mezza));
+    return vuoti;
+  };
+
+  it('TUTTI i vuoti sono identici, quello contro il bordo compreso', () => {
+    const vuoti = vuotiVisti(p.assiVerticali, BASE.larghezza, PROFILO_U.lato);
+    expect(p.assiVerticali).toHaveLength(9);
+    expect(vuoti).toHaveLength(10); // 9 barre → 10 vuoti
+    for (const v of vuoti) expect(v).toBeCloseTo(vuoti[0]!, 9);
+    expect(vuoti[0]).toBeCloseTo((960 - 9 * 18) / 10, 9); // 79,8
+  });
+
+  it('vale anche in verticale', () => {
+    const vuoti = vuotiVisti(p.assiOrizzontali, BASE.altezza, PROFILO_U.lato);
+    for (const v of vuoti) expect(v).toBeCloseTo(vuoti[0]!, 9);
+  });
+
+  it('l\'interasse è una CONSEGUENZA, e insegue il passo chiesto invece di subirlo', () => {
+    expect(p.vuotoX).toBeCloseTo(79.8, 9);
+    expect(p.passoEffettivoX).toBeCloseTo(97.8, 9);   // vuoto + larghezza barra
+    expect(p.passoEffettivoX).not.toBe(BASE.passoOrizzontale); // i 100 chiesti non sono ottenibili a vuoti uguali
+    expect(p.vuotoX + BARRA.larghezza).toBeCloseTo(p.passoEffettivoX, 9);
+
+    // Ed è la scelta MIGLIORE: 10 barre darebbero 88,9, molto più lontano da 100.
+    const dieci = calcolaProgetto({ ...BASE, distribuzione: 'SPAZI_UGUALI', nBarreVerticali: 10 });
+    expect(Math.abs(p.passoEffettivoX - 100)).toBeLessThan(Math.abs(dieci.passoEffettivoX - 100));
+  });
+
+  it('i fori usano il passo EFFETTIVO, non quello digitato col cursore', () => {
+    const verticale = p.barre.find((b) => b.etichetta === 'Barra verticale')!;
+    expect(verticale.interasse).toBeCloseTo(p.passoEffettivoY, 9);
+    expect(verticale.interasse).not.toBe(BASE.passoVerticale);
+    for (let i = 1; i < verticale.posizioni.length; i++) {
+      expect(verticale.posizioni[i]! - verticale.posizioni[i - 1]!).toBeCloseTo(verticale.interasse, 9);
+    }
+  });
+
+  it('a differenza del passo fisso, dove il vuoto sul bordo è diverso da quelli interni', () => {
+    const fisso = calcolaProgetto(BASE);
+    const vuoti = vuotiVisti(fisso.assiVerticali, BASE.larghezza, PROFILO_U.lato);
+    expect(vuoti[0]).toBe(21);   // contro il telaio
+    expect(vuoti[1]).toBe(82);   // fra due barre
+    expect(vuoti[0]).not.toBe(vuoti[1]);
+  });
+
+  it('resta simmetrico e dentro la luce', () => {
+    for (const x of p.assiVerticali) {
+      expect(x - BARRA.larghezza / 2).toBeGreaterThanOrEqual(PROFILO_U.lato - 1e-9);
+      expect(x + BARRA.larghezza / 2).toBeLessThanOrEqual(BASE.larghezza - PROFILO_U.lato + 1e-9);
+    }
+  });
+
+  it('il numero di barre si può forzare a mano', () => {
+    const forzato = calcolaProgetto({ ...BASE, distribuzione: 'SPAZI_UGUALI', nBarreVerticali: 4 });
+    expect(forzato.assiVerticali).toHaveLength(4);
+    const vuoti = vuotiVisti(forzato.assiVerticali, BASE.larghezza, PROFILO_U.lato);
+    for (const v of vuoti) expect(v).toBeCloseTo(vuoti[0]!, 9);
+  });
+
+  it('il vuoto minimo è rispettato: non si stipano barre fino a toccarsi', () => {
+    const fitto = calcolaProgetto({ ...BASE, distribuzione: 'SPAZI_UGUALI', passoOrizzontale: 20, margineMinimo: 30 });
+    expect(fitto.vuotoX).toBeGreaterThanOrEqual(30 - 1e-9);
+  });
+
+  it('griglia nuda: i vuoti uguali si misurano dal filo del pannello, e le teste sporgono', () => {
+    const nuda = calcolaProgetto({ ...BASE, distribuzione: 'SPAZI_UGUALI', conBordo: false });
+    const vuoti = vuotiVisti(nuda.assiVerticali, BASE.larghezza, 0);
+    for (const v of vuoti) expect(v).toBeCloseTo(vuoti[0]!, 9);
+    // Le barre restano lunghe quanto l'ingombro: le teste sporgono oltre
+    // l'ultima barra incrociata, come d'uso nelle griglie da giardino.
+    const o = nuda.barre.find((b) => b.etichetta === 'Barra orizzontale')!;
+    expect(o.lunghezza).toBe(1000);
+    expect(nuda.assiVerticali[0]! - BARRA.larghezza / 2).toBeGreaterThan(0);
   });
 });
 
