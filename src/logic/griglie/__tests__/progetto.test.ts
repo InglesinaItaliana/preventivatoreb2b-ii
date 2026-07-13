@@ -25,6 +25,7 @@ const BASE: ConfigGriglia = {
   gioco: 1,
   margineMinimo: 10,
   conBordo: true,
+  lunghezzaMinima: 80,
 };
 
 describe('LONDRA — geometria', () => {

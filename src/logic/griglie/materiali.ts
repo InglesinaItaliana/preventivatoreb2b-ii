@@ -42,3 +42,10 @@ export const SPESSORE_PANNELLO = PROFILO_U.lato; // 20
 export const DEFAULT_GIOCO = 1;          // mm per lato, infilaggio barra nel canale
 export const DEFAULT_KERF = 2;           // mm, spessore della lama
 export const DEFAULT_MARGINE_MINIMO = 10; // mm fra il filo interno della cornice e il bordo dell'ultima barra
+
+/**
+ * Sotto questa lunghezza la barretta d'angolo di una griglia a rombi si omette.
+ * A prescindere da questo valore, una barra senza NESSUN incrocio viene sempre
+ * scartata: non c'è nulla che la tenga ferma, cadrebbe.
+ */
+export const DEFAULT_LUNGHEZZA_MINIMA = 80;

@@ -9,7 +9,7 @@ import { pianificaTaglio, type PezzoDaTagliare } from '../logic/griglie/nesting'
 import { appartiene, coloreFinitura, type FamigliaFinitura } from '../logic/griglie/finiture';
 import {
   PROFILO_U, BARRA, CANALE_INTERNO, PROFONDITA_CANALE,
-  DEFAULT_GIOCO, DEFAULT_KERF, DEFAULT_MARGINE_MINIMO,
+  DEFAULT_GIOCO, DEFAULT_KERF, DEFAULT_MARGINE_MINIMO, DEFAULT_LUNGHEZZA_MINIMA,
 } from '../logic/griglie/materiali';
 
 const router = useRouter();
@@ -49,7 +49,12 @@ const mostraAvanzate = ref(false);
 const gioco = ref(DEFAULT_GIOCO);
 const kerf = ref(DEFAULT_KERF);
 const margineMinimo = ref(DEFAULT_MARGINE_MINIMO);
+const lunghezzaMinima = ref(DEFAULT_LUNGHEZZA_MINIMA);
 const pesoBarraKgM = ref<number | null>(null);
+
+// Su una griglia a rombi le barre non corrono parallele al bordo: il "vuoto
+// contro il bordo" non esiste come grandezza, e i vuoti uguali non hanno senso.
+const aRombi = computed(() => stile.value !== 'LONDRA');
 
 // MILANO impone rombi quadrati, VENEZIA l'asse verticale doppio: in quegli stili
 // il secondo cursore non è libero, è una conseguenza. LONDRA è l'unico con due
@@ -63,7 +68,9 @@ const passoVerticaleEffettivo = computed(() => {
 
 const config = computed<ConfigGriglia>(() => ({
   stile: stile.value,
-  distribuzione: distribuzione.value,
+  // Sui rombi la distribuzione a vuoti uguali non è definita: si ricade sul passo.
+  distribuzione: aRombi.value ? 'PASSO_FISSO' : distribuzione.value,
+  lunghezzaMinima: lunghezzaMinima.value,
   nBarreVerticali: distribuzione.value === 'SPAZI_UGUALI' ? nVertOverride.value : null,
   nBarreOrizzontali: distribuzione.value === 'SPAZI_UGUALI' ? nOrizOverride.value : null,
   larghezza: larghezzaCm.value * 10,
@@ -138,9 +145,14 @@ const finitureDisponibili = computed(() => {
 const foriEstesi = ref(false);
 
 // --- Aggancio anteprima ↔ distinta -----------------------------------------
-const evidenzia = ref<'verticali' | 'orizzontali' | null>(null);
-const famigliaDi = (etichetta: string) =>
-  etichetta.includes('verticale') ? 'verticali' as const : 'orizzontali' as const;
+// Solo su LONDRA: lì una riga di distinta È una famiglia di barre. Sui rombi un
+// "tipo" raccoglie barre di entrambe le famiglie, quindi non c'è niente da
+// accendere in blocco.
+const evidenzia = ref<string | null>(null);
+const famigliaDi = (etichetta: string): string | null => {
+  if (aRombi.value) return null;
+  return etichetta.includes('verticale') ? 'V' : 'O';
+};
 
 // --- Formattazione ----------------------------------------------------------
 const nf = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 1 });
@@ -187,16 +199,17 @@ const kg = (v: number) => `${nf2.format(v)} kg`;
             <div class="grid grid-cols-3 gap-2">
               <button
                 v-for="s in (['LONDRA', 'MILANO', 'VENEZIA'] as Stile[])" :key="s"
-                @click="stile = s"
-                :disabled="s !== 'LONDRA'"
+                @click="stile = s; azzeraRitocchi()"
                 class="py-2 rounded-lg text-[11px] font-bold border transition-all"
                 :class="stile === s
                   ? 'bg-amber-400 border-amber-400 text-amber-950 shadow-md'
-                  : 'bg-white border-gray-200 text-gray-500 hover:border-amber-300 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:border-gray-200'"
+                  : 'bg-white border-gray-200 text-gray-500 hover:border-amber-300'"
               >{{ s }}</button>
             </div>
-            <p v-if="stile === 'LONDRA'" class="text-[10px] text-gray-400 mt-1.5 italic">
-              Milano e Venezia (rombi) arrivano dopo la validazione di Londra in officina.
+            <p class="text-[10px] text-gray-400 mt-1.5 italic leading-snug">
+              <template v-if="stile === 'LONDRA'">Griglia ortogonale: celle quadrate o rettangolari.</template>
+              <template v-else-if="stile === 'MILANO'">Rombi quadrati: barre a 45°.</template>
+              <template v-else>Rombi con l'asse verticale doppio: barre a circa 63°.</template>
             </p>
           </div>
 
@@ -242,8 +255,9 @@ const kg = (v: number) => `${nf2.format(v)} kg`;
             {{ conBordo ? 'Ingombro esterno, telaio compreso.' : 'Ingombro della griglia nuda.' }}
           </p>
 
-          <!-- Distribuzione -->
-          <div>
+          <!-- Distribuzione: solo su LONDRA. Sui rombi le barre non corrono
+               parallele al bordo, quindi il "vuoto contro il bordo" non esiste. -->
+          <div v-if="!aRombi">
             <label class="block text-[10px] font-bold text-gray-500 uppercase mb-2">Distribuzione</label>
             <div class="grid grid-cols-2 gap-2">
               <button
@@ -277,17 +291,21 @@ const kg = (v: number) => `${nf2.format(v)} kg`;
           <div>
             <div class="flex justify-between items-baseline mb-1">
               <label class="text-[10px] font-bold text-gray-500 uppercase">
-                Passo orizzontale
-                <span v-if="distribuzione === 'SPAZI_UGUALI'" class="text-gray-300 normal-case">(desiderato)</span>
+                {{ aRombi ? 'Larghezza del rombo' : 'Passo orizzontale' }}
+                <span v-if="!aRombi && distribuzione === 'SPAZI_UGUALI'" class="text-gray-300 normal-case">(desiderato)</span>
               </label>
               <span class="text-sm font-bold text-amber-600 tabular-nums">{{ nf.format(passoOrizzontaleCm) }} cm</span>
             </div>
             <input v-model.number="passoOrizzontaleCm" type="range" min="2" max="50" step="0.5"
               @input="azzeraRitocchi()" class="w-full accent-amber-400" />
-            <p class="text-[10px] text-gray-400 italic">Interasse fra le barre verticali.</p>
+            <p class="text-[10px] text-gray-400 italic">
+              <template v-if="stile === 'MILANO'">Diagonale del rombo: essendo quadrato, vale in entrambi i versi.</template>
+              <template v-else-if="stile === 'VENEZIA'">Diagonale orizzontale; quella verticale è il doppio.</template>
+              <template v-else>Interasse fra le barre verticali.</template>
+            </p>
           </div>
 
-          <div>
+          <div v-if="!aRombi">
             <div class="flex justify-between items-baseline mb-1">
               <label class="text-[10px] font-bold text-gray-500 uppercase">
                 Passo verticale
@@ -306,8 +324,33 @@ const kg = (v: number) => `${nf2.format(v)} kg`;
             </p>
           </div>
 
+          <!-- Risultato: sui rombi le grandezze sono altre -->
+          <div v-if="progetto && aRombi" class="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-1.5">
+            <p class="text-[10px] font-bold uppercase text-gray-500">Risultato</p>
+            <div class="flex justify-between text-[11px]">
+              <span class="text-gray-500">Barre da tagliare</span>
+              <span class="font-bold tabular-nums">{{ progetto.disegno.barre.length }}</span>
+            </div>
+            <div class="flex justify-between text-[11px]">
+              <span class="text-gray-500">Tipi diversi</span>
+              <span class="font-bold tabular-nums">{{ progetto.barre.length }}</span>
+            </div>
+            <div class="flex justify-between text-[11px]">
+              <span class="text-gray-500">Distanza fra parallele</span>
+              <span class="font-bold tabular-nums">{{ nf.format(progetto.passoEffettivoX / 10) }} cm</span>
+            </div>
+            <div class="flex justify-between text-[11px]">
+              <span class="text-gray-500">Vuoto fra le barre</span>
+              <span class="font-bold tabular-nums">{{ nf.format(progetto.vuotoX / 10) }} cm</span>
+            </div>
+            <div class="flex justify-between text-[11px]">
+              <span class="text-gray-500">Rivetti</span>
+              <span class="font-bold tabular-nums">{{ progetto.nRivetti }}</span>
+            </div>
+          </div>
+
           <!-- Il risultato reale: in SPAZI_UGUALI non coincide col cursore -->
-          <div v-if="progetto" class="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
+          <div v-if="progetto && !aRombi" class="bg-gray-50 border border-gray-200 rounded-lg p-3 space-y-2">
             <p class="text-[10px] font-bold uppercase text-gray-500">Risultato</p>
 
             <div v-for="asse in ([
@@ -404,6 +447,15 @@ const kg = (v: number) => `${nf2.format(v)} kg`;
               <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Margine minimo dal telaio (mm)</label>
               <input v-model.number="margineMinimo" type="number" min="0" step="1"
                 class="w-full p-2 border border-gray-200 rounded-lg text-sm" />
+            </div>
+            <div v-if="aRombi">
+              <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Lunghezza minima barra (mm)</label>
+              <input v-model.number="lunghezzaMinima" type="number" min="0" step="10"
+                class="w-full p-2 border border-gray-200 rounded-lg text-sm" />
+              <p class="text-[10px] text-gray-400 italic mt-0.5">
+                Sotto questa, le barrette d'angolo si omettono. Quelle senza nessun incrocio
+                vengono scartate comunque: non avrebbero nulla che le tenga.
+              </p>
             </div>
             <div>
               <label class="block text-[10px] font-bold text-gray-500 uppercase mb-1">Peso barra 18×8 (kg/m)</label>
@@ -557,11 +609,19 @@ const kg = (v: number) => `${nf2.format(v)} kg`;
                   <dd class="font-bold tabular-nums">{{ mm(b.interasse) }}</dd>
                 </div>
                 <div class="flex justify-between">
+                  <dt class="text-gray-500">Ultimo foro (dalla coda)</dt>
+                  <dd class="font-bold tabular-nums">{{ mm(b.codaForo) }}</dd>
+                </div>
+                <div class="flex justify-between">
                   <dt class="text-gray-500">Numero di fori</dt>
                   <dd class="font-bold tabular-nums">{{ b.nFori }}</dd>
                 </div>
-                <p class="text-[11px] text-gray-400 italic pt-1">
-                  La foratura è simmetrica: l'ultimo foro dista {{ mm(b.primoForo) }} dalla coda.
+                <p v-if="Math.abs(b.primoForo - b.codaForo) < 0.05" class="text-[11px] text-gray-400 italic pt-1">
+                  Foratura simmetrica: la barra si può montare da entrambi i versi.
+                </p>
+                <p v-else class="text-[11px] text-amber-700 italic pt-1 font-medium">
+                  Foratura ASIMMETRICA: la testa è l'estremità in basso. Montarla al contrario
+                  sposta tutti i fori.
                 </p>
               </dl>
 

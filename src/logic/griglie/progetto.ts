@@ -10,6 +10,7 @@
 import {
   PROFILO_U, BARRA, FONDO_CANALE, SPESSORE_PANNELLO,
 } from './materiali';
+import { calcolaDiagonale, type Punto } from './diagonale';
 
 export type Stile = 'LONDRA' | 'MILANO' | 'VENEZIA';
 
@@ -40,6 +41,7 @@ export interface ConfigGriglia {
   gioco: number;              // mm per lato: infilaggio della barra nel canale
   margineMinimo: number;      // vuoto minimo ammesso contro il bordo
   conBordo: boolean;          // false = griglia nuda, senza telaio perimetrale
+  lunghezzaMinima: number;    // sotto questa, la barretta d'angolo (rombi) si omette
   nBarreVerticali?: number | null;   // forzatura manuale del numero di barre (SPAZI_UGUALI)
   nBarreOrizzontali?: number | null;
 }
@@ -62,6 +64,15 @@ export interface PezzoBarra {
   interasse: number;          // costante fra un foro e il successivo
   nFori: number;
   posizioni: number[];        // tutti i fori, dalla testa della barra
+  codaForo: number;           // dall'ultimo foro alla coda. Sulle diagonali ≠ primoForo:
+                              // la barra NON è simmetrica e va montata per il verso giusto.
+}
+
+/** Una barra sul disegno: un segmento che l'anteprima ingrossa a 18 mm. */
+export interface SegmentoBarra {
+  x1: number; y1: number;
+  x2: number; y2: number;
+  famiglia: 'V' | 'O' | 'A' | 'B';
 }
 
 export interface Progetto {
@@ -81,6 +92,9 @@ export interface Progetto {
   latoTelaio: number;         // 0 se senza bordo perimetrale
   testa: number;              // da dove parte la barra, dal filo esterno (0 se senza bordo)
   spessorePannello: number;   // col telaio = 20; senza = due barre sovrapposte = 16
+
+  // Disegno: unico per tutti gli stili, così l'anteprima non deve sapere quale sta guardando
+  disegno: { barre: SegmentoBarra[]; rivetti: Punto[] };
 
   // Distinte
   bordi: PezzoBordo[];
@@ -241,6 +255,7 @@ function calcolaLondra(c: ConfigGriglia): Progetto {
       interasse: oriz.passo,
       nFori: oriz.n,
       posizioni: foriSuVerticale,
+      codaForo: lunghezzaVerticale - (foriSuVerticale[foriSuVerticale.length - 1] ?? 0),
     });
   }
   if (oriz.n > 0) {
@@ -253,8 +268,17 @@ function calcolaLondra(c: ConfigGriglia): Progetto {
       interasse: vert.passo,
       nFori: vert.n,
       posizioni: foriSuOrizzontale,
+      codaForo: lunghezzaOrizzontale - (foriSuOrizzontale[foriSuOrizzontale.length - 1] ?? 0),
     });
   }
+
+  const disegno = {
+    barre: [
+      ...oriz.assi.map((y): SegmentoBarra => ({ x1: testa, y1: y, x2: c.larghezza - testa, y2: y, famiglia: 'O' })),
+      ...vert.assi.map((x): SegmentoBarra => ({ x1: x, y1: testa, x2: x, y2: c.altezza - testa, famiglia: 'V' })),
+    ],
+    rivetti: vert.assi.flatMap((x) => oriz.assi.map((y): Punto => ({ x, y }))),
+  };
 
   // --- Controlli che salvano materiale -------------------------------------
   if (vert.n === 0 || oriz.n === 0) {
@@ -295,6 +319,7 @@ function calcolaLondra(c: ConfigGriglia): Progetto {
     testa,
     // Senza telaio il pannello è spesso quanto due barre sovrapposte, non quanto la U.
     spessorePannello: c.conBordo ? SPESSORE_PANNELLO : BARRA.spessore * 2,
+    disegno,
     bordi,
     barre,
     nRivetti: vert.n * oriz.n,
@@ -304,15 +329,136 @@ function calcolaLondra(c: ConfigGriglia): Progetto {
   };
 }
 
+/** MILANO (rombi quadrati) e VENEZIA (asse verticale doppio): stesso reticolo, rapporto diverso. */
+function calcolaRombi(c: ConfigGriglia, rapporto: number): Progetto {
+  const avvisi: string[] = [];
+  const latoTelaio = c.conBordo ? PROFILO_U.lato : 0;
+  const testa = c.conBordo ? FONDO_CANALE + c.gioco : 0;
+
+  const d = calcolaDiagonale({
+    larghezza: c.larghezza,
+    altezza: c.altezza,
+    rapporto,
+    diagonale: c.passoOrizzontale,   // Δ: la diagonale orizzontale del rombo
+    testa,
+    lunghezzaMinima: c.lunghezzaMinima,
+  });
+
+  // Su una griglia a rombi ogni barra è una corda diversa del rettangolo: le
+  // lunghezze sono tutte diverse. Le accorpiamo per SCHEMA — ma prima le
+  // NORMALIZZIAMO nel verso.
+  //
+  // Sulle barre d'angolo la foratura è asimmetrica (il primo foro non dista dalla
+  // testa quanto l'ultimo dalla coda), e le barre arrivano in coppie speculari:
+  // una con i fori 129/94, l'altra con 94/129. Ma quelle due sono LO STESSO PEZZO
+  // girato: stessa lunghezza, stessa foratura, montato al contrario. Tenerle
+  // separate significherebbe far tagliare e forare all'officina il doppio degli
+  // schemi per niente. Quindi le portiamo tutte nello stesso verso (foro più
+  // vicino verso la testa) e poi accorpiamo.
+  const perSchema = new Map<string, PezzoBarra>();
+  for (const b of d.barre) {
+    let fori = b.fori;
+    let primo = fori[0] ?? 0;
+    let coda = b.codaForo;
+
+    if (primo > coda + 1e-6) {
+      fori = fori.map((f) => b.lunghezza - f).reverse();
+      primo = fori[0] ?? 0;
+      coda = b.lunghezza - (fori[fori.length - 1] ?? 0);
+    }
+
+    const chiave = [
+      Math.round(b.lunghezza * 10),
+      Math.round(primo * 10),
+      fori.length,
+    ].join('|');
+
+    const esistente = perSchema.get(chiave);
+    if (esistente) {
+      esistente.quantitaPerTelaio++;
+      continue;
+    }
+    perSchema.set(chiave, {
+      etichetta: '',
+      lunghezza: b.lunghezza,
+      quantitaPerTelaio: 1,
+      taglio: '90°',
+      primoForo: primo,
+      interasse: b.interasse,
+      nFori: fori.length,
+      posizioni: fori,
+      codaForo: coda,
+    });
+  }
+
+  // Dalla più lunga alla più corta: è l'ordine in cui si taglia.
+  const barre = [...perSchema.values()].sort((a, b) => b.lunghezza - a.lunghezza);
+  barre.forEach((b, i) => { b.etichetta = `Barra tipo ${String.fromCharCode(65 + i)}`; });
+
+  const bordi: PezzoBordo[] = c.conBordo ? [
+    { etichetta: 'Montante orizzontale (sopra/sotto)', lunghezza: c.larghezza, quantitaPerTelaio: 2, taglio: '45° alle due estremità' },
+    { etichetta: 'Montante verticale (dx/sx)', lunghezza: c.altezza, quantitaPerTelaio: 2, taglio: '45° alle due estremità' },
+  ] : [];
+
+  const metriBarra = d.barre.reduce((t, b) => t + b.lunghezza, 0) / 1000;
+  const lunghezzaMax = d.barre.reduce((t, b) => Math.max(t, b.lunghezza), 0);
+
+  if (d.barre.length === 0) {
+    avvisi.push('Con questo passo non entra nessuna barra: riduci il passo o aumenta le misure del pannello.');
+  }
+  if (d.scartate > 0) {
+    avvisi.push(`${d.scartate} barre d'angolo omesse: troppo corte, o senza nessun incrocio che le tenga ferme.`);
+  }
+  if (d.vuoto < 0) {
+    avvisi.push('Con questo passo le barre si sovrappongono: il rombo è più stretto della barra stessa.');
+  }
+  if (lunghezzaMax > BARRA.stecca) {
+    avvisi.push(`Una barra supera i ${BARRA.stecca / 1000} m della stecca commerciale: il pezzo non è ricavabile intero.`);
+  }
+  if (c.conBordo && (c.larghezza > PROFILO_U.stecca || c.altezza > PROFILO_U.stecca)) {
+    avvisi.push(`Un lato del telaio supera i ${PROFILO_U.stecca / 1000} m della stecca di profilo a U.`);
+  }
+  if (!c.conBordo) {
+    avvisi.push('Griglia nuda: le teste delle barre sporgono oltre l\'ultima barra incrociata, come d\'uso nelle griglie da giardino. Se non le vuoi a vista, metti il bordo perimetrale.');
+  }
+  avvisi.push(`Taglio a 90° su barra inclinata (${d.angolo.toFixed(1)}°): la lunghezza è calcolata perché sia lo SPIGOLO a fermarsi sul fondo del canale, non l'asse. Da verificare su un pannello vero.`);
+
+  return {
+    config: c,
+    luceX: c.larghezza - 2 * latoTelaio,
+    luceY: c.altezza - 2 * latoTelaio,
+    margineX: 0,
+    margineY: 0,
+    vuotoX: d.vuoto,
+    vuotoY: d.vuoto,
+    passoEffettivoX: d.perpendicolare,
+    passoEffettivoY: d.perpendicolare,
+    assiVerticali: [],
+    assiOrizzontali: [],
+    latoTelaio,
+    testa,
+    spessorePannello: c.conBordo ? SPESSORE_PANNELLO : BARRA.spessore * 2,
+    disegno: {
+      barre: d.barre.map((b) => ({ ...b.segmento, famiglia: b.famiglia })),
+      rivetti: d.rivetti,
+    },
+    bordi,
+    barre,
+    nRivetti: d.rivetti.length,
+    metriU: c.conBordo ? (2 * c.larghezza + 2 * c.altezza) / 1000 : 0,
+    metriBarra,
+    avvisi,
+  };
+}
+
 export function calcolaProgetto(c: ConfigGriglia): Progetto {
   switch (c.stile) {
     case 'LONDRA':
       return calcolaLondra(c);
-    default:
-      // MILANO e VENEZIA (griglie a rombi) arrivano dopo la validazione di LONDRA
-      // in officina: la matematica delle diagonali si appoggia a questo modello,
-      // e conviene sapere che il modello è giusto prima di costruirci sopra.
-      throw new Error(`Stile ${c.stile} non ancora implementato`);
+    case 'MILANO':
+      return calcolaRombi(c, 1);   // rombi quadrati → barre a 45°
+    case 'VENEZIA':
+      return calcolaRombi(c, 2);   // asse verticale doppio → barre a ~63,4°
   }
 }
 
