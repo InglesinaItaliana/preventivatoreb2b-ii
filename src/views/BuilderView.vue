@@ -11,7 +11,6 @@ import { computeTotals } from '../lib/billingTotals';
 import { useCatalogStore } from '../Data/catalog';
 import type { Categoria, RigaPreventivo, StatoPreventivo, Allegato, RiepilogoRiga } from '../types';
 import { calculatePrice } from '../logic/pricing';
-import { metriGriglia, metriPerimetro } from '../logic/geometry';
 import { costruisciDettaglio, type Dettaglio } from '../logic/priceBreakdown';
 import PriceBreakdownModal from '../components/PriceBreakdownModal.vue';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -291,33 +290,6 @@ const opzioniTelaio = reactive({ nonEquidistanti: false, curva: false, tacca: fa
 const isAdmin = computed(() => route.query?.admin === 'true');
 
 const totaleImponibile = computed(() => preventivo.value.reduce((t, i) => t + i.prezzo_totale, 0));
-
-// Metri lineari TOTALI della riga (× quantità): il cliente li divide per il
-// totale riga e ritrova il €/m a cui era abituato prima di POPS.
-//
-// Quali metri, dipende da cosa paga la riga — sono i metri su cui il motore
-// costruisce il prezzo, non una misura decorativa:
-//  - griglia      → sviluppo lineare (orizzontali × base + verticali × altezza)
-//  - solo canalino → perimetro del telaio, che è la base del suo prezzo
-//                    (metri_perimetro × moltiplicatore C111/C112/C211/C311)
-//  - EXTRA/spedizione → nessun metro (misure a zero) → trattino
-//
-// I metri arrivano da geometry.ts, la stessa fonte usata dai motori di prezzo:
-// se qui usassimo le misure grezze invece di quelle arrotondate ai 50mm, la
-// divisione del cliente non tornerebbe.
-const metriRiga = (r: RigaPreventivo): number | null => {
-  if (r.categoria === 'EXTRA') return null;
-  const qty = r.quantita || 1;
-  const m = r.categoria === 'CANALINO'
-    ? metriPerimetro(r.base_mm, r.altezza_mm) * qty
-    : metriGriglia({
-        base_mm: r.base_mm,
-        altezza_mm: r.altezza_mm,
-        num_orizzontali: r.colonne,
-        num_verticali: r.righe,
-      }) * qty;
-  return m > 0 ? m : null;
-};
 
 // FE-4: in modalità CiC il totale finale usa la regola canonica (half-up per
 // riga, identica al backend/CiC) → la cifra a video combacia col documento.
@@ -1799,8 +1771,8 @@ onMounted(async() => {
                 <th class="p-3">Misure</th>
                 <th class="p-3 text-center">Griglia</th>
                 <th class="p-3 text-center">Opzioni</th>
-                <th class="p-3 text-right" title="Metri lineari della riga × quantità — griglia: sviluppo lineare; solo canalino: perimetro del telaio">m</th>
                 <th class="p-3 text-right">Totale</th>
+                <th class="p-3 w-8"><span class="sr-only">Dettaglio prezzo</span></th>
                 <th class="p-3 text-right w-16">Azioni</th>
               </tr>
             </thead>
@@ -1830,24 +1802,22 @@ onMounted(async() => {
                   </div>
                 </td>
 
-                <td class="p-3 text-right text-xs text-gray-600 tabular-nums whitespace-nowrap">
-                  <span v-if="metriRiga(r) !== null">{{ metriRiga(r)!.toFixed(2) }} m</span>
-                  <span v-else class="text-gray-300">–</span>
+                <td class="p-3 text-right font-bold font-heading text-gray-900 tabular-nums">
+                  {{ prezziVisibili ? r.prezzo_totale.toFixed(2) + ' €' : '-' }}
                 </td>
 
-                <td class="p-3 text-right font-bold font-heading text-gray-900">
-                  <div class="flex items-center justify-end gap-1.5">
-                    <span>{{ prezziVisibili ? r.prezzo_totale.toFixed(2) + ' €' : '-' }}</span>
-                    <!-- Lente sempre visibile (non hover-gated: su touch l'hover non esiste) -->
-                    <button
-                      v-if="prezziVisibili && r.categoria !== 'EXTRA'"
-                      @click="apriDettaglio(r)"
-                      class="p-1 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-md transition-colors shrink-0"
-                      title="Come si compone questo prezzo"
-                    >
-                      <MagnifyingGlassIcon class="h-4 w-4" />
-                    </button>
-                  </div>
+                <!-- Colonna propria: così i prezzi restano allineati a filo anche
+                     sulle righe EXTRA, che la lente non ce l'hanno. -->
+                <td class="p-3 pl-0">
+                  <!-- Sempre visibile, non hover-gated: su touch l'hover non esiste -->
+                  <button
+                    v-if="prezziVisibili && r.categoria !== 'EXTRA'"
+                    @click="apriDettaglio(r)"
+                    class="p-1 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-md transition-colors"
+                    title="Come si compone questo prezzo"
+                  >
+                    <MagnifyingGlassIcon class="h-4 w-4" />
+                  </button>
                 </td>
 
                 <td class="p-3 text-right">

@@ -46,7 +46,7 @@ describe('geometry: arrotondamento ai 50mm', () => {
   });
 });
 
-describe('la colonna "m" riconcilia col totale riga', () => {
+describe('riga "Verifica" della modale: totale ÷ metri = €/m', () => {
   // Il senso della feature: il cliente divide il totale della riga per i metri e
   // deve ritrovare il €/m. Vale sul listino 2025, che è lineare (incrocio =
   // metri × (griglia + canalino), senza supplementi fissi).
