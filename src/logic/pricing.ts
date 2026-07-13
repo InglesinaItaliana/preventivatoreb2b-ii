@@ -1,6 +1,7 @@
 import { useCatalogStore } from '../Data/catalog';
 import { calculateLogic2025 } from './pricing2025'; // <--- Importiamo la logica vecchia
 import { calculateLogic2025x } from './pricing2025x';
+import { metriGriglia, metriPerimetro } from './geometry';
 
 // Esportiamo l'interfaccia così la può usare anche il file 2025
 export interface PricingInput {
@@ -36,12 +37,8 @@ const MOLTIPLICATORI_SOLO_CANALINO: Record<string, number> = {
  * Questa funzione contiene esattamente la logica che avevi prima.
  */
 function calculateLogic2026(input: PricingInput, catalog: any) {
-  // 1. Normalizzazione Misure (Arrotondamento ai 50mm)
-  const base_round = Math.ceil(input.base_mm / 50) * 50;
-  const altezza_round = Math.ceil(input.altezza_mm / 50) * 50;
-
-  // Calcolo Metri Lineari del Perimetro (Base + Altezza) * 2
-  const metri_perimetro = ((base_round * 2) + (altezza_round * 2)) / 1000;
+  // 1. Metri lineari del perimetro (misure arrotondate ai 50mm dentro geometry.ts)
+  const metri_perimetro = metriPerimetro(input.base_mm, input.altezza_mm);
 
   // --- LOGICA DEDICATA: SOLO CANALINO ---
   if (input.isSoloCanalino) {
@@ -62,8 +59,8 @@ function calculateLogic2026(input: PricingInput, catalog: any) {
   // --------------------------------------
 
   // Sviluppo lineare della griglia
-  const metri_griglia = ((input.num_orizzontali * base_round) + (input.num_verticali * altezza_round)) / 1000;
-  
+  const metri_griglia = metriGriglia(input);
+
   // Determinazione Taglia (S, M, L, XL)
   let taglia: 'S' | 'M' | 'L' | 'XL' = 'XL';
   if (metri_perimetro < 2.5) taglia = 'S';

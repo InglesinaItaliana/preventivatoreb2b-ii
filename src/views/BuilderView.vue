@@ -11,6 +11,10 @@ import { computeTotals } from '../lib/billingTotals';
 import { useCatalogStore } from '../Data/catalog';
 import type { Categoria, RigaPreventivo, StatoPreventivo, Allegato, RiepilogoRiga } from '../types';
 import { calculatePrice } from '../logic/pricing';
+import { costruisciDettaglio, type Dettaglio } from '../logic/priceBreakdown';
+import PriceBreakdownModal from '../components/PriceBreakdownModal.vue';
+import AnnuncioPrezzoModal from '../components/AnnuncioPrezzoModal.vue';
+import { annuncioDaMostrare, segnaAnnuncioVisto, ANNUNCIO_DETTAGLIO_PREZZO } from '../composables/useAnnunci';
 import { onAuthStateChanged } from 'firebase/auth';
 import OrderModals from '../components/OrderModals.vue';
 import { STATUS_DETAILS } from '../types';
@@ -37,7 +41,8 @@ import {
   ChevronUpDownIcon,
   CheckIcon,
   MinusIcon,
-  PlusIcon
+  PlusIcon,
+  MagnifyingGlassIcon
 } from '@heroicons/vue/24/solid'
 
 const currentPriceList = ref('2026-a');
@@ -329,6 +334,36 @@ const isLocked = computed(() => {
   return statoCorrente.value !== 'DRAFT';
 });
 
+// Il cliente vede i prezzi solo in certi stati: stessa condizione della colonna
+// Totale, estratta per riusarla sulla lente del dettaglio (dove non ci sono
+// prezzi non c'è niente da spiegare).
+const prezziVisibili = computed(() =>
+  isAdmin.value || isStandard.value ||
+  ['QUOTE_READY', 'SIGNED', 'IN_PRODUZIONE', 'READY'].includes(statoCorrente.value)
+);
+
+// --- Annuncio della novità (una volta sola per cliente) ---------------------
+const showAnnuncio = ref(false);
+
+const chiudiAnnuncio = () => {
+  showAnnuncio.value = false;
+  const uid = auth.currentUser?.uid;
+  if (uid) segnaAnnuncioVisto(uid, ANNUNCIO_DETTAGLIO_PREZZO);
+};
+
+// --- Modale "come si compone il prezzo" ------------------------------------
+const dettaglioAperto = ref<Dettaglio | null>(null);
+const dettaglioDescrizione = ref('');
+const dettaglioCodice = ref('');
+
+const apriDettaglio = (r: RigaPreventivo) => {
+  const d = costruisciDettaglio(r, currentPriceList.value, catalog);
+  if (!d) return;
+  dettaglioAperto.value = d;
+  dettaglioDescrizione.value = r.descrizioneCompleta;
+  dettaglioCodice.value = r.codice || '';
+};
+
 const showConfigurationPanels = computed(() => {
   // Se stiamo ancora caricando i dati iniziali, nascondi tutto per evitare il "flash"
   if (!isDataLoaded.value) return false;
@@ -607,8 +642,14 @@ const aggiungi = () => {
   });
 
   // Reset
+  // null (non 0): con v-model.number l'input resta vuoto e il placeholder
+  // ("Base (mm)", "n°Vert", ...) torna visibile. Con 0 mostrerebbe "0".
+  Object.assign(pannello, { base: null, altezza: null, righe: null, colonne: null, qty: null });
+  // Curva/Tacca/Non Equidistanti sono attributi della singola riga: senza reset
+  // il pannello successivo li erediterebbe in silenzio.
+  Object.assign(opzioniTelaio, { nonEquidistanti: false, curva: false, tacca: false });
   customRalGriglia.value = '';
-  adminCustomPrice.value = ''; 
+  adminCustomPrice.value = '';
 };
 
 const uploadFile = async (event: Event) => {
@@ -1222,6 +1263,11 @@ onMounted(async() => {
           if (userSnap.exists()) {
             const d = userSnap.data();
             userDefaultDetraction.value = d.detraction_value !== undefined ? d.detraction_value : 21;
+            // Annuncio della lente: una volta sola, e solo al cliente (l'admin
+            // la novità la conosce). Riusa questo snapshot: nessuna lettura in più.
+            if (!isAdmin.value && annuncioDaMostrare(d, ANNUNCIO_DETTAGLIO_PREZZO)) {
+              showAnnuncio.value = true;
+            }
           }
         } catch (e) {
            console.error("Errore caricamento dati utente", e);
@@ -1742,6 +1788,7 @@ onMounted(async() => {
                 <th class="p-3 text-center">Griglia</th>
                 <th class="p-3 text-center">Opzioni</th>
                 <th class="p-3 text-right">Totale</th>
+                <th class="p-3 w-8"><span class="sr-only">Dettaglio prezzo</span></th>
                 <th class="p-3 text-right w-16">Azioni</th>
               </tr>
             </thead>
@@ -1771,8 +1818,22 @@ onMounted(async() => {
                   </div>
                 </td>
 
-                <td class="p-3 text-right font-bold font-heading text-gray-900">
-                  {{ (isAdmin || isStandard || ['QUOTE_READY', 'SIGNED', 'IN_PRODUZIONE', 'READY'].includes(statoCorrente)) ? r.prezzo_totale.toFixed(2) + ' €' : '-' }}
+                <td class="p-3 text-right font-bold font-heading text-gray-900 tabular-nums">
+                  {{ prezziVisibili ? r.prezzo_totale.toFixed(2) + ' €' : '-' }}
+                </td>
+
+                <!-- Colonna propria: così i prezzi restano allineati a filo anche
+                     sulle righe EXTRA, che la lente non ce l'hanno. -->
+                <td class="p-3 pl-0">
+                  <!-- Sempre visibile, non hover-gated: su touch l'hover non esiste -->
+                  <button
+                    v-if="prezziVisibili && r.categoria !== 'EXTRA'"
+                    @click="apriDettaglio(r)"
+                    class="p-1 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-md transition-colors"
+                    title="Come si compone questo prezzo"
+                  >
+                    <MagnifyingGlassIcon class="h-4 w-4" />
+                  </button>
                 </td>
 
                 <td class="p-3 text-right">
@@ -1876,6 +1937,16 @@ onMounted(async() => {
       @confirmFast="onConfirmFast"
       @confirmSign="onConfirmSign"
     />
+
+    <PriceBreakdownModal
+      :show="!!dettaglioAperto"
+      :dettaglio="dettaglioAperto"
+      :descrizione="dettaglioDescrizione"
+      :codice="dettaglioCodice"
+      @close="dettaglioAperto = null"
+    />
+
+    <AnnuncioPrezzoModal :show="showAnnuncio" @close="chiudiAnnuncio" />
     <div 
       v-if="showToast" 
       class="fixed inset-0 z-[60] flex items-center justify-center transition-all duration-300"
