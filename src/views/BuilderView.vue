@@ -13,6 +13,8 @@ import type { Categoria, RigaPreventivo, StatoPreventivo, Allegato, RiepilogoRig
 import { calculatePrice } from '../logic/pricing';
 import { costruisciDettaglio, type Dettaglio } from '../logic/priceBreakdown';
 import PriceBreakdownModal from '../components/PriceBreakdownModal.vue';
+import AnnuncioPrezzoModal from '../components/AnnuncioPrezzoModal.vue';
+import { annuncioDaMostrare, segnaAnnuncioVisto, ANNUNCIO_DETTAGLIO_PREZZO } from '../composables/useAnnunci';
 import { onAuthStateChanged } from 'firebase/auth';
 import OrderModals from '../components/OrderModals.vue';
 import { STATUS_DETAILS } from '../types';
@@ -339,6 +341,15 @@ const prezziVisibili = computed(() =>
   isAdmin.value || isStandard.value ||
   ['QUOTE_READY', 'SIGNED', 'IN_PRODUZIONE', 'READY'].includes(statoCorrente.value)
 );
+
+// --- Annuncio della novità (una volta sola per cliente) ---------------------
+const showAnnuncio = ref(false);
+
+const chiudiAnnuncio = () => {
+  showAnnuncio.value = false;
+  const uid = auth.currentUser?.uid;
+  if (uid) segnaAnnuncioVisto(uid, ANNUNCIO_DETTAGLIO_PREZZO);
+};
 
 // --- Modale "come si compone il prezzo" ------------------------------------
 const dettaglioAperto = ref<Dettaglio | null>(null);
@@ -1252,6 +1263,11 @@ onMounted(async() => {
           if (userSnap.exists()) {
             const d = userSnap.data();
             userDefaultDetraction.value = d.detraction_value !== undefined ? d.detraction_value : 21;
+            // Annuncio della lente: una volta sola, e solo al cliente (l'admin
+            // la novità la conosce). Riusa questo snapshot: nessuna lettura in più.
+            if (!isAdmin.value && annuncioDaMostrare(d, ANNUNCIO_DETTAGLIO_PREZZO)) {
+              showAnnuncio.value = true;
+            }
           }
         } catch (e) {
            console.error("Errore caricamento dati utente", e);
@@ -1929,6 +1945,8 @@ onMounted(async() => {
       :codice="dettaglioCodice"
       @close="dettaglioAperto = null"
     />
+
+    <AnnuncioPrezzoModal :show="showAnnuncio" @close="chiudiAnnuncio" />
     <div 
       v-if="showToast" 
       class="fixed inset-0 z-[60] flex items-center justify-center transition-all duration-300"
