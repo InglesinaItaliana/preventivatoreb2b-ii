@@ -23,7 +23,7 @@ export const roleFallbackPath: Partial<Record<Role, string>> = {
 }
 
 /** Path amministrativi vietati ai clienti (redirect a /dashboard). */
-export const forbiddenClientPaths = ['/admin', '/production', '/delivery', '/stack', '/calcoli']
+export const forbiddenClientPaths = ['/admin', '/production', '/delivery', '/stack', '/calcoli', '/griglie']
 
 /** Matcher identico al guard storico: match esatto o prefisso di segmento. */
 function matchPath(path: string, prefix: string): boolean {
