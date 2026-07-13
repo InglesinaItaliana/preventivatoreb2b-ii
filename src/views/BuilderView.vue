@@ -607,8 +607,14 @@ const aggiungi = () => {
   });
 
   // Reset
+  // null (non 0): con v-model.number l'input resta vuoto e il placeholder
+  // ("Base (mm)", "n°Vert", ...) torna visibile. Con 0 mostrerebbe "0".
+  Object.assign(pannello, { base: null, altezza: null, righe: null, colonne: null, qty: null });
+  // Curva/Tacca/Non Equidistanti sono attributi della singola riga: senza reset
+  // il pannello successivo li erediterebbe in silenzio.
+  Object.assign(opzioniTelaio, { nonEquidistanti: false, curva: false, tacca: false });
   customRalGriglia.value = '';
-  adminCustomPrice.value = ''; 
+  adminCustomPrice.value = '';
 };
 
 const uploadFile = async (event: Event) => {
