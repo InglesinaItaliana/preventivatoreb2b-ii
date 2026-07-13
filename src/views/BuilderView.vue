@@ -12,6 +12,8 @@ import { useCatalogStore } from '../Data/catalog';
 import type { Categoria, RigaPreventivo, StatoPreventivo, Allegato, RiepilogoRiga } from '../types';
 import { calculatePrice } from '../logic/pricing';
 import { metriGriglia, metriPerimetro } from '../logic/geometry';
+import { costruisciDettaglio, type Dettaglio } from '../logic/priceBreakdown';
+import PriceBreakdownModal from '../components/PriceBreakdownModal.vue';
 import { onAuthStateChanged } from 'firebase/auth';
 import OrderModals from '../components/OrderModals.vue';
 import { STATUS_DETAILS } from '../types';
@@ -38,7 +40,8 @@ import {
   ChevronUpDownIcon,
   CheckIcon,
   MinusIcon,
-  PlusIcon
+  PlusIcon,
+  MagnifyingGlassIcon
 } from '@heroicons/vue/24/solid'
 
 const currentPriceList = ref('2026-a');
@@ -356,6 +359,27 @@ const isLocked = computed(() => {
   }
   return statoCorrente.value !== 'DRAFT';
 });
+
+// Il cliente vede i prezzi solo in certi stati: stessa condizione della colonna
+// Totale, estratta per riusarla sulla lente del dettaglio (dove non ci sono
+// prezzi non c'è niente da spiegare).
+const prezziVisibili = computed(() =>
+  isAdmin.value || isStandard.value ||
+  ['QUOTE_READY', 'SIGNED', 'IN_PRODUZIONE', 'READY'].includes(statoCorrente.value)
+);
+
+// --- Modale "come si compone il prezzo" ------------------------------------
+const dettaglioAperto = ref<Dettaglio | null>(null);
+const dettaglioDescrizione = ref('');
+const dettaglioCodice = ref('');
+
+const apriDettaglio = (r: RigaPreventivo) => {
+  const d = costruisciDettaglio(r, currentPriceList.value, catalog);
+  if (!d) return;
+  dettaglioAperto.value = d;
+  dettaglioDescrizione.value = r.descrizioneCompleta;
+  dettaglioCodice.value = r.codice || '';
+};
 
 const showConfigurationPanels = computed(() => {
   // Se stiamo ancora caricando i dati iniziali, nascondi tutto per evitare il "flash"
@@ -1812,7 +1836,18 @@ onMounted(async() => {
                 </td>
 
                 <td class="p-3 text-right font-bold font-heading text-gray-900">
-                  {{ (isAdmin || isStandard || ['QUOTE_READY', 'SIGNED', 'IN_PRODUZIONE', 'READY'].includes(statoCorrente)) ? r.prezzo_totale.toFixed(2) + ' €' : '-' }}
+                  <div class="flex items-center justify-end gap-1.5">
+                    <span>{{ prezziVisibili ? r.prezzo_totale.toFixed(2) + ' €' : '-' }}</span>
+                    <!-- Lente sempre visibile (non hover-gated: su touch l'hover non esiste) -->
+                    <button
+                      v-if="prezziVisibili && r.categoria !== 'EXTRA'"
+                      @click="apriDettaglio(r)"
+                      class="p-1 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-md transition-colors shrink-0"
+                      title="Come si compone questo prezzo"
+                    >
+                      <MagnifyingGlassIcon class="h-4 w-4" />
+                    </button>
+                  </div>
                 </td>
 
                 <td class="p-3 text-right">
@@ -1915,6 +1950,14 @@ onMounted(async() => {
       @close="showModals = false"
       @confirmFast="onConfirmFast"
       @confirmSign="onConfirmSign"
+    />
+
+    <PriceBreakdownModal
+      :show="!!dettaglioAperto"
+      :dettaglio="dettaglioAperto"
+      :descrizione="dettaglioDescrizione"
+      :codice="dettaglioCodice"
+      @close="dettaglioAperto = null"
     />
     <div 
       v-if="showToast" 
