@@ -26,6 +26,13 @@ const quantita = ref(1);
 const conBordo = ref(true);
 const distribuzione = ref<Distribuzione>('PASSO_FISSO');
 
+// Quale strato sta DAVANTI. Decide la foratura: la famiglia a vista prende il
+// foro cieco (il rivetto entra da dietro e si allarga nella sua cavità senza
+// bucarne la parete esterna), l'altra il foro passante. In officina davanti
+// stanno le orizzontali.
+const famigliaAVistaLondra = ref<'O' | 'V'>('O');
+const famigliaAVistaRombi = ref<'A' | 'B'>('A');
+
 // In SPAZI_UGUALI il cursore è un desiderata: il numero di barre lo sceglie il
 // calcolo. Questi override esistono per ritoccarlo a mano (+/−); muovere il
 // cursore li azzera, così la fonte di verità resta una sola.
@@ -81,6 +88,7 @@ const config = computed<ConfigGriglia>(() => ({
   gioco: gioco.value,
   margineMinimo: margineMinimo.value,
   conBordo: conBordo.value,
+  famigliaAVista: aRombi.value ? famigliaAVistaRombi.value : famigliaAVistaLondra.value,
 }));
 
 const progetto = computed(() => {
@@ -206,6 +214,38 @@ const kg = (v: number) => `${nf2.format(v)} kg`;
               <template v-if="stile === 'LONDRA'">Griglia ortogonale: celle quadrate o rettangolari.</template>
               <template v-else-if="stile === 'MILANO'">Rombi quadrati: barre a 45°.</template>
               <template v-else>Rombi con l'asse verticale doppio: barre a circa 63°.</template>
+            </p>
+          </div>
+
+          <!-- Strato a vista: decide la foratura -->
+          <div>
+            <label class="block text-[10px] font-bold text-gray-500 uppercase mb-2">Strato a vista</label>
+            <div class="grid grid-cols-2 gap-2">
+              <template v-if="!aRombi">
+                <button
+                  v-for="f in ([{ k: 'O' as const, l: 'ORIZZONTALI' }, { k: 'V' as const, l: 'VERTICALI' }])" :key="f.k"
+                  @click="famigliaAVistaLondra = f.k"
+                  class="py-2 rounded-lg text-[11px] font-bold border transition-all"
+                  :class="famigliaAVistaLondra === f.k
+                    ? 'bg-gray-900 border-gray-900 text-white shadow-md'
+                    : 'bg-white border-gray-200 text-gray-500 hover:border-gray-400'"
+                >{{ f.l }}</button>
+              </template>
+              <template v-else>
+                <button
+                  v-for="f in ([{ k: 'A' as const, l: 'DIAGONALE ↗' }, { k: 'B' as const, l: 'DIAGONALE ↘' }])" :key="f.k"
+                  @click="famigliaAVistaRombi = f.k"
+                  class="py-2 rounded-lg text-[11px] font-bold border transition-all"
+                  :class="famigliaAVistaRombi === f.k
+                    ? 'bg-gray-900 border-gray-900 text-white shadow-md'
+                    : 'bg-white border-gray-200 text-gray-500 hover:border-gray-400'"
+                >{{ f.l }}</button>
+              </template>
+            </div>
+            <p class="text-[10px] text-gray-400 mt-1.5 italic leading-snug">
+              Lo strato davanti prende il foro <b>cieco</b> (una parete): il rivetto entra
+              da dietro e si allarga nella cavità, e il lato a vista resta senza teste.
+              L'altro strato prende il foro <b>passante</b>.
             </p>
           </div>
 
@@ -546,7 +586,7 @@ const kg = (v: number) => `${nf2.format(v)} kg`;
                 <tr>
                   <th class="text-left pb-1.5">Pezzo</th>
                   <th class="text-right pb-1.5">Lunghezza</th>
-                  <th class="text-center pb-1.5">Taglio</th>
+                  <th class="text-center pb-1.5">Foratura</th>
                   <th class="text-right pb-1.5">Q.tà</th>
                 </tr>
               </thead>
@@ -559,7 +599,23 @@ const kg = (v: number) => `${nf2.format(v)} kg`;
                 >
                   <td class="py-2 text-gray-700 text-xs">{{ b.etichetta }}</td>
                   <td class="py-2 text-right font-bold tabular-nums">{{ mm(b.lunghezza) }}</td>
-                  <td class="py-2 text-center text-[11px] text-gray-500">{{ b.taglio }}</td>
+                  <td class="py-2 text-center">
+                    <!-- I pezzi si tagliano identici: cambia solo come si forano.
+                         Sui rombi la ripartizione è sempre esattamente a metà. -->
+                    <div class="flex gap-1 justify-center flex-wrap">
+                      <span
+                        v-if="b.quantitaCieca"
+                        class="px-1.5 py-0.5 rounded text-[10px] font-bold border bg-purple-50 text-purple-700 border-purple-200"
+                        title="Una parete sola, sul lato di contatto: la faccia esterna resta intera"
+                      >{{ b.quantitaCieca * quantita }} cieca</span>
+                      <span
+                        v-if="b.quantitaPassante"
+                        class="px-1.5 py-0.5 rounded text-[10px] font-bold border bg-slate-100 text-slate-600 border-slate-200"
+                        title="Due pareti: il rivetto la attraversa, e su di essa appoggia la testa"
+                      >{{ b.quantitaPassante * quantita }} passante</span>
+                      <span v-if="!b.nFori" class="text-[10px] text-gray-300">nessun foro</span>
+                    </div>
+                  </td>
                   <td class="py-2 text-right font-bold tabular-nums">
                     {{ b.quantitaPerTelaio * quantita }}
                     <span v-if="quantita > 1" class="text-[10px] text-gray-400 font-normal">({{ b.quantitaPerTelaio }}×{{ quantita }})</span>
@@ -567,6 +623,11 @@ const kg = (v: number) => `${nf2.format(v)} kg`;
                 </tr>
               </tbody>
             </table>
+            <p class="text-[11px] text-gray-500 mt-3 leading-snug">
+              I pezzi si <b>tagliano identici</b>: cambia solo la foratura.
+              Quelli a <b>foro cieco</b> stanno nello strato a vista e vanno montati con la
+              <b>faccia forata verso l'interno</b> — girati, il foro finisce a vista.
+            </p>
           </div>
         </div>
 

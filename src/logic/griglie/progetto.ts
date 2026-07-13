@@ -41,7 +41,14 @@ export interface ConfigGriglia {
   gioco: number;              // mm per lato: infilaggio della barra nel canale
   margineMinimo: number;      // vuoto minimo ammesso contro il bordo
   conBordo: boolean;          // false = griglia nuda, senza telaio perimetrale
-  lunghezzaMinima: number;    // sotto questa, la barretta d'angolo (rombi) si omette
+  lunghezzaMinima: number;    // filtro estetico: sotto questa la barretta d'angolo si omette
+  /**
+   * Quale famiglia sta nello strato A VISTA (davanti). Decide la foratura:
+   * la famiglia davanti prende il foro CIECO (una parete sola), quella dietro
+   * il foro PASSANTE. In LONDRA: 'O' = orizzontali · 'V' = verticali.
+   * Sui rombi: 'A' e 'B' sono le due diagonali.
+   */
+  famigliaAVista: 'V' | 'O' | 'A' | 'B';
   nBarreVerticali?: number | null;   // forzatura manuale del numero di barre (SPAZI_UGUALI)
   nBarreOrizzontali?: number | null;
 }
@@ -54,11 +61,34 @@ export interface PezzoBordo {
   taglio: string;
 }
 
-/** Una barra della griglia, con il suo schema di foratura. */
+/**
+ * Come si fora una barra.
+ *
+ * Il profilo è CAVO, e il rivetto entra da un lato solo del pannello: attraversa
+ * da parte a parte la barra dello strato NASCOSTO (foro passante, due pareti, e
+ * su di essa appoggia la testa), poi buca UNA SOLA parete della barra a vista ed
+ * entra nella sua cavità, dove si allarga tirando. La parete esterna di quella
+ * barra non viene mai forata: per questo il lato a vista resta pulito, senza
+ * teste di rivetto.
+ */
+export type Foratura = 'PASSANTE' | 'CIECA';
+
+/**
+ * Una barra della griglia, con il suo schema di taglio e foratura.
+ *
+ * La foratura NON separa i pezzi: si tagliano identici, e solo dopo si forano in
+ * due modi. Sui rombi le due famiglie di diagonali sono l'una l'immagine
+ * speculare dell'altra, quindi ogni forma esce in quantità pari e si divide
+ * ESATTAMENTE a metà fra i due strati — è una simmetria, non una coincidenza
+ * delle misure. Su Londra invece orizzontali e verticali hanno lunghezze e
+ * quantità diverse, e ogni tipo sta tutto da una parte sola.
+ */
 export interface PezzoBarra {
   etichetta: string;
   lunghezza: number;
-  quantitaPerTelaio: number;
+  quantitaPerTelaio: number;   // pezzi da tagliare, in tutto
+  quantitaCieca: number;       // ...di cui forati su UNA parete (strato a vista)
+  quantitaPassante: number;    // ...e di cui forati da parte a parte (strato dietro)
   taglio: string;
   primoForo: number;          // dalla testa della barra
   interasse: number;          // costante fra un foro e il successivo
@@ -247,11 +277,18 @@ function calcolaLondra(c: ConfigGriglia): Progetto {
   // NB: l'interasse dei fori è quello EFFETTIVO. In SPAZI_UGUALI il passo chiesto
   // col cursore è solo un desiderata: chi fora deve leggere il passo vero, non
   // quello che è stato digitato.
+  // La famiglia davanti prende il foro CIECO (il rivetto entra da dietro e si
+  // allarga nella sua cavità, senza bucarne la parete esterna): è così che il
+  // lato a vista resta senza teste di rivetto.
+  const vistaV = c.famigliaAVista === 'V';
+
   if (vert.n > 0) {
     barre.push({
       etichetta: 'Barra verticale',
       lunghezza: lunghezzaVerticale,
       quantitaPerTelaio: vert.n,
+      quantitaCieca: vistaV ? vert.n : 0,
+      quantitaPassante: vistaV ? 0 : vert.n,
       taglio: '90°',
       primoForo: foriSuVerticale[0] ?? 0,
       interasse: oriz.passo,
@@ -265,6 +302,8 @@ function calcolaLondra(c: ConfigGriglia): Progetto {
       etichetta: 'Barra orizzontale',
       lunghezza: lunghezzaOrizzontale,
       quantitaPerTelaio: oriz.n,
+      quantitaCieca: vistaV ? 0 : oriz.n,
+      quantitaPassante: vistaV ? oriz.n : 0,
       taglio: '90°',
       primoForo: foriSuOrizzontale[0] ?? 0,
       interasse: vert.passo,
@@ -274,15 +313,16 @@ function calcolaLondra(c: ConfigGriglia): Progetto {
     });
   }
 
+  // Ordine di disegno: la famiglia a vista va SOPRA, come nel pannello vero.
+  const segOriz = oriz.assi.map((y): SegmentoBarra => ({
+    x1: testa, y1: y, x2: c.larghezza - testa, y2: y, famiglia: 'O', tipo: 'Barra orizzontale',
+  }));
+  const segVert = vert.assi.map((x): SegmentoBarra => ({
+    x1: x, y1: testa, x2: x, y2: c.altezza - testa, famiglia: 'V', tipo: 'Barra verticale',
+  }));
+
   const disegno = {
-    barre: [
-      ...oriz.assi.map((y): SegmentoBarra => ({
-        x1: testa, y1: y, x2: c.larghezza - testa, y2: y, famiglia: 'O', tipo: 'Barra orizzontale',
-      })),
-      ...vert.assi.map((x): SegmentoBarra => ({
-        x1: x, y1: testa, x2: x, y2: c.altezza - testa, famiglia: 'V', tipo: 'Barra verticale',
-      })),
-    ],
+    barre: vistaV ? [...segOriz, ...segVert] : [...segVert, ...segOriz],
     rivetti: vert.assi.flatMap((x) => oriz.assi.map((y): Punto => ({ x, y }))),
   };
 
@@ -346,7 +386,10 @@ function calcolaRombi(c: ConfigGriglia, rapporto: number): Progetto {
     diagonale: c.passoOrizzontale,   // Δ: la diagonale orizzontale del rombo
     testa,
     lunghezzaMinima: c.lunghezzaMinima,
+    conBordo: c.conBordo,
   });
+
+  const famVista = c.famigliaAVista === 'B' ? 'B' : 'A';
 
   // Su una griglia a rombi ogni barra è una corda diversa del rettangolo: le
   // lunghezze sono tutte diverse. Le accorpiamo per SCHEMA — ma prima le
@@ -373,6 +416,11 @@ function calcolaRombi(c: ConfigGriglia, rapporto: number): Progetto {
       coda = b.lunghezza - (fori[fori.length - 1] ?? 0);
     }
 
+    // La famiglia NON entra nella chiave: i pezzi si TAGLIANO identici, e solo
+    // dopo si forano in due modi. Le due famiglie sono l'una lo specchio
+    // dell'altra, quindi ogni forma esce in quantità pari e si divide esattamente
+    // a metà fra foro cieco (strato a vista) e foro passante (strato dietro).
+    const aVista = b.famiglia === famVista;
     const chiave = [
       Math.round(b.lunghezza * 10),
       Math.round(primo * 10),
@@ -383,12 +431,16 @@ function calcolaRombi(c: ConfigGriglia, rapporto: number): Progetto {
     const esistente = perSchema.get(chiave);
     if (esistente) {
       esistente.quantitaPerTelaio++;
+      if (aVista) esistente.quantitaCieca++;
+      else esistente.quantitaPassante++;
       continue;
     }
     perSchema.set(chiave, {
       etichetta: '',
       lunghezza: b.lunghezza,
       quantitaPerTelaio: 1,
+      quantitaCieca: aVista ? 1 : 0,
+      quantitaPassante: aVista ? 0 : 1,
       taglio: '90°',
       primoForo: primo,
       interasse: b.interasse,
@@ -421,6 +473,9 @@ function calcolaRombi(c: ConfigGriglia, rapporto: number): Progetto {
   if (d.vuoto < 0) {
     avvisi.push('Con questo passo le barre si sovrappongono: il rombo è più stretto della barra stessa.');
   }
+  if (d.pivotanti > 0 && !c.conBordo) {
+    avvisi.push(`${d.pivotanti} barre sono tenute da un solo rivetto: senza telaio girano attorno a quel perno.`);
+  }
   if (lunghezzaMax > BARRA.stecca) {
     avvisi.push(`Una barra supera i ${BARRA.stecca / 1000} m della barra commerciale: il pezzo non è ricavabile intero.`);
   }
@@ -444,11 +499,14 @@ function calcolaRombi(c: ConfigGriglia, rapporto: number): Progetto {
     testa,
     spessorePannello: c.conBordo ? SPESSORE_PANNELLO : BARRA.spessore * 2,
     disegno: {
-      barre: d.barre.map((b, i): SegmentoBarra => ({
-        ...b.segmento,
-        famiglia: b.famiglia,
-        tipo: etichettaPerChiave.get(chiaveDi[i]!) ?? '',
-      })),
+      // La famiglia a vista si disegna per ULTIMA, così sta sopra come nel pannello.
+      barre: d.barre
+        .map((b, i): SegmentoBarra => ({
+          ...b.segmento,
+          famiglia: b.famiglia,
+          tipo: etichettaPerChiave.get(chiaveDi[i]!) ?? '',
+        }))
+        .sort((a, b) => Number(a.famiglia === famVista) - Number(b.famiglia === famVista)),
       rivetti: d.rivetti,
     },
     bordi,

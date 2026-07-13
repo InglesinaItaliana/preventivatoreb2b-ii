@@ -25,7 +25,8 @@ const BASE: ConfigGriglia = {
   gioco: 1,
   margineMinimo: 10,
   conBordo: true,
-  lunghezzaMinima: 80,
+  lunghezzaMinima: 0,
+  famigliaAVista: 'O',
 };
 
 describe('LONDRA — geometria', () => {
@@ -101,8 +102,34 @@ describe('LONDRA — geometria', () => {
     }
   });
 
-  it('un rivetto per incrocio', () => {
+  it('un rivetto per incrocio, e nessun foro orfano', () => {
     expect(p.nRivetti).toBe(10 * 10);
+    // Ogni rivetto unisce due barre: i fori totali sono il doppio dei rivetti.
+    const foriTotali = p.barre.reduce((t, b) => t + b.nFori * b.quantitaPerTelaio, 0);
+    expect(foriTotali).toBe(2 * p.nRivetti);
+  });
+
+  it('le orizzontali stanno davanti: foro cieco a loro, passante alle verticali', () => {
+    // Su LONDRA la ripartizione NON è a metà come sui rombi: orizzontali e
+    // verticali hanno lunghezze e quantità diverse, e ogni tipo sta tutto da una
+    // parte sola. Le orizzontali sono a vista → una parete sola, e il lato a
+    // vista resta senza teste di rivetto.
+    const oriz = p.barre.find((b) => b.etichetta === 'Barra orizzontale')!;
+    const vert = p.barre.find((b) => b.etichetta === 'Barra verticale')!;
+
+    expect(oriz.quantitaCieca).toBe(oriz.quantitaPerTelaio);
+    expect(oriz.quantitaPassante).toBe(0);
+
+    expect(vert.quantitaPassante).toBe(vert.quantitaPerTelaio);
+    expect(vert.quantitaCieca).toBe(0);
+  });
+
+  it('invertendo lo strato a vista si invertono le forature', () => {
+    const v = calcolaProgetto({ ...BASE, famigliaAVista: 'V' });
+    const oriz = v.barre.find((b) => b.etichetta === 'Barra orizzontale')!;
+    const vert = v.barre.find((b) => b.etichetta === 'Barra verticale')!;
+    expect(vert.quantitaCieca).toBe(vert.quantitaPerTelaio);
+    expect(oriz.quantitaPassante).toBe(oriz.quantitaPerTelaio);
   });
 
   it('il telaio è quattro pezzi a 45°, lunghi quanto l\'ingombro esterno', () => {
