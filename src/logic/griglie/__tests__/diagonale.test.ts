@@ -212,9 +212,14 @@ describe('rombi — casi che salvano materiale', () => {
     for (const b of p.barre) expect(b.nFori).toBeGreaterThanOrEqual(1);
   });
 
-  it('gli scarti vengono DICHIARATI, non nascosti', () => {
+  it('gli scarti vengono CONTATI, non nascosti', () => {
+    // Non è più un avviso (faceva rumore), ma il numero resta esposto: una barra
+    // che sparisce dalla distinta senza che nessuno lo dica è un guaio in officina.
     const p = calcolaProgetto({ ...BASE, lunghezzaMinima: 400 });
-    expect(p.avvisi.join(' ')).toContain('omesse');
+    expect(p.barreScartate).toBeGreaterThan(0);
+
+    const totale = p.barre.reduce((t, b) => t + b.quantitaPerTelaio, 0);
+    expect(totale).toBe(p.disegno.barre.length); // e quelle rimaste tornano tutte
   });
 
   it('passo più stretto della barra: avvisa invece di produrre una griglia impossibile', () => {
@@ -233,7 +238,7 @@ describe('rombi — casi che salvano materiale', () => {
     }
   });
 
-  it('avvisa sempre che il taglio a 90° va validato su un pannello vero', () => {
-    expect(calcolaProgetto(BASE).avvisi.join(' ')).toContain('SPIGOLO');
+  it('un pannello sano non produce nessun avviso', () => {
+    expect(calcolaProgetto(BASE).avvisi).toEqual([]);
   });
 });

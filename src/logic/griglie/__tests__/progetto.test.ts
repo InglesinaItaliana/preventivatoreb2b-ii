@@ -135,9 +135,9 @@ describe('LONDRA — casi che salvano materiale', () => {
     expect(vuoto.avvisi.join(' ')).toContain('nessuna barra');
   });
 
-  it('barra più lunga della stecca commerciale: avvisa invece di far tagliare un pezzo che non esiste', () => {
+  it('barra più lunga di quella commerciale: avvisa invece di far tagliare un pezzo che non esiste', () => {
     const p = calcolaProgetto({ ...BASE, altezza: 3200 });
-    expect(p.avvisi.join(' ')).toContain('stecca commerciale');
+    expect(p.avvisi.join(' ')).toContain('barra commerciale');
   });
 
   it('lato del telaio più lungo della stecca di profilo', () => {

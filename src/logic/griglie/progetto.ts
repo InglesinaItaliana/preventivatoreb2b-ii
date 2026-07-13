@@ -101,6 +101,7 @@ export interface Progetto {
   bordi: PezzoBordo[];
   barre: PezzoBarra[];
   nRivetti: number;           // un rivetto per incrocio
+  barreScartate: number;      // barrette d'angolo omesse (rombi): troppo corte o senza incroci
 
   // Materiale (metri lineari EFFETTIVI nel pannello, non le stecche da comprare)
   metriU: number;             // per telaio
@@ -290,13 +291,10 @@ function calcolaLondra(c: ConfigGriglia): Progetto {
     avvisi.push('Con questo passo non entra nessuna barra: riduci il passo o aumenta le misure del pannello.');
   }
   if (lunghezzaVerticale > BARRA.stecca || lunghezzaOrizzontale > BARRA.stecca) {
-    avvisi.push(`Una barra supera i ${BARRA.stecca / 1000} m della stecca commerciale: il pezzo non è ricavabile intero.`);
+    avvisi.push(`Una barra supera i ${BARRA.stecca / 1000} m della barra commerciale: il pezzo non è ricavabile intero.`);
   }
   if (c.conBordo && (c.larghezza > PROFILO_U.stecca || c.altezza > PROFILO_U.stecca)) {
-    avvisi.push(`Un lato del telaio supera i ${PROFILO_U.stecca / 1000} m della stecca di profilo a U.`);
-  }
-  if (!c.conBordo) {
-    avvisi.push('Griglia nuda: le teste delle barre sporgono oltre l\'ultima barra incrociata, come d\'uso nelle griglie da giardino. Se non le vuoi a vista, metti il bordo perimetrale.');
+    avvisi.push(`Un lato del telaio supera i ${PROFILO_U.stecca / 1000} m della barra di profilo a U.`);
   }
   if (vert.n > 0 && vert.margine < c.margineMinimo - 0.001) {
     avvisi.push('Il margine laterale è sotto il minimo impostato.');
@@ -328,6 +326,7 @@ function calcolaLondra(c: ConfigGriglia): Progetto {
     bordi,
     barre,
     nRivetti: vert.n * oriz.n,
+    barreScartate: 0,
     metriU,
     metriBarra,
     avvisi,
@@ -419,22 +418,15 @@ function calcolaRombi(c: ConfigGriglia, rapporto: number): Progetto {
   if (d.barre.length === 0) {
     avvisi.push('Con questo passo non entra nessuna barra: riduci il passo o aumenta le misure del pannello.');
   }
-  if (d.scartate > 0) {
-    avvisi.push(`${d.scartate} barre d'angolo omesse: troppo corte, o senza nessun incrocio che le tenga ferme.`);
-  }
   if (d.vuoto < 0) {
     avvisi.push('Con questo passo le barre si sovrappongono: il rombo è più stretto della barra stessa.');
   }
   if (lunghezzaMax > BARRA.stecca) {
-    avvisi.push(`Una barra supera i ${BARRA.stecca / 1000} m della stecca commerciale: il pezzo non è ricavabile intero.`);
+    avvisi.push(`Una barra supera i ${BARRA.stecca / 1000} m della barra commerciale: il pezzo non è ricavabile intero.`);
   }
   if (c.conBordo && (c.larghezza > PROFILO_U.stecca || c.altezza > PROFILO_U.stecca)) {
-    avvisi.push(`Un lato del telaio supera i ${PROFILO_U.stecca / 1000} m della stecca di profilo a U.`);
+    avvisi.push(`Un lato del telaio supera i ${PROFILO_U.stecca / 1000} m della barra di profilo a U.`);
   }
-  if (!c.conBordo) {
-    avvisi.push('Griglia nuda: le teste delle barre sporgono oltre l\'ultima barra incrociata, come d\'uso nelle griglie da giardino. Se non le vuoi a vista, metti il bordo perimetrale.');
-  }
-  avvisi.push(`Taglio a 90° su barra inclinata (${d.angolo.toFixed(1)}°): la lunghezza è calcolata perché sia lo SPIGOLO a fermarsi sul fondo del canale, non l'asse. Da verificare su un pannello vero.`);
 
   return {
     config: c,
@@ -462,6 +454,7 @@ function calcolaRombi(c: ConfigGriglia, rapporto: number): Progetto {
     bordi,
     barre,
     nRivetti: d.rivetti.length,
+    barreScartate: d.scartate,
     metriU: c.conBordo ? (2 * c.larghezza + 2 * c.altezza) / 1000 : 0,
     metriBarra,
     avvisi,

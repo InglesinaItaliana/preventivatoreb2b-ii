@@ -91,7 +91,7 @@ const progetto = computed(() => {
   }
 });
 
-// --- Picking: la distinta moltiplicata per i telai, impacchettata nelle stecche
+// --- Picking: la distinta moltiplicata per i telai, impacchettata nelle barre commerciali
 const pianoU = computed(() => {
   const p = progetto.value;
   if (!p) return null;
@@ -343,6 +343,11 @@ const kg = (v: number) => `${nf2.format(v)} kg`;
               <span class="text-gray-500">Rivetti</span>
               <span class="font-bold tabular-nums">{{ progetto.nRivetti }}</span>
             </div>
+            <!-- Scartate: dato, non allarme. Ma non sparisce in silenzio. -->
+            <div v-if="progetto.barreScartate > 0" class="flex justify-between text-[11px]">
+              <span class="text-gray-400">Barrette d'angolo omesse</span>
+              <span class="font-bold tabular-nums text-gray-400">{{ progetto.barreScartate }}</span>
+            </div>
           </div>
 
           <!-- Il risultato reale: in SPAZI_UGUALI non coincide col cursore -->
@@ -465,8 +470,8 @@ const kg = (v: number) => `${nf2.format(v)} kg`;
 
             <div class="bg-gray-50 border border-gray-200 rounded-lg p-3 text-[11px] text-gray-500 space-y-0.5">
               <p class="font-bold text-gray-700 uppercase text-[10px] mb-1">Materiali (fissi)</p>
-              <p>Profilo a U {{ PROFILO_U.lato }}×{{ PROFILO_U.lato }}×{{ nf.format(PROFILO_U.spessore) }} · stecca {{ m(PROFILO_U.stecca) }} · {{ nf2.format(PROFILO_U.pesoKgM) }} kg/m</p>
-              <p>Barra {{ BARRA.larghezza }}×{{ BARRA.spessore }} · stecca {{ m(BARRA.stecca) }} · {{ nf2.format(BARRA.pesoKgM) }} kg/m</p>
+              <p>Profilo a U {{ PROFILO_U.lato }}×{{ PROFILO_U.lato }}×{{ nf.format(PROFILO_U.spessore) }} · barre da {{ m(PROFILO_U.stecca) }} · {{ nf2.format(PROFILO_U.pesoKgM) }} kg/m</p>
+              <p>Barra {{ BARRA.larghezza }}×{{ BARRA.spessore }} · barre da {{ m(BARRA.stecca) }} · {{ nf2.format(BARRA.pesoKgM) }} kg/m</p>
               <p>Canale interno {{ mm(CANALE_INTERNO) }} · profondità {{ mm(PROFONDITA_CANALE) }}</p>
               <p class="italic pt-1">Due barre sovrapposte fanno {{ BARRA.spessore * 2 }} mm: il canale da {{ CANALE_INTERNO }} le riceve con 1 mm di gioco.</p>
             </div>
@@ -529,9 +534,6 @@ const kg = (v: number) => `${nf2.format(v)} kg`;
                 </tr>
               </tbody>
             </table>
-            <p class="text-[11px] text-gray-400 mt-3 italic">
-              Le lunghezze sono sul lato lungo del quartabuono: i pezzi si chiudono a 45° agli angoli.
-            </p>
           </div>
 
           <!-- Barre -->
@@ -565,13 +567,6 @@ const kg = (v: number) => `${nf2.format(v)} kg`;
                 </tr>
               </tbody>
             </table>
-            <p v-if="conBordo" class="text-[11px] text-gray-400 mt-3 italic">
-              La barra entra nel canale fino a {{ mm(PROFONDITA_CANALE) }}: la lunghezza tiene già conto
-              del gioco d'infilaggio ({{ mm(gioco) }} per lato).
-            </p>
-            <p v-else class="text-[11px] text-gray-400 mt-3 italic">
-              Griglia nuda: nessun canale in cui infilare le teste, la barra vale l'ingombro pieno.
-            </p>
           </div>
         </div>
 
@@ -644,7 +639,7 @@ const kg = (v: number) => `${nf2.format(v)} kg`;
 
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div class="border border-gray-200 rounded-xl p-4 bg-white" :class="{ 'opacity-50': !conBordo }">
-              <p class="text-[10px] font-bold uppercase text-gray-400 mb-1">Profilo a U · stecche da {{ m(PROFILO_U.stecca) }}</p>
+              <p class="text-[10px] font-bold uppercase text-gray-400 mb-1">Profilo a U · barre da {{ m(PROFILO_U.stecca) }}</p>
               <p class="text-3xl font-bold font-heading text-gray-900 tabular-nums">{{ pianoU.nStecche }}</p>
               <p v-if="conBordo" class="text-[11px] text-gray-500 mt-1 tabular-nums">
                 sfrido {{ m(pianoU.sfrido) }} ({{ nf.format(pianoU.sfridoPerc) }}%)
@@ -652,7 +647,7 @@ const kg = (v: number) => `${nf2.format(v)} kg`;
               <p v-else class="text-[11px] text-gray-500 mt-1">griglia nuda: nessun telaio</p>
             </div>
             <div class="border border-gray-200 rounded-xl p-4 bg-white">
-              <p class="text-[10px] font-bold uppercase text-gray-400 mb-1">Barra 18×8 · stecche da {{ m(BARRA.stecca) }}</p>
+              <p class="text-[10px] font-bold uppercase text-gray-400 mb-1">Barra 18×8 · barre da {{ m(BARRA.stecca) }}</p>
               <p class="text-3xl font-bold font-heading text-gray-900 tabular-nums">{{ pianoBarre.nStecche }}</p>
               <p class="text-[11px] text-gray-500 mt-1 tabular-nums">
                 sfrido {{ m(pianoBarre.sfrido) }} ({{ nf.format(pianoBarre.sfridoPerc) }}%)
@@ -665,7 +660,7 @@ const kg = (v: number) => `${nf2.format(v)} kg`;
             </div>
           </div>
 
-          <!-- Piano di taglio: le stecche con lo STESSO schema sono accorpate.
+          <!-- Piano di taglio: le barre commerciali con lo STESSO schema sono accorpate.
                Alla sega serve lo schema, non l'elenco di cento righe identiche. -->
           <div class="mt-5 space-y-4">
             <div v-for="piano in [{ nome: 'Profilo a U', p: pianoU }, { nome: 'Barra 18×8', p: pianoBarre }]" :key="piano.nome">
@@ -673,8 +668,9 @@ const kg = (v: number) => `${nf2.format(v)} kg`;
                 <p class="text-[10px] font-bold uppercase text-gray-500 mb-2">
                   Piano di taglio · {{ piano.nome }}
                   <span class="text-gray-400 font-normal normal-case">
-                    — {{ piano.p!.gruppi.length }} schema{{ piano.p!.gruppi.length > 1 ? 'i diversi' : '' }}
-                    su {{ piano.p!.nStecche }} stecche
+                    — {{ piano.p!.gruppi.length }}
+                    {{ piano.p!.gruppi.length > 1 ? 'schemi diversi' : 'schema' }}
+                    su {{ piano.p!.nStecche }} {{ piano.p!.nStecche === 1 ? 'barra' : 'barre' }}
                   </span>
                 </p>
                 <div class="space-y-1.5">
@@ -700,7 +696,7 @@ const kg = (v: number) => `${nf2.format(v)} kg`;
               </template>
             </div>
             <p class="text-[11px] text-gray-400 italic">
-              Lo sfrido tiene conto della lama ({{ mm(kerf) }} a taglio): su una stecca da cui ricavi dieci pezzi
+              Lo sfrido tiene conto della lama ({{ mm(kerf) }} a taglio): su una barra da cui ricavi dieci pezzi
               se ne vanno {{ mm(kerf * 9) }} in trucioli.
             </p>
           </div>
