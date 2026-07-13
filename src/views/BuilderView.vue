@@ -11,6 +11,7 @@ import { computeTotals } from '../lib/billingTotals';
 import { useCatalogStore } from '../Data/catalog';
 import type { Categoria, RigaPreventivo, StatoPreventivo, Allegato, RiepilogoRiga } from '../types';
 import { calculatePrice } from '../logic/pricing';
+import { metriGriglia } from '../logic/geometry';
 import { onAuthStateChanged } from 'firebase/auth';
 import OrderModals from '../components/OrderModals.vue';
 import { STATUS_DETAILS } from '../types';
@@ -287,6 +288,25 @@ const opzioniTelaio = reactive({ nonEquidistanti: false, curva: false, tacca: fa
 const isAdmin = computed(() => route.query?.admin === 'true');
 
 const totaleImponibile = computed(() => preventivo.value.reduce((t, i) => t + i.prezzo_totale, 0));
+
+// Metri lineari TOTALI della riga (sviluppo griglia × quantità): il cliente li
+// divide per il totale riga e ritrova il €/m a cui era abituato prima di POPS.
+// I metri arrivano da geometry.ts, la stessa fonte usata dal motore di prezzo:
+// se qui usassimo le misure grezze invece di quelle arrotondate ai 50mm, la sua
+// divisione non tornerebbe.
+// null (→ trattino) dove i metri di griglia non significano nulla: righe EXTRA e
+// spedizione (misure a zero) e solo-canalino (paga il perimetro del telaio, non
+// lo sviluppo della griglia).
+const metriRiga = (r: RigaPreventivo): number | null => {
+  if (r.categoria === 'EXTRA' || r.categoria === 'CANALINO') return null;
+  const m = metriGriglia({
+    base_mm: r.base_mm,
+    altezza_mm: r.altezza_mm,
+    num_orizzontali: r.colonne,
+    num_verticali: r.righe,
+  }) * (r.quantita || 1);
+  return m > 0 ? m : null;
+};
 
 // FE-4: in modalità CiC il totale finale usa la regola canonica (half-up per
 // riga, identica al backend/CiC) → la cifra a video combacia col documento.
@@ -1747,6 +1767,7 @@ onMounted(async() => {
                 <th class="p-3">Misure</th>
                 <th class="p-3 text-center">Griglia</th>
                 <th class="p-3 text-center">Opzioni</th>
+                <th class="p-3 text-right" title="Metri lineari di griglia della riga (sviluppo × quantità)">m</th>
                 <th class="p-3 text-right">Totale</th>
                 <th class="p-3 text-right w-16">Azioni</th>
               </tr>
@@ -1775,6 +1796,11 @@ onMounted(async() => {
                     <span v-if="r.curva" class="px-1.5 py-0.5 rounded bg-orange-100 text-orange-700 text-[9px] font-bold border border-orange-200">Curva</span>
                     <span v-if="r.tacca" class="px-1.5 py-0.5 rounded bg-purple-100 text-purple-700 text-[9px] font-bold border border-purple-200">Tacca</span>
                   </div>
+                </td>
+
+                <td class="p-3 text-right text-xs text-gray-600 tabular-nums whitespace-nowrap">
+                  <span v-if="metriRiga(r) !== null">{{ metriRiga(r)!.toFixed(2) }} m</span>
+                  <span v-else class="text-gray-300">–</span>
                 </td>
 
                 <td class="p-3 text-right font-bold font-heading text-gray-900">

@@ -1,7 +1,8 @@
 // src/logic/pricing2025x.ts
 
 import { useCatalogStore } from '../Data/catalog';
-import type { PricingInput } from './pricing'; 
+import type { PricingInput } from './pricing';
+import { metriGriglia, metriPerimetro } from './geometry';
 
 const MOLTIPLICATORI_SOLO_CANALINO: Record<string, number> = {
   'C111': 1.5, 'C112': 2.0, 'C211': 2.5, 'C311': 3.0
@@ -18,11 +19,9 @@ export function calculateLogic2025x(input: PricingInput) {
   const pCanalinoAumentato = input.prezzo_unitario_canalino + MAGGIORAZIONE_LEALI;
   // ----------------------------------------
 
-  // Normalizzazione Misure
-  const base_round = Math.ceil(input.base_mm / 50) * 50;
-  const altezza_round = Math.ceil(input.altezza_mm / 50) * 50;
-  const metri_perimetro = ((base_round * 2) + (altezza_round * 2)) / 1000;
-  const metri_griglia = ((input.num_orizzontali * base_round) + (input.num_verticali * altezza_round)) / 1000;
+  // Metri lineari (misure arrotondate ai 50mm dentro geometry.ts)
+  const metri_perimetro = metriPerimetro(input.base_mm, input.altezza_mm);
+  const metri_griglia = metriGriglia(input);
 
   if (input.isSoloCanalino) {
     let prezzo_unitario = 0;
