@@ -478,14 +478,6 @@ const kg = (v: number) => `${nf2.format(v)} kg`;
       <!-- ══════════ ANTEPRIMA + DISTINTE ══════════ -->
       <div class="lg:col-span-8 xl:col-span-9 space-y-6">
 
-        <!-- Avvisi -->
-        <div v-if="progetto?.avvisi.length" class="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-1.5">
-          <div v-for="a in progetto.avvisi" :key="a" class="flex gap-2.5 text-sm text-amber-900">
-            <ExclamationTriangleIcon class="h-5 w-5 text-amber-500 shrink-0" />
-            <span>{{ a }}</span>
-          </div>
-        </div>
-
         <!-- Anteprima -->
         <div class="bg-white/60 backdrop-blur-sm p-5 rounded-xl shadow-lg border border-white/80">
           <div class="flex justify-between items-baseline mb-3">
@@ -497,6 +489,16 @@ const kg = (v: number) => `${nf2.format(v)} kg`;
           </div>
           <div class="h-[26rem] flex items-center justify-center">
             <GrigliaPreview v-if="progetto" :progetto="progetto" :finitura="finitura" :evidenzia="evidenzia" />
+          </div>
+        </div>
+
+        <!-- Avvisi: SOTTO l'anteprima, non sopra. Alcuni compaiono sempre (la nota
+             sul taglio a 90°), e stando in testa spostavano il riquadro a ogni
+             cambio di stile. -->
+        <div v-if="progetto?.avvisi.length" class="bg-amber-50 border border-amber-200 rounded-xl p-4 space-y-1.5">
+          <div v-for="a in progetto.avvisi" :key="a" class="flex gap-2.5 text-sm text-amber-900">
+            <ExclamationTriangleIcon class="h-5 w-5 text-amber-500 shrink-0" />
+            <span>{{ a }}</span>
           </div>
         </div>
 
