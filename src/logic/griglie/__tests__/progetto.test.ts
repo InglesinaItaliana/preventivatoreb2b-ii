@@ -23,6 +23,7 @@ const BASE: ConfigGriglia = {
   quantita: 1,
   gioco: 1,
   margineMinimo: 10,
+  conBordo: true,
 };
 
 describe('LONDRA — geometria', () => {
@@ -183,6 +184,74 @@ describe('nesting — piano di taglio dalla stecca', () => {
     const piano = pianificaTaglio([{ etichetta: 'enorme', lunghezza: 3500, quantita: 2 }], 3000, 2);
     expect(piano.nonRicavabili).toHaveLength(1);
     expect(piano.nStecche).toBe(0);
+  });
+});
+
+describe('LONDRA — griglia nuda (senza bordo perimetrale)', () => {
+  const nuda = calcolaProgetto({ ...BASE, conBordo: false, margineMinimo: 0 });
+
+  it('niente telaio in distinta, e niente profilo da comprare', () => {
+    expect(nuda.bordi).toEqual([]);
+    expect(nuda.metriU).toBe(0);
+    expect(nuda.latoTelaio).toBe(0);
+  });
+
+  it('senza canale non c\'è rientro: la barra vale l\'ingombro pieno', () => {
+    expect(nuda.testa).toBe(0);
+    const v = nuda.barre.find((b) => b.etichetta === 'Barra verticale')!;
+    const o = nuda.barre.find((b) => b.etichetta === 'Barra orizzontale')!;
+    expect(v.lunghezza).toBe(2000);
+    expect(o.lunghezza).toBe(1000);
+  });
+
+  it('la luce è tutto il pannello, non solo quello che il telaio lascia scoperto', () => {
+    const conTelaio = calcolaProgetto({ ...BASE, margineMinimo: 0 });
+    expect(nuda.luceX).toBe(1000);      // tutto l'ingombro
+    expect(conTelaio.luceX).toBe(960);  // meno i due lati da 20 della U
+  });
+
+  it('i 40 mm di luce in più producono barre in più, quando il passo ce le fa entrare', () => {
+    // Col passo 100 i 40 mm avanzati non bastano per un\'altra barra: 10 e 10.
+    // Col passo 50 sì — ed è la prova che la luce è davvero cresciuta.
+    const nuda50 = calcolaProgetto({ ...BASE, conBordo: false, margineMinimo: 0, passoOrizzontale: 50 });
+    const telaio50 = calcolaProgetto({ ...BASE, margineMinimo: 0, passoOrizzontale: 50 });
+    expect(nuda50.assiVerticali.length).toBeGreaterThan(telaio50.assiVerticali.length);
+  });
+
+  it('il pannello è spesso due barre sovrapposte, non quanto la U', () => {
+    expect(nuda.spessorePannello).toBe(16);
+    expect(calcolaProgetto(BASE).spessorePannello).toBe(20);
+    expect(calcolaImballaggio(nuda, 0.39).ingombro.spessore).toBe(16);
+  });
+
+  it('i fori partono dal filo del pannello, non dal fondo di un canale che non c\'è', () => {
+    const v = nuda.barre.find((b) => b.etichetta === 'Barra verticale')!;
+    expect(v.primoForo).toBe(nuda.assiOrizzontali[0]);
+  });
+});
+
+describe('nesting — stecche accorpate per schema', () => {
+  it('cento pezzi identici non diventano cento righe da leggere', () => {
+    const piano = pianificaTaglio([{ etichetta: 'barra', lunghezza: 995, quantita: 30 }], 3000, 2);
+    // 10 stecche da 3 pezzi ciascuna → un solo schema, ripetuto 10 volte
+    expect(piano.nStecche).toBe(10);
+    expect(piano.gruppi).toHaveLength(1);
+    expect(piano.gruppi[0]!.ripetizioni).toBe(10);
+    expect(piano.gruppi[0]!.tagli).toHaveLength(3);
+  });
+
+  it('gli schemi diversi restano distinti, e le ripetizioni tornano', () => {
+    const piano = pianificaTaglio(
+      [
+        { etichetta: 'lunga', lunghezza: 1995, quantita: 4 },
+        { etichetta: 'corta', lunghezza: 995, quantita: 4 },
+      ],
+      3000, 2,
+    );
+    const totale = piano.gruppi.reduce((t, g) => t + g.ripetizioni, 0);
+    expect(totale).toBe(piano.nStecche);
+    const pezziNeiGruppi = piano.gruppi.reduce((t, g) => t + g.tagli.length * g.ripetizioni, 0);
+    expect(pezziNeiGruppi).toBe(8);
   });
 });
 

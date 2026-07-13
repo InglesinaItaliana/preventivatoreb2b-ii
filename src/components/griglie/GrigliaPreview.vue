@@ -1,25 +1,38 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import type { Progetto } from '../../logic/griglie/progetto';
-import { BARRA, PROFILO_U, FONDO_CANALE } from '../../logic/griglie/materiali';
+import { BARRA } from '../../logic/griglie/materiali';
+import { coloreFinitura, tinta } from '../../logic/griglie/finiture';
 
 const props = defineProps<{
   progetto: Progetto;
+  finitura: string;
   evidenzia?: 'verticali' | 'orizzontali' | null;
 }>();
 
 const W = computed(() => props.progetto.config.larghezza);
 const H = computed(() => props.progetto.config.altezza);
 
-// Le barre partono dal fondo del canale (+ gioco): le loro teste restano NASCOSTE
-// sotto il telaio, esattamente come nel pannello vero.
-const testa = computed(() => FONDO_CANALE + props.progetto.config.gioco);
+// Telaio e rientro arrivano dal progetto, non li ricalcoliamo qui: senza bordo
+// perimetrale valgono entrambi zero, e una copia locale se lo dimenticherebbe.
+const lato = computed(() => props.progetto.latoTelaio);
+const testa = computed(() => props.progetto.testa);
 const mezza = BARRA.larghezza / 2;
 
-// Telaio come banda: rettangolo esterno con il buco della luce (fill-rule evenodd).
-// Disegnato DOPO le barre, così ne copre le teste — è l'ordine di montaggio reale.
+// Il pannello prende il colore della finitura scelta. Le barre sono dello stesso
+// materiale, quindi dello stesso colore: le distinguiamo dal telaio con una
+// tinta appena più scura, non con un colore diverso — sarebbe una bugia visiva.
+const colore = computed(() => coloreFinitura(props.finitura));
+const coloreTelaio = computed(() => colore.value);
+const coloreBarreOriz = computed(() => tinta(colore.value, -0.14));
+const coloreBarreVert = computed(() => tinta(colore.value, -0.26));
+const coloreBordo = computed(() => tinta(colore.value, -0.45)); // contorno: tiene visibili anche i bianchi
+const coloreRivetto = computed(() => tinta(colore.value, -0.55));
+
+const EVIDENZA = '#FBBF24'; // amber-400: solo per l'hover, mai come colore del pezzo
+
 const telaio = computed(() => {
-  const w = W.value, h = H.value, l = PROFILO_U.lato;
+  const w = W.value, h = H.value, l = lato.value;
   return `M0,0 H${w} V${h} H0 Z M${l},${l} H${w - l} V${h - l} H${l} Z`;
 });
 
@@ -27,16 +40,16 @@ const margine = computed(() => Math.max(W.value, H.value) * 0.04);
 const viewBox = computed(() =>
   `${-margine.value} ${-margine.value} ${W.value + 2 * margine.value} ${H.value + 2 * margine.value}`
 );
-
 const quotaFont = computed(() => Math.max(W.value, H.value) * 0.028);
+const trattoBordo = computed(() => Math.max(W.value, H.value) * 0.0018);
 </script>
 
 <template>
   <svg :viewBox="viewBox" class="w-full h-full" preserveAspectRatio="xMidYMid meet">
-    <!-- Luce interna -->
+    <!-- Luce interna (o l'intero pannello, se non c'è il telaio) -->
     <rect
-      :x="PROFILO_U.lato" :y="PROFILO_U.lato"
-      :width="Math.max(0, W - 2 * PROFILO_U.lato)" :height="Math.max(0, H - 2 * PROFILO_U.lato)"
+      :x="lato" :y="lato"
+      :width="Math.max(0, W - 2 * lato)" :height="Math.max(0, H - 2 * lato)"
       class="fill-slate-50"
     />
 
@@ -45,8 +58,9 @@ const quotaFont = computed(() => Math.max(W.value, H.value) * 0.028);
       v-for="(y, i) in progetto.assiOrizzontali" :key="`h${i}`"
       :x="testa" :y="y - mezza"
       :width="Math.max(0, W - 2 * testa)" :height="BARRA.larghezza"
-      class="transition-colors"
-      :class="evidenzia === 'orizzontali' ? 'fill-amber-400' : (evidenzia === 'verticali' ? 'fill-slate-200' : 'fill-slate-300')"
+      :fill="evidenzia === 'orizzontali' ? EVIDENZA : coloreBarreOriz"
+      :stroke="coloreBordo" :stroke-width="trattoBordo"
+      class="transition-[fill] duration-150"
     />
 
     <!-- Barre verticali: sopra le orizzontali, come nel pannello (barre sovrapposte) -->
@@ -54,8 +68,9 @@ const quotaFont = computed(() => Math.max(W.value, H.value) * 0.028);
       v-for="(x, i) in progetto.assiVerticali" :key="`v${i}`"
       :x="x - mezza" :y="testa"
       :width="BARRA.larghezza" :height="Math.max(0, H - 2 * testa)"
-      class="transition-colors"
-      :class="evidenzia === 'verticali' ? 'fill-amber-400' : (evidenzia === 'orizzontali' ? 'fill-slate-300' : 'fill-slate-400')"
+      :fill="evidenzia === 'verticali' ? EVIDENZA : coloreBarreVert"
+      :stroke="coloreBordo" :stroke-width="trattoBordo"
+      class="transition-[fill] duration-150"
     />
 
     <!-- Rivetti: uno per incrocio -->
@@ -63,13 +78,16 @@ const quotaFont = computed(() => Math.max(W.value, H.value) * 0.028);
       <circle
         v-for="(y, j) in progetto.assiOrizzontali" :key="`r${i}-${j}`"
         :cx="x" :cy="y" :r="BARRA.larghezza * 0.17"
-        class="fill-slate-600"
+        :fill="coloreRivetto"
       />
     </template>
 
-    <!-- Telaio a U, sopra tutto: le teste delle barre spariscono nel canale -->
-    <path :d="telaio" fill-rule="evenodd" class="fill-amber-400" />
-    <path :d="telaio" fill-rule="evenodd" fill="none" stroke-width="1.5" class="stroke-amber-600/40" />
+    <!-- Telaio a U, sopra tutto: le teste delle barre spariscono nel canale.
+         Se il bordo perimetrale non c'è, qui non si disegna nulla. -->
+    <template v-if="progetto.latoTelaio > 0">
+      <path :d="telaio" fill-rule="evenodd" :fill="coloreTelaio" />
+      <path :d="telaio" fill-rule="evenodd" fill="none" :stroke="coloreBordo" :stroke-width="trattoBordo * 1.5" />
+    </template>
 
     <!-- Quote d'ingombro -->
     <text

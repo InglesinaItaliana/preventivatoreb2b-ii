@@ -22,6 +22,7 @@ export interface ConfigGriglia {
   quantita: number;           // telai identici
   gioco: number;              // mm per lato: infilaggio della barra nel canale
   margineMinimo: number;      // mm fra il filo interno della cornice e il bordo dell'ultima barra
+  conBordo: boolean;          // false = griglia nuda, senza telaio perimetrale
 }
 
 /** Un pezzo del telaio (profilo a U). */
@@ -54,7 +55,9 @@ export interface Progetto {
   margineY: number;
   assiVerticali: number[];    // x degli assi delle barre verticali, dal filo ESTERNO
   assiOrizzontali: number[];  // y degli assi delle barre orizzontali, dal filo ESTERNO
-  estensioneBarra: { da: number; a: number }; // da dove a dove corre una barra, dal filo esterno
+  latoTelaio: number;         // 0 se senza bordo perimetrale
+  testa: number;              // da dove parte la barra, dal filo esterno (0 se senza bordo)
+  spessorePannello: number;   // col telaio = 20; senza = due barre sovrapposte = 16
 
   // Distinte
   bordi: PezzoBordo[];
@@ -79,14 +82,16 @@ function distribuisci(
   ingombro: number,
   margineMinimo: number,
   passo: number,
+  latoTelaio: number,
 ): { n: number; assi: number[]; margine: number; luce: number } {
-  const luce = ingombro - 2 * PROFILO_U.lato;
+  const luce = ingombro - 2 * latoTelaio;
   const mezzaBarra = BARRA.larghezza / 2;
 
   // Spazio in cui possono cadere gli ASSI: la barra più esterna deve restare
   // dentro la luce, staccata almeno del margine minimo dalla cornice.
-  const primoAsseMin = PROFILO_U.lato + margineMinimo + mezzaBarra;
-  const ultimoAsseMax = ingombro - PROFILO_U.lato - margineMinimo - mezzaBarra;
+  // Senza telaio (latoTelaio = 0) la luce è tutto il pannello.
+  const primoAsseMin = latoTelaio + margineMinimo + mezzaBarra;
+  const ultimoAsseMax = ingombro - latoTelaio - margineMinimo - mezzaBarra;
   const corsa = ultimoAsseMax - primoAsseMin;
 
   if (corsa < 0 || passo <= 0) return { n: 0, assi: [], margine: 0, luce };
@@ -98,20 +103,24 @@ function distribuisci(
   const assi: number[] = [];
   for (let i = 0; i < n; i++) assi.push(primoAsse + i * passo);
 
-  const margine = (primoAsse - mezzaBarra) - PROFILO_U.lato;
+  const margine = (primoAsse - mezzaBarra) - latoTelaio;
   return { n, assi, margine, luce };
 }
 
 function calcolaLondra(c: ConfigGriglia): Progetto {
   const avvisi: string[] = [];
 
+  // Senza bordo perimetrale: niente telaio, niente canale, niente rientro.
+  // La griglia è nuda e la barra vale l'ingombro pieno.
+  const latoTelaio = c.conBordo ? PROFILO_U.lato : 0;
+  const testa = c.conBordo ? FONDO_CANALE + c.gioco : 0;
+
   // Le barre VERTICALI si distribuiscono in larghezza (passo orizzontale) e
   // corrono in altezza. E viceversa.
-  const vert = distribuisci(c.larghezza, c.margineMinimo, c.passoOrizzontale);
-  const oriz = distribuisci(c.altezza, c.margineMinimo, c.passoVerticale);
+  const vert = distribuisci(c.larghezza, c.margineMinimo, c.passoOrizzontale, latoTelaio);
+  const oriz = distribuisci(c.altezza, c.margineMinimo, c.passoVerticale, latoTelaio);
 
-  // La barra va a battuta sul fondo del canale, meno il gioco d'infilaggio.
-  const testa = FONDO_CANALE + c.gioco;
+  // Con il bordo, la barra va a battuta sul fondo del canale meno il gioco.
   const lunghezzaVerticale = c.altezza - 2 * testa;
   const lunghezzaOrizzontale = c.larghezza - 2 * testa;
 
@@ -121,10 +130,10 @@ function calcolaLondra(c: ConfigGriglia): Progetto {
   const foriSuVerticale = oriz.assi.map((y) => y - testa);
   const foriSuOrizzontale = vert.assi.map((x) => x - testa);
 
-  const bordi: PezzoBordo[] = [
+  const bordi: PezzoBordo[] = c.conBordo ? [
     { etichetta: 'Montante orizzontale (sopra/sotto)', lunghezza: c.larghezza, quantitaPerTelaio: 2, taglio: '45° alle due estremità' },
     { etichetta: 'Montante verticale (dx/sx)', lunghezza: c.altezza, quantitaPerTelaio: 2, taglio: '45° alle due estremità' },
-  ];
+  ] : [];
 
   const barre: PezzoBarra[] = [];
   if (vert.n > 0) {
@@ -159,8 +168,11 @@ function calcolaLondra(c: ConfigGriglia): Progetto {
   if (lunghezzaVerticale > BARRA.stecca || lunghezzaOrizzontale > BARRA.stecca) {
     avvisi.push(`Una barra supera i ${BARRA.stecca / 1000} m della stecca commerciale: il pezzo non è ricavabile intero.`);
   }
-  if (c.larghezza > PROFILO_U.stecca || c.altezza > PROFILO_U.stecca) {
+  if (c.conBordo && (c.larghezza > PROFILO_U.stecca || c.altezza > PROFILO_U.stecca)) {
     avvisi.push(`Un lato del telaio supera i ${PROFILO_U.stecca / 1000} m della stecca di profilo a U.`);
+  }
+  if (!c.conBordo) {
+    avvisi.push('Senza bordo perimetrale: le barre restano a vista e la griglia è centrata sull\'ingombro. Se le barre esterne devono invece stare a filo del bordo, il passo non può essere rispettato esattamente — dimmelo e cambio la regola.');
   }
   if (vert.n > 0 && vert.margine < c.margineMinimo - 0.001) {
     avvisi.push('Il margine laterale è sotto il minimo impostato.');
@@ -169,7 +181,7 @@ function calcolaLondra(c: ConfigGriglia): Progetto {
     avvisi.push('Il margine verticale è sotto il minimo impostato.');
   }
 
-  const metriU = (2 * c.larghezza + 2 * c.altezza) / 1000;
+  const metriU = c.conBordo ? (2 * c.larghezza + 2 * c.altezza) / 1000 : 0;
   const metriBarra = (vert.n * lunghezzaVerticale + oriz.n * lunghezzaOrizzontale) / 1000;
 
   return {
@@ -180,7 +192,10 @@ function calcolaLondra(c: ConfigGriglia): Progetto {
     margineY: oriz.margine,
     assiVerticali: vert.assi,
     assiOrizzontali: oriz.assi,
-    estensioneBarra: { da: testa, a: 0 }, // 'a' viene calcolato per asse nella preview
+    latoTelaio,
+    testa,
+    // Senza telaio il pannello è spesso quanto due barre sovrapposte, non quanto la U.
+    spessorePannello: c.conBordo ? SPESSORE_PANNELLO : BARRA.spessore * 2,
     bordi,
     barre,
     nRivetti: vert.n * oriz.n,
@@ -217,7 +232,7 @@ export function calcolaImballaggio(p: Progetto, pesoBarraKgM: number | null) {
     ingombro: {
       larghezza: p.config.larghezza,
       altezza: p.config.altezza,
-      spessore: SPESSORE_PANNELLO * n,
+      spessore: p.spessorePannello * n,
     },
   };
 }

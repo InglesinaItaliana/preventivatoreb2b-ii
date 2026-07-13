@@ -23,8 +23,16 @@ export interface Stecca {
   avanzo: number;   // quello che resta della stecca, trucioli già sottratti
 }
 
+/** Stecche con la STESSA sequenza di taglio, accorpate: alla sega interessa lo schema, non l'elenco. */
+export interface GruppoStecche {
+  tagli: { etichetta: string; lunghezza: number }[];
+  avanzo: number;
+  ripetizioni: number;
+}
+
 export interface PianoTaglio {
   stecche: Stecca[];
+  gruppi: GruppoStecche[];
   nStecche: number;
   lunghezzaStecca: number;
   materialeUtile: number;   // somma dei pezzi
@@ -74,12 +82,24 @@ export function pianificaTaglio(
     s.avanzo = Math.max(0, lunghezzaStecca - consumato);
   }
 
+  // Accorpa le stecche con la stessa sequenza di tagli: su cento telai identici
+  // il piano è una manciata di schemi ripetuti, non cento righe da leggere.
+  const perFirma = new Map<string, GruppoStecche>();
+  for (const s of stecche) {
+    const firma = s.tagli.map((t) => `${t.etichetta}:${t.lunghezza}`).join('|');
+    const g = perFirma.get(firma);
+    if (g) g.ripetizioni++;
+    else perFirma.set(firma, { tagli: s.tagli, avanzo: s.avanzo, ripetizioni: 1 });
+  }
+  const gruppi = [...perFirma.values()].sort((a, b) => b.ripetizioni - a.ripetizioni);
+
   const materialeUtile = lista.reduce((t, x) => t + x.lunghezza, 0);
   const materialeAcquistato = stecche.length * lunghezzaStecca;
   const sfrido = materialeAcquistato - materialeUtile;
 
   return {
     stecche,
+    gruppi,
     nStecche: stecche.length,
     lunghezzaStecca,
     materialeUtile,

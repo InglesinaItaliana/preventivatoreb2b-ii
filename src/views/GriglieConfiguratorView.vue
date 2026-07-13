@@ -6,8 +6,9 @@ import { useCatalogStore } from '../Data/catalog';
 import GrigliaPreview from '../components/griglie/GrigliaPreview.vue';
 import { calcolaProgetto, calcolaImballaggio, type ConfigGriglia, type Stile } from '../logic/griglie/progetto';
 import { pianificaTaglio, type PezzoDaTagliare } from '../logic/griglie/nesting';
+import { appartiene, coloreFinitura, type FamigliaFinitura } from '../logic/griglie/finiture';
 import {
-  PROFILO_U, BARRA, CANALE_INTERNO, PROFONDITA_CANALE, SPESSORE_PANNELLO,
+  PROFILO_U, BARRA, CANALE_INTERNO, PROFONDITA_CANALE,
   DEFAULT_GIOCO, DEFAULT_KERF, DEFAULT_MARGINE_MINIMO,
 } from '../logic/griglie/materiali';
 
@@ -22,8 +23,9 @@ const altezzaCm = ref(180);
 const passoOrizzontaleCm = ref(10);
 const passoVerticaleCm = ref(10);
 const quantita = ref(1);
+const conBordo = ref(true);
 
-const tipoFinitura = ref<'VERNICIATO' | 'RIVESTITO'>('VERNICIATO');
+const tipoFinitura = ref<FamigliaFinitura>('VERNICIATO');
 const finitura = ref('');
 
 // Parametri d'officina: si tarano sul campo, quindi stanno in un pannello a parte.
@@ -52,6 +54,7 @@ const config = computed<ConfigGriglia>(() => ({
   quantita: quantita.value,
   gioco: gioco.value,
   margineMinimo: margineMinimo.value,
+  conBordo: conBordo.value,
 }));
 
 const progetto = computed(() => {
@@ -89,7 +92,10 @@ const imballaggio = computed(() =>
   progetto.value ? calcolaImballaggio(progetto.value, pesoBarraKgM.value) : null
 );
 
-// --- Finiture: le prendiamo dal catalogo POPS, non le reinventiamo -----------
+// --- Finiture: le prendiamo dal listino POPS, non le reinventiamo ------------
+// Nel listino il tipo NON si chiama "VERNICIATO": i gruppi veri sono
+// COLORE STANDARD / COLORE PERSONALIZZATO / RIVESTITA. La corrispondenza sta in
+// finiture.ts, così se domani il listino cambia nomenclatura si tocca un punto solo.
 const finitureDisponibili = computed(() => {
   const trovate = new Map<string, string>(); // finitura → gruppo
   const albero: any = catalog.listino || {};
@@ -97,14 +103,14 @@ const finitureDisponibili = computed(() => {
     for (const mod of Object.values(cat as any)) {
       for (const dim of Object.values(mod as any)) {
         for (const [fin, v] of Object.entries(dim as any)) {
-          const gruppo = String((v as any)?.group || '').toUpperCase();
+          const gruppo = String((v as any)?.group || '').trim().toUpperCase();
           if (gruppo) trovate.set(fin, gruppo);
         }
       }
     }
   }
   return [...trovate.entries()]
-    .filter(([, g]) => g.includes(tipoFinitura.value === 'VERNICIATO' ? 'VERNICIAT' : 'RIVESTIT'))
+    .filter(([, g]) => appartiene(g, tipoFinitura.value))
     .map(([f]) => f)
     .sort();
 });
@@ -175,6 +181,31 @@ const kg = (v: number) => `${nf2.format(v)} kg`;
             </p>
           </div>
 
+          <!-- Bordo perimetrale -->
+          <div>
+            <label class="block text-[10px] font-bold text-gray-500 uppercase mb-2">Bordo perimetrale</label>
+            <div class="grid grid-cols-2 gap-2">
+              <button
+                @click="conBordo = true"
+                class="py-2 rounded-lg text-[11px] font-bold border transition-all"
+                :class="conBordo
+                  ? 'bg-gray-900 border-gray-900 text-white shadow-md'
+                  : 'bg-white border-gray-200 text-gray-500 hover:border-gray-400'"
+              >CON TELAIO</button>
+              <button
+                @click="conBordo = false"
+                class="py-2 rounded-lg text-[11px] font-bold border transition-all"
+                :class="!conBordo
+                  ? 'bg-gray-900 border-gray-900 text-white shadow-md'
+                  : 'bg-white border-gray-200 text-gray-500 hover:border-gray-400'"
+              >GRIGLIA NUDA</button>
+            </div>
+            <p class="text-[10px] text-gray-400 mt-1.5 italic">
+              <template v-if="conBordo">Profilo a U su tutti e quattro i lati; le barre entrano nel canale.</template>
+              <template v-else>Nessun telaio: le barre valgono l'ingombro pieno e restano a vista.</template>
+            </p>
+          </div>
+
           <!-- Misure -->
           <div class="grid grid-cols-2 gap-3">
             <div>
@@ -188,7 +219,9 @@ const kg = (v: number) => `${nf2.format(v)} kg`;
                 class="w-full p-2 border border-gray-200 rounded-lg text-center text-sm font-bold focus:ring-2 focus:ring-amber-400 outline-none" />
             </div>
           </div>
-          <p class="text-[10px] text-gray-400 -mt-2 italic">Ingombro esterno, telaio compreso.</p>
+          <p class="text-[10px] text-gray-400 -mt-2 italic">
+            {{ conBordo ? 'Ingombro esterno, telaio compreso.' : 'Ingombro della griglia nuda.' }}
+          </p>
 
           <!-- Passi -->
           <div>
@@ -229,13 +262,23 @@ const kg = (v: number) => `${nf2.format(v)} kg`;
                   : 'bg-white border-gray-200 text-gray-500 hover:border-gray-400'"
               >{{ t }}</button>
             </div>
-            <select v-model="finitura" :disabled="!finitureDisponibili.length"
-              class="w-full p-2 border border-gray-200 rounded-lg bg-white text-sm disabled:opacity-50">
-              <option value="" disabled>
-                {{ catalog.loading ? 'Caricamento listino…' : (finitureDisponibili.length ? 'Seleziona finitura' : 'Nessuna finitura disponibile') }}
-              </option>
-              <option v-for="f in finitureDisponibili" :key="f" :value="f">{{ f }}</option>
-            </select>
+            <div class="flex items-center gap-2">
+              <span
+                class="h-9 w-9 shrink-0 rounded-lg border border-gray-300 shadow-inner"
+                :style="{ backgroundColor: coloreFinitura(finitura) }"
+                :title="finitura || 'Nessuna finitura'"
+              ></span>
+              <select v-model="finitura" :disabled="!finitureDisponibili.length"
+                class="flex-1 min-w-0 p-2 border border-gray-200 rounded-lg bg-white text-sm disabled:opacity-50">
+                <option value="" disabled>
+                  {{ catalog.loading ? 'Caricamento listino…' : (finitureDisponibili.length ? 'Seleziona finitura' : 'Nessuna finitura disponibile') }}
+                </option>
+                <option v-for="f in finitureDisponibili" :key="f" :value="f">{{ f }}</option>
+              </select>
+            </div>
+            <p class="text-[10px] text-gray-400 mt-1 italic">
+              {{ tipoFinitura === 'VERNICIATO' ? 'Colore standard e personalizzato del listino.' : 'Effetto legno del listino.' }}
+            </p>
           </div>
 
           <!-- Quantità -->
@@ -313,14 +356,14 @@ const kg = (v: number) => `${nf2.format(v)} kg`;
             </span>
           </div>
           <div class="h-[26rem] flex items-center justify-center">
-            <GrigliaPreview v-if="progetto" :progetto="progetto" :evidenzia="evidenzia" />
+            <GrigliaPreview v-if="progetto" :progetto="progetto" :finitura="finitura" :evidenzia="evidenzia" />
           </div>
         </div>
 
         <div v-if="progetto" class="grid grid-cols-1 xl:grid-cols-2 gap-6">
 
           <!-- Telaio -->
-          <div class="bg-white/60 backdrop-blur-sm p-5 rounded-xl shadow-lg border border-white/80">
+          <div v-if="progetto.bordi.length" class="bg-white/60 backdrop-blur-sm p-5 rounded-xl shadow-lg border border-white/80">
             <h2 class="font-bold text-sm uppercase tracking-wide text-gray-800 border-b pb-2 mb-3">
               Telaio · profilo a U
             </h2>
@@ -381,9 +424,12 @@ const kg = (v: number) => `${nf2.format(v)} kg`;
                 </tr>
               </tbody>
             </table>
-            <p class="text-[11px] text-gray-400 mt-3 italic">
+            <p v-if="conBordo" class="text-[11px] text-gray-400 mt-3 italic">
               La barra entra nel canale fino a {{ mm(PROFONDITA_CANALE) }}: la lunghezza tiene già conto
               del gioco d'infilaggio ({{ mm(gioco) }} per lato).
+            </p>
+            <p v-else class="text-[11px] text-gray-400 mt-3 italic">
+              Griglia nuda: nessun canale in cui infilare le teste, la barra vale l'ingombro pieno.
             </p>
           </div>
         </div>
@@ -448,12 +494,13 @@ const kg = (v: number) => `${nf2.format(v)} kg`;
           </h2>
 
           <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div class="border border-gray-200 rounded-xl p-4 bg-white">
+            <div class="border border-gray-200 rounded-xl p-4 bg-white" :class="{ 'opacity-50': !conBordo }">
               <p class="text-[10px] font-bold uppercase text-gray-400 mb-1">Profilo a U · stecche da {{ m(PROFILO_U.stecca) }}</p>
               <p class="text-3xl font-bold font-heading text-gray-900 tabular-nums">{{ pianoU.nStecche }}</p>
-              <p class="text-[11px] text-gray-500 mt-1 tabular-nums">
+              <p v-if="conBordo" class="text-[11px] text-gray-500 mt-1 tabular-nums">
                 sfrido {{ m(pianoU.sfrido) }} ({{ nf.format(pianoU.sfridoPerc) }}%)
               </p>
+              <p v-else class="text-[11px] text-gray-500 mt-1">griglia nuda: nessun telaio</p>
             </div>
             <div class="border border-gray-200 rounded-xl p-4 bg-white">
               <p class="text-[10px] font-bold uppercase text-gray-400 mb-1">Barra 18×8 · stecche da {{ m(BARRA.stecca) }}</p>
@@ -469,27 +516,39 @@ const kg = (v: number) => `${nf2.format(v)} kg`;
             </div>
           </div>
 
-          <!-- Piano di taglio -->
+          <!-- Piano di taglio: le stecche con lo STESSO schema sono accorpate.
+               Alla sega serve lo schema, non l'elenco di cento righe identiche. -->
           <div class="mt-5 space-y-4">
             <div v-for="piano in [{ nome: 'Profilo a U', p: pianoU }, { nome: 'Barra 18×8', p: pianoBarre }]" :key="piano.nome">
-              <p class="text-[10px] font-bold uppercase text-gray-500 mb-2">Piano di taglio · {{ piano.nome }}</p>
-              <div class="space-y-1.5">
-                <div
-                  v-for="(s, i) in piano.p!.stecche" :key="i"
-                  class="flex items-center gap-2 text-[11px]"
-                >
-                  <span class="w-16 shrink-0 text-gray-400 font-bold tabular-nums">#{{ i + 1 }}</span>
-                  <div class="flex-1 flex gap-0.5 h-6 bg-gray-100 rounded overflow-hidden">
-                    <div
-                      v-for="(t, j) in s.tagli" :key="j"
-                      class="bg-amber-400 flex items-center justify-center text-amber-950 font-bold overflow-hidden whitespace-nowrap"
-                      :style="{ width: `${(t.lunghezza / piano.p!.lunghezzaStecca) * 100}%` }"
-                      :title="`${t.etichetta} — ${nf.format(t.lunghezza)} mm`"
-                    >{{ nf.format(t.lunghezza) }}</div>
+              <template v-if="piano.p!.gruppi.length">
+                <p class="text-[10px] font-bold uppercase text-gray-500 mb-2">
+                  Piano di taglio · {{ piano.nome }}
+                  <span class="text-gray-400 font-normal normal-case">
+                    — {{ piano.p!.gruppi.length }} schema{{ piano.p!.gruppi.length > 1 ? 'i diversi' : '' }}
+                    su {{ piano.p!.nStecche }} stecche
+                  </span>
+                </p>
+                <div class="space-y-1.5">
+                  <div
+                    v-for="(g, i) in piano.p!.gruppi" :key="i"
+                    class="flex items-center gap-2 text-[11px]"
+                  >
+                    <span class="w-12 shrink-0 font-bold tabular-nums px-1.5 py-0.5 rounded text-center"
+                      :class="g.ripetizioni > 1 ? 'bg-gray-900 text-white' : 'text-gray-400'">
+                      ×{{ g.ripetizioni }}
+                    </span>
+                    <div class="flex-1 flex gap-0.5 h-6 bg-gray-100 rounded overflow-hidden">
+                      <div
+                        v-for="(t, j) in g.tagli" :key="j"
+                        class="bg-amber-400 flex items-center justify-center text-amber-950 font-bold overflow-hidden whitespace-nowrap"
+                        :style="{ width: `${(t.lunghezza / piano.p!.lunghezzaStecca) * 100}%` }"
+                        :title="`${t.etichetta} — ${nf.format(t.lunghezza)} mm`"
+                      >{{ nf.format(t.lunghezza) }}</div>
+                    </div>
+                    <span class="w-24 shrink-0 text-right text-gray-400 tabular-nums">avanzo {{ nf.format(g.avanzo) }}</span>
                   </div>
-                  <span class="w-24 shrink-0 text-right text-gray-400 tabular-nums">avanzo {{ nf.format(s.avanzo) }}</span>
                 </div>
-              </div>
+              </template>
             </div>
             <p class="text-[11px] text-gray-400 italic">
               Lo sfrido tiene conto della lama ({{ mm(kerf) }} a taglio): su una stecca da cui ricavi dieci pezzi
@@ -506,7 +565,10 @@ const kg = (v: number) => `${nf2.format(v)} kg`;
             <dl class="text-sm space-y-1.5">
               <div class="flex justify-between">
                 <dt class="text-gray-500">Telaio (profilo a U)</dt>
-                <dd class="font-medium tabular-nums">{{ kg(imballaggio.pesoU) }}</dd>
+                <dd class="font-medium tabular-nums">
+                  <template v-if="conBordo">{{ kg(imballaggio.pesoU) }}</template>
+                  <span v-else class="text-gray-300 text-xs">griglia nuda</span>
+                </dd>
               </div>
               <div class="flex justify-between">
                 <dt class="text-gray-500">Barre della griglia</dt>
@@ -539,7 +601,8 @@ const kg = (v: number) => `${nf2.format(v)} kg`;
                 {{ nf.format(imballaggio.ingombro.spessore / 10) }} cm
               </p>
               <p class="text-[11px] text-gray-500 mt-2">
-                {{ quantita }} pannello{{ quantita > 1 ? 'i impilati' : '' }} da {{ mm(SPESSORE_PANNELLO) }} di spessore.
+                {{ quantita }} pannello{{ quantita > 1 ? 'i impilati' : '' }} da {{ mm(progetto!.spessorePannello) }} di spessore
+                <template v-if="!conBordo"> (due barre sovrapposte, senza telaio)</template>.
               </p>
               <p v-if="imballaggio.pesoBarre === null" class="text-[11px] text-amber-600 mt-2 font-bold">
                 Inserisci il peso al metro della barra nei parametri d'officina per avere il peso.
