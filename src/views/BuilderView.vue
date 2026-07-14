@@ -848,13 +848,16 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
       else if (azione === 'FORCE_EDIT') nuovoStato = 'PENDING_VAL';
     }
 
+    // Le azioni ORDINE pre-salvano in ORDER_REQ: a WAITING_SIGN ci porta la
+    // callable creaOrdineBilling SOLO dopo aver creato e verificato l'ordine
+    // su CiC. Su errore il doc resta in ORDER_REQ (bottone ACCETTA ORDINE = retry).
+    const azioneOrdine = azione === 'ADMIN_FIRMA' || azione === 'CREA_ORDINE_ADMIN';
+
     if (isAdmin.value && azione) {
       if (azione === 'ADMIN_VALIDA') nuovoStato = 'QUOTE_READY';
       if (azione === 'ADMIN_RIFIUTA') nuovoStato = 'REJECTED';
-      if (azione === 'ADMIN_FIRMA') nuovoStato = 'WAITING_SIGN';
-      // NUOVI STATI PER CREAZIONE DIRETTA
       if (azione === 'CREA_PREVENTIVO_ADMIN') nuovoStato = 'QUOTE_READY';
-      if (azione === 'CREA_ORDINE_ADMIN') nuovoStato = 'WAITING_SIGN';
+      if (azioneOrdine) nuovoStato = 'ORDER_REQ';
     }
 
     // Calcolo Sommario
@@ -890,6 +893,13 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
     if (azione === 'ORDINA' && currentDetraction.value !== userDefaultDetraction.value) {
         docData.order_detraction_value = currentDetraction.value;
     }
+    if (azioneOrdine) {
+      // Sentinella per il watchdog: se il flusso muore tra questo salvataggio e
+      // la callable (browser chiuso, rete), il doc resta marcato e non diventa
+      // un orfano invisibile. L'emissione riuscita la cancella (billingError:
+      // delete lato server); su fallimento viene sovrascritta dall'errore vero.
+      docData.billingError = 'Emissione ordine non completata — ripetere ACCETTA ORDINE';
+    }
     // LOGICA ASSEGNAZIONE CLIENTE (UID)
     if (!currentDocId.value) {
         docData.dataCreazione = serverTimestamp();
@@ -915,12 +925,30 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
     }
 
     statoCorrente.value = nuovoStato;
+
+    // Emissione ordine SINCRONA: il documento fiscale nasce (e viene verificato)
+    // su CiC PRIMA che lo stato avanzi a WAITING_SIGN. Se fallisce si resta qui:
+    // il doc è in ORDER_REQ con billingError e ACCETTA ORDINE ritenta.
+    if (azioneOrdine) {
+      const creaOrdine = httpsCallable(functions, 'creaOrdineBilling');
+      await creaOrdine({ docId: currentDocId.value });
+      statoCorrente.value = 'WAITING_SIGN';
+    }
+
     vaiDashboard();
 
     if (isAdmin.value) router.push('/admin');
     else caricaListaStorico();
 
-  } catch (e) { showCustomToast("Errore durante il salvataggio."); console.error(e); }
+  } catch (e: any) {
+    console.error(e);
+    // Le HttpsError della callable portano il motivo vero (es. totale CiC ≠ atteso).
+    if (typeof e?.code === 'string' && e.code.startsWith('functions/')) {
+      showCustomToast(`Emissione ordine fallita: ${e.message}`);
+    } else {
+      showCustomToast("Errore durante il salvataggio.");
+    }
+  }
   finally { isSaving.value = false; }
 };
 

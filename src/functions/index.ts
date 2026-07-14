@@ -1266,85 +1266,7 @@ async function generaOrdineCiC(
     clienteUID: string,
 ): Promise<void> {
     try {
-        const userDoc = await admin.firestore().collection('users').doc(clienteUID).get();
-        const userData = userDoc.data();
-        const pivaCliente = userData?.piva;
-        if (!pivaCliente) {
-            console.error('[CIC] P.IVA mancante nell\'anagrafica utente.');
-            return;
-        }
-
-        const provider = await createCicProvider();
-
-        const customer = await provider.findOrCreateCustomer({
-            piva: pivaCliente,
-            name: userData?.ragioneSociale || newData.cliente || 'Cliente',
-            email: userData?.email,
-            taxCode: userData?.codiceFiscale,
-            address: userData?.indirizzo,
-            zip: userData?.cap,
-            city: userData?.citta,
-            province: userData?.provincia,
-        });
-
-        const lines = (newData.elementi || []).map((item: any) => {
-            let desc = item.descrizioneCompleta || 'Articolo Vetrata';
-            if (item.categoria !== 'EXTRA' && (item.base_mm > 0 || item.altezza_mm > 0)) {
-                desc += ` - Dim: ${item.base_mm}x${item.altezza_mm} mm${item.infoCanalino ? ` - ${item.infoCanalino}` : ''}`;
-            }
-            return {
-                code: item.codice ? String(item.codice).toUpperCase().trim() : '',
-                description: desc,
-                qty: item.quantita || 1,
-                unitNetPrice: item.prezzo_unitario || 0,
-                category: item.categoria,
-                // Il TRASPORTO non prende lo sconto d'ordine: sconto di riga a 0, che
-                // sovrascrive quello di documento. Stessa regola su DDT e fattura, e
-                // già riflessa nella cifra che il cliente vede in POPS (netCanonico).
-                ...(isRigaConsegna(item) ? { discountPercentage: 0 } : {}),
-            };
-        });
-
-        // Aggancia il productNumber CiC mappato a ogni riga (per codice POPS).
-        const cicProdMap = await resolveCicProductIds(lines.map((l: any) => l.code));
-        for (const l of lines as any[]) { if (l.code) l.cicProductId = cicProdMap.get(l.code); }
-
-        const orderDate = newData.dataConsegnaPrevista || new Date().toISOString().split('T')[0];
-        const result = await provider.createOrder({
-            customer,
-            date: orderDate,
-            lines,
-            discountPercentage: Number(newData.scontoPercentuale) || 0,
-            visibleSubject: newData.commessa || `Rif: ${newData.codice}`,
-        });
-
-        // id salvato SUBITO → blocca i ri-trigger (anti-duplicato).
-        // Salvo anche numero e data CiC veri → il PDF ordine mostra quelli (non il codice/data preventivo).
-        await change.after.ref.update({
-            cic_order_id: result.id,
-            cic_order_number: result.number ?? null,
-            cic_order_date: orderDate,
-            cic_order_url: result.url || null,
-            billingBackend: 'cic',
-            billingError: admin.firestore.FieldValue.delete(),
-        });
-
-        // validazione totali NON bloccante: la cifra cliente deve combaciare al centesimo.
-        // Confronto contro netCanonico (regola CiC, salvato sempre) → metodologia coerente,
-        // niente falsi errori per doc salvati prima del cutover. Fallback per doc vecchi.
-        const expectedNet = (typeof newData.netCanonico === 'number')
-            ? newData.netCanonico
-            : (typeof newData.totaleScontato === 'number')
-            ? newData.totaleScontato
-            : (newData.totaleImponibile || 0);
-        if (Math.abs((result.netAmount || 0) - expectedNet) > 0.01) {
-            await change.after.ref.update({
-                billingError: `Totale CiC ${result.netAmount} ≠ atteso POPS ${expectedNet}`,
-            });
-            console.warn(`[CIC] Discrepanza totale: CiC ${result.netAmount} vs atteso ${expectedNet}`);
-        }
-
-        console.log(`✅ [CIC] ORDINE CREATO! ID: ${result.id}`);
+        await emettiOrdineCiC(change.after.ref, newData, clienteUID, false);
     } catch (error: any) {
         // come il path FiC: logga e basta, NESSUNA scrittura sul doc → niente
         // ri-trigger e niente ordini duplicati su CiC.
@@ -1354,6 +1276,252 @@ async function generaOrdineCiC(
         }
     }
 }
+
+// Core dell'emissione ordine CiC, condiviso dal trigger (strictVerify=false,
+// comportamento storico) e dalla callable creaOrdineBilling (strictVerify=true:
+// mismatch totale → cancella l'ordine, ripulisce i campi cic_* e lancia, così
+// lo stato NON avanza). Riconciliazione anti-doppione: l'ordine porta il codice
+// POPS in references.other → prima di creare si cerca un ordine già esistente
+// con la stessa chiave (un 500/timeout su un tentativo precedente NON prova che
+// l'ordine non sia stato creato): se il totale combacia lo si adotta, se non
+// combacia (preventivo modificato tra i tentativi) lo si cancella e si ricrea.
+async function emettiOrdineCiC(
+    docRef: admin.firestore.DocumentReference,
+    data: admin.firestore.DocumentData,
+    clienteUID: string,
+    strictVerify: boolean,
+): Promise<{ orderId: string | number; orderNumber: string | number | null }> {
+    const userDoc = await admin.firestore().collection('users').doc(clienteUID).get();
+    const userData = userDoc.data();
+    const pivaCliente = userData?.piva;
+    if (!pivaCliente) {
+        throw new Error('P.IVA mancante nell\'anagrafica utente.');
+    }
+
+    const provider = await createCicProvider();
+
+    const customer = await provider.findOrCreateCustomer({
+        piva: pivaCliente,
+        name: userData?.ragioneSociale || data.cliente || 'Cliente',
+        email: userData?.email,
+        taxCode: userData?.codiceFiscale,
+        address: userData?.indirizzo,
+        zip: userData?.cap,
+        city: userData?.citta,
+        province: userData?.provincia,
+    });
+
+    const lines = (data.elementi || []).map((item: any) => {
+        let desc = item.descrizioneCompleta || 'Articolo Vetrata';
+        if (item.categoria !== 'EXTRA' && (item.base_mm > 0 || item.altezza_mm > 0)) {
+            desc += ` - Dim: ${item.base_mm}x${item.altezza_mm} mm${item.infoCanalino ? ` - ${item.infoCanalino}` : ''}`;
+        }
+        return {
+            code: item.codice ? String(item.codice).toUpperCase().trim() : '',
+            description: desc,
+            qty: item.quantita || 1,
+            unitNetPrice: item.prezzo_unitario || 0,
+            category: item.categoria,
+            // Il TRASPORTO non prende lo sconto d'ordine: sconto di riga a 0, che
+            // sovrascrive quello di documento. Stessa regola su DDT e fattura, e
+            // già riflessa nella cifra che il cliente vede in POPS (netCanonico).
+            ...(isRigaConsegna(item) ? { discountPercentage: 0 } : {}),
+        };
+    });
+
+    // Aggancia il productNumber CiC mappato a ogni riga (per codice POPS).
+    const cicProdMap = await resolveCicProductIds(lines.map((l: any) => l.code));
+    for (const l of lines as any[]) { if (l.code) l.cicProductId = cicProdMap.get(l.code); }
+
+    // Cifra attesa: serve anche alla riconciliazione, quindi calcolata PRIMA di creare.
+    // Confronto contro netCanonico (regola CiC, salvato sempre) → metodologia coerente,
+    // niente falsi errori per doc salvati prima del cutover. Fallback per doc vecchi.
+    const expectedNet = (typeof data.netCanonico === 'number')
+        ? data.netCanonico
+        : (typeof data.totaleScontato === 'number')
+        ? data.totaleScontato
+        : (data.totaleImponibile || 0);
+
+    // Riconciliazione: c'è già un ordine su Reviso con la nostra chiave?
+    const reference = data.codice ? String(data.codice) : '';
+    let result = reference ? await provider.findOrderByReference(reference) : null;
+    if (result) {
+        if (Math.abs((result.netAmount || 0) - expectedNet) <= 0.01) {
+            console.log(`♻️ [CIC] Ordine ${result.id} già su Reviso per ${reference}: adottato (retry senza doppione).`);
+        } else {
+            console.warn(`♻️ [CIC] Ordine ${result.id} per ${reference} stantio (totale ${result.netAmount} ≠ ${expectedNet}): cancellato, si ricrea.`);
+            await provider.deleteDocument({ id: result.id, type: 'order' });
+            result = null;
+        }
+    }
+
+    const orderDate = data.dataConsegnaPrevista || new Date().toISOString().split('T')[0];
+    if (!result) {
+        result = await provider.createOrder({
+            customer,
+            date: orderDate,
+            lines,
+            discountPercentage: Number(data.scontoPercentuale) || 0,
+            visibleSubject: data.commessa || `Rif: ${data.codice}`,
+            ...(reference ? { reference } : {}),
+        });
+    }
+
+    // id salvato SUBITO → blocca i ri-trigger (anti-duplicato).
+    // Salvo anche numero e data CiC veri → il PDF ordine mostra quelli (non il codice/data preventivo).
+    await docRef.update({
+        cic_order_id: result.id,
+        cic_order_number: result.number ?? null,
+        cic_order_date: orderDate,
+        cic_order_url: result.url || null,
+        billingBackend: 'cic',
+        billingError: admin.firestore.FieldValue.delete(),
+    });
+
+    // validazione totali: la cifra cliente deve combaciare al centesimo.
+    if (Math.abs((result.netAmount || 0) - expectedNet) > 0.01) {
+        const msg = `Totale CiC ${result.netAmount} ≠ atteso POPS ${expectedNet}`;
+        if (strictVerify) {
+            // Ordine sbagliato: non deve restare né su Reviso né sul doc. Reviso
+            // RIUSA gli id dei documenti cancellati → mai lasciare id penzolanti.
+            await provider.deleteDocument({ id: result.id, type: 'order' });
+            await docRef.update({
+                cic_order_id: admin.firestore.FieldValue.delete(),
+                cic_order_number: admin.firestore.FieldValue.delete(),
+                cic_order_date: admin.firestore.FieldValue.delete(),
+                cic_order_url: admin.firestore.FieldValue.delete(),
+                billingBackend: admin.firestore.FieldValue.delete(),
+            });
+            throw new Error(msg);
+        }
+        await docRef.update({ billingError: msg });
+        console.warn(`[CIC] Discrepanza totale: CiC ${result.netAmount} vs atteso ${expectedNet}`);
+    }
+
+    console.log(`✅ [CIC] ORDINE CREATO! ID: ${result.id}`);
+    return { orderId: result.id, orderNumber: result.number ?? null };
+}
+
+// --- EMISSIONE ORDINE SINCRONA (fix ordine-orfano-silenzioso / incidente CALIFORNIA) ---
+// Chiamata dal Builder al posto del salto diretto a WAITING_SIGN: crea PRIMA il
+// documento fiscale su CiC (verifica bloccante del totale) e solo a ordine
+// confermato avanza lo stato. Su errore il doc resta in ORDER_REQ con billingError
+// visibile e il bottone ACCETTA ORDINE è il retry (la riconciliazione in
+// emettiOrdineCiC garantisce che il retry non crei doppioni). Scrivere l'errore
+// qui è sicuro: il doc non è in WAITING_SIGN, quindi il trigger non scatta.
+// Il trigger generaOrdineFIC resta invariato: è no-op su queste scritture (quando
+// lo stato arriva a WAITING_SIGN l'id c'è già) e resta il percorso del legacy FiC.
+export const creaOrdineBilling = functions
+    .region('europe-west1')
+    .https.onCall(async (data, context) => {
+        const callerEmail = (context.auth?.token?.email || '').toLowerCase().trim();
+        const callerRole = context.auth?.token?.role;
+        const isAdminCaller = callerRole === 'ADMIN' || callerEmail === 'info@inglesinaitaliana.it';
+        if (!context.auth || !isAdminCaller) {
+            throw new functions.https.HttpsError('permission-denied', 'Riservato agli amministratori.');
+        }
+
+        const docId: string | undefined = data?.docId;
+        if (!docId) {
+            throw new functions.https.HttpsError('invalid-argument', 'docId obbligatorio.');
+        }
+        const docRef = admin.firestore().collection('preventivi').doc(docId);
+        const snap = await docRef.get();
+        if (!snap.exists) {
+            throw new functions.https.HttpsError('not-found', 'Preventivo non trovato.');
+        }
+        const d = snap.data() as admin.firestore.DocumentData;
+
+        // Idempotenza SOLO per il legacy FiC: ordine già emesso → resta solo da
+        // avanzare lo stato. Un cic_order_id già presente (crash di un tentativo
+        // precedente tra scrittura id e stato) NON viene promosso alla cieca: si
+        // ripassa da emettiOrdineCiC, la cui riconciliazione ritrova l'ordine per
+        // reference, ne RI-VERIFICA il totale e riscrive gli id.
+        if (d.fic_order_id) {
+            await docRef.update({ stato: 'WAITING_SIGN', billingError: admin.firestore.FieldValue.delete() });
+            return { ok: true, backend: 'fic', giaEmesso: true };
+        }
+
+        const backend = await resolveBillingBackend(d);
+        if (backend !== 'cic' && !d.cic_order_id) {
+            // Legacy FiC (dietro kill-switch): comportamento storico — lo stato
+            // avanza e il trigger crea l'ordine in asincrono. (Si cancella anche
+            // l'eventuale sentinella scritta dal Builder al pre-salvataggio.)
+            await docRef.update({ stato: 'WAITING_SIGN', billingError: admin.firestore.FieldValue.delete() });
+            return { ok: true, backend: 'fic' };
+        }
+
+        const clienteUID = d.clienteUID;
+        if (!clienteUID) {
+            throw new functions.https.HttpsError('failed-precondition', 'clienteUID mancante sul preventivo.');
+        }
+
+        try {
+            const r = await emettiOrdineCiC(docRef, d, clienteUID, true);
+            await docRef.update({ stato: 'WAITING_SIGN' });
+            return { ok: true, backend: 'cic', orderId: r.orderId, orderNumber: r.orderNumber };
+        } catch (error: any) {
+            const msg = 'Errore CiC: ' + (error?.message || 'sconosciuto');
+            console.error('❌ [CIC] creaOrdineBilling:', msg);
+            if (error?.response) {
+                console.error('Dettaglio errore API CiC:', JSON.stringify(error.response.data, null, 2));
+            }
+            try { await docRef.update({ billingError: msg }); } catch { /* best effort */ }
+            throw new functions.https.HttpsError('failed-precondition', msg);
+        }
+    });
+
+// --- WATCHDOG ORDINI ORFANI (rete di sicurezza / incidente CALIFORNIA) ---
+// Ogni notte cerca i preventivi avanzati senza documento fiscale (né FiC né CiC)
+// e le emissioni fallite parcheggiate in ORDER_REQ con billingError, e manda una
+// email a info@. NESSUNA scrittura sui doc: su un doc in WAITING_SIGN qualunque
+// write ri-farebbe scattare il trigger (retry cieco → possibili doppioni).
+export const watchdogOrdiniOrfani = functions
+    .region('europe-west1')
+    .pubsub.schedule('every day 05:30')
+    .timeZone('Europe/Rome')
+    .onRun(async () => {
+        const db = admin.firestore();
+        const snap = await db.collection('preventivi')
+            .where('stato', 'in', ['ORDER_REQ', 'WAITING_SIGN', 'SIGNED', 'IN_PRODUZIONE', 'READY'])
+            .get();
+
+        const orfani = snap.docs
+            .map((s) => ({ id: s.id, ...(s.data() as any) }))
+            // ORDER_REQ anomalo = emissione fallita/interrotta: billingError
+            // (errore vero o sentinella del Builder) oppure un order id scritto
+            // senza che lo stato sia avanzato (crash tra i due update).
+            .filter((p) => p.stato === 'ORDER_REQ'
+                ? !!(p.billingError || p.cic_order_id || p.fic_order_id)
+                : (!p.fic_order_id && !p.cic_order_id));
+
+        if (orfani.length === 0) {
+            console.log('🐶 [WATCHDOG] Nessun ordine senza documento fiscale.');
+            return null;
+        }
+
+        const righe = orfani.map((p) =>
+            `• ${p.codice || p.id} — ${p.commessa || 'senza commessa'} — ${p.cliente || '?'} — stato ${p.stato}` +
+            ` — € ${p.totaleScontato ?? p.totaleImponibile ?? '?'}` +
+            (p.billingError ? `\n    ↳ ${p.billingError}` : ''));
+        console.warn(`🐶 [WATCHDOG] ${orfani.length} ordini senza documento fiscale:\n${righe.join('\n')}`);
+
+        const mailTransport = nodemailer.createTransport({
+            service: 'gmail',
+            auth: { user: process.env.GMAIL_EMAIL, pass: process.env.GMAIL_PASSWORD },
+        });
+        await mailTransport.sendMail({
+            from: '"Inglesina Italiana B2B" <info@inglesinaitaliana.it>',
+            to: 'info@inglesinaitaliana.it',
+            subject: `⚠️ POPS: ${orfani.length} ordini senza documento fiscale`,
+            text: 'Il controllo notturno ha trovato ordini avanzati senza documento fiscale '
+                + 'o emissioni fallite da riprovare.\n'
+                + 'Da POPS: aprire il preventivo e ri-emettere con ACCETTA ORDINE, oppure verificare su Reviso.\n\n'
+                + righe.join('\n') + '\n',
+        });
+        console.log(`🐶 [WATCHDOG] Email inviata (${orfani.length} ordini).`);
+        return null;
+    });
 
 // --- DDT CUMULATIVO SU CONTABILITÀ IN CLOUD (CiC) ---
 // Gemello CiC di creaDdtCumulativo. Reviso non ha il "join" ordini→DDT: POPS
