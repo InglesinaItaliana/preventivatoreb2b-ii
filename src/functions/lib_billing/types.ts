@@ -64,6 +64,14 @@ export interface DocumentInput {
   lines: LineInput[];
   discountPercentage: number;   // sconto globale POPS (%)
   visibleSubject?: string;      // commessa / riferimento
+  /**
+   * Chiave di riconciliazione POPS→Reviso (= codice preventivo), scritta in
+   * `references.other` e filtrabile con `$eq` (spike 2026-07-14). Serve a
+   * ritrovare un ordine già creato quando un tentativo precedente è morto dopo
+   * il POST (un 500/timeout NON prova che l'ordine non esista). Mai usare l'id
+   * come chiave: Reviso riusa gli id dei documenti cancellati.
+   */
+  reference?: string;
 }
 
 /** Dati di spedizione per il DDT. */

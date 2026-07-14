@@ -105,6 +105,20 @@ class CicProvider {
     async createQuotation(doc) {
         return this.createSalesDoc('/quotations', doc);
     }
+    /**
+     * Cerca un ordine per chiave di riconciliazione (references.other = codice
+     * POPS). Ritorna il primo match o null: è il check anti-doppione prima di
+     * ogni retry di creazione ordine.
+     */
+    async findOrderByReference(reference) {
+        const clean = (reference || '').trim();
+        if (!clean)
+            return null;
+        const filter = encodeURIComponent(`references.other$eq:${clean}`);
+        const found = await this.client.get(`/orders?filter=${filter}`);
+        const list = ((found === null || found === void 0 ? void 0 : found.collection) || []);
+        return list.length > 0 ? this.toSalesResult(list[0]) : null;
+    }
     // In CiC il prodotto si referenzia col productNumber CiC (auto-assegnato), NON
     // col codice POPS (che è il barCode). Usiamo il cicProductId mappato; se manca,
     // fallback al prodotto generico (cfg.genericProductNumber = productNumber CiC del
@@ -121,7 +135,7 @@ class CicProvider {
         // rounding.ts (provato nello spike → combaciano). La validazione "cifra ==
         // quella vista dal cliente" la fa il chiamante (generaOrdineCiC) contro
         // totaleScontato, così non lasciamo ordini orfani in caso di scarto.
-        const payload = Object.assign(Object.assign({ date: doc.date, currency: 'EUR', paymentTerms: { paymentTermsNumber: this.cfg.defaultPaymentTermsNumber }, customer: { customerNumber: Number(doc.customer.id) }, recipient: { name: doc.customer.name, vatZone: { vatZoneNumber: this.cfg.domesticVatZone } }, layout: { layoutNumber: this.cfg.layoutNumber } }, (doc.visibleSubject ? { notes: { heading: doc.visibleSubject } } : {})), { 
+        const payload = Object.assign(Object.assign(Object.assign({ date: doc.date, currency: 'EUR', paymentTerms: { paymentTermsNumber: this.cfg.defaultPaymentTermsNumber }, customer: { customerNumber: Number(doc.customer.id) }, recipient: { name: doc.customer.name, vatZone: { vatZoneNumber: this.cfg.domesticVatZone } }, layout: { layoutNumber: this.cfg.layoutNumber } }, (doc.visibleSubject ? { notes: { heading: doc.visibleSubject } } : {})), (doc.reference ? { references: { other: doc.reference } } : {})), { 
             // Lo sconto di riga sovrascrive quello di documento: il TRASPORTO non prende mai
             // lo sconto d'ordine (le righe di consegna arrivano con discountPercentage: 0),
             // così ordine, DDT e fattura addebitano la stessa cifra per il trasporto.
