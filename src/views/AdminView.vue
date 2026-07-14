@@ -110,27 +110,46 @@ const avviaCreazioneDdt = () => {
     showDdtModal.value = true;
 };
 
-const handleCancelOrder = async (p: any) => {
-  if (!confirm(`Sei sicuro di voler ANNULLARE l'ordine di ${p.cliente}? Il documento su Fatture in Cloud verrà eliminato.`)) {
-    return;
-  }
+// --- MODALE ANNULLA ORDINE (al posto del confirm() nativo del browser) ---
+const orderToCancel = ref<any | null>(null);
+const isCancelling = ref(false);
+
+// Il documento fiscale da eliminare sta sul backend dell'ordine (FiC o CiC);
+// se l'ordine non è ancora stato emesso non c'è nulla da eliminare.
+const cancelDocLabel = computed(() => {
+  const p = orderToCancel.value;
+  if (!p || (!p.cic_order_id && !p.fic_order_id)) return '';
+  return resolveBackend(p) === 'cic' ? 'Contabilità in Cloud' : 'Fatture in Cloud';
+});
+
+const handleCancelOrder = (p: any) => {
+  orderToCancel.value = p;
+};
+
+const confirmCancelOrder = async () => {
+  const p = orderToCancel.value;
+  if (!p || isCancelling.value) return;
+  isCancelling.value = true;
 
   try {
     showCustomToast("⏳ Annullamento in corso...");
     const cancelFn = httpsCallable(functions, 'cancelOrder');
     await cancelFn({ orderId: p.id });
-    
+
     // Aggiornamento ottimistico locale
     const index = listaPreventivi.value.findIndex(x => x.id === p.id);
     if (index !== -1) {
       listaPreventivi.value[index].stato = 'REJECTED';
     }
-    
+
     showCustomToast("✅ Ordine Annullato con successo.");
     fetchServerCounts(); // Aggiorna i contatori
+    orderToCancel.value = null;
   } catch (e: any) {
     console.error(e);
     showCustomToast(`❌ Errore: ${e.message}`);
+  } finally {
+    isCancelling.value = false;
   }
 };
 
@@ -1202,7 +1221,7 @@ onUnmounted(() => {
     @close="showDdtModal = false"
     @confirm="handleCreaDdt"
   />
-  <OrderModals 
+  <OrderModals
       :show="showModals"
       :mode="modalMode"
       :order="selectedOrder"
@@ -1210,6 +1229,34 @@ onUnmounted(() => {
       @close="showModals = false"
       @confirmProduction="onConfirmProduction"
     />
+
+  <!-- MODALE ANNULLA ORDINE -->
+  <div v-if="orderToCancel" class="fixed inset-0 z-[999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+    <div class="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 animate-in fade-in zoom-in duration-200">
+      <div class="flex items-center gap-3 mb-4 text-red-600">
+        <XCircleIcon class="w-8 h-8" />
+        <h2 class="font-bold text-lg text-gray-900">Annulla ordine</h2>
+      </div>
+
+      <div class="bg-red-50 p-4 rounded-lg text-sm text-red-800 mb-4 border border-red-100">
+        <p>Stai per annullare l'ordine di <strong>{{ orderToCancel.cliente }}</strong><span v-if="orderToCancel.codice"> ({{ orderToCancel.codice }})</span>.</p>
+        <p class="mt-1" v-if="cancelDocLabel">Il documento su <strong>{{ cancelDocLabel }}</strong> verrà eliminato.</p>
+        <p class="mt-1" v-else>Nessun documento fiscale collegato.</p>
+      </div>
+
+      <div class="flex justify-end gap-3 mt-6 border-t pt-4">
+        <button @click="orderToCancel = null" :disabled="isCancelling" class="px-4 py-2 text-gray-500 font-bold hover:bg-gray-100 rounded-lg transition-colors disabled:opacity-50">Indietro</button>
+        <button
+          @click="confirmCancelOrder"
+          :disabled="isCancelling"
+          class="bg-red-600 text-white px-6 py-2 rounded-lg font-bold shadow-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center gap-2"
+        >
+          <span v-if="isCancelling" class="animate-spin">⌛</span>
+          {{ isCancelling ? 'Attendere...' : 'ANNULLA ORDINE' }}
+        </button>
+      </div>
+    </div>
+  </div>
     <div v-if="spedizioneAttivaCliente" class="fixed bottom-6 left-1/2 transform -translate-x-1/2 z-50 animate-bounce-in w-[95%] md:w-auto max-w-[95vw]">
       <div class="bg-gray-900/95 backdrop-blur text-white px-4 py-3 md:px-6 md:py-4 rounded-2xl shadow-2xl flex flex-col md:flex-row items-center gap-3 md:gap-8 border border-gray-700/50 ring-1 ring-white/10 overflow-hidden">
         
