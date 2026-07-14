@@ -8,6 +8,7 @@ import { jsPDF } from 'jspdf';
 import { doc as fsDoc, getDoc } from 'firebase/firestore';
 import { drawBillingDocument, type PdfDocData, type PdfKind, type PdfLine } from './billingPdfDraw';
 import { computeTotals } from './billingTotals';
+import { ddtElementi, isRigaConsegna } from './billing';
 import { db } from '../firebase';
 import type { PreventivoDocumento } from '../types';
 
@@ -77,13 +78,20 @@ function fmtDate(v: any): string {
 export function buildPdfData(p: PreventivoLike, kind: PdfKind): PdfDocData {
   const elementi: any[] = Array.isArray(p.elementi) ? p.elementi : [];
   const sconto = Number(p.scontoPercentuale) || 0;
+  // Il trasporto non prende lo sconto d'ordine (né qui, né sull'ordine CiC, né sul DDT).
+  const scontoDiRiga = (e: any) => (isRigaConsegna(e) ? 0 : sconto);
   const totals = computeTotals(
-    elementi.map((e) => ({ qty: Number(e.quantita) || 1, unitNetPrice: Number(e.prezzo_unitario) || 0 })),
+    elementi.map((e) => ({
+      qty: Number(e.quantita) || 1,
+      unitNetPrice: Number(e.prezzo_unitario) || 0,
+      discountPct: scontoDiRiga(e),
+    })),
     sconto, VAT_RATE,
   );
   const isDdt = kind === 'ddt';
-  // DDT = documento di trasporto: elenca solo la merce (escludo gli EXTRA).
-  const elForLines = isDdt ? elementi.filter((e) => e.categoria !== 'EXTRA') : elementi;
+  // DDT: le righe sono già state selezionate da openDdtPdf (merce + lavorazioni +
+  // una sola consegna), coerenti con quelle del DDT su CiC. Qui non si filtra più.
+  const elForLines = elementi;
   const lines: PdfLine[] = elForLines.map((e) => {
     const i = elementi.indexOf(e);
     let desc = e.descrizioneCompleta || 'Articolo';
@@ -95,7 +103,7 @@ export function buildPdfData(p: PreventivoLike, kind: PdfKind): PdfDocData {
     if (isDdt && e.__group) base.group = e.__group; // raggruppamento per ordine (DDT cumulativo)
     if (!isDdt) {
       base.unitNetPrice = Number(e.prezzo_unitario) || 0;
-      base.discountPct = sconto || undefined;
+      base.discountPct = scontoDiRiga(e) || undefined;
       base.totalNet = totals.lineNets[i];
     }
     return base;
@@ -188,15 +196,20 @@ export function openDdtPdf(p: PreventivoLike | PreventivoLike[]): Promise<void> 
   }
   // DDT cumulativo (più ordini): tagga ogni riga con l'ordine di provenienza,
   // così nel PDF compare un'intestazione di gruppo per ciascun ordine.
+  // Le righe sono quelle del DDT su CiC: merce + lavorazioni + una sola consegna
+  // (la tariffa più alta fra tutti gli ordini) → vedi ddtElementi().
   const multi = arr.length > 1;
   const merged: PreventivoLike = {
     ...first,
-    elementi: arr.flatMap((x) => {
-      const elementi = Array.isArray(x.elementi) ? x.elementi : [];
-      if (!multi) return elementi;
-      const label = orderGroupLabel(x);
-      return elementi.map((e: any) => ({ ...e, __group: label }));
-    }),
+    elementi: ddtElementi(
+      arr.flatMap((x) => {
+        const elementi = Array.isArray(x.elementi) ? x.elementi : [];
+        if (!multi) return elementi;
+        const label = orderGroupLabel(x);
+        return elementi.map((e: any) => ({ ...e, __group: label }));
+      }),
+      first.metodoSpedizione,   // corriere → la consegna diventa "Spedizione", come sul DDT CiC
+    ),
   };
   return openBillingPdf(merged, 'ddt');
 }

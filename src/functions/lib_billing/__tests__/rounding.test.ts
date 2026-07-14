@@ -99,3 +99,31 @@ describe('computeTotals — netto per riga → IVA su totale → lordo', () => {
     expect(t.gross).toBe(round2(t.net + t.vat));
   });
 });
+
+// ============================================================================
+// REGOLA COMMERCIALE: il trasporto non prende MAI lo sconto d'ordine — né sul
+// preventivo, né sull'ordine CiC, né sul DDT. Lo sconto di riga (0) sovrascrive
+// quello globale. Se questa regola si rompe, la cifra che il cliente firma non
+// coincide più con quella che gli viene fatturata.
+// ============================================================================
+describe('computeTotals — sconto di riga (trasporto escluso dallo sconto)', () => {
+  it('la riga con discountPct: 0 resta a prezzo pieno, le altre sono scontate', () => {
+    const t = computeTotals([
+      { qty: 2, unitNetPrice: 100 },                    // merce → sconto globale 10%
+      { qty: 1, unitNetPrice: 35, discountPct: 0 },     // consegna → nessuno sconto
+    ], 10, 22);
+    expect(t.lineNets).toEqual([180, 35]);
+    expect(t.net).toBe(215);
+  });
+
+  it('senza discountPct di riga vale lo sconto globale (comportamento storico invariato)', () => {
+    const t = computeTotals([{ qty: 2, unitNetPrice: 100 }, { qty: 1, unitNetPrice: 35 }], 10, 22);
+    expect(t.lineNets).toEqual([180, 31.5]);
+    expect(t.net).toBe(211.5);
+  });
+
+  it('sconto 0: la riga esclusa non cambia nulla', () => {
+    const t = computeTotals([{ qty: 1, unitNetPrice: 35, discountPct: 0 }], 0, 22);
+    expect(t.net).toBe(35);
+  });
+});

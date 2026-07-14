@@ -2,6 +2,7 @@
   import { ref, watch, computed, reactive } from 'vue';
   import { Dialog, DialogPanel, DialogTitle, TransitionChild, TransitionRoot } from '@headlessui/vue';
   import { TruckIcon } from '@heroicons/vue/24/solid';
+  import { isDeliveryTariff } from '../lib/billing';
   const props = defineProps<{
     show: boolean;
     orders: any[];
@@ -54,10 +55,39 @@
     }
   }, { immediate: true, deep: true });
   
+  // --- Coerenza fra tariffa d'ordine e trasporto scelto ---------------------
+  // La tariffa di consegna è stata pattuita col cliente in fase d'ordine; qui si
+  // decide come la merce viaggia davvero. Se le due cose si smentiscono (ordine
+  // "Consegna Diretta" spedito col corriere, o viceversa) POPS lo dice e lascia
+  // decidere all'operatore. Nel DDT viene addebitata UNA sola consegna: quella con
+  // la tariffa più alta fra gli ordini (se il trasporto è a corriere la riga prende
+  // il nome "Spedizione", ma il prezzo resta quello pattuito).
+  const tariffeOrdini = computed(() => {
+    const nomi = props.orders.flatMap((o: any) => (o?.elementi || [])
+      .filter((e: any) => e?.categoria === 'EXTRA' && isDeliveryTariff(e?.descrizioneCompleta))
+      .map((e: any) => ({ nome: String(e.descrizioneCompleta), prezzo: Number(e.prezzo_unitario) || 0 })));
+    return nomi.sort((a, b) => b.prezzo - a.prezzo);
+  });
+
+  const tariffaAddebitata = computed(() => tariffeOrdini.value[0] || null);
+
+  const avvisoTrasporto = computed(() => {
+    const t = tariffaAddebitata.value;
+    if (!t) return '';
+    const isSpedizione = t.nome.trim().toLowerCase() === 'spedizione';
+    if (form.tipoTrasporto === 'COURIER' && !isSpedizione) {
+      return `Gli ordini prevedono <strong>${t.nome}</strong> (${t.prezzo.toFixed(2)} €), ma stai creando un DDT <strong>a mezzo corriere</strong>. In fattura la riga sarà "Spedizione" al prezzo pattuito di ${t.prezzo.toFixed(2)} €.`;
+    }
+    if (form.tipoTrasporto === 'INTERNAL' && isSpedizione) {
+      return `Gli ordini prevedono <strong>Spedizione</strong> (${t.prezzo.toFixed(2)} €, corriere), ma stai creando un DDT <strong>con mezzi interni</strong>. Verrà comunque addebitata la tariffa pattuita di ${t.prezzo.toFixed(2)} €.`;
+    }
+    return '';
+  });
+
   const confirm = () => {
     if (form.colli < 1) return alert("Inserire almeno 1 collo");
     if (!form.date) return alert("Data obbligatoria");
-  
+
     loading.value = true;
     // Passiamo tutto l'oggetto form che ora è sincronizzato con gli input
     emit('confirm', { ...form });
@@ -97,7 +127,7 @@
                           >
                             Mezzi Interni
                           </button>
-                          <button 
+                          <button
                             type="button"
                             @click="form.tipoTrasporto = 'COURIER'"
                             class="flex-1 py-2 rounded-lg text-xs font-bold border transition-all"
@@ -106,6 +136,21 @@
                             Corriere Esterno
                           </button>
                         </div>
+
+                        <!-- Il trasporto scelto qui smentisce la tariffa pattuita sull'ordine:
+                             lo diciamo, e lasciamo decidere all'operatore. -->
+                        <p
+                          v-if="avvisoTrasporto"
+                          class="mt-3 text-[11px] leading-relaxed text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2"
+                          v-html="avvisoTrasporto"
+                        ></p>
+                        <p
+                          v-else-if="tariffaAddebitata && tariffeOrdini.length > 1"
+                          class="mt-3 text-[11px] leading-relaxed text-slate-500"
+                        >
+                          Consegna addebitata una sola volta: <strong>{{ tariffaAddebitata.nome }}</strong>
+                          ({{ tariffaAddebitata.prezzo.toFixed(2) }} €), la tariffa più alta fra i {{ orders.length }} ordini.
+                        </p>
                       </div>
   
                       <div v-if="form.tipoTrasporto === 'COURIER'" class="mb-4 space-y-3 animate-in fade-in slide-in-from-top-2">
