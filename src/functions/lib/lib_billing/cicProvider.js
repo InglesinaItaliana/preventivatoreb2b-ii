@@ -27,7 +27,10 @@ class CicProvider {
     }
     // --- CLIENTI ---------------------------------------------------------------
     async findOrCreateCustomer(input) {
-        const piva = (input.piva || '').trim();
+        // In CiC la P.IVA è memorizzata SENZA il prefisso 'IT' (vedi fetchCustomerByVat):
+        // cercare 'IT01234567890' non trova nulla e finirebbe per CREARE un cliente
+        // doppione, con sconto di pagamento 0 → fatture senza sconto, in silenzio.
+        const piva = (input.piva || '').trim().replace(/^IT/i, '');
         if (!piva)
             throw new Error('findOrCreateCustomer: P.IVA mancante');
         const filter = encodeURIComponent(`vatNumber$eq:${piva}`);
@@ -35,10 +38,20 @@ class CicProvider {
         const list = ((found === null || found === void 0 ? void 0 : found.collection) || []);
         if (list.length > 0) {
             const c = list[0];
-            return { id: c.customerNumber, name: c.name, piva: c.vatNumber || piva };
+            return {
+                id: c.customerNumber,
+                name: c.name,
+                piva: c.vatNumber || piva,
+                defaultDiscountPct: Number(c.defaultDiscountPct) || 0,
+            };
         }
         const created = await this.client.post('/customers', Object.assign(Object.assign(Object.assign(Object.assign(Object.assign({ name: input.name, vatNumber: piva, currency: 'EUR', customerGroup: { customerGroupNumber: this.cfg.customerGroupNumber }, vatZone: { vatZoneNumber: this.cfg.domesticVatZone }, paymentTerms: { paymentTermsNumber: this.cfg.defaultPaymentTermsNumber } }, (input.taxCode ? { corporateIdentificationNumber: input.taxCode } : {})), (input.email ? { email: input.email } : {})), (input.address ? { address: input.address } : {})), (input.zip ? { zip: input.zip } : {})), (input.city ? { city: input.city } : {})));
-        return { id: created.customerNumber, name: created.name, piva: created.vatNumber || piva };
+        return {
+            id: created.customerNumber,
+            name: created.name,
+            piva: created.vatNumber || piva,
+            defaultDiscountPct: Number(created.defaultDiscountPct) || 0,
+        };
     }
     // Recupera l'anagrafica COMPLETA di un cliente CiC per P.IVA (per l'import in
     // POPS). Ritorna null se assente. NB: in CiC la P.IVA è memorizzata SENZA il
@@ -67,6 +80,24 @@ class CicProvider {
             city: c.city || '',
         };
     }
+    // --- SCONTO DI PAGAMENTO (campo cliente `defaultDiscountPct`) ---------------
+    // CiC è il PADRONE del dato: POPS lo legge al volo (niente copia in Firestore che
+    // possa divergere) e, se l'admin lo modifica, lo riscrive QUI. È lo sconto che
+    // finisce sulle righe del DDT e che la fattura eredita.
+    async getCustomerDiscount(customerNumber) {
+        const c = await this.client.get(`/customers/${customerNumber}`);
+        return Number(c === null || c === void 0 ? void 0 : c.defaultDiscountPct) || 0;
+    }
+    /** Scrive lo sconto sul cliente CiC. PUT su Reviso = replace → rileggo e rimando l'oggetto intero. */
+    async setCustomerDiscount(customerNumber, pct) {
+        const valore = Math.round((Number(pct) || 0) * 100) / 100;
+        if (valore < 0 || valore > 100)
+            throw new Error(`Sconto non valido: ${pct}`);
+        const c = await this.client.get(`/customers/${customerNumber}`);
+        c.defaultDiscountPct = valore;
+        const updated = await this.client.put(`/customers/${customerNumber}`, c);
+        return Number(updated === null || updated === void 0 ? void 0 : updated.defaultDiscountPct) || 0;
+    }
     // --- ORDINI / PREVENTIVI ---------------------------------------------------
     async createOrder(doc) {
         return this.createSalesDoc('/orders', doc);
@@ -90,15 +121,22 @@ class CicProvider {
         // rounding.ts (provato nello spike → combaciano). La validazione "cifra ==
         // quella vista dal cliente" la fa il chiamante (generaOrdineCiC) contro
         // totaleScontato, così non lasciamo ordini orfani in caso di scarto.
-        const payload = Object.assign(Object.assign({ date: doc.date, currency: 'EUR', paymentTerms: { paymentTermsNumber: this.cfg.defaultPaymentTermsNumber }, customer: { customerNumber: Number(doc.customer.id) }, recipient: { name: doc.customer.name, vatZone: { vatZoneNumber: this.cfg.domesticVatZone } }, layout: { layoutNumber: this.cfg.layoutNumber } }, (doc.visibleSubject ? { notes: { heading: doc.visibleSubject } } : {})), { lines: doc.lines.map((l, i) => ({
-                lineNumber: i + 1,
-                description: l.description,
-                quantity: l.qty,
-                unitNetPrice: (0, rounding_1.roundTo10)(l.unitNetPrice),
-                discountPercentage: doc.discountPercentage,
-                product: this.productRef(l.cicProductId),
-                vatInfo: { vatAccount: { vatCode: this.cfg.vatCode } },
-            })) });
+        const payload = Object.assign(Object.assign({ date: doc.date, currency: 'EUR', paymentTerms: { paymentTermsNumber: this.cfg.defaultPaymentTermsNumber }, customer: { customerNumber: Number(doc.customer.id) }, recipient: { name: doc.customer.name, vatZone: { vatZoneNumber: this.cfg.domesticVatZone } }, layout: { layoutNumber: this.cfg.layoutNumber } }, (doc.visibleSubject ? { notes: { heading: doc.visibleSubject } } : {})), { 
+            // Lo sconto di riga sovrascrive quello di documento: il TRASPORTO non prende mai
+            // lo sconto d'ordine (le righe di consegna arrivano con discountPercentage: 0),
+            // così ordine, DDT e fattura addebitano la stessa cifra per il trasporto.
+            lines: doc.lines.map((l, i) => {
+                var _a;
+                return ({
+                    lineNumber: i + 1,
+                    description: l.description,
+                    quantity: l.qty,
+                    unitNetPrice: (0, rounding_1.roundTo10)(l.unitNetPrice),
+                    discountPercentage: (_a = l.discountPercentage) !== null && _a !== void 0 ? _a : doc.discountPercentage,
+                    product: this.productRef(l.cicProductId),
+                    vatInfo: { vatAccount: { vatCode: this.cfg.vatCode } },
+                });
+            }) });
         const res = await this.client.post(path, payload);
         // Anti-orfano: se Reviso non restituisce un id valido, lancia PRIMA che il
         // chiamante persista cic_order_id (evita ordini orfani / ri-trigger).
@@ -131,9 +169,22 @@ class CicProvider {
     // Payload riga allineato all'esempio ufficiale Postman: product via `product.id`
     // (= productNumber), totali per riga forniti (computeTotals).
     async createDeliveryNote(input) {
-        var _a, _b, _c, _d, _e, _f;
+        var _a, _b, _c, _d, _e, _f, _g, _h, _j;
         const ownerId = Number(input.customer.id);
-        const totals = (0, rounding_1.computeTotals)(input.lines, 0, this.cfg.vatRate); // DDT: nessuno sconto globale
+        // Sconto PER RIGA (su CiC non esiste lo sconto globale di documento): sul DDT
+        // portiamo lo sconto di pagamento del cliente, così la fattura — che nasce dal
+        // DDT — lo eredita. Lo sconto concordato sull'ordine è già dentro unitNetPrice.
+        const lineNets = input.lines.map((l) => l.isDescriptive
+            ? 0
+            : (0, rounding_1.round2)(l.qty * l.unitNetPrice * (1 - (l.discountPercentage || 0) / 100)));
+        const totals = {
+            net: (0, rounding_1.round2)(lineNets.reduce((a, b) => a + b, 0)),
+            vat: 0,
+            gross: 0,
+            lineNets,
+        };
+        totals.vat = (0, rounding_1.round2)((totals.net * this.cfg.vatRate) / 100);
+        totals.gross = (0, rounding_1.round2)(totals.net + totals.vat);
         const productLines = input.lines.map((l, i) => {
             // Riga descrittiva (intestazione ordine nel DDT cumulativo): solo testo,
             // nessun prodotto/quantità/prezzo. Reviso la accetta come "text line".
@@ -166,7 +217,7 @@ class CicProvider {
                 totalNetAmount: net,
                 totalGrossAmount: (0, rounding_1.round2)(net + vat),
                 unitCostPrice: null,
-                discountPercentage: 0.0,
+                discountPercentage: l.discountPercentage || 0,
                 totalVatAmount: vat,
                 manuallyEditedSalesPrice: true,
             };
@@ -243,15 +294,26 @@ class CicProvider {
             await this.deleteDraftQuiet(id);
             throw new Error(`DDT CiC: emissione fallita (id ${id}, bozza rimossa): ${(e === null || e === void 0 ? void 0 : e.message) || e}`);
         }
-        // 3) rilegge il numero definitivo (tollera il transitorio BeingIssued)
-        const number = await this.readIssuedNumber(id);
+        // 3) rilegge il DDT EMESSO: numero definitivo e — soprattutto — i totali che
+        //    Reviso ha davvero registrato. Sono quelli che finiranno in fattura, e non
+        //    coincidono necessariamente con i nostri: Reviso ricalcola le righe dai
+        //    prezzi unitari + sconto, senza arrotondarle a 2 decimali. Restituire i
+        //    NOSTRI numeri renderebbe cieco qualunque controllo a valle (li staremmo
+        //    solo confrontando con se stessi).
+        const emesso = await this.readIssued(id);
+        const number = (_j = (_h = (_g = emesso === null || emesso === void 0 ? void 0 : emesso.numberSeries) === null || _g === void 0 ? void 0 : _g.numberSeriesSequenceElement) === null || _h === void 0 ? void 0 : _h.number) !== null && _j !== void 0 ? _j : null;
+        const vat = Number(emesso === null || emesso === void 0 ? void 0 : emesso.vatAmount);
+        const gross = Number(emesso === null || emesso === void 0 ? void 0 : emesso.totalAmount);
+        const totaliReviso = Number.isFinite(vat) && Number.isFinite(gross);
         return {
             id,
             number: number !== null && number !== void 0 ? number : undefined,
             url: undefined,
-            netAmount: totals.net,
-            vatAmount: totals.vat,
-            grossAmount: totals.gross,
+            // Il DDT di Reviso espone lordo e IVA (non il netto): il netto si ricava.
+            // Se la rilettura non li porta, si ripiega sui nostri (meglio che nulla).
+            netAmount: totaliReviso ? (0, rounding_1.round2)(gross - vat) : totals.net,
+            vatAmount: totaliReviso ? (0, rounding_1.round2)(vat) : totals.vat,
+            grossAmount: totaliReviso ? (0, rounding_1.round2)(gross) : totals.gross,
         };
     }
     /** Cancella una bozza DDT rimasta orfana dopo un'emissione fallita (best-effort, non solleva). */
@@ -266,19 +328,20 @@ class CicProvider {
     /**
      * Rilegge il DDT finché è `Issued` con un numero assegnato. Dopo /issue lo
      * stato passa per `BeingIssued` (transitorio): qualche tentativo breve basta.
-     * Best-effort: ritorna il numero appena disponibile, altrimenti null.
+     * Best-effort: ritorna l'ultimo documento letto (con numero e totali di Reviso),
+     * anche se il transitorio non si è ancora chiuso.
      */
-    async readIssuedNumber(id) {
+    async readIssued(id) {
         var _a, _b, _c;
-        let num = null;
+        let ultimo = null;
         for (let attempt = 0; attempt < 4; attempt++) {
-            const dn = await this.client.get(`/delivery-notes/sales/${id}`);
-            num = (_c = (_b = (_a = dn === null || dn === void 0 ? void 0 : dn.numberSeries) === null || _a === void 0 ? void 0 : _a.numberSeriesSequenceElement) === null || _b === void 0 ? void 0 : _b.number) !== null && _c !== void 0 ? _c : null;
-            if (num != null && (dn === null || dn === void 0 ? void 0 : dn.deliveryNoteStatus) === 'Issued')
-                return num;
+            ultimo = await this.client.get(`/delivery-notes/sales/${id}`);
+            const num = (_c = (_b = (_a = ultimo === null || ultimo === void 0 ? void 0 : ultimo.numberSeries) === null || _a === void 0 ? void 0 : _a.numberSeriesSequenceElement) === null || _b === void 0 ? void 0 : _b.number) !== null && _c !== void 0 ? _c : null;
+            if (num != null && (ultimo === null || ultimo === void 0 ? void 0 : ultimo.deliveryNoteStatus) === 'Issued')
+                return ultimo;
             await new Promise((r) => setTimeout(r, 300));
         }
-        return num;
+        return ultimo;
     }
     // --- DELETE / URL ----------------------------------------------------------
     async deleteDocument(ref) {

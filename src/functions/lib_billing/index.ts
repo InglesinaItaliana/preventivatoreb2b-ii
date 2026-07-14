@@ -14,6 +14,7 @@ export { round2, computeTotals } from './rounding';
 export { getCicConfig, getActiveBackend } from './cicConfig';
 export { CicProvider, createCicProvider } from './cicProvider';
 export { CicClient } from './cicClient';
+export { buildDdtLines, isDeliveryTariff, isRigaConsegna, DELIVERY_TARIFF_CODES } from './ddtLines';
 
 /**
  * Ritorna il provider per il backend richiesto (o quello attivo da config).

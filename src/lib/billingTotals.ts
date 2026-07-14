@@ -25,12 +25,16 @@ export interface ComputedTotals {
  * @param vatRate aliquota IVA in % (es. 22)
  */
 export function computeTotals(
-  lines: ReadonlyArray<{ qty: number; unitNetPrice: number }>,
+  lines: ReadonlyArray<{ qty: number; unitNetPrice: number; discountPct?: number }>,
   discountPct: number,
   vatRate: number,
 ): ComputedTotals {
-  const factor = 1 - discountPct / 100;
-  const lineNets = lines.map((l) => round2(l.qty * l.unitNetPrice * factor));
+  // `discountPct` di riga sovrascrive quello globale: il trasporto non prende mai lo
+  // sconto d'ordine (le righe di consegna passano 0). Specchio di lib_billing/rounding.ts.
+  const lineNets = lines.map((l) => {
+    const pct = l.discountPct ?? discountPct;
+    return round2(l.qty * l.unitNetPrice * (1 - pct / 100));
+  });
   const net = round2(lineNets.reduce((a, b) => a + b, 0));
   const vat = round2((net * vatRate) / 100);
   const gross = round2(net + vat);

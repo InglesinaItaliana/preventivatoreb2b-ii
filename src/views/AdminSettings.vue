@@ -161,6 +161,66 @@ const showCustomToast = (message: string) => {
   }, 2500); 
 };
 
+// --- SCONTO DI PAGAMENTO (vive su CiC, non in Firestore) ---------------------
+// Fonte di verità = scheda cliente di Contabilità in Cloud (`defaultDiscountPct`):
+// è lo sconto che POPS scrive sulle righe del DDT e che la fattura eredita. Qui lo
+// mostriamo per non costringere l'admin ad aprire Reviso, ma è protetto da lucchetto:
+// toccarlo per sbaglio significa fatturare a tutti i prossimi DDT lo sconto sbagliato.
+const scontoPagamento = reactive({
+  piva: '',
+  valore: null as number | null,   // valore attuale su CiC
+  bozza: 0,                        // valore in modifica
+  sbloccato: false,
+  loading: false,
+  saving: false,
+  errore: '',
+});
+
+const caricaScontoPagamento = async (piva: string) => {
+  Object.assign(scontoPagamento, { piva, valore: null, bozza: 0, sbloccato: false, errore: '', loading: true });
+  try {
+    const fn = httpsCallable(functions, 'manageCustomerDiscount');
+    const res: any = await fn({ piva });
+    // L'admin può aver già cambiato cliente mentre la risposta era in volo: senza
+    // questa guardia mostreremmo lo sconto di A sulla scheda di B (e lo si scriverebbe
+    // su B guardando il valore di A).
+    if (scontoPagamento.piva !== piva) return;
+    scontoPagamento.valore = Number(res?.data?.defaultDiscountPct) || 0;
+    scontoPagamento.bozza = scontoPagamento.valore;
+  } catch (e: any) {
+    if (scontoPagamento.piva !== piva) return;
+    scontoPagamento.errore = e?.message || 'Impossibile leggere lo sconto da CiC.';
+  } finally {
+    if (scontoPagamento.piva === piva) scontoPagamento.loading = false;
+  }
+};
+
+/** Il lucchetto protegge dalla modifica per errore: sblocca e blocca, senza mai buttare via ciò che è stato scritto. */
+const toggleLucchettoSconto = () => {
+  scontoPagamento.sbloccato = !scontoPagamento.sbloccato;
+  if (!scontoPagamento.sbloccato) return;              // richiudendo si TIENE la bozza
+  scontoPagamento.bozza = scontoPagamento.valore ?? 0; // aprendo si riparte dal valore vero
+  scontoPagamento.errore = '';
+};
+
+const salvaScontoPagamento = async () => {
+  if (scontoPagamento.bozza === scontoPagamento.valore) return;
+  scontoPagamento.saving = true;
+  scontoPagamento.errore = '';   // un errore vecchio non deve bloccare un tentativo nuovo
+  try {
+    const fn = httpsCallable(functions, 'manageCustomerDiscount');
+    const res: any = await fn({ piva: scontoPagamento.piva, value: scontoPagamento.bozza });
+    scontoPagamento.valore = Number(res?.data?.defaultDiscountPct) || 0;
+    scontoPagamento.bozza = scontoPagamento.valore;
+    scontoPagamento.sbloccato = false;
+    showCustomToast(`Sconto di pagamento aggiornato su CiC: ${scontoPagamento.valore}%`);
+  } catch (e: any) {
+    scontoPagamento.errore = e?.message || 'Scrittura su CiC fallita.';
+  } finally {
+    scontoPagamento.saving = false;
+  }
+};
+
 const openEditClient = (client: ClientUser) => {
   editingClient.id = client.id;
   editingClient.ragioneSociale = client.ragioneSociale;
@@ -168,10 +228,19 @@ const openEditClient = (client: ClientUser) => {
   editingClient.detraction_value = client.detraction_value || 0;
   editingClient.price_list_mode = client.price_list_mode || 'default';
   showClientEditModal.value = true;
+  if (client.piva) caricaScontoPagamento(client.piva);
+  else Object.assign(scontoPagamento, { piva: '', valore: null, errore: 'Cliente senza P.IVA: sconto non leggibile da CiC.', loading: false });
 };
 
 const saveClientSettings = async () => {
   try {
+    // Lo sconto di pagamento NON va su Firestore: se è stato modificato, si scrive su CiC.
+    // La condizione guarda SOLO la bozza, non il lucchetto: richiudere il lucchetto dopo
+    // aver scritto un valore è il gesto naturale di conferma, e non deve perdere la modifica.
+    if (scontoPagamento.valore !== null && scontoPagamento.bozza !== scontoPagamento.valore) {
+      await salvaScontoPagamento();
+      if (scontoPagamento.errore) return;   // non chiudo: l'admin deve vedere il fallimento
+    }
     await updateDoc(doc(db, 'users', editingClient.id), {
       delivery_tariff_code: editingClient.delivery_tariff_code,
       detraction_value: editingClient.detraction_value,
@@ -1479,6 +1548,58 @@ const catalogStore = useCatalogStore();
             <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Detrazione (Valore Intero)</label>
             <input type="number" v-model.number="editingClient.detraction_value" class="w-full bg-slate-50 border-none rounded-xl p-3 font-bold">
             <p class="text-[10px] text-slate-400 mt-1">Valore usato per calcoli futuri, non modifica il preventivo corrente.</p>
+          </div>
+
+          <!-- Sconto di pagamento: il dato vive su CiC, non qui. Lucchetto perché
+               modificarlo per sbaglio sconterebbe tutte le fatture successive. -->
+          <div class="pt-4 border-t border-slate-100">
+            <label class="block text-xs font-bold text-slate-400 uppercase mb-1">Sconto di Pagamento (Contabilità in Cloud)</label>
+
+            <p v-if="scontoPagamento.loading" class="text-sm text-slate-400 py-3">Lettura da CiC…</p>
+
+            <p v-else-if="scontoPagamento.errore" class="text-xs text-red-700 bg-red-50 border border-red-200 rounded-xl p-3">
+              {{ scontoPagamento.errore }}
+            </p>
+
+            <div v-else class="flex items-center gap-2">
+              <div class="relative flex-1">
+                <input
+                  type="number" min="0" max="100" step="0.5"
+                  v-model.number="scontoPagamento.bozza"
+                  :disabled="!scontoPagamento.sbloccato || scontoPagamento.saving"
+                  class="w-full rounded-xl p-3 font-bold border-none transition-colors"
+                  :class="scontoPagamento.sbloccato ? 'bg-amber-50 ring-2 ring-amber-300 text-slate-900' : 'bg-slate-100 text-slate-400 cursor-not-allowed'"
+                >
+                <span class="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-bold"
+                      :class="scontoPagamento.sbloccato ? 'text-slate-500' : 'text-slate-300'">%</span>
+              </div>
+              <button
+                type="button"
+                @click="toggleLucchettoSconto"
+                :title="scontoPagamento.sbloccato ? 'Blocca il campo' : 'Sblocca per modificare (scrive su CiC)'"
+                class="h-12 w-12 flex items-center justify-center rounded-xl border transition-all"
+                :class="scontoPagamento.sbloccato
+                  ? 'bg-amber-400 border-amber-400 text-amber-950'
+                  : 'bg-white border-slate-200 text-slate-400 hover:text-slate-600 hover:border-slate-300'"
+              >
+                <LockOpenIcon v-if="scontoPagamento.sbloccato" class="h-5 w-5" />
+                <LockClosedIcon v-else class="h-5 w-5" />
+              </button>
+            </div>
+
+            <p v-if="!scontoPagamento.loading && !scontoPagamento.errore" class="text-[10px] mt-1"
+               :class="scontoPagamento.sbloccato || scontoPagamento.bozza !== scontoPagamento.valore ? 'text-amber-700 font-bold' : 'text-slate-400'">
+              <template v-if="scontoPagamento.valore !== null && scontoPagamento.bozza !== scontoPagamento.valore">
+                Modifica in attesa ({{ scontoPagamento.valore }}% → {{ scontoPagamento.bozza }}%): al salvataggio viene scritta
+                <strong>su CiC</strong> e applicata a tutti i DDT successivi.
+              </template>
+              <template v-else-if="scontoPagamento.sbloccato">
+                Salvando, il valore viene scritto <strong>su CiC</strong> e applicato a tutti i DDT successivi.
+              </template>
+              <template v-else>
+                Sconto legato alle modalità di pagamento. Vive su CiC (fonte di verità): POPS lo applica alle righe del DDT, la fattura lo eredita.
+              </template>
+            </p>
           </div>
         </div>
 

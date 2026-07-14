@@ -38,13 +38,18 @@ function roundTo10(n) {
 }
 /**
  * Calcola i totali canonici di un documento.
- * @param lines righe con quantità e prezzo unitario netto
+ * @param lines righe con quantità e prezzo unitario netto. `discountPct` sulla riga
+ *   SOVRASCRIVE lo sconto globale: serve al trasporto, che per regola commerciale non
+ *   prende mai lo sconto d'ordine (le righe di consegna passano `discountPct: 0`).
  * @param discountPct sconto globale in percentuale (0 = nessuno)
  * @param vatRate aliquota IVA in percentuale (es. 22)
  */
 function computeTotals(lines, discountPct, vatRate) {
-    const factor = 1 - discountPct / 100;
-    const lineNets = lines.map((l) => round2(l.qty * l.unitNetPrice * factor));
+    const lineNets = lines.map((l) => {
+        var _a;
+        const pct = (_a = l.discountPct) !== null && _a !== void 0 ? _a : discountPct;
+        return round2(l.qty * l.unitNetPrice * (1 - pct / 100));
+    });
     const net = round2(lineNets.reduce((a, b) => a + b, 0));
     const vat = round2((net * vatRate) / 100);
     const gross = round2(net + vat);

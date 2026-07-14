@@ -8,6 +8,7 @@ import { httpsCallable } from 'firebase/functions';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { db, storage, auth, functions } from '../firebase';
 import { computeTotals } from '../lib/billingTotals';
+import { isRigaConsegna } from '../lib/billing';
 import { useCatalogStore } from '../Data/catalog';
 import type { Categoria, RigaPreventivo, StatoPreventivo, Allegato, RiepilogoRiga } from '../types';
 import { calculatePrice } from '../logic/pricing';
@@ -293,30 +294,21 @@ const isAdmin = computed(() => route.query?.admin === 'true');
 
 const totaleImponibile = computed(() => preventivo.value.reduce((t, i) => t + i.prezzo_totale, 0));
 
-// FE-4: in modalità CiC il totale finale usa la regola canonica (half-up per
-// riga, identica al backend/CiC) → la cifra a video combacia col documento.
-// Attivo SOLO quando config/billing.activeBackend === 'cic'; in FiC: invariato.
-const cicTotalsActive = ref(false);
-const totaleFinale = computed(() => {
-  if (cicTotalsActive.value) {
-    return computeTotals(
-      preventivo.value.map((i) => ({ qty: (i as any).quantita || 1, unitNetPrice: (i as any).prezzo_unitario || 0 })),
-      scontoApplicato.value, 22,
-    ).net;
-  }
-  const sconto = (totaleImponibile.value * scontoApplicato.value) / 100;
-  return totaleImponibile.value - sconto;
-});
-// La regola canonica si attiva solo col flag globale di cutover.
-let unsubBilling: (() => void) | null = null;
-onMounted(() => {
-  unsubBilling = onSnapshot(
-    doc(db, 'config', 'billing'),
-    (snap) => { cicTotalsActive.value = snap.exists() && (snap.data() as any)?.activeBackend === 'cic'; },
-    () => { cicTotalsActive.value = false; },
-  );
-});
-onUnmounted(() => { if (unsubBilling) unsubBilling(); });
+// Righe per il calcolo canonico (half-up per riga, identico a backend e CiC).
+// Il TRASPORTO non prende mai lo sconto d'ordine (regola commerciale): la riga di
+// consegna passa `discountPct: 0`, così la cifra che il cliente vede e firma è la
+// stessa che finirà su ordine, DDT e fattura.
+const righeCanoniche = () => preventivo.value.map((i: any) => ({
+  qty: i.quantita || 1,
+  unitNetPrice: i.prezzo_unitario || 0,
+  ...(isRigaConsegna(i) ? { discountPct: 0 } : {}),
+}));
+
+// La regola canonica vale SEMPRE. (Era gated su config/billing.activeBackend==='cic',
+// ma `config/*` è backend-only nelle firestore.rules: il client riceveva sempre
+// permission-denied e il flag restava false → la cifra a video non è MAI stata quella
+// canonica. Con CiC attivo dal cutover, il gate non ha più ragione d'essere.)
+const totaleFinale = computed(() => computeTotals(righeCanoniche(), scontoApplicato.value, 22).net);
 
 const isStandard = computed(() => {
   const haLavorazioniSpeciali = preventivo.value.some(r => 
@@ -885,10 +877,7 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
       // Netto canonico (regola CiC, half-up per riga) salvato SEMPRE, a prescindere
       // dal flag UI: è la cifra contro cui il backend valida l'ordine CiC, così non
       // ci sono falsi billingError per doc salvati prima del cutover.
-      netCanonico: computeTotals(
-        preventivo.value.map((i) => ({ qty: (i as any).quantita || 1, unitNetPrice: (i as any).prezzo_unitario || 0 })),
-        scontoApplicato.value, 22,
-      ).net,
+      netCanonico: computeTotals(righeCanoniche(), scontoApplicato.value, 22).net,
       stato: nuovoStato,
       noteCliente: noteCliente.value,
       allegati: listaAllegati.value,

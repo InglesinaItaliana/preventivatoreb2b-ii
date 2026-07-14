@@ -31,6 +31,13 @@ export interface CustomerRef {
   id: string | number;
   name: string;
   piva: string;
+  /**
+   * Sconto legato alle modalità di pagamento (CiC: campo cliente `defaultDiscountPct`).
+   * Su CiC NON esiste uno sconto globale di documento: va messo riga per riga. Lo
+   * scriviamo noi sulle righe del DDT così la fattura lo eredita e l'amministrazione
+   * non deve più inserirlo a mano. Fonte di verità = CiC (non duplicato in POPS).
+   */
+  defaultDiscountPct?: number;
 }
 
 /** Riga documento, prima dell'arrotondamento (prezzi unitari netti). */
@@ -42,6 +49,12 @@ export interface LineInput {
   category?: string;       // EXTRA/Spedizione/... per la logica POPS
   cicProductId?: string | number; // productNumber CiC mappato (da products/{code}.cicProductId)
   isDescriptive?: boolean; // riga di solo testo (nessun prodotto/quantità/prezzo): intestazione ordine nel DDT cumulativo
+  /**
+   * Sconto di riga (%). Sul DDT vale lo sconto di pagamento del cliente; lo sconto
+   * concordato sull'ordine è invece già dentro `unitNetPrice` (una riga CiC ha un
+   * solo campo sconto e i due sconti si compongono in cascata).
+   */
+  discountPercentage?: number;
 }
 
 /** Input per creare ordine/preventivo. */

@@ -1225,13 +1225,7 @@ async function generaOrdineCiC(change, newData, clienteUID) {
             if (item.categoria !== 'EXTRA' && (item.base_mm > 0 || item.altezza_mm > 0)) {
                 desc += ` - Dim: ${item.base_mm}x${item.altezza_mm} mm${item.infoCanalino ? ` - ${item.infoCanalino}` : ''}`;
             }
-            return {
-                code: item.codice ? String(item.codice).toUpperCase().trim() : '',
-                description: desc,
-                qty: item.quantita || 1,
-                unitNetPrice: item.prezzo_unitario || 0,
-                category: item.categoria,
-            };
+            return Object.assign({ code: item.codice ? String(item.codice).toUpperCase().trim() : '', description: desc, qty: item.quantita || 1, unitNetPrice: item.prezzo_unitario || 0, category: item.categoria }, ((0, lib_billing_1.isRigaConsegna)(item) ? { discountPercentage: 0 } : {}));
         });
         // Aggancia il productNumber CiC mappato a ogni riga (per codice POPS).
         const cicProdMap = await resolveCicProductIds(lines.map((l) => l.code));
@@ -1287,7 +1281,7 @@ async function generaOrdineCiC(change, newData, clienteUID) {
 // assembla le righe dai preventivi in Firestore. Il DDT è un documento di
 // trasporto → elenca la MERCE (righe non-EXTRA); i prezzi non sono rilevanti.
 async function creaDdtCumulativoCiC(orderIds, data) {
-    var _a, _b, _c, _d, _e;
+    var _a, _b, _c;
     const { date, colli, weight, tipoTrasporto, corriere, tracking } = data;
     const db = admin.firestore();
     try {
@@ -1316,37 +1310,12 @@ async function creaDdtCumulativoCiC(orderIds, data) {
             city: userData === null || userData === void 0 ? void 0 : userData.citta,
             province: userData === null || userData === void 0 ? void 0 : userData.provincia,
         });
-        // Righe = merce trasportata (escludo gli EXTRA: spedizione/lavorazioni).
-        // DDT cumulativo (piu' ordini): la prima riga di ogni ordine porta in
-        // descrizione il riferimento all'ordine (numero CiC + commessa), cosi'
-        // dal DDT si risale ai singoli ordini raggruppati.
-        const isCumulativo = orders.length > 1;
-        const lines = [];
-        for (const o of orders) {
-            const cicNum = (_c = (_b = (_a = o.data.cic_order_number) !== null && _a !== void 0 ? _a : o.data.cic_order_id) !== null && _b !== void 0 ? _b : o.data.codice) !== null && _c !== void 0 ? _c : '';
-            const commessa = o.data.commessa ? ` - ${o.data.commessa}` : '';
-            const groupLabel = `[Ordine ${cicNum}${commessa}]`;
-            let firstOfOrder = true;
-            for (const item of (o.data.elementi || [])) {
-                if (item.categoria === 'EXTRA')
-                    continue;
-                let desc = item.descrizioneCompleta || 'Articolo Vetrata';
-                if (item.base_mm > 0 || item.altezza_mm > 0) {
-                    desc += ` - Dim: ${item.base_mm}x${item.altezza_mm} mm`;
-                }
-                if (isCumulativo && firstOfOrder) {
-                    desc = `${groupLabel} ${desc}`;
-                    firstOfOrder = false;
-                }
-                lines.push({
-                    code: item.codice ? String(item.codice).toUpperCase().trim() : '',
-                    description: desc,
-                    qty: item.quantita || 1,
-                    unitNetPrice: item.prezzo_unitario || 0,
-                    category: item.categoria,
-                });
-            }
-        }
+        // Righe DDT = merce + lavorazioni + UNA sola consegna (tariffa più alta),
+        // coi prezzi già netti dello sconto d'ordine e lo sconto di PAGAMENTO del
+        // cliente sul campo sconto di riga (la fattura nasce dal DDT e lo eredita).
+        // La regola vive in lib_billing/ddtLines.ts (pura, coperta da test).
+        const scontoPagamento = Number(customer.defaultDiscountPct) || 0;
+        const lines = (0, lib_billing_1.buildDdtLines)(orders.map((o) => o.data), scontoPagamento, tipoTrasporto === 'COURIER' ? 'COURIER' : 'INTERNAL');
         if (lines.length === 0)
             return { success: false, message: 'Nessuna riga merce da spedire.' };
         // Aggancia il productNumber CiC mappato a ogni riga (per codice POPS).
@@ -1367,14 +1336,37 @@ async function creaDdtCumulativoCiC(orderIds, data) {
                 transportType: tipoTrasporto === 'COURIER' ? 'COURIER' : 'INTERNAL',
             },
         });
+        // Controllo NON bloccante sul netto. `ddt.netAmount` è il totale RILETTO DA
+        // REVISO sul documento emesso (non il nostro ricalcolo: confrontarsi con se
+        // stessi non protegge da niente) — è la cifra da cui nascerà la fattura.
+        // Reviso ricalcola le righe dai prezzi unitari senza arrotondarle a 2 decimali,
+        // mentre POPS arrotonda per riga: mezzo centesimo di scarto per riga è
+        // fisiologico e la tolleranza lo assorbe. Oltre quella soglia NON blocchiamo
+        // il DDT (è già emesso) ma lo scriviamo sul documento: niente in silenzio.
+        const nettoAtteso = (0, lib_billing_1.round2)(lines
+            .filter((l) => !l.isDescriptive)
+            .reduce((acc, l) => acc + (0, lib_billing_1.round2)(l.qty * l.unitNetPrice * (1 - (l.discountPercentage || 0) / 100)), 0));
+        const tolleranza = 0.02 + 0.005 * lines.length;
+        const scarto = Math.abs((ddt.netAmount || 0) - nettoAtteso);
+        const nettoDivergente = scarto > tolleranza;
+        if (nettoDivergente) {
+            console.warn(`⚠️ [CIC DDT] Netto divergente: CiC ${ddt.netAmount} vs atteso POPS ${nettoAtteso} (scarto ${scarto.toFixed(2)}, tolleranza ${tolleranza.toFixed(2)})`);
+        }
+        // Un billingError NON nato dal DDT (es. la discrepanza di totale scritta da
+        // generaOrdineCiC alla creazione dell'ordine) va PRESERVATO: cancellarlo qui
+        // spegnerebbe l'unico avviso durevole proprio mentre si emette il documento
+        // da cui nasce la fattura.
+        const erroreDelDdt = (msg) => typeof msg === 'string'
+            && (msg.startsWith('Errore CiC:') || msg.startsWith('DDT '));
         const batch = db.batch();
         const nuovoStato = tipoTrasporto === 'COURIER' ? 'SHIPPED' : 'DELIVERY';
         for (const o of orders) {
             const ref = db.collection('preventivi').doc(o.firestoreId);
-            batch.update(ref, {
+            const precedente = o.data.billingError;
+            const patch = {
                 cic_ddt_id: ddt.id,
-                cic_ddt_number: (_d = ddt.number) !== null && _d !== void 0 ? _d : null,
-                cic_ddt_url: (_e = ddt.url) !== null && _e !== void 0 ? _e : null,
+                cic_ddt_number: (_a = ddt.number) !== null && _a !== void 0 ? _a : null,
+                cic_ddt_url: (_b = ddt.url) !== null && _b !== void 0 ? _b : null,
                 stato: nuovoStato,
                 dataConsegnaPrevista: date,
                 colli: colli != null ? Number(colli) : null,
@@ -1382,8 +1374,14 @@ async function creaDdtCumulativoCiC(orderIds, data) {
                 corriere: tipoTrasporto === 'COURIER' ? corriere : null,
                 trackingCode: tipoTrasporto === 'COURIER' ? tracking : null,
                 dataSpedizione: admin.firestore.FieldValue.serverTimestamp(),
-                billingError: admin.firestore.FieldValue.delete(), // pulisce un errore di un tentativo precedente
-            });
+            };
+            if (nettoDivergente) {
+                patch.billingError = `DDT ${(_c = ddt.number) !== null && _c !== void 0 ? _c : ddt.id}: netto CiC ${ddt.netAmount} ≠ atteso POPS ${nettoAtteso} — verificare prima della fatturazione`;
+            }
+            else if (erroreDelDdt(precedente)) {
+                patch.billingError = admin.firestore.FieldValue.delete(); // fallimento DDT precedente: risolto
+            } // altrimenti: non tocco il campo (un errore d'ordine resta visibile)
+            batch.update(ref, patch);
         }
         await batch.commit();
         return { success: true, cic_id: ddt.id };
@@ -3926,5 +3924,56 @@ exports.appointmentReminders = functions
     }
     console.log(`[appointmentReminders] scanned ${snap.size}, reminders sent ${sentCount}`);
     return null;
+});
+// ============================================================================
+// SCONTO DI PAGAMENTO DEL CLIENTE (CiC = padrone del dato)
+// ----------------------------------------------------------------------------
+// Lo sconto legato alle modalità di pagamento vive sulla scheda cliente di CiC
+// (campo `defaultDiscountPct`) ed è quello che POPS scrive sulle righe del DDT:
+// la fattura, che nasce dal DDT, lo eredita così com'è. NON lo duplichiamo in
+// Firestore — due copie divergono, e una fattura sbagliata non si scopre subito.
+// Questa callable serve alla scheda cliente in POPS: legge il valore da CiC e,
+// solo se l'admin sblocca il lucchetto, lo riscrive su CiC.
+//   { piva }             → { defaultDiscountPct, customerNumber, name }
+//   { piva, value: 3 }   → scrive e ritorna il valore confermato da CiC
+// ============================================================================
+exports.manageCustomerDiscount = functions
+    .region('europe-west1')
+    .https.onCall(async (data, context) => {
+    var _a, _b, _c, _d;
+    const callerEmail = (((_b = (_a = context.auth) === null || _a === void 0 ? void 0 : _a.token) === null || _b === void 0 ? void 0 : _b.email) || '').toLowerCase().trim();
+    const callerRole = (_d = (_c = context.auth) === null || _c === void 0 ? void 0 : _c.token) === null || _d === void 0 ? void 0 : _d.role;
+    const isAdminCaller = callerRole === 'ADMIN' || callerEmail === 'info@inglesinaitaliana.it';
+    if (!context.auth || !isAdminCaller) {
+        throw new functions.https.HttpsError('permission-denied', 'Riservato agli amministratori.');
+    }
+    const piva = String((data === null || data === void 0 ? void 0 : data.piva) || '').trim().replace(/^IT/i, '');
+    if (!piva)
+        throw new functions.https.HttpsError('invalid-argument', 'P.IVA mancante.');
+    try {
+        const provider = await (0, lib_billing_1.createCicProvider)();
+        const cliente = await provider.fetchCustomerByVat(piva);
+        if (!cliente) {
+            throw new functions.https.HttpsError('not-found', `Cliente con P.IVA ${piva} non trovato su Contabilità in Cloud.`);
+        }
+        // Sola lettura se non arriva un valore.
+        if ((data === null || data === void 0 ? void 0 : data.value) === undefined || (data === null || data === void 0 ? void 0 : data.value) === null) {
+            const pct = await provider.getCustomerDiscount(cliente.customerNumber);
+            return { defaultDiscountPct: pct, customerNumber: cliente.customerNumber, name: cliente.name };
+        }
+        const richiesto = Number(data.value);
+        if (!Number.isFinite(richiesto) || richiesto < 0 || richiesto > 100) {
+            throw new functions.https.HttpsError('invalid-argument', 'Sconto ammesso fra 0 e 100.');
+        }
+        const confermato = await provider.setCustomerDiscount(cliente.customerNumber, richiesto);
+        console.log(`[CIC] Sconto pagamento aggiornato: cliente ${cliente.customerNumber} → ${confermato}% (da ${callerEmail})`);
+        return { defaultDiscountPct: confermato, customerNumber: cliente.customerNumber, name: cliente.name };
+    }
+    catch (e) {
+        if (e instanceof functions.https.HttpsError)
+            throw e;
+        console.error('❌ [CIC] manageCustomerDiscount:', (e === null || e === void 0 ? void 0 : e.message) || e);
+        throw new functions.https.HttpsError('internal', (e === null || e === void 0 ? void 0 : e.message) || 'Errore Contabilità in Cloud.');
+    }
 });
 //# sourceMappingURL=index.js.map
