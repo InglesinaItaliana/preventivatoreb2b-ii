@@ -1432,18 +1432,22 @@ export const creaOrdineBilling = functions
         }
         const d = snap.data() as admin.firestore.DocumentData;
 
-        // Idempotenza: ordine già emesso (o retry dopo un crash avvenuto tra la
-        // scrittura degli id e quella dello stato) → resta solo da avanzare lo stato.
-        if (d.cic_order_id || d.fic_order_id) {
-            await docRef.update({ stato: 'WAITING_SIGN' });
-            return { ok: true, backend: d.cic_order_id ? 'cic' : 'fic', giaEmesso: true };
+        // Idempotenza SOLO per il legacy FiC: ordine già emesso → resta solo da
+        // avanzare lo stato. Un cic_order_id già presente (crash di un tentativo
+        // precedente tra scrittura id e stato) NON viene promosso alla cieca: si
+        // ripassa da emettiOrdineCiC, la cui riconciliazione ritrova l'ordine per
+        // reference, ne RI-VERIFICA il totale e riscrive gli id.
+        if (d.fic_order_id) {
+            await docRef.update({ stato: 'WAITING_SIGN', billingError: admin.firestore.FieldValue.delete() });
+            return { ok: true, backend: 'fic', giaEmesso: true };
         }
 
         const backend = await resolveBillingBackend(d);
-        if (backend !== 'cic') {
+        if (backend !== 'cic' && !d.cic_order_id) {
             // Legacy FiC (dietro kill-switch): comportamento storico — lo stato
-            // avanza e il trigger crea l'ordine in asincrono.
-            await docRef.update({ stato: 'WAITING_SIGN' });
+            // avanza e il trigger crea l'ordine in asincrono. (Si cancella anche
+            // l'eventuale sentinella scritta dal Builder al pre-salvataggio.)
+            await docRef.update({ stato: 'WAITING_SIGN', billingError: admin.firestore.FieldValue.delete() });
             return { ok: true, backend: 'fic' };
         }
 
@@ -1484,8 +1488,11 @@ export const watchdogOrdiniOrfani = functions
 
         const orfani = snap.docs
             .map((s) => ({ id: s.id, ...(s.data() as any) }))
+            // ORDER_REQ anomalo = emissione fallita/interrotta: billingError
+            // (errore vero o sentinella del Builder) oppure un order id scritto
+            // senza che lo stato sia avanzato (crash tra i due update).
             .filter((p) => p.stato === 'ORDER_REQ'
-                ? !!p.billingError
+                ? !!(p.billingError || p.cic_order_id || p.fic_order_id)
                 : (!p.fic_order_id && !p.cic_order_id));
 
         if (orfani.length === 0) {
