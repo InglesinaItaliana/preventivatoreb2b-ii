@@ -1239,8 +1239,11 @@ onUnmounted(() => {
       </div>
 
       <div class="bg-red-50 p-4 rounded-lg text-sm text-red-800 mb-4 border border-red-100">
-        <p>Stai per annullare l'ordine di <strong>{{ orderToCancel.cliente }}</strong><span v-if="orderToCancel.codice"> ({{ orderToCancel.codice }})</span>.</p>
-        <p class="mt-1" v-if="cancelDocLabel">Il documento su <strong>{{ cancelDocLabel }}</strong> verrà eliminato.</p>
+        <p>Stai per annullare l'ordine di <strong>{{ orderToCancel.cliente }}</strong><span v-if="orderToCancel.commessa"> — commessa <strong>{{ orderToCancel.commessa }}</strong></span>.</p>
+        <p class="mt-1" v-if="cancelDocLabel">
+          <span v-if="orderToCancel.cic_order_number">L'ordine n. <strong>{{ orderToCancel.cic_order_number }}</strong> su <strong>{{ cancelDocLabel }}</strong> verrà eliminato.</span>
+          <span v-else>Il documento su <strong>{{ cancelDocLabel }}</strong> verrà eliminato.</span>
+        </p>
         <p class="mt-1" v-else>Nessun documento fiscale collegato.</p>
       </div>
 
