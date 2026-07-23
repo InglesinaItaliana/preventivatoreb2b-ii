@@ -40,8 +40,16 @@
   
   watch(() => props.orders, (newOrders: any[]) => {
     if (newOrders.length > 0) {
-      // 1. Imposta la data (usa quella del primo ordine o oggi)
-      form.date = newOrders[0].dataConsegnaPrevista || new Date().toISOString().split('T')[0];
+      // 1. Imposta la data proposta: MAI anteriore a oggi. La serie DDT su Reviso
+      //    è "Ordered" (numeri in ordine di data): una data anteriore all'ultimo DDT
+      //    già emesso fa fallire l'emissione ("An issued sequence element cannot
+      //    change number or number series"). La data di consegna prevista dell'ordine
+      //    è quasi sempre nel passato quando si spedisce → si clampa a oggi.
+      //    Confronto lessicografico sicuro: le date sono ISO YYYY-MM-DD.
+      //    Resta comunque modificabile a mano nel campo data.
+      const oggi = new Date().toISOString().split('T')[0];
+      const prevista = newOrders[0].dataConsegnaPrevista;
+      form.date = (prevista && prevista > oggi) ? prevista : oggi;
       
       // 2. Calcola la somma dei colli
       const totaleColli = newOrders.reduce((somma: number, ordine: any) => {
