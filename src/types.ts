@@ -26,6 +26,24 @@ export const ACTIVE_STATUSES = [
 
 export const ARCHIVE_STATUSES = ['DELIVERED', 'REJECTED'];
 
+/**
+ * Archivio: una query PER STATO, non una sola su ARCHIVE_STATUSES.
+ * Motivo: i due stati hanno date diverse e vanno contati a parte, altrimenti
+ * gli annullati mangiano gli slot dei consegnati dentro lo stesso `limit`.
+ *
+ * `campoOrdine` per i consegnati è `dataConsegnaPrevista` e NON `dataSpedizione`:
+ * a DDT emesso viene sovrascritto con la data del documento DDT (functions/index.ts,
+ * rami CiC e FiC), quindi È la data del DDT, ed è presente su tutti i consegnati.
+ * `dataSpedizione` invece manca su alcuni ordini chiusi senza DDT e in Firestore
+ * un `orderBy` su un campo assente li escluderebbe dalla query in silenzio.
+ *
+ * Gli stati elencati qui devono coprire ARCHIVE_STATUSES: lo verifica un test.
+ */
+export const ARCHIVIO_QUERIES = [
+  { stato: 'DELIVERED', campoOrdine: 'dataConsegnaPrevista', limite: 50 },
+  { stato: 'REJECTED', campoOrdine: 'dataCreazione', limite: 30 },
+] as const;
+
   // Aggiungi interfaccia per la Sessione di Consegna
 export interface DeliverySession {
   id: string;

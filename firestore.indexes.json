@@ -107,6 +107,23 @@
       ]
     },
     {
+      "collectionGroup": "preventivi",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "stato",                "order": "ASCENDING" },
+        { "fieldPath": "dataConsegnaPrevista", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "preventivi",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "clienteUID",           "order": "ASCENDING" },
+        { "fieldPath": "stato",                "order": "ASCENDING" },
+        { "fieldPath": "dataConsegnaPrevista", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "nebulaDocs",
       "queryScope": "COLLECTION",
       "fields": [
