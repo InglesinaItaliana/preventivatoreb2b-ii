@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onBeforeUnmount } from 'vue';
+import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue';
 import { Dialog, DialogPanel, DialogTitle, TransitionChild, TransitionRoot } from '@headlessui/vue';
 import { XMarkIcon, ArchiveBoxIcon, ArrowPathIcon, MagnifyingGlassIcon } from '@heroicons/vue/24/solid';
 import { collection, query, where, getDocs } from 'firebase/firestore';
@@ -22,15 +22,12 @@ const emit = defineEmits(['close']);
 const router = useRouter();
 
 const {
-  consegnati, annullati, risultatiCommessa, modalita,
+  ordini, risultatiCommessa, modalita,
   loading, caricandoAltri, errore, troncato, altri,
   carica, caricaAltri, cercaPerCommessa,
 } = useArchivio();
 
 const { suggeriti, cerca: cercaClienti, pulisci: pulisciSuggeriti } = useClientiSuggeriti();
-
-// Gli annullati stanno chiusi in fondo: sono rumore, non storico da consultare.
-const mostraAnnullati = ref(false);
 
 // --- Ricerca (solo admin) ---
 // Cliente e commessa sono modalità ALTERNATIVE, non filtri che si sommano: chi
@@ -48,7 +45,7 @@ const uidVincolato = computed(() =>
 );
 
 const ricarica = () => {
-  mostraAnnullati.value = false;
+  contenitore.value?.scrollTo({ top: 0 });
   carica(uidVincolato.value);
 };
 
@@ -95,7 +92,6 @@ const avviaRicercaCommessa = () => {
   queryCliente.value = '';
   clienteSelezionato.value = null;
   pulisciSuggeriti();
-  mostraAnnullati.value = false;
   cercaPerCommessa(queryCommessa.value);
 };
 
@@ -125,15 +121,16 @@ const azzeraRicerca = () => {
 };
 
 // Un timer in volo su una modale chiusa farebbe partire una query fantasma.
-onBeforeUnmount(fermaTimerCommessa);
+onBeforeUnmount(() => {
+  fermaTimerCommessa();
+  smontaOsservatore();
+});
 
 const ricercaAttiva = computed(() => modalita.value !== 'recenti' && !!props.isAdmin);
 
 // --- Presentazione ---
 const archivioVuoto = computed(() =>
-  modalita.value === 'commessa'
-    ? risultatiCommessa.value.length === 0
-    : consegnati.value.length === 0 && annullati.value.length === 0
+  modalita.value === 'commessa' ? risultatiCommessa.value.length === 0 : ordini.value.length === 0
 );
 
 // "Nessun ordine in archivio" è vero solo nella vista dei recenti: dopo una
@@ -152,13 +149,45 @@ const messaggioVuoto = computed(() => {
 // diventa un muro indistinto. Nella vista "recenti" copre pochi giorni, quindi
 // raggrupparla non aggiungerebbe nulla.
 const raggruppa = computed(() => modalita.value === 'cliente');
-const gruppiConsegnati = computed(() => raggruppa.value ? raggruppaPerMese(consegnati.value) : []);
+const gruppi = computed(() => raggruppa.value ? raggruppaPerMese(ordini.value) : []);
+
+// --- Scroll infinito ---
+// Una sentinella in fondo alla lista: quando entra nel campo visivo del
+// contenitore, la pagina successiva parte da sola. IntersectionObserver e non
+// un listener di scroll, che si attiverebbe a ogni pixel.
+const contenitore = ref<HTMLElement | null>(null);
+const sentinella = ref<HTMLElement | null>(null);
+let osservatore: IntersectionObserver | null = null;
+
+const smontaOsservatore = () => {
+  osservatore?.disconnect();
+  osservatore = null;
+};
+
+const montaOsservatore = async () => {
+  smontaOsservatore();
+  await nextTick();
+  if (!contenitore.value || !sentinella.value) return;
+  osservatore = new IntersectionObserver(
+    voci => { if (voci.some(v => v.isIntersecting)) caricaAltri(); },
+    // rootMargin: si parte poco PRIMA del bordo, così la pagina è già lì
+    // quando ci si arriva invece di far vedere il vuoto.
+    { root: contenitore.value, rootMargin: '200px' }
+  );
+  osservatore.observe(sentinella.value);
+};
 
 watch(() => props.show, (isOpen) => {
   if (isOpen) {
     azzeraRicerca();
+    montaOsservatore();
+  } else {
+    smontaOsservatore();
   }
 });
+
+// La sentinella compare e scompare col v-if della lista: va riosservata.
+watch(sentinella, () => { if (props.show) montaOsservatore(); });
 
 const openOrder = (codice: string) => {
   const url = `/preventivatore?codice=${codice}${props.isAdmin ? '&admin=true&readonly=true' : ''}`;
@@ -287,7 +316,7 @@ const openOrdine = (order: any) => {
                 </button>
               </div>
 
-              <div class="flex-1 overflow-y-auto p-6 bg-gray-50">
+              <div ref="contenitore" class="flex-1 overflow-y-auto p-6 bg-gray-50">
                 
                 <div v-if="loading" class="flex flex-col items-center justify-center py-10 text-gray-400">
                   <ArrowPathIcon class="h-8 w-8 animate-spin mb-2" />
@@ -317,10 +346,10 @@ const openOrdine = (order: any) => {
                 </div>
 
                 <div v-else class="space-y-3">
-                  <!-- Consegnati: raggruppati per mese quando la lista copre mesi
-                       (storico di un cliente), piatti nella vista dei recenti. -->
+                  <!-- Una lista sola: consegnati e annullati insieme, in ordine
+                       di data. Raggruppata per mese quando copre mesi. -->
                   <template v-if="raggruppa">
-                    <div v-for="gruppo in gruppiConsegnati" :key="gruppo.chiave" class="space-y-3">
+                    <div v-for="gruppo in gruppi" :key="gruppo.chiave" class="space-y-3">
                       <h4 class="text-xs font-bold uppercase tracking-wide text-gray-500 pt-2 first:pt-0">
                         {{ gruppo.etichetta }}
                       </h4>
@@ -338,7 +367,7 @@ const openOrdine = (order: any) => {
 
                   <template v-else>
                     <ArchiveOrderRow
-                      v-for="order in consegnati"
+                      v-for="order in ordini"
                       :key="order.id"
                       :order="order"
                       :is-admin="isAdmin"
@@ -348,45 +377,18 @@ const openOrdine = (order: any) => {
                     />
                   </template>
 
-                  <button
-                    v-if="altri.DELIVERED"
-                    type="button"
-                    :disabled="caricandoAltri"
-                    @click.stop="caricaAltri('DELIVERED')"
-                    class="w-full py-2 text-xs font-bold uppercase tracking-wide text-gray-500 border border-dashed border-gray-300 rounded-xl hover:border-amber-300 hover:text-gray-800 disabled:opacity-50 transition-colors"
-                  >
-                    {{ caricandoAltri ? 'Carico…' : 'Carica altri consegnati' }}
-                  </button>
-
-                  <button
-                    v-if="annullati.length"
-                    type="button"
-                    @click="mostraAnnullati = !mostraAnnullati"
-                    class="w-full mt-4 pt-4 border-t border-gray-200 flex items-center justify-between text-left text-xs font-bold uppercase tracking-wide text-gray-500 hover:text-gray-800 transition-colors"
-                  >
-                    <span>Ordini annullati ({{ annullati.length }})</span>
-                    <span class="text-[10px] font-bold text-gray-400">{{ mostraAnnullati ? 'Nascondi' : 'Mostra' }}</span>
-                  </button>
-
-                  <div v-if="mostraAnnullati" class="space-y-3">
-                    <ArchiveOrderRow
-                      v-for="order in annullati"
-                      :key="order.id"
-                      :order="order"
-                      :is-admin="isAdmin"
-                      @apri="openOrder"
-                      @apri-ddt="openDdt"
-                      @apri-ordine="openOrdine"
-                    />
-                    <button
-                      v-if="altri.REJECTED"
-                      type="button"
-                      :disabled="caricandoAltri"
-                      @click.stop="caricaAltri('REJECTED')"
-                      class="w-full py-2 text-xs font-bold uppercase tracking-wide text-gray-500 border border-dashed border-gray-300 rounded-xl hover:border-amber-300 hover:text-gray-800 disabled:opacity-50 transition-colors"
-                    >
-                      {{ caricandoAltri ? 'Carico…' : 'Carica altri annullati' }}
-                    </button>
+                  <!-- Sentinella dello scroll infinito: entrando nel campo
+                       visivo fa partire la pagina successiva. Dichiara anche
+                       che scorrendo ne arrivano altri, invece di lasciare
+                       credere che la lista finisca qui. -->
+                  <div ref="sentinella" class="pt-2 pb-1 text-center">
+                    <div v-if="altri" class="flex items-center justify-center gap-2 text-[11px] font-bold uppercase tracking-wide text-gray-400">
+                      <ArrowPathIcon v-if="caricandoAltri" class="h-3.5 w-3.5 animate-spin" />
+                      <span>{{ caricandoAltri ? 'Carico altri ordini…' : 'Scorri per caricarne altri' }}</span>
+                    </div>
+                    <div v-else class="text-[11px] text-gray-300">
+                      Fine dell'archivio
+                    </div>
                   </div>
                 </div>
 

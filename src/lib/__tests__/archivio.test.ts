@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { raggruppaPerMese, filtraClienti, estremiCommessa, dataOrdine } from '../archivio';
+import { raggruppaPerMese, filtraClienti, estremiCommessa, dataOrdine, fondiOrdinati } from '../archivio';
 
 const consegnato = (commessa: string, data: string) => ({ commessa, stato: 'DELIVERED', dataConsegnaPrevista: data });
 const annullato = (commessa: string, secondi: number) => ({ commessa, stato: 'REJECTED', dataCreazione: { seconds: secondi } });
@@ -8,6 +8,19 @@ describe('dataOrdine', () => {
   it('legge la data DDT dei consegnati (stringa) e la creazione degli annullati (Timestamp)', () => {
     expect(dataOrdine(consegnato('A', '2026-07-15'))?.getFullYear()).toBe(2026);
     expect(dataOrdine(annullato('B', 1750000000))).toBeInstanceOf(Date);
+  });
+
+  it('per un annullato usa la creazione ANCHE se ha una data di consegna prevista', () => {
+    // Metà degli annullati ha una dataConsegnaPrevista residua: usarla
+    // ordinerebbe la riga su un campo diverso da quello della sua query,
+    // e la fusione mescolerebbe liste ordinate per criteri diversi.
+    const misto = { stato: 'REJECTED', dataConsegnaPrevista: '2026-12-31', dataCreazione: { seconds: 1750000000 } };
+    expect(dataOrdine(misto)?.getFullYear()).toBe(new Date(1750000000 * 1000).getFullYear());
+  });
+
+  it('ripiega sull\'altra data se la primaria manca', () => {
+    expect(dataOrdine({ stato: 'DELIVERED', dataCreazione: { seconds: 1750000000 } })).toBeInstanceOf(Date);
+    expect(dataOrdine({ stato: 'REJECTED', dataConsegnaPrevista: '2026-03-01' })?.getMonth()).toBe(2);
   });
 
   it('non esplode su ordini senza data né su date malformate', () => {
@@ -92,5 +105,46 @@ describe('estremiCommessa', () => {
     expect(estremiCommessa('  maino  ')?.da).toBe('MAINO');
     expect(estremiCommessa('M')).toBeNull();
     expect(estremiCommessa('   ')).toBeNull();
+  });
+});
+
+describe('fondiOrdinati', () => {
+  const D = (commessa: string, data: string) => consegnato(commessa, data);
+  const R = (commessa: string, iso: string) => annullato(commessa, new Date(iso).getTime() / 1000);
+
+  it('intercala due elenchi mantenendo l’ordine decrescente per data', () => {
+    const { pagina } = fondiOrdinati([
+      [D('d1', '2026-07-20'), D('d2', '2026-07-10'), D('d3', '2026-06-01')],
+      [R('r1', '2026-07-15'), R('r2', '2026-07-05')],
+    ], 10);
+    expect(pagina.map(o => o.commessa)).toEqual(['d1', 'r1', 'd2', 'r2', 'd3']);
+  });
+
+  it('si ferma a `quanti` e lascia il resto negli avanzi, senza perdere nulla', () => {
+    const a = [D('d1', '2026-07-20'), D('d2', '2026-07-10')];
+    const b = [R('r1', '2026-07-15'), R('r2', '2026-07-05')];
+    const { pagina, resti } = fondiOrdinati([a, b], 2);
+    expect(pagina.map(o => o.commessa)).toEqual(['d1', 'r1']);
+    expect(resti.flat().map(o => o.commessa)).toEqual(['d2', 'r2']);
+    expect(pagina.length + resti.flat().length).toBe(a.length + b.length);
+  });
+
+  it('non altera gli elenchi in ingresso', () => {
+    const a = [D('d1', '2026-07-20')];
+    const b = [R('r1', '2026-07-15')];
+    fondiOrdinati([a, b], 2);
+    expect(a).toHaveLength(1);
+    expect(b).toHaveLength(1);
+  });
+
+  it('gestisce elenchi vuoti e chiede più di quanti ce ne siano', () => {
+    expect(fondiOrdinati([[], []], 10).pagina).toEqual([]);
+    expect(fondiOrdinati([[D('solo', '2026-07-20')], []], 10).pagina).toHaveLength(1);
+  });
+
+  it('mette in fondo chi non ha data, ma non lo perde', () => {
+    const senzaData = { stato: 'DELIVERED', commessa: 'x' };
+    const { pagina } = fondiOrdinati([[senzaData], [R('r1', '2026-07-15')]], 10);
+    expect(pagina.map((o: any) => o.commessa)).toEqual(['r1', 'x']);
   });
 });

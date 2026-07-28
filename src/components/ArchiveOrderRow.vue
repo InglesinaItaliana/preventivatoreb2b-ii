@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { DocumentTextIcon, EyeIcon } from '@heroicons/vue/24/solid';
 import { STATUS_DETAILS } from '../types';
+import { dataOrdine } from '../lib/archivio';
 
 /**
  * Una riga dell'archivio. Estratta da ArchiveModal perché la stessa riga viene
@@ -14,17 +15,10 @@ defineProps<{
 
 const emit = defineEmits(['apri', 'apriDdt', 'apriOrdine']);
 
-const formatDate = (seconds: number) => seconds ? new Date(seconds * 1000).toLocaleDateString() : '-';
-
-// La data mostrata deve essere quella su cui la lista è ordinata, altrimenti
-// l'ordine sembra casuale: DDT per i consegnati, creazione per gli annullati.
-const formatDataOrdinamento = (o: any) => {
-  if (o?.stato === 'DELIVERED') {
-    const d = o?.dataConsegnaPrevista;
-    return d ? new Date(d).toLocaleDateString() : '-';
-  }
-  return formatDate(o?.dataCreazione?.seconds);
-};
+// La data mostrata è ESATTAMENTE quella su cui la lista è ordinata — stessa
+// funzione, non una regola riscritta qui — altrimenti in una lista che mescola
+// consegnati e annullati l'ordine sembrerebbe casuale.
+const formatDataOrdinamento = (o: any) => dataOrdine(o)?.toLocaleDateString() ?? '-';
 
 // Altezza fissa condivisa dai tre pulsanti: senza, quello con la sola icona
 // sarebbe più basso degli altri due, che contengono una riga di testo.

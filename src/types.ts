@@ -27,30 +27,32 @@ export const ACTIVE_STATUSES = [
 export const ARCHIVE_STATUSES = ['DELIVERED', 'REJECTED'];
 
 /**
- * Archivio: una query PER STATO, non una sola su ARCHIVE_STATUSES.
- * Motivo: i due stati hanno date diverse e vanno contati a parte, altrimenti
- * gli annullati mangiano gli slot dei consegnati dentro lo stesso `limit`.
+ * Archivio: una query PER STATO, fuse poi in un'unica lista lato client.
+ *
+ * Non una sola query `stato in [...]`: i due stati si ordinano su campi
+ * DIVERSI, e in Firestore un `orderBy` su un campo assente esclude il
+ * documento in silenzio — ordinando tutto su `dataConsegnaPrevista`
+ * sparirebbero gli annullati che non ne hanno (oggi 34 su 61).
  *
  * `campoOrdine` per i consegnati è `dataConsegnaPrevista` e NON `dataSpedizione`:
  * a DDT emesso viene sovrascritto con la data del documento DDT (functions/index.ts,
  * rami CiC e FiC), quindi È la data del DDT, ed è presente su tutti i consegnati.
- * `dataSpedizione` invece manca su alcuni ordini chiusi senza DDT e in Firestore
- * un `orderBy` su un campo assente li escluderebbe dalla query in silenzio.
+ * `dataSpedizione` invece manca su alcuni ordini chiusi senza DDT.
  *
  * Gli stati elencati qui devono coprire ARCHIVE_STATUSES: lo verifica un test.
  */
 export const ARCHIVIO_QUERIES = [
-  { stato: 'DELIVERED', campoOrdine: 'dataConsegnaPrevista', limite: 50 },
-  { stato: 'REJECTED', campoOrdine: 'dataCreazione', limite: 30 },
+  { stato: 'DELIVERED', campoOrdine: 'dataConsegnaPrevista' },
+  { stato: 'REJECTED', campoOrdine: 'dataCreazione' },
 ] as const;
 
 /**
- * Con un cliente selezionato il limite non serve più a proteggere la vista:
- * lo storico di un singolo cliente è di poche decine di ordini (il più grande
- * ne ha 62 in archivio), quindi 150 li mostra tutti con margine. Se un giorno
- * mordesse, la modale lo dichiara invece di troncare in silenzio.
+ * Quanti ordini per pagina, in ogni modalità. Si scorre fino in fondo e la
+ * pagina successiva arriva da sola, quindi il numero non deve più decidere
+ * "quanto storico si vede": deve solo essere abbastanza grande da non far
+ * ricaricare di continuo e abbastanza piccolo da non pesare (80 × ~3 KB).
  */
-export const LIMITE_ARCHIVIO_CLIENTE = 150;
+export const PAGINA_ARCHIVIO = 80;
 
 /** Ricerca per commessa: risultati per prefisso, tetto di sicurezza. */
 export const LIMITE_ARCHIVIO_COMMESSA = 50;

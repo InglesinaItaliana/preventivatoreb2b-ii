@@ -18,7 +18,9 @@ describe('spec query archivio', () => {
     expect(consegnati?.campoOrdine).toBe('dataConsegnaPrevista');
   });
 
-  it('ha una capienza propria per stato', () => {
-    for (const q of ARCHIVIO_QUERIES) expect(q.limite).toBeGreaterThan(0);
+  it('ogni stato ha il proprio campo di ordinamento', () => {
+    for (const q of ARCHIVIO_QUERIES) expect(q.campoOrdine).toBeTruthy();
+    // Campi diversi: è la ragione per cui servono due query e una fusione.
+    expect(new Set(ARCHIVIO_QUERIES.map(q => q.campoOrdine)).size).toBe(ARCHIVIO_QUERIES.length);
   });
 });

@@ -7,10 +7,10 @@ import { db } from '../firebase';
 import {
   ARCHIVIO_QUERIES,
   ARCHIVE_STATUSES,
-  LIMITE_ARCHIVIO_CLIENTE,
+  PAGINA_ARCHIVIO,
   LIMITE_ARCHIVIO_COMMESSA,
 } from '../types';
-import { estremiCommessa } from '../lib/archivio';
+import { estremiCommessa, fondiOrdinati } from '../lib/archivio';
 
 /**
  * Caricamento dell'archivio storico (ordini consegnati e annullati).
@@ -19,76 +19,105 @@ import { estremiCommessa } from '../lib/archivio';
  * logica di query è cresciuta con la ricerca, quindi vive qui e non nel template.
  *
  * Tre modalità, mutuamente esclusive:
- *  - 'recenti'  → gli ultimi archiviati, una query per stato (v. ARCHIVIO_QUERIES)
- *  - 'cliente'  → tutto lo storico archiviato di un cliente, limite più alto
- *  - 'commessa' → ricerca per prefisso su `commessa`, lista piatta
+ *  - 'recenti'  → gli ultimi archiviati
+ *  - 'cliente'  → lo storico archiviato di un cliente
+ *  - 'commessa' → ricerca per prefisso su `commessa`, senza paginazione
  *
- * Una query PER STATO e non una sola su ARCHIVE_STATUSES: stati diversi hanno
- * campo di ordinamento e capienza propri, e sommarli in un solo `limit` è il
- * motivo per cui l'archivio mostrava pochi clienti.
+ * UNA LISTA SOLA, ma DUE QUERY. I due stati si ordinano su campi diversi
+ * (v. ARCHIVIO_QUERIES), quindi arrivano separati e vengono fusi qui per data.
+ * Un'unica query `stato in [...]` ordinata su un campo solo perderebbe in
+ * silenzio i documenti che quel campo non ce l'hanno.
  */
 export type ModalitaArchivio = 'recenti' | 'cliente' | 'commessa';
-/** Gli stati d'archivio, come chiavi tipizzate di cursori e flag di paginazione. */
-export type StatoArchivio = 'DELIVERED' | 'REJECTED';
+
+interface Flusso {
+  stato: string;
+  campoOrdine: string;
+  /** Righe già lette dal server ma non ancora entrate in una pagina fusa. */
+  avanzo: any[];
+  cursore: QueryDocumentSnapshot | null;
+  /** Il server potrebbe averne altre (l'ultima pagina letta era piena). */
+  altreSulServer: boolean;
+}
 
 export function useArchivio() {
-  const consegnati = ref<any[]>([]);
-  const annullati = ref<any[]>([]);
+  const ordini = ref<any[]>([]);
   const risultatiCommessa = ref<any[]>([]);
   const modalita = ref<ModalitaArchivio>('recenti');
   const loading = ref(false);
   const caricandoAltri = ref(false);
   const errore = ref<string | null>(null);
-  /** Solo per la ricerca commessa, che non è paginata: la modale lo dichiara. */
+  /** Solo per la ricerca commessa, che non è paginata. */
   const troncato = ref(false);
-  /** Esiste (forse) un'altra pagina per quello stato → si mostra "Carica altri". */
-  const altri = ref<Record<StatoArchivio, boolean>>({ DELIVERED: false, REJECTED: false });
+  /** Esiste (forse) altro da caricare: la modale mostra l'invito a scorrere. */
+  const altri = ref(false);
 
-  // Cursore per stato: l'ULTIMO documento della pagina già caricata. Serve il
-  // DocumentSnapshot vero, non il dato: `startAfter` su un valore sarebbe
-  // ambiguo con date ripetute (più DDT nello stesso giorno), sullo snapshot no.
-  const cursori: Record<StatoArchivio, QueryDocumentSnapshot | null> = { DELIVERED: null, REJECTED: null };
-  // Il cliente in vigore, per far ripartire le pagine successive dallo stesso filtro.
+  let flussi: Flusso[] = [];
   let clienteCorrente: string | undefined;
 
+  const nuoviFlussi = (): Flusso[] =>
+    ARCHIVIO_QUERIES.map(q => ({
+      stato: q.stato,
+      campoOrdine: q.campoOrdine,
+      avanzo: [],
+      cursore: null,
+      altreSulServer: true,
+    }));
+
   const svuota = () => {
-    consegnati.value = [];
-    annullati.value = [];
+    ordini.value = [];
     risultatiCommessa.value = [];
     troncato.value = false;
     errore.value = null;
-    altri.value = { DELIVERED: false, REJECTED: false };
-    cursori.DELIVERED = null;
-    cursori.REJECTED = null;
+    altri.value = false;
+    flussi = nuoviFlussi();
   };
 
-  const paginaDi = async (
-    stato: string,
-    campoOrdine: string,
-    limite: number,
-    clienteUID?: string,
-    dopo?: QueryDocumentSnapshot | null
-  ) => {
+  /** Una pagina del singolo flusso, ripartendo dal proprio cursore. */
+  const leggiDalServer = async (f: Flusso) => {
     const vincoli: QueryConstraint[] = [];
-    if (clienteUID) vincoli.push(where('clienteUID', '==', clienteUID));
-    vincoli.push(where('stato', '==', stato), orderBy(campoOrdine, 'desc'));
-    if (dopo) vincoli.push(startAfter(dopo));
-    vincoli.push(limit(limite));
+    if (clienteCorrente) vincoli.push(where('clienteUID', '==', clienteCorrente));
+    vincoli.push(where('stato', '==', f.stato), orderBy(f.campoOrdine, 'desc'));
+    // Il cursore è il DocumentSnapshot, non il valore: con più DDT nello stesso
+    // giorno un cursore per valore sarebbe ambiguo e salterebbe o ripeterebbe righe.
+    if (f.cursore) vincoli.push(startAfter(f.cursore));
+    vincoli.push(limit(PAGINA_ARCHIVIO));
 
     const snap = await getDocs(query(collection(db, 'preventivi'), ...vincoli));
-    return {
-      righe: snap.docs.map(d => ({ id: d.id, ...d.data() })),
-      ultimo: snap.docs[snap.docs.length - 1] ?? null,
-      // Pagina piena ⇒ POTREBBERO essercene altre. Se il totale è un multiplo
-      // esatto del limite, l'ultimo "Carica altri" non troverà nulla e sparirà:
-      // è il compromesso normale di questa paginazione.
-      pienaVuolDirePossibiliAltri: snap.docs.length === limite,
-    };
+    f.avanzo.push(...snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    f.cursore = snap.docs[snap.docs.length - 1] ?? f.cursore;
+    f.altreSulServer = snap.docs.length === PAGINA_ARCHIVIO;
   };
 
-  const limitePer = (stato: string) => {
-    const q = ARCHIVIO_QUERIES.find(x => x.stato === stato)!;
-    return clienteCorrente ? LIMITE_ARCHIVIO_CLIENTE : q.limite;
+  /**
+   * Prossima pagina fusa, appesa a quella già a video.
+   *
+   * Prima riempie ogni flusso fino ad avere almeno una pagina in avanzo (o a
+   * esaurirlo): è la condizione che rende corretta la fusione, perché una
+   * pagina di N elementi non può pescarne più di N da un solo flusso, quindi
+   * nessuna riga rimasta sul server può essere più recente di una già mostrata.
+   */
+  const caricaAltri = async () => {
+    if (caricandoAltri.value || !altri.value) return;
+    caricandoAltri.value = true;
+    try {
+      for (const f of flussi) {
+        while (f.avanzo.length < PAGINA_ARCHIVIO && f.altreSulServer) {
+          await leggiDalServer(f);
+        }
+      }
+      const { pagina, resti } = fondiOrdinati(flussi.map(f => f.avanzo), PAGINA_ARCHIVIO);
+      flussi.forEach((f, i) => { f.avanzo = resti[i] ?? []; });
+      ordini.value = [...ordini.value, ...pagina];
+      altri.value = flussi.some(f => f.avanzo.length > 0 || f.altreSulServer);
+    } catch (e: any) {
+      console.error('Errore caricamento archivio:', e);
+      errore.value = 'Impossibile caricare altri ordini. Riprova.';
+      // Senza questo, lo scroll infinito ritenterebbe a ogni pixel.
+      altri.value = false;
+    } finally {
+      caricandoAltri.value = false;
+    }
   };
 
   /**
@@ -101,48 +130,11 @@ export function useArchivio() {
     svuota();
     clienteCorrente = clienteUID;
     modalita.value = clienteUID ? 'cliente' : 'recenti';
+    altri.value = true; // sbloccato per la prima pagina
     try {
-      const risultati = await Promise.all(
-        ARCHIVIO_QUERIES.map(async q => {
-          const pagina = await paginaDi(q.stato, q.campoOrdine, limitePer(q.stato), clienteUID);
-          cursori[q.stato] = pagina.ultimo;
-          altri.value[q.stato] = pagina.pienaVuolDirePossibiliAltri;
-          return [q.stato, pagina.righe] as const;
-        })
-      );
-      const perStato = new Map(risultati);
-      consegnati.value = perStato.get('DELIVERED') ?? [];
-      annullati.value = perStato.get('REJECTED') ?? [];
-    } catch (e: any) {
-      console.error('Errore caricamento archivio:', e);
-      errore.value = 'Impossibile caricare l’archivio. Riprova.';
+      await caricaAltri();
     } finally {
       loading.value = false;
-    }
-  };
-
-  /**
-   * Pagina successiva di uno dei due elenchi, APPESA a quella già a video.
-   * Ripercorre la stessa query con lo stesso filtro cliente, ripartendo dal
-   * cursore: senza, un "carica altri" rifarebbe la prima pagina.
-   */
-  const caricaAltri = async (stato: StatoArchivio) => {
-    if (caricandoAltri.value || !altri.value[stato]) return;
-    const q = ARCHIVIO_QUERIES.find(x => x.stato === stato);
-    if (!q) return;
-
-    caricandoAltri.value = true;
-    try {
-      const pagina = await paginaDi(stato, q.campoOrdine, limitePer(stato), clienteCorrente, cursori[stato]);
-      cursori[stato] = pagina.ultimo ?? cursori[stato];
-      altri.value[stato] = pagina.pienaVuolDirePossibiliAltri;
-      const destinazione = stato === 'DELIVERED' ? consegnati : annullati;
-      destinazione.value = [...destinazione.value, ...pagina.righe];
-    } catch (e: any) {
-      console.error('Errore caricamento pagina successiva:', e);
-      errore.value = 'Impossibile caricare altri ordini. Riprova.';
-    } finally {
-      caricandoAltri.value = false;
     }
   };
 
@@ -187,8 +179,7 @@ export function useArchivio() {
   };
 
   return {
-    consegnati,
-    annullati,
+    ordini,
     risultatiCommessa,
     modalita,
     loading,
