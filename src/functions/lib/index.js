@@ -4212,4 +4212,61 @@ exports.cercaCommessaArchivio = functions
         throw new functions.https.HttpsError('internal', 'Ricerca non riuscita.');
     }
 });
+// ============================================================================
+// ANAGRAFICA AZIENDA EMITTENTE (Reviso → settings/company)
+// ----------------------------------------------------------------------------
+// I dati dell'emittente stampati sui PDF POPS stavano in una costante dentro il
+// bundle: cambiarli voleva dire un deploy, e nessuno si accorgeva se divergevano
+// da Reviso (il telefono è rimasto quello vecchio per un mese dopo il cutover).
+// Qui la fonte di verità diventa Reviso: si legge /self e si pubblica su
+// settings/company, che il client legge in chiaro (rules: read autenticato,
+// write admin — qui si scrive con l'Admin SDK).
+//
+// Due porte, stessa logica: la callable per l'admin che vuole allineare subito
+// dopo aver corretto Reviso, lo schedulato notturno perché nessuno si ricordi
+// di premere il pulsante. Se Reviso non risponde NON si tocca il documento: i
+// PDF continuano con l'ultimo dato buono.
+// ============================================================================
+async function aggiornaCompanyInfo(origine) {
+    const info = await (0, lib_billing_1.fetchCompanyInfo)();
+    const ref = admin.firestore().collection('settings').doc('company');
+    const prima = (await ref.get()).data();
+    const cambiati = (0, lib_billing_1.diffCompany)(prima, info);
+    await ref.set(Object.assign(Object.assign({}, info), { source: 'reviso', syncedAt: admin.firestore.FieldValue.serverTimestamp() }), { merge: true });
+    if (cambiati.length)
+        console.log(`[COMPANY] settings/company aggiornato da ${origine}: ${cambiati.join(', ')}`);
+    return info;
+}
+exports.syncCompanyInfo = functions
+    .region('europe-west1')
+    .https.onCall(async (data, context) => {
+    var _a, _b, _c, _d;
+    const callerEmail = (((_b = (_a = context.auth) === null || _a === void 0 ? void 0 : _a.token) === null || _b === void 0 ? void 0 : _b.email) || '').toLowerCase().trim();
+    const isAdminCaller = ((_d = (_c = context.auth) === null || _c === void 0 ? void 0 : _c.token) === null || _d === void 0 ? void 0 : _d.role) === 'ADMIN' || callerEmail === 'info@inglesinaitaliana.it';
+    if (!context.auth || !isAdminCaller) {
+        throw new functions.https.HttpsError('permission-denied', 'Riservato agli amministratori.');
+    }
+    try {
+        return await aggiornaCompanyInfo(callerEmail);
+    }
+    catch (e) {
+        console.error('❌ [COMPANY] syncCompanyInfo:', (e === null || e === void 0 ? void 0 : e.message) || e);
+        throw new functions.https.HttpsError('internal', (e === null || e === void 0 ? void 0 : e.message) || 'Errore Contabilità in Cloud.');
+    }
+});
+exports.syncCompanyInfoDaily = functions
+    .region('europe-west1')
+    .pubsub.schedule('every day 05:45')
+    .timeZone('Europe/Rome')
+    .onRun(async () => {
+    try {
+        await aggiornaCompanyInfo('sync notturno');
+    }
+    catch (e) {
+        // Non rilancia: un'anagrafica non aggiornata non è un incidente, e
+        // il documento resta com'era (ultimo dato buono).
+        console.error('❌ [COMPANY] sync notturno:', (e === null || e === void 0 ? void 0 : e.message) || e);
+    }
+    return null;
+});
 //# sourceMappingURL=index.js.map

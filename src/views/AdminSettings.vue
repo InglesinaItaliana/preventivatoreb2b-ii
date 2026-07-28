@@ -9,7 +9,7 @@
   UserPlusIcon, PencilSquareIcon, MagnifyingGlassIcon, PhoneIcon, EnvelopeIcon,
   UsersIcon, BuildingOfficeIcon, CloudArrowUpIcon, PaperAirplaneIcon, CheckCircleIcon, ExclamationTriangleIcon,
   XCircleIcon, Cog6ToothIcon, TruckIcon, ClockIcon, CurrencyEuroIcon, TagIcon, MapPinIcon, IdentificationIcon,
-  LockClosedIcon, LockOpenIcon, PlusIcon, TrashIcon
+  LockClosedIcon, LockOpenIcon, PlusIcon, TrashIcon, ArrowPathIcon
 } from '@heroicons/vue/24/solid';
   
   // --- TIPI ---
@@ -269,6 +269,46 @@ const saveSettings = async () => {
     } catch (e) {
       console.error(e);
       showCustomToast("Errore salvataggio");
+    }
+  };
+
+  // --- DATI AZIENDA EMITTENTE (Reviso → settings/company) -------------------
+  // Sono i dati stampati in testa a preventivi, conferme d'ordine e DDT. NON si
+  // editano qui: si correggono in Reviso (che è quello che emette i documenti
+  // veri) e da lì si riallineano. Il sync gira anche da solo ogni notte; questo
+  // pulsante serve a non aspettare fino al giorno dopo.
+  const company = ref<Record<string, any> | null>(null);
+  const companySyncing = ref(false);
+
+  const companyCityLine = computed(() => {
+    const c = company.value;
+    if (!c) return '';
+    const prov = c.province && !String(c.city || '').toUpperCase().includes(`(${String(c.province).toUpperCase()})`)
+      ? ` (${c.province})` : '';
+    return [c.zip, c.city].filter(Boolean).join(' ') + prov;
+  });
+
+  const companySyncedAt = computed(() => {
+    const t: any = company.value?.syncedAt;
+    const d = t?.toDate ? t.toDate() : null;
+    return d ? d.toLocaleString('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '';
+  });
+
+  const syncCompany = async () => {
+    companySyncing.value = true;
+    try {
+      const fn = httpsCallable(functions, 'syncCompanyInfo');
+      const res: any = await fn({});
+      // La callable ritorna i dati appena scritti: si rilegge il doc solo per
+      // avere anche syncedAt (server timestamp).
+      const snap = await getDoc(doc(db, 'settings', 'company'));
+      company.value = snap.exists() ? snap.data() : (res?.data || null);
+      showCustomToast("Dati azienda aggiornati da Reviso");
+    } catch (e: any) {
+      console.error(e);
+      showCustomToast(e?.message || "Errore lettura da Reviso");
+    } finally {
+      companySyncing.value = false;
     }
   };
 
@@ -563,7 +603,11 @@ const saveSettings = async () => {
         if(data.active_global_default) globalPricing.active_global_default = data.active_global_default;
       }
 
-    } catch (e) { 
+      // 5. Anagrafica azienda emittente (sola lettura: la scrive Reviso)
+      const companySnap = await getDoc(doc(db, 'settings', 'company'));
+      company.value = companySnap.exists() ? companySnap.data() : null;
+
+    } catch (e) {
       console.error(e); 
     } finally { 
       loading.value = false; 
@@ -1107,8 +1151,8 @@ const catalogStore = useCatalogStore();
                 </div>
               </div>
               
-              <button 
-                @click="saveSettings" 
+              <button
+                @click="saveSettings"
                 class="w-full bg-slate-900 text-white py-4 rounded-[1.5rem] font-bold text-lg shadow-xl shadow-slate-200 hover:bg-black hover:scale-[1.01] transition-all active:scale-95 flex items-center justify-center gap-2"
               >
                 <span>Salva Tutte le Impostazioni</span>
@@ -1117,6 +1161,66 @@ const catalogStore = useCatalogStore();
 
             </div>
 
+          </div>
+
+          <!-- Dati azienda emittente: sola lettura, la fonte è Reviso -->
+          <div class="bg-white rounded-[2rem] shadow-sm border border-slate-200 overflow-hidden">
+            <div class="bg-slate-50/50 px-8 py-5 border-b border-slate-100 flex items-center justify-between gap-3 flex-wrap">
+              <div class="flex items-center gap-3">
+                <div class="bg-slate-200 p-2.5 rounded-xl text-slate-600 shadow-sm">
+                  <BuildingOfficeIcon class="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 class="text-lg font-bold text-slate-800 leading-tight">Dati Azienda sui Documenti</h3>
+                  <p class="text-xs text-slate-400 font-medium">Intestazione di preventivi, ordini e DDT — fonte: Contabilità in Cloud</p>
+                </div>
+              </div>
+              <button
+                @click="syncCompany"
+                :disabled="companySyncing"
+                class="px-5 py-2.5 rounded-xl bg-slate-900 text-white text-sm font-bold flex items-center gap-2 hover:bg-black transition-all active:scale-95 disabled:opacity-50"
+              >
+                <ArrowPathIcon class="w-4 h-4" :class="companySyncing ? 'animate-spin' : ''" />
+                {{ companySyncing ? 'Lettura…' : 'Aggiorna da Reviso' }}
+              </button>
+            </div>
+
+            <div class="p-8">
+              <div v-if="company" class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-5">
+                <div>
+                  <p class="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Ragione sociale e indirizzo</p>
+                  <p class="font-bold text-slate-800">{{ company.name }}</p>
+                  <p class="text-sm text-slate-600">{{ company.address }}</p>
+                  <p class="text-sm text-slate-600">{{ companyCityLine }}</p>
+                </div>
+                <div class="space-y-4">
+                  <div>
+                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Partita IVA</p>
+                    <p class="font-bold text-slate-800">{{ company.piva || '—' }}</p>
+                  </div>
+                  <div>
+                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">Telefono</p>
+                    <p class="font-bold text-slate-800">{{ company.tel || '—' }}</p>
+                  </div>
+                  <div>
+                    <p class="text-[10px] font-black text-slate-400 uppercase tracking-wider mb-1">E-mail referente</p>
+                    <p class="font-bold text-slate-800">{{ company.email || '—' }}</p>
+                  </div>
+                </div>
+              </div>
+              <p v-else class="text-sm text-slate-500">
+                Nessun dato ancora sincronizzato: i documenti usano l'ultima anagrafica nota.
+                Premi <span class="font-bold">Aggiorna da Reviso</span> per allinearli.
+              </p>
+
+              <p class="text-[11px] text-slate-400 mt-6 leading-relaxed">
+                Questi campi non si modificano da POPS: si correggono in Contabilità in Cloud
+                (Impostazioni → Dati azienda) e poi si preme "Aggiorna da Reviso", così l'intestazione
+                dei PDF resta identica a quella dei documenti emessi. L'allineamento avviene comunque
+                da solo ogni notte.
+                <span v-if="companySyncedAt"> Ultimo aggiornamento: {{ companySyncedAt }}.</span>
+              </p>
+            </div>
           </div>
         </div>
 

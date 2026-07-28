@@ -15,6 +15,7 @@ export { getCicConfig, getActiveBackend } from './cicConfig';
 export { CicProvider, createCicProvider } from './cicProvider';
 export { CicClient } from './cicClient';
 export { buildDdtLines, isDeliveryTariff, isRigaConsegna, DELIVERY_TARIFF_CODES } from './ddtLines';
+export { fetchCompanyInfo, mapSelfToCompany, diffCompany, type CompanyInfo } from './companyInfo';
 
 /**
  * Ritorna il provider per il backend richiesto (o quello attivo da config).
