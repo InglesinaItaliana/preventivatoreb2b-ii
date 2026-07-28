@@ -98,6 +98,18 @@ const archivioVuoto = computed(() =>
 // Con un cliente selezionato la lista copre mesi: senza intestazioni di mese
 // diventa un muro indistinto. Nella vista "recenti" copre pochi giorni, quindi
 // raggrupparla non aggiungerebbe nulla.
+// "Nessun ordine in archivio" è vero solo nella vista dei recenti: dopo una
+// ricerca a vuoto direbbe che l'archivio è vuoto, che è un'altra cosa.
+const messaggioVuoto = computed(() => {
+  if (modalita.value === 'commessa') {
+    return `Nessuna commessa che inizia per “${queryCommessa.value.trim().toUpperCase()}”.`;
+  }
+  if (modalita.value === 'cliente' && props.isAdmin) {
+    return 'Questo cliente non ha ordini in archivio.';
+  }
+  return 'Nessun ordine in archivio.';
+});
+
 const raggruppa = computed(() => modalita.value === 'cliente');
 const gruppiConsegnati = computed(() => raggruppa.value ? raggruppaPerMese(consegnati.value) : []);
 
@@ -247,7 +259,7 @@ const openOrdine = (order: any) => {
 
                 <div v-else-if="archivioVuoto" class="text-center py-10 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl">
                   <ArchiveBoxIcon class="h-12 w-12 mx-auto mb-2 opacity-50" />
-                  <p>Nessun ordine in archivio.</p>
+                  <p>{{ messaggioVuoto }}</p>
                 </div>
 
                 <div v-else-if="modalita === 'commessa'" class="space-y-3">
