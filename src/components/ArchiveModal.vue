@@ -145,10 +145,12 @@ const messaggioVuoto = computed(() => {
   return 'Nessun ordine in archivio.';
 });
 
-// Con un cliente selezionato la lista copre mesi: senza intestazioni di mese
-// diventa un muro indistinto. Nella vista "recenti" copre pochi giorni, quindi
-// raggrupparla non aggiungerebbe nulla.
-const raggruppa = computed(() => modalita.value === 'cliente');
+// Sempre raggruppato per mese, tranne nella ricerca commessa: quella è
+// ordinata per commessa e non per data, quindi intestazioni di mese
+// racconterebbero una progressione che nella lista non c'è.
+// Anche la lista di default lo è: con lo scroll infinito cresce di centinaia
+// di righe, e senza intestazioni diventa un muro indistinto.
+const raggruppa = computed(() => modalita.value !== 'commessa');
 const gruppi = computed(() => raggruppa.value ? raggruppaPerMese(ordini.value) : []);
 
 // --- Scroll infinito ---
@@ -350,7 +352,12 @@ const openOrdine = (order: any) => {
                        di data. Raggruppata per mese quando copre mesi. -->
                   <template v-if="raggruppa">
                     <div v-for="gruppo in gruppi" :key="gruppo.chiave" class="space-y-3">
-                      <h4 class="text-xs font-bold uppercase tracking-wide text-gray-500 pt-2 first:pt-0">
+                      <!-- Ancorata in cima mentre si scorre dentro il mese, poi
+                           spinta via da quella successiva: scorrendo a lungo si
+                           sa sempre in che mese si è. `-mx-6 px-6` allarga la
+                           fascia fino ai bordi del contenitore, altrimenti le
+                           righe passerebbero scoperte ai lati. -->
+                      <h4 class="sticky top-0 z-10 -mx-6 px-6 py-2 bg-gray-50/95 backdrop-blur-sm text-xs font-bold uppercase tracking-wide text-gray-500">
                         {{ gruppo.etichetta }}
                       </h4>
                       <ArchiveOrderRow
