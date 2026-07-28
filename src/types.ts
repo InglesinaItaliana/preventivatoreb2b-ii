@@ -44,6 +44,17 @@ export const ARCHIVIO_QUERIES = [
   { stato: 'REJECTED', campoOrdine: 'dataCreazione', limite: 30 },
 ] as const;
 
+/**
+ * Con un cliente selezionato il limite non serve più a proteggere la vista:
+ * lo storico di un singolo cliente è di poche decine di ordini (il più grande
+ * ne ha 62 in archivio), quindi 150 li mostra tutti con margine. Se un giorno
+ * mordesse, la modale lo dichiara invece di troncare in silenzio.
+ */
+export const LIMITE_ARCHIVIO_CLIENTE = 150;
+
+/** Ricerca per commessa: risultati per prefisso, tetto di sicurezza. */
+export const LIMITE_ARCHIVIO_COMMESSA = 50;
+
   // Aggiungi interfaccia per la Sessione di Consegna
 export interface DeliverySession {
   id: string;

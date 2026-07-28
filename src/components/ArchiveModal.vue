@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue';
 import { Dialog, DialogPanel, DialogTitle, TransitionChild, TransitionRoot } from '@headlessui/vue';
-import { XMarkIcon, ArchiveBoxIcon, ArrowPathIcon, DocumentTextIcon } from '@heroicons/vue/24/solid';
+import { XMarkIcon, ArchiveBoxIcon, ArrowPathIcon, MagnifyingGlassIcon } from '@heroicons/vue/24/solid';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
-import { STATUS_DETAILS } from '../types';
 import { useRouter } from 'vue-router';
 import { resolveBackend } from '../lib/billing';
 import { openDdtPdf, openOrderPdf } from '../lib/billingPdf';
 import { useArchivio } from '../composables/useArchivio';
+import { useClientiSuggeriti } from '../composables/useClientiSuggeriti';
+import { raggruppaPerMese } from '../lib/archivio';
+import ArchiveOrderRow from './ArchiveOrderRow.vue';
 
 const props = defineProps<{
   show: boolean;
@@ -19,38 +21,91 @@ const props = defineProps<{
 const emit = defineEmits(['close']);
 const router = useRouter();
 
-const { consegnati, annullati, loading, errore, carica } = useArchivio();
+const {
+  consegnati, annullati, risultatiCommessa, modalita,
+  loading, errore, troncato, carica, cercaPerCommessa,
+} = useArchivio();
+
+const { suggeriti, cerca: cercaClienti, pulisci: pulisciSuggeriti } = useClientiSuggeriti();
 
 // Gli annullati stanno chiusi in fondo: sono rumore, non storico da consultare.
 const mostraAnnullati = ref(false);
 
-const archivioVuoto = computed(() => consegnati.value.length === 0 && annullati.value.length === 0);
+// --- Ricerca (solo admin) ---
+// Cliente e commessa sono modalità ALTERNATIVE, non filtri che si sommano: chi
+// cerca una commessa quasi mai sa di che cliente sia, e metterle in AND
+// renderebbe il campo commessa inutile proprio nel caso d'uso principale.
+const queryCliente = ref('');
+const clienteSelezionato = ref<any | null>(null);
+const queryCommessa = ref('');
 
-// Due sezioni, stessa riga: la seconda è collassata e si apre a richiesta.
-const sezioni = computed(() => [
-  { key: 'consegnati', orders: consegnati.value, collassabile: false },
-  { key: 'annullati', orders: annullati.value, collassabile: true },
-]);
+// Il vincolo per cliente vale sia per la dashboard cliente (il proprio UID, per
+// le regole Firestore) sia per l'admin che ne seleziona uno.
+const uidVincolato = computed(() =>
+  clienteSelezionato.value?.uid || clienteSelezionato.value?.id ||
+  (!props.isAdmin && props.clientUid ? props.clientUid : undefined)
+);
+
+const ricarica = () => {
+  mostraAnnullati.value = false;
+  carica(uidVincolato.value);
+};
+
+const onDigitaCliente = () => {
+  // Digitare qui abbandona qualunque ricerca in corso: cambiare il testo dopo
+  // aver scelto un cliente significa volerne un altro, e una ricerca commessa
+  // non può restare a video con il proprio campo ormai svuotato.
+  const stavaFiltrando = !!clienteSelezionato.value || !!queryCommessa.value;
+  queryCommessa.value = '';
+  clienteSelezionato.value = null;
+  if (stavaFiltrando) ricarica();
+  cercaClienti(queryCliente.value);
+};
+
+const selezionaCliente = (cliente: any) => {
+  clienteSelezionato.value = cliente;
+  queryCliente.value = cliente.ragioneSociale || cliente.email || '';
+  pulisciSuggeriti();
+  ricarica();
+};
+
+const avviaRicercaCommessa = () => {
+  if (queryCommessa.value.trim().length < 2) return;
+  queryCliente.value = '';
+  clienteSelezionato.value = null;
+  pulisciSuggeriti();
+  mostraAnnullati.value = false;
+  cercaPerCommessa(queryCommessa.value);
+};
+
+const azzeraRicerca = () => {
+  queryCliente.value = '';
+  queryCommessa.value = '';
+  clienteSelezionato.value = null;
+  pulisciSuggeriti();
+  ricarica();
+};
+
+const ricercaAttiva = computed(() => modalita.value !== 'recenti' && !!props.isAdmin);
+
+// --- Presentazione ---
+const archivioVuoto = computed(() =>
+  modalita.value === 'commessa'
+    ? risultatiCommessa.value.length === 0
+    : consegnati.value.length === 0 && annullati.value.length === 0
+);
+
+// Con un cliente selezionato la lista copre mesi: senza intestazioni di mese
+// diventa un muro indistinto. Nella vista "recenti" copre pochi giorni, quindi
+// raggrupparla non aggiungerebbe nulla.
+const raggruppa = computed(() => modalita.value === 'cliente');
+const gruppiConsegnati = computed(() => raggruppa.value ? raggruppaPerMese(consegnati.value) : []);
 
 watch(() => props.show, (isOpen) => {
   if (isOpen) {
-    mostraAnnullati.value = false;
-    // Solo il percorso cliente vincola la query al proprio UID; l'admin vede tutto.
-    carica(!props.isAdmin && props.clientUid ? props.clientUid : undefined);
+    azzeraRicerca();
   }
 });
-
-const formatDate = (seconds: number) => seconds ? new Date(seconds * 1000).toLocaleDateString() : '-';
-
-// La data mostrata deve essere quella su cui la lista è ordinata, altrimenti
-// l'ordine sembra casuale: DDT per i consegnati, creazione per gli annullati.
-const formatDataOrdinamento = (order: any) => {
-  if (order?.stato === 'DELIVERED') {
-    const d = order?.dataConsegnaPrevista;
-    return d ? new Date(d).toLocaleDateString() : '-';
-  }
-  return formatDate(order?.dataCreazione?.seconds);
-};
 
 const openOrder = (codice: string) => {
   const url = `/preventivatore?codice=${codice}${props.isAdmin ? '&admin=true&readonly=true' : ''}`;
@@ -117,6 +172,67 @@ const openOrdine = (order: any) => {
                 </button>
               </div>
 
+              <!-- Ricerca: solo admin. Un cliente vede già solo i propri ordini,
+                   e la ricerca commessa richiede una query che le regole
+                   Firestore gli negano. -->
+              <div v-if="isAdmin" class="px-6 py-3 bg-white border-b border-gray-200 flex flex-col sm:flex-row gap-2">
+                <div class="relative flex-1">
+                  <input
+                    v-model="queryCliente"
+                    @input="onDigitaCliente"
+                    type="text"
+                    placeholder="Cerca cliente…"
+                    class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 transition-all"
+                  />
+                  <ul
+                    v-if="suggeriti.length"
+                    class="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-xl max-h-56 overflow-y-auto"
+                  >
+                    <li
+                      v-for="c in suggeriti"
+                      :key="c.id"
+                      @click="selezionaCliente(c)"
+                      class="px-3 py-2 text-sm text-left hover:bg-amber-50 cursor-pointer border-b border-gray-100 last:border-0"
+                    >
+                      <div class="font-bold text-gray-800">{{ c.ragioneSociale || c.email }}</div>
+                      <div v-if="c.ragioneSociale && c.email" class="text-[10px] text-gray-400">{{ c.email }}</div>
+                    </li>
+                  </ul>
+                </div>
+
+                <div class="flex gap-2 sm:w-64">
+                  <input
+                    v-model="queryCommessa"
+                    @keyup.enter="avviaRicercaCommessa"
+                    type="text"
+                    placeholder="Commessa (inizia per…)"
+                    class="flex-1 min-w-0 text-sm border border-gray-300 rounded-lg px-3 py-2 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 transition-all"
+                  />
+                  <button
+                    @click="avviaRicercaCommessa"
+                    :disabled="queryCommessa.trim().length < 2"
+                    class="px-3 rounded-lg bg-amber-400 border border-amber-500 text-amber-950 hover:bg-amber-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    title="Cerca commessa"
+                  >
+                    <MagnifyingGlassIcon class="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+
+              <div v-if="ricercaAttiva" class="px-6 py-2 bg-amber-50 border-b border-amber-200 flex items-center justify-between gap-3">
+                <span class="text-xs text-amber-900 truncate">
+                  <template v-if="modalita === 'cliente'">
+                    Storico di <strong>{{ queryCliente }}</strong>
+                  </template>
+                  <template v-else>
+                    Commesse che iniziano per <strong>{{ queryCommessa.trim().toUpperCase() }}</strong>
+                  </template>
+                </span>
+                <button @click="azzeraRicerca" class="text-xs font-bold text-amber-900 hover:underline shrink-0">
+                  Azzera
+                </button>
+              </div>
+
               <div class="flex-1 overflow-y-auto p-6 bg-gray-50">
                 
                 <div v-if="loading" class="flex flex-col items-center justify-center py-10 text-gray-400">
@@ -134,82 +250,76 @@ const openOrdine = (order: any) => {
                   <p>Nessun ordine in archivio.</p>
                 </div>
 
+                <div v-else-if="modalita === 'commessa'" class="space-y-3">
+                  <ArchiveOrderRow
+                    v-for="order in risultatiCommessa"
+                    :key="order.id"
+                    :order="order"
+                    :is-admin="isAdmin"
+                    @apri="openOrder"
+                    @apri-ddt="openDdt"
+                    @apri-ordine="openOrdine"
+                  />
+                </div>
+
                 <div v-else class="space-y-3">
-                  <template v-for="sezione in sezioni" :key="sezione.key">
+                  <!-- Consegnati: raggruppati per mese quando la lista copre mesi
+                       (storico di un cliente), piatti nella vista dei recenti. -->
+                  <template v-if="raggruppa">
+                    <div v-for="gruppo in gruppiConsegnati" :key="gruppo.chiave" class="space-y-3">
+                      <h4 class="text-xs font-bold uppercase tracking-wide text-gray-500 pt-2 first:pt-0">
+                        {{ gruppo.etichetta }}
+                      </h4>
+                      <ArchiveOrderRow
+                        v-for="order in gruppo.ordini"
+                        :key="order.id"
+                        :order="order"
+                        :is-admin="isAdmin"
+                        @apri="openOrder"
+                        @apri-ddt="openDdt"
+                        @apri-ordine="openOrdine"
+                      />
+                    </div>
+                  </template>
+
+                  <template v-else>
+                    <ArchiveOrderRow
+                      v-for="order in consegnati"
+                      :key="order.id"
+                      :order="order"
+                      :is-admin="isAdmin"
+                      @apri="openOrder"
+                      @apri-ddt="openDdt"
+                      @apri-ordine="openOrdine"
+                    />
+                  </template>
 
                   <button
-                    v-if="sezione.collassabile && sezione.orders.length"
+                    v-if="annullati.length"
                     type="button"
                     @click="mostraAnnullati = !mostraAnnullati"
                     class="w-full mt-4 pt-4 border-t border-gray-200 flex items-center justify-between text-left text-xs font-bold uppercase tracking-wide text-gray-500 hover:text-gray-800 transition-colors"
                   >
-                    <span>Ordini annullati ({{ sezione.orders.length }})</span>
+                    <span>Ordini annullati ({{ annullati.length }})</span>
                     <span class="text-[10px] font-bold text-gray-400">{{ mostraAnnullati ? 'Nascondi' : 'Mostra' }}</span>
                   </button>
 
-                  <div v-if="!sezione.collassabile || mostraAnnullati" class="space-y-3">
-                  <div
-                    v-for="order in sezione.orders"
-                    :key="order.id"
-                    @click="openOrder(order.codice)"
-                    class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-amber-300 cursor-pointer transition-all flex justify-between items-center group"
-                  >
-                    <div v-if="!isAdmin">
-                      <div class="flex items-baseline gap-2 mb-1">
-                        <span class="font-bold text-gray-800">{{ order.commessa || order.codice }}</span>
-                        <span class="text-[10px] text-gray-400">{{ formatDataOrdinamento(order) }}</span>
-                      </div>
-                      <div class="flex items-center gap-2">
-                        <span class="text-[10px] px-2 py-0.5 rounded border uppercase font-bold"
-                              :class="STATUS_DETAILS[order.stato as keyof typeof STATUS_DETAILS]?.badge">
-                          {{ STATUS_DETAILS[order.stato as keyof typeof STATUS_DETAILS]?.label }}
-                        </span>
-                        
-                      </div>
-                    </div>
-
-                    <div v-else>
-                      <div class="flex items-center gap-2 mb-1">
-                        <span class="font-bold text-gray-800">{{ order.commessa || order.codice }}</span>
-                        <span class="text-[10px] px-2 py-0.5 rounded border uppercase font-bold"
-                              :class="STATUS_DETAILS[order.stato as keyof typeof STATUS_DETAILS]?.badge">
-                          {{ STATUS_DETAILS[order.stato as keyof typeof STATUS_DETAILS]?.label }}
-                        </span>
-                      </div>
-                      <div class="text-xs text-gray-500 flex gap-2">
-                        <span>{{ order.cliente }}</span>
-                        <span>•</span>
-                        <span>{{ formatDataOrdinamento(order) }}</span>
-                      </div>
-                    </div>
-
-                    <div class="text-right">
-                      <div class="font-bold text-gray-900">{{ (order.totaleScontato || order.totaleImponibile || 0).toFixed(2) }} €</div>
-                      <div v-if="isAdmin" class="text-xs text-blue-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity">VEDI ></div>
-                      <div class="flex items-center justify-end gap-2 mt-1">
-                        <button
-                            v-if="order.cic_order_id || order.fic_order_id"
-                            @click.stop="openOrdine(order)"
-                            class="flex items-center gap-1 text-sm font-bold text-amber-950 bg-amber-400 border border-amber-500 px-8 py-0.5 rounded-full hover:bg-amber-300 transition-colors"
-                            title="Visualizza Ordine"
-                          >
-                            <DocumentTextIcon class="w-3 h-3" /> ORDINE
-                          </button>
-                        <button
-                            v-if="order.fic_ddt_url || order.cic_ddt_id"
-                            @click.stop="openDdt(order)"
-                            class="flex items-center gap-1 text-sm font-bold text-amber-950 bg-amber-400 border border-amber-500 px-8 py-0.5 rounded-full hover:bg-amber-300 transition-colors"
-                            title="Visualizza DDT"
-                          >
-                            <DocumentTextIcon class="w-3 h-3" /> DDT
-                          </button>
-                      </div>
-                    </div>
+                  <div v-if="mostraAnnullati" class="space-y-3">
+                    <ArchiveOrderRow
+                      v-for="order in annullati"
+                      :key="order.id"
+                      :order="order"
+                      :is-admin="isAdmin"
+                      @apri="openOrder"
+                      @apri-ddt="openDdt"
+                      @apri-ordine="openOrdine"
+                    />
                   </div>
-                  </div>
-
-                  </template>
                 </div>
+
+                <p v-if="troncato && !loading" class="mt-4 text-[11px] text-gray-400 text-center">
+                  Elenco troncato al limite di caricamento: potrebbero esserci altri ordini più vecchi.
+                </p>
 
               </div>
 
