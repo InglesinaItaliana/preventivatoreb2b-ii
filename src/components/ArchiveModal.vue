@@ -74,11 +74,19 @@ const selezionaCliente = (cliente: any) => {
 // commessa di fiato e parte una sola query.
 const PAUSA_DIGITAZIONE_MS = 400;
 let timerCommessa: ReturnType<typeof setTimeout> | null = null;
+// Copre ANCHE la pausa di digitazione, non solo la query: senza, i primi
+// 400 ms sarebbero muti e sembrerebbe che il campo non faccia niente.
+const attesaCommessa = ref(false);
 
 const fermaTimerCommessa = () => {
   if (timerCommessa) clearTimeout(timerCommessa);
   timerCommessa = null;
+  attesaCommessa.value = false;
 };
+
+const ricercaCommessaInCorso = computed(() =>
+  attesaCommessa.value || (loading.value && modalita.value === 'commessa')
+);
 
 const avviaRicercaCommessa = () => {
   fermaTimerCommessa();
@@ -102,6 +110,7 @@ const onDigitaCommessa = () => {
     }
     return;
   }
+  attesaCommessa.value = true;
   timerCommessa = setTimeout(avviaRicercaCommessa, PAUSA_DIGITAZIONE_MS);
 };
 
@@ -243,23 +252,23 @@ const openOrdine = (order: any) => {
                   </ul>
                 </div>
 
-                <div class="flex gap-2 sm:w-64">
+                <!-- Niente pulsante "cerca": la ricerca parte da sola dopo la
+                     pausa di digitazione, quindi sarebbe un comando che non fa
+                     nulla di più. L'icona resta, ma come segnale (e come
+                     indicatore di attesa), non come controllo. -->
+                <div class="relative sm:w-64">
                   <input
                     v-model="queryCommessa"
                     @input="onDigitaCommessa"
                     @keyup.enter="avviaRicercaCommessa"
                     type="text"
                     placeholder="Commessa (inizia per…)"
-                    class="flex-1 min-w-0 text-sm border border-gray-300 rounded-lg px-3 py-2 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 transition-all"
+                    class="w-full text-sm border border-gray-300 rounded-lg pl-3 pr-9 py-2 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 transition-all"
                   />
-                  <button
-                    @click="avviaRicercaCommessa"
-                    :disabled="queryCommessa.trim().length < 2"
-                    class="px-3 rounded-lg bg-amber-400 border border-amber-500 text-amber-950 hover:bg-amber-300 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
-                    title="Cerca commessa"
-                  >
-                    <MagnifyingGlassIcon class="h-4 w-4" />
-                  </button>
+                  <span class="absolute inset-y-0 right-3 flex items-center pointer-events-none text-gray-400">
+                    <ArrowPathIcon v-if="ricercaCommessaInCorso" class="h-4 w-4 animate-spin" />
+                    <MagnifyingGlassIcon v-else class="h-4 w-4" />
+                  </span>
                 </div>
               </div>
 
