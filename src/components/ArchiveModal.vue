@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue';
+import { ref, computed, watch, onBeforeUnmount } from 'vue';
 import { Dialog, DialogPanel, DialogTitle, TransitionChild, TransitionRoot } from '@headlessui/vue';
 import { XMarkIcon, ArchiveBoxIcon, ArrowPathIcon, MagnifyingGlassIcon } from '@heroicons/vue/24/solid';
 import { collection, query, where, getDocs } from 'firebase/firestore';
@@ -123,7 +123,7 @@ const azzeraRicerca = () => {
 // Un timer in volo su una modale chiusa farebbe partire una query fantasma.
 onBeforeUnmount(() => {
   fermaTimerCommessa();
-  smontaOsservatore();
+  azzeraSpinta();
 });
 
 const ricercaAttiva = computed(() => modalita.value !== 'recenti' && !!props.isAdmin);
@@ -153,43 +153,65 @@ const messaggioVuoto = computed(() => {
 const raggruppa = computed(() => modalita.value !== 'commessa');
 const gruppi = computed(() => raggruppa.value ? raggruppaPerMese(ordini.value) : []);
 
-// --- Scroll infinito ---
-// Una sentinella in fondo alla lista: quando entra nel campo visivo del
-// contenitore, la pagina successiva parte da sola. IntersectionObserver e non
-// un listener di scroll, che si attiverebbe a ogni pixel.
+// --- Caricamento a resistenza ---
+// Arrivati in fondo la lista si ferma: per averne altri bisogna insistere,
+// spingendo oltre il bordo. Serve a non far crescere l'elenco per inerzia
+// mentre si sta solo scorrendo, e a rendere il caricamento una scelta.
 const contenitore = ref<HTMLElement | null>(null);
-const sentinella = ref<HTMLElement | null>(null);
-let osservatore: IntersectionObserver | null = null;
+const SPINTA_RICHIESTA = 90; // pixel di scorrimento a vuoto da accumulare
+const spinta = ref(0);
+let decadimento: ReturnType<typeof setTimeout> | null = null;
 
-const smontaOsservatore = () => {
-  osservatore?.disconnect();
-  osservatore = null;
+const progressoSpinta = computed(() => Math.min(100, (spinta.value / SPINTA_RICHIESTA) * 100));
+
+const inFondo = () => {
+  const el = contenitore.value;
+  if (!el) return false;
+  return el.scrollHeight - el.scrollTop - el.clientHeight <= 2;
 };
 
-const montaOsservatore = async () => {
-  smontaOsservatore();
-  await nextTick();
-  if (!contenitore.value || !sentinella.value) return;
-  osservatore = new IntersectionObserver(
-    voci => { if (voci.some(v => v.isIntersecting)) caricaAltri(); },
-    // rootMargin: si parte poco PRIMA del bordo, così la pagina è già lì
-    // quando ci si arriva invece di far vedere il vuoto.
-    { root: contenitore.value, rootMargin: '200px' }
-  );
-  osservatore.observe(sentinella.value);
+const azzeraSpinta = () => {
+  spinta.value = 0;
+  if (decadimento) { clearTimeout(decadimento); decadimento = null; }
 };
+
+/** Accumula lo scorrimento a vuoto oltre il bordo; superata la soglia, carica. */
+const spingi = (delta: number) => {
+  if (!altri.value || caricandoAltri.value || loading.value) return;
+  if (delta <= 0 || !inFondo()) { azzeraSpinta(); return; }
+
+  spinta.value += delta;
+  // Se si smette di spingere la resistenza si ripristina: senza, spintarelle
+  // sparse nel tempo si sommerebbero e il caricamento sembrerebbe casuale.
+  if (decadimento) clearTimeout(decadimento);
+  decadimento = setTimeout(azzeraSpinta, 500);
+
+  if (spinta.value >= SPINTA_RICHIESTA) {
+    azzeraSpinta();
+    caricaAltri();
+  }
+};
+
+const onWheel = (e: WheelEvent) => spingi(e.deltaY);
+
+// Su touch il dito che risale equivale a scorrere in giù.
+let ultimoTocco = 0;
+const onTouchStart = (e: TouchEvent) => { ultimoTocco = e.touches[0]?.clientY ?? 0; };
+const onTouchMove = (e: TouchEvent) => {
+  const y = e.touches[0]?.clientY ?? 0;
+  spingi(ultimoTocco - y);
+  ultimoTocco = y;
+};
+
+// Allontanandosi dal fondo la resistenza si ripristina da capo.
+const onScroll = () => { if (!inFondo()) azzeraSpinta(); };
 
 watch(() => props.show, (isOpen) => {
   if (isOpen) {
     azzeraRicerca();
-    montaOsservatore();
-  } else {
-    smontaOsservatore();
+    azzeraSpinta();
   }
 });
-
-// La sentinella compare e scompare col v-if della lista: va riosservata.
-watch(sentinella, () => { if (props.show) montaOsservatore(); });
 
 const openOrder = (codice: string) => {
   const url = `/preventivatore?codice=${codice}${props.isAdmin ? '&admin=true&readonly=true' : ''}`;
@@ -318,7 +340,17 @@ const openOrdine = (order: any) => {
                 </button>
               </div>
 
-              <div ref="contenitore" class="flex-1 overflow-y-auto p-6 bg-gray-50">
+              <!-- overscroll-contain: arrivati in fondo lo scorrimento NON passa
+                   alla pagina sotto. È metà della resistenza; l'altra metà è la
+                   soglia da superare in `spingi`. -->
+              <div
+                ref="contenitore"
+                @scroll.passive="onScroll"
+                @wheel.passive="onWheel"
+                @touchstart.passive="onTouchStart"
+                @touchmove.passive="onTouchMove"
+                class="flex-1 overflow-y-auto overscroll-contain p-6 bg-gray-50"
+              >
                 
                 <div v-if="loading" class="flex flex-col items-center justify-center py-10 text-gray-400">
                   <ArrowPathIcon class="h-8 w-8 animate-spin mb-2" />
@@ -357,7 +389,7 @@ const openOrdine = (order: any) => {
                            sa sempre in che mese si è. `-mx-6 px-6` allarga la
                            fascia fino ai bordi del contenitore, altrimenti le
                            righe passerebbero scoperte ai lati. -->
-                      <h4 class="sticky top-0 z-10 -mx-6 px-6 py-2 bg-gray-50/95 backdrop-blur-sm text-xs font-bold uppercase tracking-wide text-gray-500">
+                      <h4 class="sticky top-0 z-10 -mx-6 px-6 py-2 bg-gray-50 border-b border-gray-200 text-xs font-bold uppercase tracking-wide text-gray-500">
                         {{ gruppo.etichetta }}
                       </h4>
                       <ArchiveOrderRow
@@ -384,16 +416,20 @@ const openOrdine = (order: any) => {
                     />
                   </template>
 
-                  <!-- Sentinella dello scroll infinito: entrando nel campo
-                       visivo fa partire la pagina successiva. Dichiara anche
-                       che scorrendo ne arrivano altri, invece di lasciare
-                       credere che la lista finisca qui. -->
-                  <div ref="sentinella" class="pt-2 pb-1 text-center">
-                    <div v-if="altri" class="flex items-center justify-center gap-2 text-[11px] font-bold uppercase tracking-wide text-gray-400">
-                      <ArrowPathIcon v-if="caricandoAltri" class="h-3.5 w-3.5 animate-spin" />
-                      <span>{{ caricandoAltri ? 'Carico altri ordini…' : 'Scorri per caricarne altri' }}</span>
+                  <!-- Piede: dichiara che la lista non finisce qui e mostra
+                       quanta resistenza resta da vincere. La barra che si
+                       riempie è ciò che rende leggibile lo "spingi ancora". -->
+                  <div class="pt-2 pb-1">
+                    <div v-if="altri" class="flex flex-col items-center gap-1.5">
+                      <div class="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-gray-400">
+                        <ArrowPathIcon v-if="caricandoAltri" class="h-3.5 w-3.5 animate-spin" />
+                        <span>{{ caricandoAltri ? 'Carico altri ordini…' : 'Continua a scorrere per caricarne altri' }}</span>
+                      </div>
+                      <div v-if="!caricandoAltri" class="h-1 w-24 rounded-full bg-gray-200 overflow-hidden">
+                        <div class="h-full bg-amber-400 rounded-full transition-[width] duration-75" :style="{ width: progressoSpinta + '%' }" />
+                      </div>
                     </div>
-                    <div v-else class="text-[11px] text-gray-300">
+                    <div v-else class="text-center text-[11px] text-gray-300">
                       Fine dell'archivio
                     </div>
                   </div>
