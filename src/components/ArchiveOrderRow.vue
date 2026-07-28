@@ -84,7 +84,7 @@ const CLASSI_PULSANTE =
           v-if="order.cic_order_id || order.fic_order_id"
           @click.stop="emit('apriOrdine', order)"
           :class="CLASSI_PULSANTE"
-          class="px-8"
+          class="px-4"
           title="Visualizza Ordine"
         >
           <DocumentTextIcon class="w-3 h-3" /> ORDINE
@@ -93,7 +93,7 @@ const CLASSI_PULSANTE =
           v-if="order.fic_ddt_url || order.cic_ddt_id"
           @click.stop="emit('apriDdt', order)"
           :class="CLASSI_PULSANTE"
-          class="px-8"
+          class="px-4"
           title="Visualizza DDT"
         >
           <DocumentTextIcon class="w-3 h-3" /> DDT
