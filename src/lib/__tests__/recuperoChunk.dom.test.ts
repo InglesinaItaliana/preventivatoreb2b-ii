@@ -47,27 +47,30 @@ describe('installaRecuperoChunk', () => {
     expect(destinazione).toBe('/admin');
   });
 
+  it('NON reagisce agli import dinamici fuori dalla navigazione', () => {
+    // Il caso che protegge il lavoro non salvato: un ordine in composizione
+    // vive solo in memoria, e un import estraneo che fallisce (notifiche,
+    // messaging) non deve poter ricaricare la pagina buttandolo via.
+    const f = routerFinto();
+    installaRecuperoChunk(f.router);
+    const evento = new Event('vite:preloadError', { cancelable: true });
+    window.dispatchEvent(evento);
+    expect(destinazione).toBeNull();
+    expect(evento.defaultPrevented).toBe(false);
+  });
+
   it('senza destinazione ricarica il percorso corrente', () => {
     const f = routerFinto();
     installaRecuperoChunk(f.router);
-    window.dispatchEvent(new Event('vite:preloadError', { cancelable: true }));
+    f.scatena(new Error('Failed to fetch dynamically imported module'));
     expect(destinazione).toBe('/dashboard');
   });
 
-  it('annulla l’evento di preload SOLO quando ricarica davvero', () => {
+  it('esauriti i tentativi non ricarica più', () => {
     const f = routerFinto();
     installaRecuperoChunk(f.router);
-
-    const primo = new Event('vite:preloadError', { cancelable: true });
-    window.dispatchEvent(primo);
-    expect(primo.defaultPrevented).toBe(true);
-
-    // Tentativi esauriti: l'errore deve tornare a galla invece di essere inghiottito.
     sessionStorage.setItem(CHIAVE_RECUPERO, JSON.stringify({ tentativi: MAX_TENTATIVI, ultimo: Date.now() }));
-    destinazione = null;
-    const secondo = new Event('vite:preloadError', { cancelable: true });
-    window.dispatchEvent(secondo);
-    expect(secondo.defaultPrevented).toBe(false);
+    f.scatena(new Error('Failed to fetch dynamically imported module'), { fullPath: '/admin' });
     expect(destinazione).toBeNull();
   });
 

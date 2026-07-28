@@ -95,14 +95,21 @@ export function installaRecuperoChunk(router: Router): void {
   };
 
   try {
-    // Fallimento del preload di un chunk: Vite lo emette prima di lanciare.
-    // preventDefault SOLO se stiamo davvero ricaricando, altrimenti l'errore
-    // va lasciato emergere invece di essere inghiottito.
-    window.addEventListener('vite:preloadError', (evento: Event) => {
-      if (recupera()) evento.preventDefault();
-    });
-
-    // Fallimento dell'import() del componente di rotta.
+    // SOLO sulla navigazione, deliberatamente.
+    //
+    // L'aggancio ovvio sarebbe `vite:preloadError`, che intercetta QUALUNQUE
+    // import dinamico fallito. Ma un ricaricamento butta via ciò che c'è a
+    // video, e in POPS un preventivo in composizione vive solo in memoria:
+    // BuilderView non salva bozze da nessuna parte. Un import estraneo che
+    // fallisce — per esempio `import('firebase/messaging')` in
+    // useNotifications — avrebbe fatto perdere un ordine lungo senza chiedere
+    // niente, per curare un guasto che non stava nemmeno bloccando l'utente.
+    //
+    // `router.onError` invece scatta solo quando si sta GIÀ cambiando pagina:
+    // lì il contenuto corrente viene comunque abbandonato, quindi ricaricare
+    // non distrugge nulla che non stesse già per sparire. E la copertura resta
+    // piena sul caso che conta: se il preload di un chunk di rotta fallisce,
+    // l'errore risale comunque fino a qui.
     router.onError((errore, to) => {
       if (eErroreDiChunk(errore)) recupera(to?.fullPath);
     });
