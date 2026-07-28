@@ -119,24 +119,3 @@ export function filtraClienti(clienti: any[], termine: string, max = 10): any[] 
     })
     .slice(0, max);
 }
-
-// Ultimo carattere dell'area a uso privato Unicode: ordina dopo qualunque
-// carattere normale. Scritto con fromCharCode e non come letterale, perché un
-// carattere invisibile nel sorgente è facile da mangiare in un merge o in un
-// reformat, e il guasto sarebbe silenzioso (ricerca che non trova più nulla).
-const FINE_PREFISSO = String.fromCharCode(0xf8ff);
-
-/**
- * Estremi per la ricerca per PREFISSO su `commessa`.
- *
- * Firestore non ha il "contiene": il massimo ottenibile lato server su un solo
- * campo è un range [prefisso, prefisso+]. In archivio le commesse sono
- * maiuscole al 100%, quindi normalizzare a maiuscolo rende il confronto
- * affidabile invece che dipendente da come l'utente ha digitato.
- * Ritorna null se il termine è troppo corto per valere una query.
- */
-export function estremiCommessa(termine: string): { da: string; a: string } | null {
-  const t = (termine || '').trim().toUpperCase();
-  if (t.length < 2) return null;
-  return { da: t, a: t + FINE_PREFISSO };
-}

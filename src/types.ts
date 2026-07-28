@@ -54,8 +54,6 @@ export const ARCHIVIO_QUERIES = [
  */
 export const PAGINA_ARCHIVIO = 80;
 
-/** Ricerca per commessa: risultati per prefisso, tetto di sicurezza. */
-export const LIMITE_ARCHIVIO_COMMESSA = 50;
 
   // Aggiungi interfaccia per la Sessione di Consegna
 export interface DeliverySession {
