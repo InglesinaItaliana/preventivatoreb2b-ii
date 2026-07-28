@@ -123,7 +123,7 @@ const azzeraRicerca = () => {
 // Un timer in volo su una modale chiusa farebbe partire una query fantasma.
 onBeforeUnmount(() => {
   fermaTimerCommessa();
-  azzeraSpinta();
+  disarma();
 });
 
 const ricercaAttiva = computed(() => modalita.value !== 'recenti' && !!props.isAdmin);
@@ -154,12 +154,17 @@ const raggruppa = computed(() => modalita.value !== 'commessa');
 const gruppi = computed(() => raggruppa.value ? raggruppaPerMese(ordini.value) : []);
 
 // --- Caricamento a resistenza ---
-// Arrivati in fondo la lista si ferma: per averne altri bisogna insistere,
-// spingendo oltre il bordo. Serve a non far crescere l'elenco per inerzia
-// mentre si sta solo scorrendo, e a rendere il caricamento una scelta.
+// Arrivati in fondo la lista si ferma. Per averne altri bisogna FERMARSI e poi
+// spingere di nuovo: l'inerzia della scrollata con cui si è arrivati non conta,
+// altrimenti basterebbe toccare il fondo di slancio per far partire tutto.
 const contenitore = ref<HTMLElement | null>(null);
-const SPINTA_RICHIESTA = 90; // pixel di scorrimento a vuoto da accumulare
+const SPINTA_RICHIESTA = 90;   // pixel di scorrimento a vuoto da accumulare
+const PAUSA_ARMAMENTO = 250;   // ms di immobilità che separano lo slancio dalla spinta
 const spinta = ref(0);
+const alBordo = ref(false);
+/** true solo dopo una pausa sul fondo: prima, ogni evento è ancora inerzia. */
+const armato = ref(false);
+let timerArmamento: ReturnType<typeof setTimeout> | null = null;
 let decadimento: ReturnType<typeof setTimeout> | null = null;
 
 const progressoSpinta = computed(() => Math.min(100, (spinta.value / SPINTA_RICHIESTA) * 100));
@@ -175,41 +180,73 @@ const azzeraSpinta = () => {
   if (decadimento) { clearTimeout(decadimento); decadimento = null; }
 };
 
-/** Accumula lo scorrimento a vuoto oltre il bordo; superata la soglia, carica. */
-const spingi = (delta: number) => {
-  if (!altri.value || caricandoAltri.value || loading.value) return;
-  if (delta <= 0 || !inFondo()) { azzeraSpinta(); return; }
+const disarma = () => {
+  armato.value = false;
+  if (timerArmamento) { clearTimeout(timerArmamento); timerArmamento = null; }
+  azzeraSpinta();
+};
 
+/** Riparte a ogni evento: scatta solo quando lo scorrimento si è davvero fermato. */
+const programmaArmamento = () => {
+  if (timerArmamento) clearTimeout(timerArmamento);
+  timerArmamento = setTimeout(() => { armato.value = true; }, PAUSA_ARMAMENTO);
+};
+
+const puoSpingere = () => altri.value && !caricandoAltri.value && !loading.value;
+
+const accumula = (delta: number) => {
   spinta.value += delta;
+  if (decadimento) clearTimeout(decadimento);
   // Se si smette di spingere la resistenza si ripristina: senza, spintarelle
   // sparse nel tempo si sommerebbero e il caricamento sembrerebbe casuale.
-  if (decadimento) clearTimeout(decadimento);
   decadimento = setTimeout(azzeraSpinta, 500);
 
   if (spinta.value >= SPINTA_RICHIESTA) {
-    azzeraSpinta();
+    disarma();
+    alBordo.value = false;
     caricaAltri();
   }
 };
 
-const onWheel = (e: WheelEvent) => spingi(e.deltaY);
-
-// Su touch il dito che risale equivale a scorrere in giù.
-let ultimoTocco = 0;
-const onTouchStart = (e: TouchEvent) => { ultimoTocco = e.touches[0]?.clientY ?? 0; };
-const onTouchMove = (e: TouchEvent) => {
-  const y = e.touches[0]?.clientY ?? 0;
-  spingi(ultimoTocco - y);
-  ultimoTocco = y;
+const onWheel = (e: WheelEvent) => {
+  if (!puoSpingere()) return;
+  if (e.deltaY <= 0 || !inFondo()) { disarma(); return; }
+  alBordo.value = true;
+  // Finché gli eventi continuano senza pause siamo ancora nello slancio.
+  if (!armato.value) { azzeraSpinta(); programmaArmamento(); return; }
+  accumula(e.deltaY);
 };
 
-// Allontanandosi dal fondo la resistenza si ripristina da capo.
-const onScroll = () => { if (!inFondo()) azzeraSpinta(); };
+// Su touch il confine fra slancio e spinta nuova è netto: un nuovo dito appoggiato.
+// Se il dito scende quando si è GIÀ in fondo, è una spinta deliberata.
+let ultimoTocco = 0;
+const onTouchStart = (e: TouchEvent) => {
+  ultimoTocco = e.touches[0]?.clientY ?? 0;
+  if (timerArmamento) { clearTimeout(timerArmamento); timerArmamento = null; }
+  armato.value = inFondo();
+  alBordo.value = armato.value;
+  azzeraSpinta();
+};
+const onTouchMove = (e: TouchEvent) => {
+  const y = e.touches[0]?.clientY ?? 0;
+  const delta = ultimoTocco - y; // dito che risale = si scorre in giù
+  ultimoTocco = y;
+  if (!puoSpingere() || !armato.value) return;
+  if (delta <= 0 || !inFondo()) { disarma(); return; }
+  accumula(delta);
+};
+
+// Allontanandosi dal fondo si riparte da zero.
+const onScroll = () => {
+  const fondo = inFondo();
+  alBordo.value = fondo;
+  if (!fondo) disarma();
+};
 
 watch(() => props.show, (isOpen) => {
   if (isOpen) {
     azzeraRicerca();
-    azzeraSpinta();
+    disarma();
   }
 });
 
@@ -349,8 +386,13 @@ const openOrdine = (order: any) => {
                 @wheel.passive="onWheel"
                 @touchstart.passive="onTouchStart"
                 @touchmove.passive="onTouchMove"
-                class="flex-1 overflow-y-auto overscroll-contain p-6 bg-gray-50"
+                class="flex-1 overflow-y-auto overscroll-contain bg-gray-50"
               >
+                <!-- Il padding sta QUI e non sul contenitore: un padding-top sul
+                     contenitore lascerebbe una fetta scoperta sopra la fascia
+                     del mese, dove si vedrebbero passare le righe. Senza, la
+                     fascia si ancora al bordo vero, cioè sotto la ricerca. -->
+                <div class="p-6">
                 
                 <div v-if="loading" class="flex flex-col items-center justify-center py-10 text-gray-400">
                   <ArrowPathIcon class="h-8 w-8 animate-spin mb-2" />
@@ -423,7 +465,9 @@ const openOrdine = (order: any) => {
                     <div v-if="altri" class="flex flex-col items-center gap-1.5">
                       <div class="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-gray-400">
                         <ArrowPathIcon v-if="caricandoAltri" class="h-3.5 w-3.5 animate-spin" />
-                        <span>{{ caricandoAltri ? 'Carico altri ordini…' : 'Continua a scorrere per caricarne altri' }}</span>
+                        <span v-if="caricandoAltri">Carico altri ordini…</span>
+                        <span v-else-if="alBordo">{{ armato ? 'Spingi ancora per caricarne altri' : 'Sei in fondo — fermati e scorri ancora' }}</span>
+                        <span v-else>Scorri fino in fondo per caricarne altri</span>
                       </div>
                       <div v-if="!caricandoAltri" class="h-1 w-24 rounded-full bg-gray-200 overflow-hidden">
                         <div class="h-full bg-amber-400 rounded-full transition-[width] duration-75" :style="{ width: progressoSpinta + '%' }" />
@@ -439,6 +483,7 @@ const openOrdine = (order: any) => {
                   Troppi risultati: affina il termine di ricerca.
                 </p>
 
+                </div>
               </div>
 
             </DialogPanel>
