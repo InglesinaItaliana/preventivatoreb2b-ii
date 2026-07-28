@@ -243,12 +243,17 @@ export const STATUS_DETAILS: Record<StatoPreventivo, { label: string, badge: str
     darkBadge: 'bg-amber-400 text-amber-950 hover:bg-amber-300',
     hoverBadge: 'hover:bg-amber-300'
   },
-  'DELIVERED': { 
-    label: 'CONSEGNATI', 
-    badge: 'bg-amber-400 text-amber-950 border-amber-500 hover:bg-amber-300', 
-    iconBg: 'bg-amber-400 text-amber-950', 
-    darkBadge: 'bg-amber-400 text-amber-950 hover:bg-amber-300',
-    hoverBadge: 'hover:bg-amber-300'
+  // Verde Material 3: container (tono ~90) + testo on-container (tono ~10).
+  // È l'unico stato conclusivo positivo del ciclo, e l'ambra lo confondeva con
+  // tutti gli stati "in corso". Compare di fatto solo in archivio: gli altri
+  // consumatori di STATUS_DETAILS (Admin, Produzione, Builder) lavorano su
+  // stati attivi, che DELIVERED non è.
+  'DELIVERED': {
+    label: 'CONSEGNATI',
+    badge: 'bg-green-200 text-green-950 border-green-300 hover:bg-green-300',
+    iconBg: 'bg-green-200 text-green-950',
+    darkBadge: 'bg-green-200 text-green-950 hover:bg-green-300',
+    hoverBadge: 'hover:bg-green-300'
   },
   'REJECTED': { 
     label: 'ANNULLATI', 

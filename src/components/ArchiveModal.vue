@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onBeforeUnmount } from 'vue';
 import { Dialog, DialogPanel, DialogTitle, TransitionChild, TransitionRoot } from '@headlessui/vue';
 import { XMarkIcon, ArchiveBoxIcon, ArrowPathIcon, MagnifyingGlassIcon } from '@heroicons/vue/24/solid';
 import { collection, query, where, getDocs } from 'firebase/firestore';
@@ -69,7 +69,19 @@ const selezionaCliente = (cliente: any) => {
   ricarica();
 };
 
+// La ricerca parte da sola dopo una pausa di digitazione: senza attesa si
+// sparerebbe una query per tasto premuto, con l'attesa giusta si scrive la
+// commessa di fiato e parte una sola query.
+const PAUSA_DIGITAZIONE_MS = 400;
+let timerCommessa: ReturnType<typeof setTimeout> | null = null;
+
+const fermaTimerCommessa = () => {
+  if (timerCommessa) clearTimeout(timerCommessa);
+  timerCommessa = null;
+};
+
 const avviaRicercaCommessa = () => {
+  fermaTimerCommessa();
   if (queryCommessa.value.trim().length < 2) return;
   queryCliente.value = '';
   clienteSelezionato.value = null;
@@ -78,13 +90,32 @@ const avviaRicercaCommessa = () => {
   cercaPerCommessa(queryCommessa.value);
 };
 
+const onDigitaCommessa = () => {
+  fermaTimerCommessa();
+  if (queryCommessa.value.trim().length < 2) {
+    // Campo svuotato: si torna ai recenti, invece di lasciare a video i
+    // risultati di una ricerca che non è più scritta da nessuna parte.
+    if (modalita.value === 'commessa') {
+      queryCliente.value = '';
+      clienteSelezionato.value = null;
+      ricarica();
+    }
+    return;
+  }
+  timerCommessa = setTimeout(avviaRicercaCommessa, PAUSA_DIGITAZIONE_MS);
+};
+
 const azzeraRicerca = () => {
+  fermaTimerCommessa();
   queryCliente.value = '';
   queryCommessa.value = '';
   clienteSelezionato.value = null;
   pulisciSuggeriti();
   ricarica();
 };
+
+// Un timer in volo su una modale chiusa farebbe partire una query fantasma.
+onBeforeUnmount(fermaTimerCommessa);
 
 const ricercaAttiva = computed(() => modalita.value !== 'recenti' && !!props.isAdmin);
 
@@ -95,9 +126,6 @@ const archivioVuoto = computed(() =>
     : consegnati.value.length === 0 && annullati.value.length === 0
 );
 
-// Con un cliente selezionato la lista copre mesi: senza intestazioni di mese
-// diventa un muro indistinto. Nella vista "recenti" copre pochi giorni, quindi
-// raggrupparla non aggiungerebbe nulla.
 // "Nessun ordine in archivio" è vero solo nella vista dei recenti: dopo una
 // ricerca a vuoto direbbe che l'archivio è vuoto, che è un'altra cosa.
 const messaggioVuoto = computed(() => {
@@ -110,6 +138,9 @@ const messaggioVuoto = computed(() => {
   return 'Nessun ordine in archivio.';
 });
 
+// Con un cliente selezionato la lista copre mesi: senza intestazioni di mese
+// diventa un muro indistinto. Nella vista "recenti" copre pochi giorni, quindi
+// raggrupparla non aggiungerebbe nulla.
 const raggruppa = computed(() => modalita.value === 'cliente');
 const gruppiConsegnati = computed(() => raggruppa.value ? raggruppaPerMese(consegnati.value) : []);
 
@@ -215,6 +246,7 @@ const openOrdine = (order: any) => {
                 <div class="flex gap-2 sm:w-64">
                   <input
                     v-model="queryCommessa"
+                    @input="onDigitaCommessa"
                     @keyup.enter="avviaRicercaCommessa"
                     type="text"
                     placeholder="Commessa (inizia per…)"
