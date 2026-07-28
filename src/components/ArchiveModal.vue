@@ -1,13 +1,14 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { ref, computed, watch } from 'vue';
 import { Dialog, DialogPanel, DialogTitle, TransitionChild, TransitionRoot } from '@headlessui/vue';
 import { XMarkIcon, ArchiveBoxIcon, ArrowPathIcon, DocumentTextIcon } from '@heroicons/vue/24/solid';
-import { collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
-import { ARCHIVE_STATUSES, STATUS_DETAILS } from '../types';
+import { STATUS_DETAILS } from '../types';
 import { useRouter } from 'vue-router';
 import { resolveBackend } from '../lib/billing';
 import { openDdtPdf, openOrderPdf } from '../lib/billingPdf';
+import { useArchivio } from '../composables/useArchivio';
 
 const props = defineProps<{
   show: boolean;
@@ -18,49 +19,38 @@ const props = defineProps<{
 const emit = defineEmits(['close']);
 const router = useRouter();
 
-const archivedOrders = ref<any[]>([]);
-const loading = ref(false);
-const loaded = ref(false);
+const { consegnati, annullati, loading, errore, carica } = useArchivio();
 
-const loadArchive = async () => {
-  loading.value = true;
-  archivedOrders.value = []; // Pulisci la lista vecchia per feedback visivo
-  try {
-    let q;
-    const coll = collection(db, 'preventivi');
-    
-    // Costruzione query dinamica
-    const constraints = [
-      where('stato', 'in', ARCHIVE_STATUSES),
-      orderBy('dataCreazione', 'desc'),
-      limit(50)
-    ];
+// Gli annullati stanno chiusi in fondo: sono rumore, non storico da consultare.
+const mostraAnnullati = ref(false);
 
-    if (!props.isAdmin && props.clientUid) {
-      // --- MODIFICA QUI: Usa clienteUID invece di clienteEmail ---
-      constraints.unshift(where('clienteUID', '==', props.clientUid));
-    }
+const archivioVuoto = computed(() => consegnati.value.length === 0 && annullati.value.length === 0);
 
-    q = query(coll, ...constraints);
-    
-    const snap = await getDocs(q);
-    archivedOrders.value = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-    loaded.value = true;
-  } catch (e) {
-    console.error("Errore caricamento archivio:", e);
-  } finally {
-    loading.value = false;
-  }
-};
+// Due sezioni, stessa riga: la seconda è collassata e si apre a richiesta.
+const sezioni = computed(() => [
+  { key: 'consegnati', orders: consegnati.value, collassabile: false },
+  { key: 'annullati', orders: annullati.value, collassabile: true },
+]);
 
-// Modifica il watch per forzare il ricaricamento
 watch(() => props.show, (isOpen) => {
   if (isOpen) {
-    loadArchive();
+    mostraAnnullati.value = false;
+    // Solo il percorso cliente vincola la query al proprio UID; l'admin vede tutto.
+    carica(!props.isAdmin && props.clientUid ? props.clientUid : undefined);
   }
 });
 
 const formatDate = (seconds: number) => seconds ? new Date(seconds * 1000).toLocaleDateString() : '-';
+
+// La data mostrata deve essere quella su cui la lista è ordinata, altrimenti
+// l'ordine sembra casuale: DDT per i consegnati, creazione per gli annullati.
+const formatDataOrdinamento = (order: any) => {
+  if (order?.stato === 'DELIVERED') {
+    const d = order?.dataConsegnaPrevista;
+    return d ? new Date(d).toLocaleDateString() : '-';
+  }
+  return formatDate(order?.dataCreazione?.seconds);
+};
 
 const openOrder = (codice: string) => {
   const url = `/preventivatore?codice=${codice}${props.isAdmin ? '&admin=true&readonly=true' : ''}`;
@@ -134,14 +124,32 @@ const openOrdine = (order: any) => {
                   <span class="text-sm">Recupero dati in corso...</span>
                 </div>
 
-                <div v-else-if="archivedOrders.length === 0" class="text-center py-10 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl">
+                <div v-else-if="errore" class="text-center py-10 text-red-500 border-2 border-dashed border-red-200 rounded-xl">
+                  <ArchiveBoxIcon class="h-12 w-12 mx-auto mb-2 opacity-50" />
+                  <p>{{ errore }}</p>
+                </div>
+
+                <div v-else-if="archivioVuoto" class="text-center py-10 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl">
                   <ArchiveBoxIcon class="h-12 w-12 mx-auto mb-2 opacity-50" />
                   <p>Nessun ordine in archivio.</p>
                 </div>
 
                 <div v-else class="space-y-3">
-                  <div 
-                    v-for="order in archivedOrders" 
+                  <template v-for="sezione in sezioni" :key="sezione.key">
+
+                  <button
+                    v-if="sezione.collassabile && sezione.orders.length"
+                    type="button"
+                    @click="mostraAnnullati = !mostraAnnullati"
+                    class="w-full mt-4 pt-4 border-t border-gray-200 flex items-center justify-between text-left text-xs font-bold uppercase tracking-wide text-gray-500 hover:text-gray-800 transition-colors"
+                  >
+                    <span>Ordini annullati ({{ sezione.orders.length }})</span>
+                    <span class="text-[10px] font-bold text-gray-400">{{ mostraAnnullati ? 'Nascondi' : 'Mostra' }}</span>
+                  </button>
+
+                  <div v-if="!sezione.collassabile || mostraAnnullati" class="space-y-3">
+                  <div
+                    v-for="order in sezione.orders"
                     :key="order.id"
                     @click="openOrder(order.codice)"
                     class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-amber-300 cursor-pointer transition-all flex justify-between items-center group"
@@ -149,7 +157,7 @@ const openOrdine = (order: any) => {
                     <div v-if="!isAdmin">
                       <div class="flex items-baseline gap-2 mb-1">
                         <span class="font-bold text-gray-800">{{ order.commessa || order.codice }}</span>
-                        <span class="text-[10px] text-gray-400">{{ formatDate(order.dataCreazione?.seconds) }}</span>
+                        <span class="text-[10px] text-gray-400">{{ formatDataOrdinamento(order) }}</span>
                       </div>
                       <div class="flex items-center gap-2">
                         <span class="text-[10px] px-2 py-0.5 rounded border uppercase font-bold"
@@ -171,7 +179,7 @@ const openOrdine = (order: any) => {
                       <div class="text-xs text-gray-500 flex gap-2">
                         <span>{{ order.cliente }}</span>
                         <span>•</span>
-                        <span>{{ formatDate(order.dataCreazione?.seconds) }}</span>
+                        <span>{{ formatDataOrdinamento(order) }}</span>
                       </div>
                     </div>
 
@@ -198,6 +206,9 @@ const openOrdine = (order: any) => {
                       </div>
                     </div>
                   </div>
+                  </div>
+
+                  </template>
                 </div>
 
               </div>
