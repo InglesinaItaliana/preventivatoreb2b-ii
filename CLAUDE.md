@@ -91,7 +91,8 @@ Modali chiave in `src/components/`: `OrderModals.vue`, `DdtModal.vue`, `Delivery
 - Config CiC: `cicConfig.ts` (doc `config/cic` + env `REVISO_APP_SECRET`/`REVISO_AGREEMENT_GRANT`; serie DDT 29, layout 9, IVA V022).
 - Flusso DDT CiC: crea Draft → issue → rilegge numero; su fallimento issue cancella la bozza orfana (una bozza non emessa sulla serie condivisa blocca le successive).
 - Anti-orfano: l'order id viene scritto subito dopo la creazione per bloccare il re-trigger; se l'errore avviene prima dell'id, sul doc non resta nulla (rischio ordine orfano silenzioso su 500 transitorio CiC — incidente noto).
-- PDF client-side: `lib/billingPdf.ts` (jsPDF; `openOrderPdf/openQuotationPdf/openDdtPdf`; arricchisce con anagrafica da `users/{clienteUID}`) + `lib/billingPdfDraw.ts` (draw condiviso, costante `COMPANY`).
+- PDF client-side: `lib/billingPdf.ts` (jsPDF; `openOrderPdf/openQuotationPdf/openDdtPdf`; arricchisce con anagrafica da `users/{clienteUID}`) + `lib/billingPdfDraw.ts` (draw condiviso). Anteprima headless senza browser: `npx vite-node scripts/preview-pdf.mts -- <cartella>`.
+- **Anagrafica emittente = Reviso, non il codice**: `lib_billing/companyInfo.ts` legge `GET /self` e la callable/schedulata `syncCompanyInfo` la pubblica su `settings/company`, da cui i PDF la prendono a runtime (`COMPANY` in `billingPdfDraw.ts` è solo il fallback last-known-good). L'intestazione dei PDF POPS deve coincidere con quella dei documenti Reviso: si corregge in Reviso, non qui.
 - Listino Fase 2: callable `manageListino` (CiC-first: `createProduct` → `products/` → `listino_base/` → `catalogo/`); generatore codici `lib_listino/codici.ts` (LETTERA categoria + 3 cifre posizionali, immutabili; INGLESINA=I, DUPLEX=D, MUNTIN=M, CANALINO=C).
 
 # Modello dati Firestore
@@ -105,7 +106,7 @@ Regole d'accesso (`firestore.rules`): admin = custom claim `role=='ADMIN'` o ema
 | `team` | Staff interno (fonte dei custom claim) | `role` ADMIN/PRODUZIONE/COMMERCIALE/LOGISTICA, `fcmTokens[]`, `hueIndex`; chiavi = UID (re-key STELLA-GRAFO) |
 | `listino_base` / `catalogo` | Prezzi base (48) / struttura menu (389) | v. Motore prezzi |
 | `products` | Mappa cod POPS → id FiC + `cicProductId` | scritta da CF (sync) |
-| `settings` | `settings/pricing` (catalogSource, delivery_tariffs), `general`, `integrations` | lettura client, scrittura admin |
+| `settings` | `settings/pricing` (catalogSource, delivery_tariffs), `general`, `integrations`, `company` (anagrafica emittente sui PDF, scritta da Reviso) | lettura client, scrittura admin |
 | `config` | `config/billing` (kill-switch), `config/fic`, `config/cic` | **solo CF**, negata al client |
 | `core` | `core/admins.emails[]` allowlist CORE | gating sezione CORE/bug tracker |
 | `trips` | Viaggi consegna (board logistica) | |
@@ -135,7 +136,7 @@ Pattern architetturale: ogni PWA monta la STESSA shell `views/sidera/SideraLayou
 
 # File costosi da leggere interi (~righe)
 
-`BuilderView.vue` 2150 · `AdminSettings.vue` 1500 · `AdminView.vue` 1270 · `DeliveryView.vue` 1145 · `ClientDashboard.vue` 1040 · `GriglieConfiguratorView.vue` 820 · `functions/index.ts` 4300 · `style.css` ~55KB. Leggerli per sezioni mirate (Grep prima, Read con offset/limit poi).
+`BuilderView.vue` 2150 · `AdminSettings.vue` 1730 · `AdminView.vue` 1270 · `DeliveryView.vue` 1145 · `ClientDashboard.vue` 1040 · `GriglieConfiguratorView.vue` 820 · `functions/index.ts` 4630 · `style.css` ~55KB. Leggerli per sezioni mirate (Grep prima, Read con offset/limit poi).
 
 # Documenti autoritativi in `docs/`
 

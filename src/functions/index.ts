@@ -5,7 +5,7 @@ import * as admin from 'firebase-admin';
 import axios from 'axios';
 import * as nodemailer from 'nodemailer';
 // Layer di fatturazione (migrazione FiC→CiC). Vedi src/functions/lib_billing/.
-import { createCicProvider, getActiveBackend, buildDdtLines, isRigaConsegna, round2 } from './lib_billing';
+import { createCicProvider, getActiveBackend, buildDdtLines, isRigaConsegna, round2, fetchCompanyInfo, diffCompany } from './lib_billing';
 import { registerBugFunctions } from './lib_bugs/bugs';
 // Generatore codici listino (Fase 2 nuovi prodotti). Vedi src/functions/lib_listino/.
 import { nextCodiciForTiers } from './lib_listino/codici';
@@ -4573,4 +4573,60 @@ exports.cercaCommessaArchivio = functions
             console.error('❌ [ARCHIVIO] cercaCommessaArchivio:', e?.message || e);
             throw new functions.https.HttpsError('internal', 'Ricerca non riuscita.');
         }
+    });
+
+// ============================================================================
+// ANAGRAFICA AZIENDA EMITTENTE (Reviso → settings/company)
+// ----------------------------------------------------------------------------
+// I dati dell'emittente stampati sui PDF POPS stavano in una costante dentro il
+// bundle: cambiarli voleva dire un deploy, e nessuno si accorgeva se divergevano
+// da Reviso (il telefono è rimasto quello vecchio per un mese dopo il cutover).
+// Qui la fonte di verità diventa Reviso: si legge /self e si pubblica su
+// settings/company, che il client legge in chiaro (rules: read autenticato,
+// write admin — qui si scrive con l'Admin SDK).
+//
+// Due porte, stessa logica: la callable per l'admin che vuole allineare subito
+// dopo aver corretto Reviso, lo schedulato notturno perché nessuno si ricordi
+// di premere il pulsante. Se Reviso non risponde NON si tocca il documento: i
+// PDF continuano con l'ultimo dato buono.
+// ============================================================================
+async function aggiornaCompanyInfo(origine: string): Promise<any> {
+    const info = await fetchCompanyInfo();
+    const ref = admin.firestore().collection('settings').doc('company');
+    const prima = (await ref.get()).data() as any;
+    const cambiati = diffCompany(prima, info);
+    await ref.set({ ...info, source: 'reviso', syncedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+    if (cambiati.length) console.log(`[COMPANY] settings/company aggiornato da ${origine}: ${cambiati.join(', ')}`);
+    return info;
+}
+
+exports.syncCompanyInfo = functions
+    .region('europe-west1')
+    .https.onCall(async (data, context) => {
+        const callerEmail = (context.auth?.token?.email || '').toLowerCase().trim();
+        const isAdminCaller = context.auth?.token?.role === 'ADMIN' || callerEmail === 'info@inglesinaitaliana.it';
+        if (!context.auth || !isAdminCaller) {
+            throw new functions.https.HttpsError('permission-denied', 'Riservato agli amministratori.');
+        }
+        try {
+            return await aggiornaCompanyInfo(callerEmail);
+        } catch (e: any) {
+            console.error('❌ [COMPANY] syncCompanyInfo:', e?.message || e);
+            throw new functions.https.HttpsError('internal', e?.message || 'Errore Contabilità in Cloud.');
+        }
+    });
+
+exports.syncCompanyInfoDaily = functions
+    .region('europe-west1')
+    .pubsub.schedule('every day 05:45')
+    .timeZone('Europe/Rome')
+    .onRun(async () => {
+        try {
+            await aggiornaCompanyInfo('sync notturno');
+        } catch (e: any) {
+            // Non rilancia: un'anagrafica non aggiornata non è un incidente, e
+            // il documento resta com'era (ultimo dato buono).
+            console.error('❌ [COMPANY] sync notturno:', e?.message || e);
+        }
+        return null;
     });

@@ -6,15 +6,61 @@
 // Unità: mm, formato A4 (210×297). Il `doc` va creato con { unit:'mm', format:'a4' }.
 // ============================================================================
 
-// Dati azienda emittente — nuova società CiC (aggiornati al cutover FiC→CiC).
-export const COMPANY = {
-  name: 'Inglesina Italiana Srl',
-  address: 'Via Cavalier Angelo Manzoni 18, Zona industriale Maiano, 26866 Sant\'Angelo Lodigiano (LO)',
-  piva: 'P.IVA 14614580968',
-  tel: '+39 348 7293897',
+// Dati dell'azienda emittente stampati in intestazione.
+// La fonte di verità è REVISO (GET /self → .company), pubblicata su
+// settings/company dalla function syncCompanyInfo e letta a runtime da
+// billingPdf.ts: l'intestazione dei PDF POPS deve coincidere con quella dei
+// documenti Reviso, altrimenti dello stesso DDT girano due versioni con
+// emittenti diversi. Vedi functions/lib_billing/companyInfo.ts.
+export interface CompanyInfo {
+  name: string;
+  address: string;   // via e civico
+  zip: string;
+  city: string;      // può già contenere la provincia: "Sant'Angelo Lodigiano (LO)"
+  province: string;  // sigla
+  country?: string;
+  piva: string;      // solo il numero: il prefisso "P.IVA" lo mette il disegno
+  tel: string;       // vuoto = riga telefono omessa
+  email: string;
+  web?: string;      // non esiste in Reviso: resta qui, compare solo nel footer
+}
+
+// Fallback: ultimo dato buono, allineato a Reviso il 2026-07-28. Serve quando
+// settings/company non è leggibile (offline, primo avvio prima del sync) —
+// meglio un'intestazione vecchia di un'intestazione vuota.
+export const COMPANY: CompanyInfo = {
+  name: 'Inglesina Italiana S.r.l.',
+  address: 'Via Cav. Angelo Manzoni 18',
+  zip: '26866',
+  city: 'Sant\'Angelo Lodigiano (LO)',
+  province: 'LO',
+  country: 'IT',
+  piva: '14614580968',
+  tel: '0371843883',
   email: 'info@inglesinaitaliana.it',
   web: 'preventivatoreb2b-ii.web.app',
 };
+
+/** Sovrascrive il fallback solo con i campi valorizzati (un campo vuoto in
+ *  Firestore non deve cancellare l'ultimo dato buono). */
+export function mergeCompany(over?: Partial<CompanyInfo> | null): CompanyInfo {
+  const out: CompanyInfo = { ...COMPANY };
+  if (over) {
+    for (const k of Object.keys(out) as (keyof CompanyInfo)[]) {
+      const v = over[k];
+      if (typeof v === 'string' && v.trim()) (out as any)[k] = v.trim();
+    }
+  }
+  return out;
+}
+
+/** Riga "CAP Città (PR)" — la provincia solo se la città non la porta già. */
+export function companyCityLine(c: CompanyInfo): string {
+  const prov = c.province && !c.city.toUpperCase().includes(`(${c.province.toUpperCase()})`)
+    ? ` (${c.province})`
+    : '';
+  return [c.zip, c.city].filter(Boolean).join(' ') + prov;
+}
 
 export type PdfKind = 'order' | 'quotation' | 'ddt';
 
@@ -77,7 +123,13 @@ function euro(n: number | undefined): string {
   }
 }
 
-export function drawBillingDocument(doc: any, data: PdfDocData, logoDataUrl?: string): void {
+export function drawBillingDocument(
+  doc: any,
+  data: PdfDocData,
+  logoDataUrl?: string,
+  company?: Partial<CompanyInfo> | null,
+): void {
+  const C = mergeCompany(company);
   const setText = (c: [number, number, number]) => doc.setTextColor(c[0], c[1], c[2]);
   const setFill = (c: [number, number, number]) => doc.setFillColor(c[0], c[1], c[2]);
   const setDraw = (c: [number, number, number]) => doc.setDrawColor(c[0], c[1], c[2]);
@@ -115,13 +167,21 @@ export function drawBillingDocument(doc: any, data: PdfDocData, logoDataUrl?: st
   }
   const cy = logoDataUrl ? 29 : 25;
   doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); setText(INK);
-  doc.text(COMPANY.name, RIGHT, cy, { align: 'right' });
+  doc.text(C.name, RIGHT, cy, { align: 'right' });
   doc.setFont('helvetica', 'normal'); doc.setFontSize(6.8); setText(MID);
   let ay = cy + 3.3;
-  // indirizzo wrappato (max 92mm → resta nella metà destra, non tocca N./Data)
-  for (const ln of doc.splitTextToSize(COMPANY.address, 92) as string[]) { doc.text(ln, RIGHT, ay, { align: 'right' }); ay += 2.9; }
-  doc.text(`${COMPANY.piva}  ·  Tel. ${COMPANY.tel}`, RIGHT, ay, { align: 'right' }); ay += 2.9;
-  doc.text(COMPANY.email, RIGHT, ay, { align: 'right' });
+  // Righe dell'emittente: quelle vuote si saltano (un campo mancante in Reviso
+  // non deve lasciare una riga bianca o un "· Tel." senza numero).
+  const righeAzienda = [
+    C.address,
+    companyCityLine(C),
+    [C.piva ? `P.IVA ${C.piva}` : '', C.tel ? `Tel. ${C.tel}` : ''].filter(Boolean).join('  ·  '),
+    C.email,
+  ].filter((r) => r && r.trim());
+  for (const riga of righeAzienda) {
+    // wrap a 92mm → resta nella metà destra, non tocca N./Data
+    for (const ln of doc.splitTextToSize(riga, 92) as string[]) { doc.text(ln, RIGHT, ay, { align: 'right' }); ay += 2.9; }
+  }
 
   // linea accent
   let y = 44;
@@ -273,5 +333,8 @@ export function drawBillingDocument(doc: any, data: PdfDocData, logoDataUrl?: st
   const fy = 289;
   setDraw(LINE); doc.setLineWidth(0.3); doc.line(M, fy - 4, RIGHT, fy - 4);
   doc.setFont('helvetica', 'normal'); doc.setFontSize(7); setText(DIM);
-  doc.text(`${COMPANY.name}  ·  ${COMPANY.piva}  ·  ${COMPANY.email}  ·  ${COMPANY.web}`, 105, fy, { align: 'center' });
+  doc.text(
+    [C.name, C.piva ? `P.IVA ${C.piva}` : '', C.email, C.web].filter(Boolean).join('  ·  '),
+    105, fy, { align: 'center' },
+  );
 }

@@ -6,7 +6,7 @@
 
 import { jsPDF } from 'jspdf';
 import { doc as fsDoc, getDoc } from 'firebase/firestore';
-import { drawBillingDocument, type PdfDocData, type PdfKind, type PdfLine } from './billingPdfDraw';
+import { drawBillingDocument, type CompanyInfo, type PdfDocData, type PdfKind, type PdfLine } from './billingPdfDraw';
 import { computeTotals } from './billingTotals';
 import { ddtElementi, isRigaConsegna } from './billing';
 import { db } from '../firebase';
@@ -35,6 +35,23 @@ function orderGroupLabel(o: PreventivoLike): string {
   const num = o.cic_order_number ?? o.cic_order_id ?? o.codice ?? '—';
   const ref = o.commessa;
   return `Ordine ${num}${ref ? ` · ${ref}` : ''}`;
+}
+
+// ── Anagrafica emittente (settings/company, scritta da Reviso) ─────────────
+// Sorgente unica dell'intestazione: la scrive la function syncCompanyInfo
+// leggendo Reviso. Se manca o non è leggibile si disegna con il fallback in
+// billingPdfDraw (ultimo dato buono) — un PDF senza emittente non deve uscire.
+// Cache per sessione: un'anagrafica non cambia mentre si stampano i documenti.
+let companyCache: Partial<CompanyInfo> | null | undefined;
+async function loadCompany(): Promise<Partial<CompanyInfo> | null> {
+  if (companyCache !== undefined) return companyCache;
+  try {
+    const snap = await getDoc(fsDoc(db, 'settings', 'company'));
+    companyCache = snap.exists() ? (snap.data() as Partial<CompanyInfo>) : null;
+  } catch {
+    companyCache = null;
+  }
+  return companyCache;
 }
 
 // ── Logo: SVG → PNG (cache) ───────────────────────────────────────────────
@@ -170,9 +187,9 @@ export async function openBillingPdf(p: PreventivoLike, kind: PdfKind): Promise<
       provincia: p.provincia ?? u.provincia,
     } : p;
     const data = buildPdfData(enriched, kind);
-    const logo = await loadLogoPng();
+    const [logo, company] = await Promise.all([loadLogoPng(), loadCompany()]);
     const doc = new jsPDF({ unit: 'mm', format: 'a4' });
-    drawBillingDocument(doc, data, logo);
+    drawBillingDocument(doc, data, logo, company);
     const blobUrl = doc.output('bloburl');
     if (win) win.location.href = blobUrl;
     else window.open(blobUrl, '_blank');
