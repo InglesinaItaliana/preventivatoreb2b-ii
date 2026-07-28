@@ -1,14 +1,16 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed, watch, onBeforeUnmount } from 'vue';
 import { Dialog, DialogPanel, DialogTitle, TransitionChild, TransitionRoot } from '@headlessui/vue';
-import { XMarkIcon, ArchiveBoxIcon, ArrowPathIcon, DocumentTextIcon } from '@heroicons/vue/24/solid';
+import { XMarkIcon, ArchiveBoxIcon, ArrowPathIcon, MagnifyingGlassIcon } from '@heroicons/vue/24/solid';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../firebase';
-import { STATUS_DETAILS } from '../types';
 import { useRouter } from 'vue-router';
 import { resolveBackend } from '../lib/billing';
 import { openDdtPdf, openOrderPdf } from '../lib/billingPdf';
 import { useArchivio } from '../composables/useArchivio';
+import { useClientiSuggeriti } from '../composables/useClientiSuggeriti';
+import { raggruppaPerMese } from '../lib/archivio';
+import ArchiveOrderRow from './ArchiveOrderRow.vue';
 
 const props = defineProps<{
   show: boolean;
@@ -19,38 +21,234 @@ const props = defineProps<{
 const emit = defineEmits(['close']);
 const router = useRouter();
 
-const { consegnati, annullati, loading, errore, carica } = useArchivio();
+const {
+  ordini, risultatiCommessa, modalita,
+  loading, caricandoAltri, errore, troncato, altri,
+  carica, caricaAltri, cercaPerCommessa,
+} = useArchivio();
 
-// Gli annullati stanno chiusi in fondo: sono rumore, non storico da consultare.
-const mostraAnnullati = ref(false);
+const { suggeriti, cerca: cercaClienti, pulisci: pulisciSuggeriti } = useClientiSuggeriti();
 
-const archivioVuoto = computed(() => consegnati.value.length === 0 && annullati.value.length === 0);
+// --- Ricerca (solo admin) ---
+// Cliente e commessa sono modalità ALTERNATIVE, non filtri che si sommano: chi
+// cerca una commessa quasi mai sa di che cliente sia, e metterle in AND
+// renderebbe il campo commessa inutile proprio nel caso d'uso principale.
+const queryCliente = ref('');
+const clienteSelezionato = ref<any | null>(null);
+const queryCommessa = ref('');
 
-// Due sezioni, stessa riga: la seconda è collassata e si apre a richiesta.
-const sezioni = computed(() => [
-  { key: 'consegnati', orders: consegnati.value, collassabile: false },
-  { key: 'annullati', orders: annullati.value, collassabile: true },
-]);
+// Il vincolo per cliente vale sia per la dashboard cliente (il proprio UID, per
+// le regole Firestore) sia per l'admin che ne seleziona uno.
+const uidVincolato = computed(() =>
+  clienteSelezionato.value?.uid || clienteSelezionato.value?.id ||
+  (!props.isAdmin && props.clientUid ? props.clientUid : undefined)
+);
+
+const ricarica = () => {
+  contenitore.value?.scrollTo({ top: 0 });
+  carica(uidVincolato.value);
+};
+
+const onDigitaCliente = () => {
+  // Digitare qui abbandona qualunque ricerca in corso: cambiare il testo dopo
+  // aver scelto un cliente significa volerne un altro, e una ricerca commessa
+  // non può restare a video con il proprio campo ormai svuotato.
+  const stavaFiltrando = !!clienteSelezionato.value || !!queryCommessa.value;
+  queryCommessa.value = '';
+  clienteSelezionato.value = null;
+  if (stavaFiltrando) ricarica();
+  cercaClienti(queryCliente.value);
+};
+
+const selezionaCliente = (cliente: any) => {
+  clienteSelezionato.value = cliente;
+  queryCliente.value = cliente.ragioneSociale || cliente.email || '';
+  pulisciSuggeriti();
+  ricarica();
+};
+
+// La ricerca parte da sola dopo una pausa di digitazione: senza attesa si
+// sparerebbe una query per tasto premuto, con l'attesa giusta si scrive la
+// commessa di fiato e parte una sola query.
+const PAUSA_DIGITAZIONE_MS = 400;
+let timerCommessa: ReturnType<typeof setTimeout> | null = null;
+// Copre ANCHE la pausa di digitazione, non solo la query: senza, i primi
+// 400 ms sarebbero muti e sembrerebbe che il campo non faccia niente.
+const attesaCommessa = ref(false);
+
+const fermaTimerCommessa = () => {
+  if (timerCommessa) clearTimeout(timerCommessa);
+  timerCommessa = null;
+  attesaCommessa.value = false;
+};
+
+const ricercaCommessaInCorso = computed(() =>
+  attesaCommessa.value || (loading.value && modalita.value === 'commessa')
+);
+
+const avviaRicercaCommessa = () => {
+  fermaTimerCommessa();
+  if (queryCommessa.value.trim().length < 2) return;
+  queryCliente.value = '';
+  clienteSelezionato.value = null;
+  pulisciSuggeriti();
+  cercaPerCommessa(queryCommessa.value);
+};
+
+const onDigitaCommessa = () => {
+  fermaTimerCommessa();
+  if (queryCommessa.value.trim().length < 2) {
+    // Campo svuotato: si torna ai recenti, invece di lasciare a video i
+    // risultati di una ricerca che non è più scritta da nessuna parte.
+    if (modalita.value === 'commessa') {
+      queryCliente.value = '';
+      clienteSelezionato.value = null;
+      ricarica();
+    }
+    return;
+  }
+  attesaCommessa.value = true;
+  timerCommessa = setTimeout(avviaRicercaCommessa, PAUSA_DIGITAZIONE_MS);
+};
+
+const azzeraRicerca = () => {
+  fermaTimerCommessa();
+  queryCliente.value = '';
+  queryCommessa.value = '';
+  clienteSelezionato.value = null;
+  pulisciSuggeriti();
+  ricarica();
+};
+
+// Un timer in volo su una modale chiusa farebbe partire una query fantasma.
+onBeforeUnmount(() => {
+  fermaTimerCommessa();
+  disarma();
+});
+
+const ricercaAttiva = computed(() => modalita.value !== 'recenti' && !!props.isAdmin);
+
+// --- Presentazione ---
+const archivioVuoto = computed(() =>
+  modalita.value === 'commessa' ? risultatiCommessa.value.length === 0 : ordini.value.length === 0
+);
+
+// "Nessun ordine in archivio" è vero solo nella vista dei recenti: dopo una
+// ricerca a vuoto direbbe che l'archivio è vuoto, che è un'altra cosa.
+const messaggioVuoto = computed(() => {
+  if (modalita.value === 'commessa') {
+    return `Nessuna commessa che inizia per “${queryCommessa.value.trim().toUpperCase()}”.`;
+  }
+  if (modalita.value === 'cliente' && props.isAdmin) {
+    return 'Questo cliente non ha ordini in archivio.';
+  }
+  return 'Nessun ordine in archivio.';
+});
+
+// Sempre raggruppato per mese, tranne nella ricerca commessa: quella è
+// ordinata per commessa e non per data, quindi intestazioni di mese
+// racconterebbero una progressione che nella lista non c'è.
+// Anche la lista di default lo è: con lo scroll infinito cresce di centinaia
+// di righe, e senza intestazioni diventa un muro indistinto.
+const raggruppa = computed(() => modalita.value !== 'commessa');
+const gruppi = computed(() => raggruppa.value ? raggruppaPerMese(ordini.value) : []);
+
+// --- Caricamento a resistenza ---
+// Arrivati in fondo la lista si ferma. Per averne altri bisogna FERMARSI e poi
+// spingere di nuovo: l'inerzia della scrollata con cui si è arrivati non conta,
+// altrimenti basterebbe toccare il fondo di slancio per far partire tutto.
+const contenitore = ref<HTMLElement | null>(null);
+const SPINTA_RICHIESTA = 90;   // pixel di scorrimento a vuoto da accumulare
+const PAUSA_ARMAMENTO = 250;   // ms di immobilità che separano lo slancio dalla spinta
+const spinta = ref(0);
+const alBordo = ref(false);
+/** true solo dopo una pausa sul fondo: prima, ogni evento è ancora inerzia. */
+const armato = ref(false);
+let timerArmamento: ReturnType<typeof setTimeout> | null = null;
+let decadimento: ReturnType<typeof setTimeout> | null = null;
+
+const progressoSpinta = computed(() => Math.min(100, (spinta.value / SPINTA_RICHIESTA) * 100));
+
+const inFondo = () => {
+  const el = contenitore.value;
+  if (!el) return false;
+  return el.scrollHeight - el.scrollTop - el.clientHeight <= 2;
+};
+
+const azzeraSpinta = () => {
+  spinta.value = 0;
+  if (decadimento) { clearTimeout(decadimento); decadimento = null; }
+};
+
+const disarma = () => {
+  armato.value = false;
+  if (timerArmamento) { clearTimeout(timerArmamento); timerArmamento = null; }
+  azzeraSpinta();
+};
+
+/** Riparte a ogni evento: scatta solo quando lo scorrimento si è davvero fermato. */
+const programmaArmamento = () => {
+  if (timerArmamento) clearTimeout(timerArmamento);
+  timerArmamento = setTimeout(() => { armato.value = true; }, PAUSA_ARMAMENTO);
+};
+
+const puoSpingere = () => altri.value && !caricandoAltri.value && !loading.value;
+
+const accumula = (delta: number) => {
+  spinta.value += delta;
+  if (decadimento) clearTimeout(decadimento);
+  // Se si smette di spingere la resistenza si ripristina: senza, spintarelle
+  // sparse nel tempo si sommerebbero e il caricamento sembrerebbe casuale.
+  decadimento = setTimeout(azzeraSpinta, 500);
+
+  if (spinta.value >= SPINTA_RICHIESTA) {
+    disarma();
+    alBordo.value = false;
+    caricaAltri();
+  }
+};
+
+const onWheel = (e: WheelEvent) => {
+  if (!puoSpingere()) return;
+  if (e.deltaY <= 0 || !inFondo()) { disarma(); return; }
+  alBordo.value = true;
+  // Finché gli eventi continuano senza pause siamo ancora nello slancio.
+  if (!armato.value) { azzeraSpinta(); programmaArmamento(); return; }
+  accumula(e.deltaY);
+};
+
+// Su touch il confine fra slancio e spinta nuova è netto: un nuovo dito appoggiato.
+// Se il dito scende quando si è GIÀ in fondo, è una spinta deliberata.
+let ultimoTocco = 0;
+const onTouchStart = (e: TouchEvent) => {
+  ultimoTocco = e.touches[0]?.clientY ?? 0;
+  if (timerArmamento) { clearTimeout(timerArmamento); timerArmamento = null; }
+  armato.value = inFondo();
+  alBordo.value = armato.value;
+  azzeraSpinta();
+};
+const onTouchMove = (e: TouchEvent) => {
+  const y = e.touches[0]?.clientY ?? 0;
+  const delta = ultimoTocco - y; // dito che risale = si scorre in giù
+  ultimoTocco = y;
+  if (!puoSpingere() || !armato.value) return;
+  if (delta <= 0 || !inFondo()) { disarma(); return; }
+  accumula(delta);
+};
+
+// Allontanandosi dal fondo si riparte da zero.
+const onScroll = () => {
+  const fondo = inFondo();
+  alBordo.value = fondo;
+  if (!fondo) disarma();
+};
 
 watch(() => props.show, (isOpen) => {
   if (isOpen) {
-    mostraAnnullati.value = false;
-    // Solo il percorso cliente vincola la query al proprio UID; l'admin vede tutto.
-    carica(!props.isAdmin && props.clientUid ? props.clientUid : undefined);
+    azzeraRicerca();
+    disarma();
   }
 });
-
-const formatDate = (seconds: number) => seconds ? new Date(seconds * 1000).toLocaleDateString() : '-';
-
-// La data mostrata deve essere quella su cui la lista è ordinata, altrimenti
-// l'ordine sembra casuale: DDT per i consegnati, creazione per gli annullati.
-const formatDataOrdinamento = (order: any) => {
-  if (order?.stato === 'DELIVERED') {
-    const d = order?.dataConsegnaPrevista;
-    return d ? new Date(d).toLocaleDateString() : '-';
-  }
-  return formatDate(order?.dataCreazione?.seconds);
-};
 
 const openOrder = (codice: string) => {
   const url = `/preventivatore?codice=${codice}${props.isAdmin ? '&admin=true&readonly=true' : ''}`;
@@ -117,7 +315,84 @@ const openOrdine = (order: any) => {
                 </button>
               </div>
 
-              <div class="flex-1 overflow-y-auto p-6 bg-gray-50">
+              <!-- Ricerca: solo admin. Un cliente vede già solo i propri ordini,
+                   e la ricerca commessa richiede una query che le regole
+                   Firestore gli negano. -->
+              <div v-if="isAdmin" class="px-6 py-3 bg-white border-b border-gray-200 flex flex-col sm:flex-row gap-2">
+                <div class="relative flex-1">
+                  <input
+                    v-model="queryCliente"
+                    @input="onDigitaCliente"
+                    type="text"
+                    placeholder="Cerca cliente…"
+                    class="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 transition-all"
+                  />
+                  <ul
+                    v-if="suggeriti.length"
+                    class="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-xl max-h-56 overflow-y-auto"
+                  >
+                    <li
+                      v-for="c in suggeriti"
+                      :key="c.id"
+                      @click="selezionaCliente(c)"
+                      class="px-3 py-2 text-sm text-left hover:bg-amber-50 cursor-pointer border-b border-gray-100 last:border-0"
+                    >
+                      <div class="font-bold text-gray-800">{{ c.ragioneSociale || c.email }}</div>
+                      <div v-if="c.ragioneSociale && c.email" class="text-[10px] text-gray-400">{{ c.email }}</div>
+                    </li>
+                  </ul>
+                </div>
+
+                <!-- Niente pulsante "cerca": la ricerca parte da sola dopo la
+                     pausa di digitazione, quindi sarebbe un comando che non fa
+                     nulla di più. L'icona resta, ma come segnale (e come
+                     indicatore di attesa), non come controllo. -->
+                <div class="relative sm:w-64">
+                  <input
+                    v-model="queryCommessa"
+                    @input="onDigitaCommessa"
+                    @keyup.enter="avviaRicercaCommessa"
+                    type="text"
+                    placeholder="Commessa (inizia per…)"
+                    class="w-full text-sm border border-gray-300 rounded-lg pl-3 pr-9 py-2 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 transition-all"
+                  />
+                  <span class="absolute inset-y-0 right-3 flex items-center pointer-events-none text-gray-400">
+                    <ArrowPathIcon v-if="ricercaCommessaInCorso" class="h-4 w-4 animate-spin" />
+                    <MagnifyingGlassIcon v-else class="h-4 w-4" />
+                  </span>
+                </div>
+              </div>
+
+              <div v-if="ricercaAttiva" class="px-6 py-2 bg-amber-50 border-b border-amber-200 flex items-center justify-between gap-3">
+                <span class="text-xs text-amber-900 truncate">
+                  <template v-if="modalita === 'cliente'">
+                    Storico di <strong>{{ queryCliente }}</strong>
+                  </template>
+                  <template v-else>
+                    Commesse che iniziano per <strong>{{ queryCommessa.trim().toUpperCase() }}</strong>
+                  </template>
+                </span>
+                <button @click="azzeraRicerca" class="text-xs font-bold text-amber-900 hover:underline shrink-0">
+                  Azzera
+                </button>
+              </div>
+
+              <!-- overscroll-contain: arrivati in fondo lo scorrimento NON passa
+                   alla pagina sotto. È metà della resistenza; l'altra metà è la
+                   soglia da superare in `spingi`. -->
+              <div
+                ref="contenitore"
+                @scroll.passive="onScroll"
+                @wheel.passive="onWheel"
+                @touchstart.passive="onTouchStart"
+                @touchmove.passive="onTouchMove"
+                class="flex-1 overflow-y-auto overscroll-contain bg-gray-50"
+              >
+                <!-- Il padding sta QUI e non sul contenitore: un padding-top sul
+                     contenitore lascerebbe una fetta scoperta sopra la fascia
+                     del mese, dove si vedrebbero passare le righe. Senza, la
+                     fascia si ancora al bordo vero, cioè sotto la ricerca. -->
+                <div class="p-6">
                 
                 <div v-if="loading" class="flex flex-col items-center justify-center py-10 text-gray-400">
                   <ArrowPathIcon class="h-8 w-8 animate-spin mb-2" />
@@ -131,86 +406,84 @@ const openOrdine = (order: any) => {
 
                 <div v-else-if="archivioVuoto" class="text-center py-10 text-gray-400 border-2 border-dashed border-gray-200 rounded-xl">
                   <ArchiveBoxIcon class="h-12 w-12 mx-auto mb-2 opacity-50" />
-                  <p>Nessun ordine in archivio.</p>
+                  <p>{{ messaggioVuoto }}</p>
+                </div>
+
+                <div v-else-if="modalita === 'commessa'" class="space-y-3">
+                  <ArchiveOrderRow
+                    v-for="order in risultatiCommessa"
+                    :key="order.id"
+                    :order="order"
+                    :is-admin="isAdmin"
+                    @apri="openOrder"
+                    @apri-ddt="openDdt"
+                    @apri-ordine="openOrdine"
+                  />
                 </div>
 
                 <div v-else class="space-y-3">
-                  <template v-for="sezione in sezioni" :key="sezione.key">
-
-                  <button
-                    v-if="sezione.collassabile && sezione.orders.length"
-                    type="button"
-                    @click="mostraAnnullati = !mostraAnnullati"
-                    class="w-full mt-4 pt-4 border-t border-gray-200 flex items-center justify-between text-left text-xs font-bold uppercase tracking-wide text-gray-500 hover:text-gray-800 transition-colors"
-                  >
-                    <span>Ordini annullati ({{ sezione.orders.length }})</span>
-                    <span class="text-[10px] font-bold text-gray-400">{{ mostraAnnullati ? 'Nascondi' : 'Mostra' }}</span>
-                  </button>
-
-                  <div v-if="!sezione.collassabile || mostraAnnullati" class="space-y-3">
-                  <div
-                    v-for="order in sezione.orders"
-                    :key="order.id"
-                    @click="openOrder(order.codice)"
-                    class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-amber-300 cursor-pointer transition-all flex justify-between items-center group"
-                  >
-                    <div v-if="!isAdmin">
-                      <div class="flex items-baseline gap-2 mb-1">
-                        <span class="font-bold text-gray-800">{{ order.commessa || order.codice }}</span>
-                        <span class="text-[10px] text-gray-400">{{ formatDataOrdinamento(order) }}</span>
-                      </div>
-                      <div class="flex items-center gap-2">
-                        <span class="text-[10px] px-2 py-0.5 rounded border uppercase font-bold"
-                              :class="STATUS_DETAILS[order.stato as keyof typeof STATUS_DETAILS]?.badge">
-                          {{ STATUS_DETAILS[order.stato as keyof typeof STATUS_DETAILS]?.label }}
-                        </span>
-                        
-                      </div>
+                  <!-- Una lista sola: consegnati e annullati insieme, in ordine
+                       di data. Raggruppata per mese quando copre mesi. -->
+                  <template v-if="raggruppa">
+                    <div v-for="gruppo in gruppi" :key="gruppo.chiave" class="space-y-3">
+                      <!-- Ancorata in cima mentre si scorre dentro il mese, poi
+                           spinta via da quella successiva: scorrendo a lungo si
+                           sa sempre in che mese si è. `-mx-6 px-6` allarga la
+                           fascia fino ai bordi del contenitore, altrimenti le
+                           righe passerebbero scoperte ai lati. -->
+                      <h4 class="sticky top-0 z-10 -mx-6 px-6 py-2 bg-gray-50 border-b border-gray-200 text-xs font-bold uppercase tracking-wide text-gray-500">
+                        {{ gruppo.etichetta }}
+                      </h4>
+                      <ArchiveOrderRow
+                        v-for="order in gruppo.ordini"
+                        :key="order.id"
+                        :order="order"
+                        :is-admin="isAdmin"
+                        @apri="openOrder"
+                        @apri-ddt="openDdt"
+                        @apri-ordine="openOrdine"
+                      />
                     </div>
-
-                    <div v-else>
-                      <div class="flex items-center gap-2 mb-1">
-                        <span class="font-bold text-gray-800">{{ order.commessa || order.codice }}</span>
-                        <span class="text-[10px] px-2 py-0.5 rounded border uppercase font-bold"
-                              :class="STATUS_DETAILS[order.stato as keyof typeof STATUS_DETAILS]?.badge">
-                          {{ STATUS_DETAILS[order.stato as keyof typeof STATUS_DETAILS]?.label }}
-                        </span>
-                      </div>
-                      <div class="text-xs text-gray-500 flex gap-2">
-                        <span>{{ order.cliente }}</span>
-                        <span>•</span>
-                        <span>{{ formatDataOrdinamento(order) }}</span>
-                      </div>
-                    </div>
-
-                    <div class="text-right">
-                      <div class="font-bold text-gray-900">{{ (order.totaleScontato || order.totaleImponibile || 0).toFixed(2) }} €</div>
-                      <div v-if="isAdmin" class="text-xs text-blue-600 font-bold opacity-0 group-hover:opacity-100 transition-opacity">VEDI ></div>
-                      <div class="flex items-center justify-end gap-2 mt-1">
-                        <button
-                            v-if="order.cic_order_id || order.fic_order_id"
-                            @click.stop="openOrdine(order)"
-                            class="flex items-center gap-1 text-sm font-bold text-amber-950 bg-amber-400 border border-amber-500 px-8 py-0.5 rounded-full hover:bg-amber-300 transition-colors"
-                            title="Visualizza Ordine"
-                          >
-                            <DocumentTextIcon class="w-3 h-3" /> ORDINE
-                          </button>
-                        <button
-                            v-if="order.fic_ddt_url || order.cic_ddt_id"
-                            @click.stop="openDdt(order)"
-                            class="flex items-center gap-1 text-sm font-bold text-amber-950 bg-amber-400 border border-amber-500 px-8 py-0.5 rounded-full hover:bg-amber-300 transition-colors"
-                            title="Visualizza DDT"
-                          >
-                            <DocumentTextIcon class="w-3 h-3" /> DDT
-                          </button>
-                      </div>
-                    </div>
-                  </div>
-                  </div>
-
                   </template>
+
+                  <template v-else>
+                    <ArchiveOrderRow
+                      v-for="order in ordini"
+                      :key="order.id"
+                      :order="order"
+                      :is-admin="isAdmin"
+                      @apri="openOrder"
+                      @apri-ddt="openDdt"
+                      @apri-ordine="openOrdine"
+                    />
+                  </template>
+
+                  <!-- Piede: dichiara che la lista non finisce qui e mostra
+                       quanta resistenza resta da vincere. La barra che si
+                       riempie è ciò che rende leggibile lo "spingi ancora". -->
+                  <div class="pt-2 pb-1">
+                    <div v-if="altri" class="flex flex-col items-center gap-1.5">
+                      <div class="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-gray-400">
+                        <ArrowPathIcon v-if="caricandoAltri" class="h-3.5 w-3.5 animate-spin" />
+                        <span v-if="caricandoAltri">Carico altri ordini…</span>
+                        <span v-else-if="alBordo">{{ armato ? 'Spingi ancora per caricarne altri' : 'Sei in fondo — fermati e scorri ancora' }}</span>
+                        <span v-else>Scorri fino in fondo per caricarne altri</span>
+                      </div>
+                      <div v-if="!caricandoAltri" class="h-1 w-24 rounded-full bg-gray-200 overflow-hidden">
+                        <div class="h-full bg-amber-400 rounded-full transition-[width] duration-75" :style="{ width: progressoSpinta + '%' }" />
+                      </div>
+                    </div>
+                    <div v-else class="text-center text-[11px] text-gray-300">
+                      Fine dell'archivio
+                    </div>
+                  </div>
                 </div>
 
+                <p v-if="troncato && !loading" class="mt-4 text-[11px] text-gray-400 text-center">
+                  Troppi risultati: affina il termine di ricerca.
+                </p>
+
+                </div>
               </div>
 
             </DialogPanel>

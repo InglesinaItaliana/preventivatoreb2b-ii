@@ -27,22 +27,35 @@ export const ACTIVE_STATUSES = [
 export const ARCHIVE_STATUSES = ['DELIVERED', 'REJECTED'];
 
 /**
- * Archivio: una query PER STATO, non una sola su ARCHIVE_STATUSES.
- * Motivo: i due stati hanno date diverse e vanno contati a parte, altrimenti
- * gli annullati mangiano gli slot dei consegnati dentro lo stesso `limit`.
+ * Archivio: una query PER STATO, fuse poi in un'unica lista lato client.
+ *
+ * Non una sola query `stato in [...]`: i due stati si ordinano su campi
+ * DIVERSI, e in Firestore un `orderBy` su un campo assente esclude il
+ * documento in silenzio — ordinando tutto su `dataConsegnaPrevista`
+ * sparirebbero gli annullati che non ne hanno (oggi 34 su 61).
  *
  * `campoOrdine` per i consegnati è `dataConsegnaPrevista` e NON `dataSpedizione`:
  * a DDT emesso viene sovrascritto con la data del documento DDT (functions/index.ts,
  * rami CiC e FiC), quindi È la data del DDT, ed è presente su tutti i consegnati.
- * `dataSpedizione` invece manca su alcuni ordini chiusi senza DDT e in Firestore
- * un `orderBy` su un campo assente li escluderebbe dalla query in silenzio.
+ * `dataSpedizione` invece manca su alcuni ordini chiusi senza DDT.
  *
  * Gli stati elencati qui devono coprire ARCHIVE_STATUSES: lo verifica un test.
  */
 export const ARCHIVIO_QUERIES = [
-  { stato: 'DELIVERED', campoOrdine: 'dataConsegnaPrevista', limite: 50 },
-  { stato: 'REJECTED', campoOrdine: 'dataCreazione', limite: 30 },
+  { stato: 'DELIVERED', campoOrdine: 'dataConsegnaPrevista' },
+  { stato: 'REJECTED', campoOrdine: 'dataCreazione' },
 ] as const;
+
+/**
+ * Quanti ordini per pagina, in ogni modalità. Si scorre fino in fondo e la
+ * pagina successiva arriva da sola, quindi il numero non deve più decidere
+ * "quanto storico si vede": deve solo essere abbastanza grande da non far
+ * ricaricare di continuo e abbastanza piccolo da non pesare (80 × ~3 KB).
+ */
+export const PAGINA_ARCHIVIO = 80;
+
+/** Ricerca per commessa: risultati per prefisso, tetto di sicurezza. */
+export const LIMITE_ARCHIVIO_COMMESSA = 50;
 
   // Aggiungi interfaccia per la Sessione di Consegna
 export interface DeliverySession {
@@ -232,12 +245,17 @@ export const STATUS_DETAILS: Record<StatoPreventivo, { label: string, badge: str
     darkBadge: 'bg-amber-400 text-amber-950 hover:bg-amber-300',
     hoverBadge: 'hover:bg-amber-300'
   },
-  'DELIVERED': { 
-    label: 'CONSEGNATI', 
-    badge: 'bg-amber-400 text-amber-950 border-amber-500 hover:bg-amber-300', 
-    iconBg: 'bg-amber-400 text-amber-950', 
-    darkBadge: 'bg-amber-400 text-amber-950 hover:bg-amber-300',
-    hoverBadge: 'hover:bg-amber-300'
+  // Verde Material 3: container (tono ~90) + testo on-container (tono ~10).
+  // È l'unico stato conclusivo positivo del ciclo, e l'ambra lo confondeva con
+  // tutti gli stati "in corso". Compare di fatto solo in archivio: gli altri
+  // consumatori di STATUS_DETAILS (Admin, Produzione, Builder) lavorano su
+  // stati attivi, che DELIVERED non è.
+  'DELIVERED': {
+    label: 'CONSEGNATI',
+    badge: 'bg-green-200 text-green-950 border-green-300 hover:bg-green-300',
+    iconBg: 'bg-green-200 text-green-950',
+    darkBadge: 'bg-green-200 text-green-950 hover:bg-green-300',
+    hoverBadge: 'hover:bg-green-300'
   },
   'REJECTED': { 
     label: 'ANNULLATI', 

@@ -16,6 +16,7 @@ import { costruisciDettaglio, type Dettaglio } from '../logic/priceBreakdown';
 import PriceBreakdownModal from '../components/PriceBreakdownModal.vue';
 import AnnuncioPrezzoModal from '../components/AnnuncioPrezzoModal.vue';
 import { annuncioDaMostrare, segnaAnnuncioVisto, ANNUNCIO_DETTAGLIO_PREZZO } from '../composables/useAnnunci';
+import { useClientiSuggeriti } from '../composables/useClientiSuggeriti';
 import { onAuthStateChanged } from 'firebase/auth';
 import OrderModals from '../components/OrderModals.vue';
 import { STATUS_DETAILS } from '../types';
@@ -212,54 +213,26 @@ const riferimentoCommessaInput = ref<HTMLInputElement | null>(null);
 // --- NUOVA LOGICA: CREAZIONE ORDINE ADMIN ---
 const clienteUID = ref(''); // ID del cliente selezionato
 const searchClientQuery = ref('');
-const suggestedClients = ref<any[]>([]);
-const isSearchingClient = ref(false);
 
 // Determina se siamo in modalità "Nuovo Ordine Admin"
 const isNewAdminOrder = computed(() => route.query?.admin === 'true' && route.query?.new === 'true');
 
-// Funzione di ricerca clienti (Autocompletamento)
-// --- MODIFICA QUESTA PARTE NELLO SCRIPT ---
+// Ricerca clienti (autocompletamento): cache locale + filtro "contiene", ora
+// nel composable condiviso con l'archivio invece che duplicata qui. Semantica
+// invariata — cache per istanza del componente, soglia a 2 caratteri, massimo
+// 10 suggerimenti — verificata per equivalenza sui clienti reali.
+const { suggeriti: suggestedClients, cerca: cercaClienti, pulisci: pulisciSuggerimenti } = useClientiSuggeriti();
 
-const allClients = ref<any[]>([]); // Cache locale clienti
-
-const searchClients = async () => {
-  const term = searchClientQuery.value.toLowerCase();
-  if (term.length < 2) {
-    suggestedClients.value = [];
-    return;
-  }
-  
-  // 1. Carica tutti i clienti una volta sola se la lista è vuota
-  if (allClients.value.length === 0) {
-      isSearchingClient.value = true;
-      try {
-        const snap = await getDocs(collection(db, 'users'));
-        allClients.value = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-      } catch (e) {
-        console.error(e);
-      } finally {
-        isSearchingClient.value = false;
-      }
-  }
-
-  // 2. Filtra localmente (case-insensitive e "contiene")
-  suggestedClients.value = allClients.value.filter(c => {
-      const rs = (c.ragioneSociale || '').toLowerCase();
-      const em = (c.email || '').toLowerCase();
-      return rs.includes(term) || em.includes(term);
-  }).slice(0, 10); // Mostra max 10 risultati
-};
+const searchClients = () => cercaClienti(searchClientQuery.value);
 
 // Selezione del cliente dal menu a tendina
 const selectClient = (client: any) => {
   nomeCliente.value = client.ragioneSociale || client.email;
   clienteEmail.value = client.email;
   clienteUID.value = client.uid || client.id; // Salviamo l'UID
-  searchClientQuery.value = client.ragioneSociale; 
-  suggestedClients.value = []; 
+  searchClientQuery.value = client.ragioneSociale;
+  pulisciSuggerimenti();
 };
-// ---------------------------------------------
 
 const scrollToTopOnFocus = () => {
   if (riferimentoCommessaInput.value) {
