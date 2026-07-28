@@ -23,7 +23,8 @@ const router = useRouter();
 
 const {
   consegnati, annullati, risultatiCommessa, modalita,
-  loading, errore, troncato, carica, cercaPerCommessa,
+  loading, caricandoAltri, errore, troncato, altri,
+  carica, caricaAltri, cercaPerCommessa,
 } = useArchivio();
 
 const { suggeriti, cerca: cercaClienti, pulisci: pulisciSuggeriti } = useClientiSuggeriti();
@@ -348,6 +349,16 @@ const openOrdine = (order: any) => {
                   </template>
 
                   <button
+                    v-if="altri.DELIVERED"
+                    type="button"
+                    :disabled="caricandoAltri"
+                    @click.stop="caricaAltri('DELIVERED')"
+                    class="w-full py-2 text-xs font-bold uppercase tracking-wide text-gray-500 border border-dashed border-gray-300 rounded-xl hover:border-amber-300 hover:text-gray-800 disabled:opacity-50 transition-colors"
+                  >
+                    {{ caricandoAltri ? 'Carico…' : 'Carica altri consegnati' }}
+                  </button>
+
+                  <button
                     v-if="annullati.length"
                     type="button"
                     @click="mostraAnnullati = !mostraAnnullati"
@@ -367,11 +378,20 @@ const openOrdine = (order: any) => {
                       @apri-ddt="openDdt"
                       @apri-ordine="openOrdine"
                     />
+                    <button
+                      v-if="altri.REJECTED"
+                      type="button"
+                      :disabled="caricandoAltri"
+                      @click.stop="caricaAltri('REJECTED')"
+                      class="w-full py-2 text-xs font-bold uppercase tracking-wide text-gray-500 border border-dashed border-gray-300 rounded-xl hover:border-amber-300 hover:text-gray-800 disabled:opacity-50 transition-colors"
+                    >
+                      {{ caricandoAltri ? 'Carico…' : 'Carica altri annullati' }}
+                    </button>
                   </div>
                 </div>
 
                 <p v-if="troncato && !loading" class="mt-4 text-[11px] text-gray-400 text-center">
-                  Elenco troncato al limite di caricamento: potrebbero esserci altri ordini più vecchi.
+                  Troppi risultati: affina il termine di ricerca.
                 </p>
 
               </div>

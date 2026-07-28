@@ -1,5 +1,8 @@
 import { ref } from 'vue';
-import { collection, query, where, orderBy, limit, getDocs, type QueryConstraint } from 'firebase/firestore';
+import {
+  collection, query, where, orderBy, limit, startAfter, getDocs,
+  type QueryConstraint, type QueryDocumentSnapshot,
+} from 'firebase/firestore';
 import { db } from '../firebase';
 import {
   ARCHIVIO_QUERIES,
@@ -25,6 +28,8 @@ import { estremiCommessa } from '../lib/archivio';
  * motivo per cui l'archivio mostrava pochi clienti.
  */
 export type ModalitaArchivio = 'recenti' | 'cliente' | 'commessa';
+/** Gli stati d'archivio, come chiavi tipizzate di cursori e flag di paginazione. */
+export type StatoArchivio = 'DELIVERED' | 'REJECTED';
 
 export function useArchivio() {
   const consegnati = ref<any[]>([]);
@@ -32,9 +37,19 @@ export function useArchivio() {
   const risultatiCommessa = ref<any[]>([]);
   const modalita = ref<ModalitaArchivio>('recenti');
   const loading = ref(false);
+  const caricandoAltri = ref(false);
   const errore = ref<string | null>(null);
-  /** true quando una lista ha toccato il proprio limite: la modale lo dichiara. */
+  /** Solo per la ricerca commessa, che non è paginata: la modale lo dichiara. */
   const troncato = ref(false);
+  /** Esiste (forse) un'altra pagina per quello stato → si mostra "Carica altri". */
+  const altri = ref<Record<StatoArchivio, boolean>>({ DELIVERED: false, REJECTED: false });
+
+  // Cursore per stato: l'ULTIMO documento della pagina già caricata. Serve il
+  // DocumentSnapshot vero, non il dato: `startAfter` su un valore sarebbe
+  // ambiguo con date ripetute (più DDT nello stesso giorno), sullo snapshot no.
+  const cursori: Record<StatoArchivio, QueryDocumentSnapshot | null> = { DELIVERED: null, REJECTED: null };
+  // Il cliente in vigore, per far ripartire le pagine successive dallo stesso filtro.
+  let clienteCorrente: string | undefined;
 
   const svuota = () => {
     consegnati.value = [];
@@ -42,20 +57,38 @@ export function useArchivio() {
     risultatiCommessa.value = [];
     troncato.value = false;
     errore.value = null;
+    altri.value = { DELIVERED: false, REJECTED: false };
+    cursori.DELIVERED = null;
+    cursori.REJECTED = null;
   };
 
-  const caricaStato = async (
+  const paginaDi = async (
     stato: string,
     campoOrdine: string,
     limite: number,
-    clienteUID?: string
+    clienteUID?: string,
+    dopo?: QueryDocumentSnapshot | null
   ) => {
     const vincoli: QueryConstraint[] = [];
     if (clienteUID) vincoli.push(where('clienteUID', '==', clienteUID));
-    vincoli.push(where('stato', '==', stato), orderBy(campoOrdine, 'desc'), limit(limite));
+    vincoli.push(where('stato', '==', stato), orderBy(campoOrdine, 'desc'));
+    if (dopo) vincoli.push(startAfter(dopo));
+    vincoli.push(limit(limite));
 
     const snap = await getDocs(query(collection(db, 'preventivi'), ...vincoli));
-    return snap.docs.map(d => ({ id: d.id, ...d.data() }));
+    return {
+      righe: snap.docs.map(d => ({ id: d.id, ...d.data() })),
+      ultimo: snap.docs[snap.docs.length - 1] ?? null,
+      // Pagina piena ⇒ POTREBBERO essercene altre. Se il totale è un multiplo
+      // esatto del limite, l'ultimo "Carica altri" non troverà nulla e sparirà:
+      // è il compromesso normale di questa paginazione.
+      pienaVuolDirePossibiliAltri: snap.docs.length === limite,
+    };
+  };
+
+  const limitePer = (stato: string) => {
+    const q = ARCHIVIO_QUERIES.find(x => x.stato === stato)!;
+    return clienteCorrente ? LIMITE_ARCHIVIO_CLIENTE : q.limite;
   };
 
   /**
@@ -66,14 +99,15 @@ export function useArchivio() {
   const carica = async (clienteUID?: string) => {
     loading.value = true;
     svuota();
+    clienteCorrente = clienteUID;
     modalita.value = clienteUID ? 'cliente' : 'recenti';
     try {
       const risultati = await Promise.all(
         ARCHIVIO_QUERIES.map(async q => {
-          const limite = clienteUID ? LIMITE_ARCHIVIO_CLIENTE : q.limite;
-          const righe = await caricaStato(q.stato, q.campoOrdine, limite, clienteUID);
-          if (righe.length >= limite) troncato.value = true;
-          return [q.stato, righe] as const;
+          const pagina = await paginaDi(q.stato, q.campoOrdine, limitePer(q.stato), clienteUID);
+          cursori[q.stato] = pagina.ultimo;
+          altri.value[q.stato] = pagina.pienaVuolDirePossibiliAltri;
+          return [q.stato, pagina.righe] as const;
         })
       );
       const perStato = new Map(risultati);
@@ -84,6 +118,31 @@ export function useArchivio() {
       errore.value = 'Impossibile caricare l’archivio. Riprova.';
     } finally {
       loading.value = false;
+    }
+  };
+
+  /**
+   * Pagina successiva di uno dei due elenchi, APPESA a quella già a video.
+   * Ripercorre la stessa query con lo stesso filtro cliente, ripartendo dal
+   * cursore: senza, un "carica altri" rifarebbe la prima pagina.
+   */
+  const caricaAltri = async (stato: StatoArchivio) => {
+    if (caricandoAltri.value || !altri.value[stato]) return;
+    const q = ARCHIVIO_QUERIES.find(x => x.stato === stato);
+    if (!q) return;
+
+    caricandoAltri.value = true;
+    try {
+      const pagina = await paginaDi(stato, q.campoOrdine, limitePer(stato), clienteCorrente, cursori[stato]);
+      cursori[stato] = pagina.ultimo ?? cursori[stato];
+      altri.value[stato] = pagina.pienaVuolDirePossibiliAltri;
+      const destinazione = stato === 'DELIVERED' ? consegnati : annullati;
+      destinazione.value = [...destinazione.value, ...pagina.righe];
+    } catch (e: any) {
+      console.error('Errore caricamento pagina successiva:', e);
+      errore.value = 'Impossibile caricare altri ordini. Riprova.';
+    } finally {
+      caricandoAltri.value = false;
     }
   };
 
@@ -133,9 +192,12 @@ export function useArchivio() {
     risultatiCommessa,
     modalita,
     loading,
+    caricandoAltri,
     errore,
     troncato,
+    altri,
     carica,
+    caricaAltri,
     cercaPerCommessa,
   };
 }
