@@ -38,10 +38,11 @@ const CLASSI_PULSANTE =
     @click="emit('apri', order.codice)"
     class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-amber-300 cursor-pointer transition-all flex flex-col gap-1"
   >
-    <!-- Lo stato è la prima cosa che si legge: in alto a sinistra. -->
-    <div>
+    <!-- Riga di testata: data a sinistra, stato a destra. -->
+    <div class="flex justify-between items-center gap-3">
+      <span class="text-[10px] text-gray-400 shrink-0">{{ formatDataOrdinamento(order) }}</span>
       <span
-        class="inline-block text-[10px] px-2 py-0.5 rounded border uppercase font-bold"
+        class="text-[10px] px-2 py-0.5 rounded border uppercase font-bold shrink-0"
         :class="STATUS_DETAILS[order.stato as keyof typeof STATUS_DETAILS]?.badge"
       >
         {{ STATUS_DETAILS[order.stato as keyof typeof STATUS_DETAILS]?.label }}
@@ -61,45 +62,42 @@ const CLASSI_PULSANTE =
       </span>
     </div>
 
-    <div class="text-xs text-gray-500 flex gap-2 min-w-0">
-      <template v-if="isAdmin">
-        <span class="truncate">{{ order.commessa || order.codice }}</span>
-        <span class="shrink-0">•</span>
-        <span class="shrink-0">{{ formatDataOrdinamento(order) }}</span>
-      </template>
-      <span v-else>{{ formatDataOrdinamento(order) }}</span>
-    </div>
+    <!-- Ultima riga: la commessa divide lo spazio con le azioni, che restano
+         sotto il prezzo. Una riga in meno rispetto a tenerle separate. -->
+    <div class="flex items-center gap-3">
+      <span v-if="isAdmin" class="text-xs text-gray-500 truncate">
+        {{ order.commessa || order.codice }}
+      </span>
 
-    <!-- Azioni in basso a destra. flex-wrap: su schermo stretto vanno a capo
-         invece di uscire dalla card. -->
-    <div class="flex items-center justify-end gap-2 mt-1 flex-wrap">
-      <button
-        v-if="isAdmin"
-        @click.stop="emit('apri', order.codice)"
-        :class="CLASSI_PULSANTE"
-        class="px-3"
-        title="Apri l'ordine"
-      >
-        <EyeIcon class="w-3.5 h-3.5" />
-      </button>
-      <button
-        v-if="order.cic_order_id || order.fic_order_id"
-        @click.stop="emit('apriOrdine', order)"
-        :class="CLASSI_PULSANTE"
-        class="px-8"
-        title="Visualizza Ordine"
-      >
-        <DocumentTextIcon class="w-3 h-3" /> ORDINE
-      </button>
-      <button
-        v-if="order.fic_ddt_url || order.cic_ddt_id"
-        @click.stop="emit('apriDdt', order)"
-        :class="CLASSI_PULSANTE"
-        class="px-8"
-        title="Visualizza DDT"
-      >
-        <DocumentTextIcon class="w-3 h-3" /> DDT
-      </button>
+      <div class="flex items-center justify-end gap-2 flex-wrap ml-auto shrink-0">
+        <button
+          v-if="isAdmin"
+          @click.stop="emit('apri', order.codice)"
+          :class="CLASSI_PULSANTE"
+          class="px-3"
+          title="Apri l'ordine"
+        >
+          <EyeIcon class="w-3.5 h-3.5" />
+        </button>
+        <button
+          v-if="order.cic_order_id || order.fic_order_id"
+          @click.stop="emit('apriOrdine', order)"
+          :class="CLASSI_PULSANTE"
+          class="px-8"
+          title="Visualizza Ordine"
+        >
+          <DocumentTextIcon class="w-3 h-3" /> ORDINE
+        </button>
+        <button
+          v-if="order.fic_ddt_url || order.cic_ddt_id"
+          @click.stop="emit('apriDdt', order)"
+          :class="CLASSI_PULSANTE"
+          class="px-8"
+          title="Visualizza DDT"
+        >
+          <DocumentTextIcon class="w-3 h-3" /> DDT
+        </button>
+      </div>
     </div>
   </div>
 </template>
