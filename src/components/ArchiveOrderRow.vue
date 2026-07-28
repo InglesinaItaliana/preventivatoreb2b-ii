@@ -38,15 +38,16 @@ const CLASSI_PULSANTE =
     @click="emit('apri', order.codice)"
     class="bg-white p-4 rounded-xl border border-gray-200 shadow-sm hover:shadow-md hover:border-amber-300 cursor-pointer transition-all flex flex-col gap-1"
   >
-    <!-- Riga di testata: data a sinistra, stato a destra. -->
+    <!-- Riga di testata: stato a sinistra, data a destra. La data porta lo
+         stesso font e peso della commessa: sono due dati di pari rango. -->
     <div class="flex justify-between items-center gap-3">
-      <span class="text-[10px] text-gray-400 shrink-0">{{ formatDataOrdinamento(order) }}</span>
       <span
         class="text-[10px] px-2 py-0.5 rounded border uppercase font-bold shrink-0"
         :class="STATUS_DETAILS[order.stato as keyof typeof STATUS_DETAILS]?.badge"
       >
         {{ STATUS_DETAILS[order.stato as keyof typeof STATUS_DETAILS]?.label }}
       </span>
+      <span class="text-xs text-gray-500 shrink-0">{{ formatDataOrdinamento(order) }}</span>
     </div>
 
     <!-- Prezzo sulla stessa riga dell'intestazione: si legge chi/cosa e quanto
