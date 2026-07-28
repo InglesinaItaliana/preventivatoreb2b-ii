@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { raggruppaPerMese, filtraClienti, estremiCommessa, dataOrdine, fondiOrdinati } from '../archivio';
+import { raggruppaPerMese, filtraClienti, dataOrdine, fondiOrdinati } from '../archivio';
 
 const consegnato = (commessa: string, data: string) => ({ commessa, stato: 'DELIVERED', dataConsegnaPrevista: data });
 const annullato = (commessa: string, secondi: number) => ({ commessa, stato: 'REJECTED', dataCreazione: { seconds: secondi } });
@@ -83,28 +83,6 @@ describe('filtraClienti', () => {
     const tanti = Array.from({ length: 50 }, (_, i) => ({ ragioneSociale: `VETRERIA ${i}`, email: `v${i}@x.it` }));
     expect(filtraClienti(tanti, 'vetreria')).toHaveLength(10);
     expect(filtraClienti(tanti, 'vetreria', 3)).toHaveLength(3);
-  });
-});
-
-describe('estremiCommessa', () => {
-  it('normalizza a maiuscolo (in archivio le commesse lo sono al 100%)', () => {
-    expect(estremiCommessa('maino')?.da).toBe('MAINO');
-  });
-
-  it('l’estremo superiore contiene il prefisso e ordina dopo di esso', () => {
-    const e = estremiCommessa('MAINO')!;
-    expect(e.a.startsWith(e.da)).toBe(true);
-    expect(e.a > e.da).toBe(true);
-    // Una commessa che estende il prefisso cade dentro l'intervallo...
-    expect('MAINO 2' >= e.da && 'MAINO 2' <= e.a).toBe(true);
-    // ...una che non lo ha, no.
-    expect('MAINZ' <= e.a).toBe(false);
-  });
-
-  it('ignora spazi ai bordi e termini troppo corti', () => {
-    expect(estremiCommessa('  maino  ')?.da).toBe('MAINO');
-    expect(estremiCommessa('M')).toBeNull();
-    expect(estremiCommessa('   ')).toBeNull();
   });
 });
 

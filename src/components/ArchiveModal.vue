@@ -137,7 +137,7 @@ const archivioVuoto = computed(() =>
 // ricerca a vuoto direbbe che l'archivio è vuoto, che è un'altra cosa.
 const messaggioVuoto = computed(() => {
   if (modalita.value === 'commessa') {
-    return `Nessuna commessa che inizia per “${queryCommessa.value.trim().toUpperCase()}”.`;
+    return `Nessuna commessa contiene “${queryCommessa.value.trim().toUpperCase()}”.`;
   }
   if (modalita.value === 'cliente' && props.isAdmin) {
     return 'Questo cliente non ha ordini in archivio.';
@@ -353,7 +353,7 @@ const openOrdine = (order: any) => {
                     @input="onDigitaCommessa"
                     @keyup.enter="avviaRicercaCommessa"
                     type="text"
-                    placeholder="Commessa (inizia per…)"
+                    placeholder="Cerca commessa…"
                     class="w-full text-sm border border-gray-300 rounded-lg pl-3 pr-9 py-2 outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100 transition-all"
                   />
                   <span class="absolute inset-y-0 right-3 flex items-center pointer-events-none text-gray-400">
@@ -369,7 +369,7 @@ const openOrdine = (order: any) => {
                     Storico di <strong>{{ queryCliente }}</strong>
                   </template>
                   <template v-else>
-                    Commesse che iniziano per <strong>{{ queryCommessa.trim().toUpperCase() }}</strong>
+                    Commesse che contengono <strong>{{ queryCommessa.trim().toUpperCase() }}</strong>
                   </template>
                 </span>
                 <button @click="azzeraRicerca" class="text-xs font-bold text-amber-900 hover:underline shrink-0">

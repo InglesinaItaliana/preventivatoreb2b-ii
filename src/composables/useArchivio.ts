@@ -3,14 +3,10 @@ import {
   collection, query, where, orderBy, limit, startAfter, getDocs,
   type QueryConstraint, type QueryDocumentSnapshot,
 } from 'firebase/firestore';
-import { db } from '../firebase';
-import {
-  ARCHIVIO_QUERIES,
-  ARCHIVE_STATUSES,
-  PAGINA_ARCHIVIO,
-  LIMITE_ARCHIVIO_COMMESSA,
-} from '../types';
-import { estremiCommessa, fondiOrdinati } from '../lib/archivio';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions } from '../firebase';
+import { ARCHIVIO_QUERIES, PAGINA_ARCHIVIO } from '../types';
+import { fondiOrdinati } from '../lib/archivio';
 
 /**
  * Caricamento dell'archivio storico (ordini consegnati e annullati).
@@ -21,7 +17,7 @@ import { estremiCommessa, fondiOrdinati } from '../lib/archivio';
  * Tre modalità, mutuamente esclusive:
  *  - 'recenti'  → gli ultimi archiviati
  *  - 'cliente'  → lo storico archiviato di un cliente
- *  - 'commessa' → ricerca per prefisso su `commessa`, senza paginazione
+ *  - 'commessa' → ricerca per contenuto su `commessa`, senza paginazione
  *
  * UNA LISTA SOLA, ma DUE QUERY. I due stati si ordinano su campi diversi
  * (v. ARCHIVIO_QUERIES), quindi arrivano separati e vengono fusi qui per data.
@@ -49,6 +45,7 @@ export function useArchivio() {
   const errore = ref<string | null>(null);
   /** Solo per la ricerca commessa, che non è paginata. */
   const troncato = ref(false);
+
   /** Esiste (forse) altro da caricare: la modale mostra l'invito a scorrere. */
   const altri = ref(false);
 
@@ -139,40 +136,37 @@ export function useArchivio() {
   };
 
   /**
-   * Ricerca per prefisso su `commessa`.
+   * Ricerca commessa per CONTENUTO: `1260895` trova `RIF. SALVALAIO 1260895`.
    *
-   * Un solo vincolo di range, niente altri filtri lato server: `commessa` da
-   * sola usa l'indice automatico di campo singolo, mentre aggiungere lo stato
-   * (o il cliente) richiederebbe un indice composito nuovo. Gli stati non
-   * d'archivio si scartano qui, e sono pochi perché la commessa è quasi univoca.
+   * Firestore non sa cercare una sottostringa — su un campo fa uguaglianza o
+   * intervallo, e l'intervallo dà solo il prefisso — quindi l'unico modo è
+   * scorrere le commesse e confrontarle. Lo fa la callable
+   * `cercaCommessaArchivio` e non il browser, perché l'Admin SDK sa proiettare
+   * i campi: scorrere l'archivio costa lì 84 KB e ~260 ms invece dei 1296 KB e
+   * ~1550 ms che dovrebbe scaricare il client, e torna indietro solo la
+   * manciata di KB dei risultati.
    *
-   * Per questo la ricerca è riservata all'admin: un cliente non può interrogare
-   * `preventivi` senza vincolo su clienteUID (le regole Firestore rifiutano), e
-   * aggiungerlo reintrodurrebbe l'indice composito.
+   * Il prefisso è stato tolto del tutto, non tenuto come primo stadio: era più
+   * rapido ma incompleto, e cercando `RIF` avrebbe restituito 8 commesse
+   * lasciandone fuori 12 senza dirlo. Meglio qualche centinaio di ms in più
+   * che un risultato parziale che sembra completo.
    */
   const cercaPerCommessa = async (termine: string) => {
-    const estremi = estremiCommessa(termine);
-    if (!estremi) return;
+    const t = (termine || '').trim();
+    if (t.length < 2) return;
 
     loading.value = true;
+    const cercata = t.toUpperCase();
     svuota();
     modalita.value = 'commessa';
     try {
-      const snap = await getDocs(query(
-        collection(db, 'preventivi'),
-        where('commessa', '>=', estremi.da),
-        where('commessa', '<=', estremi.a),
-        orderBy('commessa'),
-        limit(LIMITE_ARCHIVIO_COMMESSA)
-      ));
-      if (snap.size >= LIMITE_ARCHIVIO_COMMESSA) troncato.value = true;
-
-      risultatiCommessa.value = snap.docs
-        .map(d => ({ id: d.id, ...d.data() } as any))
-        .filter(o => ARCHIVE_STATUSES.includes(o.stato));
+      const chiama = httpsCallable(functions, 'cercaCommessaArchivio');
+      const esito: any = (await chiama({ termine: cercata })).data;
+      risultatiCommessa.value = esito?.risultati ?? [];
+      troncato.value = !!esito?.troncato;
     } catch (e: any) {
-      console.error('Errore ricerca commessa:', e);
-      errore.value = 'Impossibile cercare la commessa. Riprova.';
+      console.error('Errore ricerca commessa estesa:', e);
+      errore.value = 'Ricerca non riuscita. Riprova.';
     } finally {
       loading.value = false;
     }
