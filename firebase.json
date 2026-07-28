@@ -40,6 +40,21 @@
     ],
     "headers": [
       {
+        "//": "ATTENZIONE ALL'ORDINE: quando piu' regole combaciano, Firebase applica L'ULTIMA (verificato su canale di anteprima). Quindi qui sta la regola generale e le eccezioni vengono dopo.",
+        "//2": "Serve perche' gli header si applicano al percorso RICHIESTO, non al file servito dopo il rewrite SPA: la sola regola su /index.html lasciava '/' e '/admin' al max-age=3600 di default, e il sito restava indietro di un'ora dopo ogni deploy.",
+        "source": "**",
+        "headers": [
+          { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+        ]
+      },
+      {
+        "//": "Eccezione: gli asset hanno il nome derivato dal contenuto, quindi un file con quel nome non cambia mai e puo' essere tenuto in cache per sempre.",
+        "source": "/assets/**",
+        "headers": [
+          { "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }
+        ]
+      },
+      {
         "source": "/sw.js",
         "headers": [
           { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
