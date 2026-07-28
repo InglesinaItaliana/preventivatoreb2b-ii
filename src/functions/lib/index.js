@@ -4126,4 +4126,90 @@ exports.manageCustomerDiscount = functions
         throw new functions.https.HttpsError('internal', (e === null || e === void 0 ? void 0 : e.message) || 'Errore Contabilità in Cloud.');
     }
 });
+// ============================================================================
+// RICERCA COMMESSA NELL'ARCHIVIO (contenuto, non solo prefisso)
+// ----------------------------------------------------------------------------
+// Firestore non sa cercare una sottostringa: su un campo fa uguaglianza o
+// intervallo, e l'intervallo dà solo il PREFISSO. Lato client l'archivio usa
+// quindi il prefisso, che però fallisce proprio quando la commessa la si
+// conosce con certezza ma il cliente l'ha scritta preceduta da qualcosa:
+// cercando "123" non si trova "RIF - 123". Sui dati veri il divario è ampio —
+// "RIF" trova 8 commesse per prefisso e 20 per contenuto.
+//
+// L'unico modo di fare il "contiene" è scorrere le commesse e confrontarle. Lo
+// facciamo QUI e non nel browser perché l'Admin SDK sa proiettare i campi con
+// select(): scorrere l'archivio costa 84 KB e ~260 ms invece dei 1296 KB e
+// ~1550 ms che dovrebbe scaricare il client, e la risposta sono i soli match
+// (qualche KB). Regge quindi un archivio molto più grande di quello di oggi.
+//
+// Sola lettura, nessuna scrittura. Riservata agli amministratori: un cliente
+// non può interrogare `preventivi` fuori dai propri ordini.
+//   { termine: '123' } → { risultati: [...], scansionati: n, troncato: bool }
+// ============================================================================
+const ARCHIVIO_STATI = ['DELIVERED', 'REJECTED'];
+// Campi che servono alla card dell'archivio, nient'altro: è ciò che tiene
+// leggera sia la scansione sia la risposta.
+const ARCHIVIO_CAMPI_RICERCA = [
+    'commessa', 'codice', 'cliente', 'clienteUID', 'stato',
+    'dataConsegnaPrevista', 'dataCreazione', 'totaleScontato', 'totaleImponibile',
+    'cic_order_id', 'fic_order_id', 'fic_ddt_url', 'cic_ddt_id', 'billingBackend',
+];
+const ARCHIVIO_MAX_RISULTATI = 60;
+exports.cercaCommessaArchivio = functions
+    .region('europe-west1')
+    .https.onCall(async (data, context) => {
+    var _a, _b, _c, _d;
+    const callerEmail = (((_b = (_a = context.auth) === null || _a === void 0 ? void 0 : _a.token) === null || _b === void 0 ? void 0 : _b.email) || '').toLowerCase().trim();
+    const callerRole = (_d = (_c = context.auth) === null || _c === void 0 ? void 0 : _c.token) === null || _d === void 0 ? void 0 : _d.role;
+    const isAdminCaller = callerRole === 'ADMIN' || callerEmail === 'info@inglesinaitaliana.it';
+    if (!context.auth || !isAdminCaller) {
+        throw new functions.https.HttpsError('permission-denied', 'Riservato agli amministratori.');
+    }
+    // In archivio le commesse sono maiuscole al 100%: normalizzare a
+    // maiuscolo rende il confronto indipendente da come si è digitato.
+    const termine = String((data === null || data === void 0 ? void 0 : data.termine) || '').trim().toUpperCase();
+    if (termine.length < 2) {
+        throw new functions.https.HttpsError('invalid-argument', 'Servono almeno 2 caratteri.');
+    }
+    try {
+        const snap = await admin.firestore().collection('preventivi')
+            .where('stato', 'in', ARCHIVIO_STATI)
+            .select(...ARCHIVIO_CAMPI_RICERCA)
+            .get();
+        const trovati = snap.docs
+            .map((d) => (Object.assign({ id: d.id }, d.data())))
+            .filter((o) => String(o.commessa || '').toUpperCase().includes(termine));
+        // Ordinati come li mostra l'archivio: per la data che qualifica
+        // l'ordine — DDT se consegnato, creazione se annullato.
+        const quando = (o) => {
+            const consegnato = o.stato === 'DELIVERED';
+            const primaria = consegnato ? o.dataConsegnaPrevista : o.dataCreazione;
+            const ripiego = consegnato ? o.dataCreazione : o.dataConsegnaPrevista;
+            for (const v of [primaria, ripiego]) {
+                if (typeof v === 'string' && v.length >= 7) {
+                    const t = Date.parse(v);
+                    if (!isNaN(t))
+                        return t;
+                }
+                if (v && typeof v.toMillis === 'function')
+                    return v.toMillis();
+            }
+            return -Infinity;
+        };
+        trovati.sort((a, b) => quando(b) - quando(a));
+        const troncato = trovati.length > ARCHIVIO_MAX_RISULTATI;
+        console.log(`[ARCHIVIO] "${termine}": ${trovati.length}/${snap.size} (da ${callerEmail})`);
+        return {
+            risultati: trovati.slice(0, ARCHIVIO_MAX_RISULTATI),
+            scansionati: snap.size,
+            troncato,
+        };
+    }
+    catch (e) {
+        if (e instanceof functions.https.HttpsError)
+            throw e;
+        console.error('❌ [ARCHIVIO] cercaCommessaArchivio:', (e === null || e === void 0 ? void 0 : e.message) || e);
+        throw new functions.https.HttpsError('internal', 'Ricerca non riuscita.');
+    }
+});
 //# sourceMappingURL=index.js.map

@@ -24,7 +24,8 @@ const router = useRouter();
 const {
   ordini, risultatiCommessa, modalita,
   loading, caricandoAltri, errore, troncato, altri,
-  carica, caricaAltri, cercaPerCommessa,
+  prefissoAVuoto, perContenuto,
+  carica, caricaAltri, cercaPerCommessa, cercaCommessaOvunque,
 } = useArchivio();
 
 const { suggeriti, cerca: cercaClienti, pulisci: pulisciSuggeriti } = useClientiSuggeriti();
@@ -137,7 +138,10 @@ const archivioVuoto = computed(() =>
 // ricerca a vuoto direbbe che l'archivio è vuoto, che è un'altra cosa.
 const messaggioVuoto = computed(() => {
   if (modalita.value === 'commessa') {
-    return `Nessuna commessa che inizia per “${queryCommessa.value.trim().toUpperCase()}”.`;
+    const t = queryCommessa.value.trim().toUpperCase();
+    return perContenuto.value
+      ? `Nessuna commessa contiene “${t}”.`
+      : `Nessuna commessa che inizia per “${t}”.`;
   }
   if (modalita.value === 'cliente' && props.isAdmin) {
     return 'Questo cliente non ha ordini in archivio.';
@@ -369,11 +373,30 @@ const openOrdine = (order: any) => {
                     Storico di <strong>{{ queryCliente }}</strong>
                   </template>
                   <template v-else>
-                    Commesse che iniziano per <strong>{{ queryCommessa.trim().toUpperCase() }}</strong>
+                    Commesse che {{ perContenuto ? 'contengono' : 'iniziano per' }}
+                    <strong>{{ queryCommessa.trim().toUpperCase() }}</strong>
                   </template>
                 </span>
                 <button @click="azzeraRicerca" class="text-xs font-bold text-amber-900 hover:underline shrink-0">
                   Azzera
+                </button>
+              </div>
+
+              <!-- Il prefisso non ha trovato nulla: la commessa potrebbe esserci
+                   ma preceduta da altro ("123" dentro "RIF - 123"). Firestore
+                   non sa cercare una sottostringa, quindi il secondo giro passa
+                   da una callable che scorre l'archivio lato server. Offerto e
+                   non automatico: è più lento, e va speso solo se serve. -->
+              <div v-if="prefissoAVuoto && !loading" class="px-6 py-3 bg-white border-b border-gray-200 text-center">
+                <p class="text-xs text-gray-500 mb-2">
+                  Nessuna commessa <strong>inizia</strong> per “{{ queryCommessa.trim().toUpperCase() }}”.
+                </p>
+                <button
+                  @click="cercaCommessaOvunque(queryCommessa)"
+                  class="inline-flex items-center gap-1.5 px-4 h-8 rounded-full text-sm font-bold text-amber-950 bg-amber-400 border border-amber-500 hover:bg-amber-300 transition-colors"
+                >
+                  <MagnifyingGlassIcon class="h-3.5 w-3.5" />
+                  Cercala in qualsiasi posizione
                 </button>
               </div>
 
