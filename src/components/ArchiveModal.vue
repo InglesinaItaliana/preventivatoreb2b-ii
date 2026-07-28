@@ -24,8 +24,8 @@ const router = useRouter();
 const {
   ordini, risultatiCommessa, modalita,
   loading, caricandoAltri, errore, troncato, altri,
-  prefissoAVuoto, perContenuto,
-  carica, caricaAltri, cercaPerCommessa, cercaCommessaOvunque,
+  perContenuto, estesaInCorso,
+  carica, caricaAltri, cercaPerCommessa,
 } = useArchivio();
 
 const { suggeriti, cerca: cercaClienti, pulisci: pulisciSuggeriti } = useClientiSuggeriti();
@@ -382,24 +382,6 @@ const openOrdine = (order: any) => {
                 </button>
               </div>
 
-              <!-- Il prefisso non ha trovato nulla: la commessa potrebbe esserci
-                   ma preceduta da altro ("123" dentro "RIF - 123"). Firestore
-                   non sa cercare una sottostringa, quindi il secondo giro passa
-                   da una callable che scorre l'archivio lato server. Offerto e
-                   non automatico: è più lento, e va speso solo se serve. -->
-              <div v-if="prefissoAVuoto && !loading" class="px-6 py-3 bg-white border-b border-gray-200 text-center">
-                <p class="text-xs text-gray-500 mb-2">
-                  Nessuna commessa <strong>inizia</strong> per “{{ queryCommessa.trim().toUpperCase() }}”.
-                </p>
-                <button
-                  @click="cercaCommessaOvunque(queryCommessa)"
-                  class="inline-flex items-center gap-1.5 px-4 h-8 rounded-full text-sm font-bold text-amber-950 bg-amber-400 border border-amber-500 hover:bg-amber-300 transition-colors"
-                >
-                  <MagnifyingGlassIcon class="h-3.5 w-3.5" />
-                  Cercala in qualsiasi posizione
-                </button>
-              </div>
-
               <!-- overscroll-contain: arrivati in fondo lo scorrimento NON passa
                    alla pagina sotto. È metà della resistenza; l'altra metà è la
                    soglia da superare in `spingi`. -->
@@ -419,7 +401,11 @@ const openOrdine = (order: any) => {
                 
                 <div v-if="loading" class="flex flex-col items-center justify-center py-10 text-gray-400">
                   <ArrowPathIcon class="h-8 w-8 animate-spin mb-2" />
-                  <span class="text-sm">Recupero dati in corso...</span>
+                  <span v-if="estesaInCorso" class="text-sm text-center px-6">
+                    Nessuna commessa <strong>inizia</strong> per “{{ queryCommessa.trim().toUpperCase() }}”:
+                    la cerco in qualsiasi posizione…
+                  </span>
+                  <span v-else class="text-sm">Recupero dati in corso...</span>
                 </div>
 
                 <div v-else-if="errore" class="text-center py-10 text-red-500 border-2 border-dashed border-red-200 rounded-xl">

@@ -50,10 +50,10 @@ export function useArchivio() {
   const errore = ref<string | null>(null);
   /** Solo per la ricerca commessa, che non è paginata. */
   const troncato = ref(false);
-  /** La ricerca per prefisso non ha trovato nulla: si può cercare "contenuto". */
-  const prefissoAVuoto = ref(false);
   /** I risultati a video vengono da una ricerca per contenuto, non per prefisso. */
   const perContenuto = ref(false);
+  /** Il secondo giro è in corso: dura di più e la modale lo spiega. */
+  const estesaInCorso = ref(false);
   /** Esiste (forse) altro da caricare: la modale mostra l'invito a scorrere. */
   const altri = ref(false);
 
@@ -73,7 +73,6 @@ export function useArchivio() {
     ordini.value = [];
     risultatiCommessa.value = [];
     troncato.value = false;
-    prefissoAVuoto.value = false;
     perContenuto.value = false;
     errore.value = null;
     altri.value = false;
@@ -146,6 +145,42 @@ export function useArchivio() {
   };
 
   /**
+   * Ricerca per CONTENUTO, non per prefisso: `123` trova anche `RIF - 123`.
+   *
+   * Firestore non sa cercare una sottostringa, quindi l'unico modo è scorrere
+   * le commesse e confrontarle. Lo fa la callable `cercaCommessaArchivio` e non
+   * il browser, perché l'Admin SDK sa proiettare i campi: scorrere l'archivio
+   * costa lì 84 KB e ~260 ms invece dei 1296 KB e ~1550 ms che dovrebbe
+   * scaricare il client, e torna indietro solo la manciata di KB dei risultati.
+   *
+   * Non sostituisce il prefisso: è il secondo passo, offerto quando il primo
+   * non trova nulla, così il caso normale resta istantaneo.
+   */
+  const cercaCommessaOvunque = async (termine: string) => {
+    const t = (termine || '').trim();
+    if (t.length < 2) return;
+
+    loading.value = true;
+    estesaInCorso.value = true;
+    const cercata = t.toUpperCase();
+    svuota();
+    modalita.value = 'commessa';
+    try {
+      const chiama = httpsCallable(functions, 'cercaCommessaArchivio');
+      const esito: any = (await chiama({ termine: cercata })).data;
+      risultatiCommessa.value = esito?.risultati ?? [];
+      troncato.value = !!esito?.troncato;
+      perContenuto.value = true;
+    } catch (e: any) {
+      console.error('Errore ricerca commessa estesa:', e);
+      errore.value = 'Ricerca estesa non riuscita. Riprova.';
+    } finally {
+      estesaInCorso.value = false;
+      loading.value = false;
+    }
+  };
+
+  /**
    * Ricerca per prefisso su `commessa`.
    *
    * Un solo vincolo di range, niente altri filtri lato server: `commessa` da
@@ -178,9 +213,13 @@ export function useArchivio() {
         .map(d => ({ id: d.id, ...d.data() } as any))
         .filter(o => ARCHIVE_STATUSES.includes(o.stato));
 
-      // Il prefisso è la strada veloce; quando non basta, la modale offre di
-      // cercare il termine in QUALSIASI posizione (v. cercaCommessaOvunque).
-      prefissoAVuoto.value = risultatiCommessa.value.length === 0;
+      // Il prefisso è la strada veloce, non l'unica: se non trova nulla si
+      // passa SUBITO alla ricerca per contenuto. L'esito è già deciso — la
+      // commessa può esserci preceduta da altro — quindi chiedere un clic
+      // sarebbe solo un passaggio in più fra l'utente e il risultato.
+      if (risultatiCommessa.value.length === 0) {
+        await cercaCommessaOvunque(termine);
+      }
     } catch (e: any) {
       console.error('Errore ricerca commessa:', e);
       errore.value = 'Impossibile cercare la commessa. Riprova.';
@@ -189,46 +228,11 @@ export function useArchivio() {
     }
   };
 
-  /**
-   * Ricerca per CONTENUTO, non per prefisso: `123` trova anche `RIF - 123`.
-   *
-   * Firestore non sa cercare una sottostringa, quindi l'unico modo è scorrere
-   * le commesse e confrontarle. Lo fa la callable `cercaCommessaArchivio` e non
-   * il browser, perché l'Admin SDK sa proiettare i campi: scorrere l'archivio
-   * costa lì 84 KB e ~260 ms invece dei 1296 KB e ~1550 ms che dovrebbe
-   * scaricare il client, e torna indietro solo la manciata di KB dei risultati.
-   *
-   * Non sostituisce il prefisso: è il secondo passo, offerto quando il primo
-   * non trova nulla, così il caso normale resta istantaneo.
-   */
-  const cercaCommessaOvunque = async (termine: string) => {
-    const t = (termine || '').trim();
-    if (t.length < 2) return;
-
-    loading.value = true;
-    const cercata = t.toUpperCase();
-    svuota();
-    modalita.value = 'commessa';
-    try {
-      const chiama = httpsCallable(functions, 'cercaCommessaArchivio');
-      const esito: any = (await chiama({ termine: cercata })).data;
-      risultatiCommessa.value = esito?.risultati ?? [];
-      troncato.value = !!esito?.troncato;
-      perContenuto.value = true;
-      prefissoAVuoto.value = false;
-    } catch (e: any) {
-      console.error('Errore ricerca commessa estesa:', e);
-      errore.value = 'Ricerca estesa non riuscita. Riprova.';
-    } finally {
-      loading.value = false;
-    }
-  };
-
   return {
     ordini,
     risultatiCommessa,
-    prefissoAVuoto,
     perContenuto,
+    estesaInCorso,
     cercaCommessaOvunque,
     modalita,
     loading,
