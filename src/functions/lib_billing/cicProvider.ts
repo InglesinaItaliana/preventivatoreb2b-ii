@@ -33,6 +33,68 @@ export interface CicCustomerRecord {
   city: string;
 }
 
+/**
+ * Record cliente Reviso → CustomerRef, anagrafica compresa. Pura → testabile.
+ *
+ * L'anagrafica non è un di più: il layout del DDT stampa il blocco `owner` DEL
+ * DOCUMENTO e non va a leggere il master cliente. Finché non la ricopiamo qui,
+ * ogni DDT esce col solo nome del destinatario — su Reviso l'indirizzo c'è, è
+ * POPS che lo perde per strada.
+ */
+export function mapCustomerRef(c: any, fallbackPiva = ''): CustomerRef {
+  const str = (v: unknown): string | undefined => {
+    const s = v == null ? '' : String(v).trim();
+    return s ? s : undefined;
+  };
+  // In Reviso la provincia è un ProvinceReference: il documento vuole il NUMERO
+  // (province.provinceNumber), non la sigla. Fuori dall'Italia non c'è affatto.
+  const provinceNumber = Number(c?.province?.provinceNumber);
+  return {
+    id: c?.customerNumber,
+    name: c?.name || '',
+    piva: c?.vatNumber || fallbackPiva,
+    defaultDiscountPct: Number(c?.defaultDiscountPct) || 0,
+    address: str(c?.address),
+    zip: str(c?.zip),
+    city: str(c?.city),
+    ...(Number.isFinite(provinceNumber) && provinceNumber > 0 ? { provinceNumber } : {}),
+    countryCode: str(c?.countryCode?.code),
+    country: str(c?.country),
+  };
+}
+
+/**
+ * Blocco `owner` (= destinatario) di un DDT CiC. Pura → testabile.
+ *
+ * Regole imparate dai documenti reali (2026-07):
+ *  - la provincia sta DENTRO countryCode (`countryCode.province.id`), ed è un numero;
+ *  - `country` è la stringa che il layout stampa tale e quale: se resta vuota il
+ *    PDF scrive "undefined" accanto alla provincia (visto sul DDT #89);
+ *  - `id` e `name` sono l'aggancio al cliente da cui nascerà la fattura: NON si
+ *    toccano, qui si aggiunge solo l'indirizzo.
+ * Campi mancanti → `null`, cioè esattamente il comportamento precedente.
+ */
+export function buildOwnerBlock(customer: CustomerRef, domesticVatZone: number) {
+  const cc = customer.countryCode || 'IT';
+  return {
+    address: customer.address ?? null,
+    zipCode: customer.zip ?? null,
+    city: customer.city ?? null,
+    countryCode: {
+      ...(customer.provinceNumber ? { province: { id: customer.provinceNumber, metaData: null } } : {}),
+      id: cc,
+      metaData: null,
+    },
+    // Il cliente estero ha il suo paese ("Malta"): stampare "Italia" sarebbe falso.
+    country: customer.country || (cc === 'IT' ? 'Italia' : cc),
+    vatZone: { vatZoneNumber: domesticVatZone, id: domesticVatZone, metaData: null },
+    vatAccount: null,
+    name: customer.name,
+    id: Number(customer.id),
+    metaData: null,
+  };
+}
+
 export class CicProvider implements BillingProvider {
   readonly backend = 'cic' as const;
 
@@ -50,13 +112,7 @@ export class CicProvider implements BillingProvider {
     const found = await this.client.get(`/customers?filter=${filter}`);
     const list = (found?.collection || []) as any[];
     if (list.length > 0) {
-      const c = list[0];
-      return {
-        id: c.customerNumber,
-        name: c.name,
-        piva: c.vatNumber || piva,
-        defaultDiscountPct: Number(c.defaultDiscountPct) || 0,
-      };
+      return mapCustomerRef(list[0], piva);
     }
 
     const created = await this.client.post('/customers', {
@@ -72,12 +128,7 @@ export class CicProvider implements BillingProvider {
       ...(input.zip ? { zip: input.zip } : {}),
       ...(input.city ? { city: input.city } : {}),
     });
-    return {
-      id: created.customerNumber,
-      name: created.name,
-      piva: created.vatNumber || piva,
-      defaultDiscountPct: Number(created.defaultDiscountPct) || 0,
-    };
+    return mapCustomerRef(created, piva);
   }
 
   // Recupera l'anagrafica COMPLETA di un cliente CiC per P.IVA (per l'import in
@@ -220,8 +271,6 @@ export class CicProvider implements BillingProvider {
   // Payload riga allineato all'esempio ufficiale Postman: product via `product.id`
   // (= productNumber), totali per riga forniti (computeTotals).
   async createDeliveryNote(input: DeliveryNoteInput): Promise<DocumentResult> {
-    const ownerId = Number(input.customer.id);
-
     // Sconto PER RIGA (su CiC non esiste lo sconto globale di documento): sul DDT
     // portiamo lo sconto di pagamento del cliente, così la fattura — che nasce dal
     // DDT — lo eredita. Lo sconto concordato sull'ordine è già dentro unitNetPrice.
@@ -287,12 +336,9 @@ export class CicProvider implements BillingProvider {
       notesAndAttachments: null,
       vatAmount: totals.vat, totalAmount: totals.gross,
       deliveryNoteType: 'Sales', deliveryNoteStatus: 'Draft', // bozza: l'emissione (e il numero) avviene via /issue
-      owner: {
-        address: null, zipCode: null, city: null,
-        countryCode: { id: 'IT', metaData: null }, country: 'Italia',
-        vatZone: { vatZoneNumber: this.cfg.domesticVatZone, id: this.cfg.domesticVatZone, metaData: null },
-        vatAccount: null, name: input.customer.name, id: ownerId, metaData: null,
-      },
+      // Destinatario CON indirizzo: il layout stampa questo blocco, non il master
+      // cliente (vedi buildOwnerBlock). L'aggancio alla fattura resta `id`/`name`.
+      owner: buildOwnerBlock(input.customer, this.cfg.domesticVatZone),
       numberSeries: {
         prefix: 'DDT', sequenceType: 'Ordered',
         numberSeriesSequenceElement: null, // niente numero forzato: lo assegna /issue dalla serie
