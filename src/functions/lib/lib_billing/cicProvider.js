@@ -20,6 +20,7 @@ exports.buildOwnerBlock = buildOwnerBlock;
 exports.createCicProvider = createCicProvider;
 const cicClient_1 = require("./cicClient");
 const cicConfig_1 = require("./cicConfig");
+const destinazione_1 = require("./destinazione");
 const rounding_1 = require("./rounding");
 /**
  * Record cliente Reviso → CustomerRef, anagrafica compresa. Pura → testabile.
@@ -274,7 +275,11 @@ class CicProvider {
             };
         });
         const ddt = {
-            references: null, affectsInStockCounter: true, destination: null, quotation: null,
+            references: null, affectsInStockCounter: true,
+            // Luogo di consegna diverso dall'indirizzo del cliente. null (consegna
+            // standard) = il layout ricopia il destinatario: comportamento storico.
+            destination: (0, destinazione_1.buildDestinationBlock)(input.destination),
+            quotation: null,
             paymentDetails: {
                 date: input.date,
                 paymentTerms: { id: this.cfg.defaultPaymentTermsNumber, metaData: null },

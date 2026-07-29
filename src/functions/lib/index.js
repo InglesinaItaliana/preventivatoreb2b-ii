@@ -1441,6 +1441,16 @@ async function creaDdtCumulativoCiC(orderIds, data) {
             .filter((o) => !!o.data && !!o.data.cic_order_id);
         if (orders.length === 0)
             return { success: false, message: 'Nessun ordine CiC valido trovato.' };
+        // --- LUOGO DI DESTINAZIONE ---------------------------------------------
+        // Un DDT ha UNA sola destinazione, e ciò che finisce sul DDT è ciò che
+        // viene fatturato: mescolare ordini diretti in posti diversi manderebbe
+        // la merce (e la fattura) all'indirizzo sbagliato, e ce ne accorgeremmo
+        // a fine mese. La regola è pura e condivisa col client (lib_billing/
+        // destinazione.ts), ma qui è autoritativa: il client si può aggirare.
+        const esitoDest = (0, lib_billing_1.destinazioneComune)(orders.map((o) => o.data.destinazione));
+        if (!esitoDest.ok)
+            return { success: false, message: esitoDest.errore };
+        const destinazione = esitoDest.destinazione;
         // Cliente dal primo ordine (un DDT cumulativo è per singolo cliente)
         const clienteUID = orders[0].data.clienteUID;
         const userData = clienteUID
@@ -1474,18 +1484,18 @@ async function creaDdtCumulativoCiC(orderIds, data) {
             if (l.code)
                 l.cicProductId = cicProdMap.get(l.code);
         }
-        const ddt = await provider.createDeliveryNote({
-            customer,
+        const ddt = await provider.createDeliveryNote(Object.assign({ customer,
             date,
-            lines,
-            shipping: {
+            lines, shipping: {
                 packages: Number(colli) || 1,
                 weight: weight ? Number(weight) : undefined,
                 carrier: tipoTrasporto === 'COURIER' ? corriere : undefined,
                 tracking: tipoTrasporto === 'COURIER' ? tracking : undefined,
                 transportType: tipoTrasporto === 'COURIER' ? 'COURIER' : 'INTERNAL',
-            },
-        });
+            } }, (destinazione ? { destination: destinazione } : {})));
+        if (destinazione) {
+            console.log(`📍 [CIC DDT] Destinazione alternativa: ${(0, lib_billing_1.formatDestinazione)(destinazione)}`);
+        }
         // Controllo NON bloccante sul netto. `ddt.netAmount` è il totale RILETTO DA
         // REVISO sul documento emesso (non il nostro ricalcolo: confrontarsi con se
         // stessi non protegge da niente) — è la cifra da cui nascerà la fattura.
@@ -1576,6 +1586,15 @@ exports.creaDdtCumulativo = functions
         }
         if (backends[0] === 'cic') {
             return await creaDdtCumulativoCiC(orderIds, data);
+        }
+        // Il path FiC non sa scrivere il luogo di destinazione sul DDT. Meglio
+        // fermarsi che emettere un documento muto: la merce partirebbe verso un
+        // indirizzo che sul DDT non è scritto da nessuna parte.
+        if (allSnaps.some((s) => { var _a; return (0, lib_billing_1.hasDestinazione)((_a = s.data()) === null || _a === void 0 ? void 0 : _a.destinazione); })) {
+            return {
+                success: false,
+                message: 'Questo ordine ha un luogo di consegna alternativo, che il backend FiC non supporta. Emettere il DDT da Contabilità in Cloud.',
+            };
         }
         const accessToken = await getValidFicToken();
         // 1. Recupera i documenti da Firestore

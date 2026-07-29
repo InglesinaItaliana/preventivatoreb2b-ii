@@ -9,6 +9,7 @@ import { doc as fsDoc, getDoc } from 'firebase/firestore';
 import { drawBillingDocument, type CompanyInfo, type PdfDocData, type PdfKind, type PdfLine } from './billingPdfDraw';
 import { computeTotals } from './billingTotals';
 import { ddtElementi, isRigaConsegna } from './billing';
+import { hasDestinazione, type DestinazioneMerce } from './destinazione';
 import { db } from '../firebase';
 import type { PreventivoDocumento } from '../types';
 
@@ -145,6 +146,12 @@ export function buildPdfData(p: PreventivoLike, kind: PdfKind): PdfDocData {
       city: p.citta,
       province: p.provincia,
     },
+    // Solo sul DDT: è il documento di trasporto, ed è l'unico su cui Reviso
+    // stampa il luogo di destinazione. Aggiungerlo altrove farebbe divergere il
+    // PDF POPS dal documento vero.
+    ...(isDdt && hasDestinazione(p.destinazione)
+      ? { destinazione: p.destinazione as DestinazioneMerce }
+      : {}),
     reference: p.commessa || p.codice,
     lines,
     showPrices: !isDdt,

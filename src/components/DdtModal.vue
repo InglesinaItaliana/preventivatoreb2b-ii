@@ -3,10 +3,20 @@
   import { Dialog, DialogPanel, DialogTitle, TransitionChild, TransitionRoot } from '@headlessui/vue';
   import { TruckIcon } from '@heroicons/vue/24/solid';
   import { isDeliveryTariff } from '../lib/billing';
+  import { hasDestinazione, righeDestinazione, type DestinazioneMerce } from '../lib/destinazione';
   const props = defineProps<{
     show: boolean;
     orders: any[];
   }>();
+
+  /**
+   * Luogo di consegna del DDT. Gli ordini selezionati hanno tutti la stessa
+   * destinazione (AdminView e la callable rifiutano i mix), quindi basta il primo.
+   */
+  const destinazioneDdt = computed<DestinazioneMerce | null>(() => {
+    const d = props.orders?.find((o: any) => hasDestinazione(o?.destinazione))?.destinazione;
+    return d || null;
+  });
   
   const emit = defineEmits(['close', 'confirm']);
   
@@ -124,6 +134,15 @@
                     </DialogTitle>
                     <div class="mt-2">
                       <p class="text-sm text-gray-500" v-html="modalDescription"></p>
+                      <!-- Punto di non ritorno: da qui esce il documento su cui è
+                           scritto dove va la merce, e da cui nascerà la fattura.
+                           Qui la destinazione si mostra per intero, non come badge. -->
+                      <div v-if="destinazioneDdt" class="mt-4 p-3 rounded-xl border border-indigo-200 bg-indigo-50">
+                        <p class="text-[10px] font-bold text-indigo-500 uppercase mb-1">📍 Consegna a un altro indirizzo</p>
+                        <p v-for="(riga, i) in righeDestinazione(destinazioneDdt)" :key="i"
+                           class="text-sm text-indigo-900 leading-snug" :class="i === 0 ? 'font-bold' : ''">{{ riga }}</p>
+                        <p v-if="destinazioneDdt.note" class="text-[11px] text-indigo-700 mt-1 italic">{{ destinazioneDdt.note }}</p>
+                      </div>
                       <div class="mb-4 bg-slate-50 p-3 rounded-xl border border-slate-200 mt-4">
                         <label class="block text-xs font-bold text-slate-400 uppercase mb-2">Modalità Spedizione</label>
                         <div class="flex gap-2">

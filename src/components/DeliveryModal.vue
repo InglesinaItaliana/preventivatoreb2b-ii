@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'; // Rimosso onMounted
 import { XMarkIcon, CheckCircleIcon, TrashIcon } from '@heroicons/vue/24/solid';
+import { hasDestinazione, righeDestinazione } from '../lib/destinazione';
 
 const props = defineProps<{
   show: boolean;
@@ -119,6 +120,13 @@ const confirmDelivery = () => {
           <p class="text-xs text-gray-500 font-bold uppercase mb-1">Cliente</p>
           <p class="text-lg font-bold text-gray-900 leading-tight">{{ order?.cliente }}</p>
           <p class="text-sm text-gray-600 mt-1">{{ order?.indirizzoConsegna || 'Indirizzo standard' }}</p>
+          <!-- Chi firma può non essere il cliente: se la merce va altrove, dirlo
+               a chi sta per far firmare la consegna. -->
+          <div v-if="hasDestinazione(order?.destinazione)" class="mt-3 pt-3 border-t border-gray-100">
+            <p class="text-xs text-indigo-500 font-bold uppercase mb-1">📍 Consegna a</p>
+            <p v-for="(riga, i) in righeDestinazione(order?.destinazione)" :key="i"
+               class="text-sm text-indigo-900 leading-snug" :class="i === 0 ? 'font-bold' : ''">{{ riga }}</p>
+          </div>
         </div>
 
         <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-200">

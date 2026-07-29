@@ -7,6 +7,8 @@
   import { db, auth, storage } from '../firebase';
   import { dedupeTeamDocs } from '../composables/sidera/useTeamMembers';
   import DeliveryModal from '../components/DeliveryModal.vue';
+  import BadgeDestinazione from '../components/shared/BadgeDestinazione.vue';
+  import { hasDestinazione, formatDestinazione } from '../lib/destinazione';
   import TripManageModal from '../components/delivery/TripManageModal.vue';
   import NovaVehiclePicker from '../components/nova/NovaVehiclePicker.vue';
   import { useVehicles } from '../composables/shared/useVehicles';
@@ -563,10 +565,15 @@ const groupedTripStops = computed(() => {
     }
     
     // 3. Fallback finale a cascata
-    const finalAddress = 
+    // ⚠️ La destinazione alternativa VIENE PRIMA di tutto: se l'ordine va in un
+    // altro posto, l'indirizzo del profilo cliente è quello sbagliato — ed è
+    // questa stringa che finisce nel navigatore dell'autista.
+    const destinazione = order.destinazione;
+    const finalAddress =
+        (hasDestinazione(destinazione) ? formatDestinazione(destinazione) : null) ||
         profileData?.address || // Dal profilo (UID o Email)
-        order.indirizzoConsegna || 
-        order.indirizzo || 
+        order.indirizzoConsegna ||
+        order.indirizzo ||
         order.via ||
         // Se abbiamo città/provincia nell'ordine usiamo almeno quelle
         (order.citta ? `${order.citta} (${order.provincia || ''})` : null) ||
@@ -592,6 +599,7 @@ const groupedTripStops = computed(() => {
 
       cliente: firstOrder.cliente || 'Cliente',
       indirizzo: finalAddress, // <--- ORA È POPOLATO
+      destinazione: hasDestinazione(destinazione) ? destinazione : null,
       commessa: ddtId ? `DDT #${ddtNumberOf(firstOrder) || '?'}` : `Commessa ${firstOrder.commessa}`,
 
       primaryOrder: firstOrder,
@@ -629,8 +637,11 @@ const getShipments = (list: Order[]) => {
         cliente: o.cliente,
         info: `Ref: ${o.commessa}`,
         colli: Number(o.colli) || 1,
-        citta: o.citta,
-        provincia: o.provincia,
+        // Città della DESTINAZIONE quando c'è: è lì che deve andare il camion,
+        // ed è su questa che il dispatcher decide come comporre il viaggio.
+        citta: hasDestinazione(o.destinazione) ? o.destinazione.citta : o.citta,
+        provincia: hasDestinazione(o.destinazione) ? o.destinazione.provincia : o.provincia,
+        destinazione: hasDestinazione(o.destinazione) ? o.destinazione : null,
         billingError: o.billingError,
         delivered: o.stato === 'DELIVERED',
       });
@@ -654,8 +665,9 @@ const getShipments = (list: Order[]) => {
       cliente: first.cliente,
       info: `DDT #${ddtNumberOf(first)} • ${orders.length} Ordini`,
       colli: ddtColli,
-      citta: first.citta,
-      provincia: first.provincia,
+      citta: hasDestinazione(first.destinazione) ? first.destinazione.citta : first.citta,
+      provincia: hasDestinazione(first.destinazione) ? first.destinazione.provincia : first.provincia,
+      destinazione: hasDestinazione(first.destinazione) ? first.destinazione : null,
       billingError: orders.find(o => o.billingError)?.billingError,
       delivered: orders.every(o => o.stato === 'DELIVERED'),
     });
@@ -882,6 +894,7 @@ const isSelected = (ids: string[]) => {
                                       <h4 class="font-bold text-slate-900 truncate text-sm">{{ shipment.cliente }}</h4>
                                       <div class="flex items-center gap-1 shrink-0">
                                         <span v-if="shipment.billingError" :title="shipment.billingError" class="text-[9px] font-black bg-red-100 text-red-700 border border-red-200 px-1.5 py-0.5 rounded uppercase tracking-wider">⚠ Errore</span>
+                                        <BadgeDestinazione :destinazione="shipment.destinazione" />
                                         <span v-if="shipment.isDdt" class="text-[9px] font-black bg-slate-900 text-white px-1.5 py-0.5 rounded uppercase tracking-wider shadow-sm">DDT</span>
                                       </div>
                                   </div>
@@ -1053,6 +1066,18 @@ const isSelected = (ids: string[]) => {
                             {{ stop.indirizzo }}
                         </p>
                         
+                        <!-- Destinazione diversa: l'autista deve vederlo dalla card,
+                             non scoprirlo al cancello. Referente e telefono servono
+                             a chi consegna, quindi vanno in chiaro, non nel tooltip. -->
+                        <div v-if="stop.destinazione" class="mb-3 -mt-1 px-3 py-2 rounded-xl bg-indigo-50 border border-indigo-200">
+                          <p class="text-[10px] font-black text-indigo-500 uppercase tracking-wider">📍 Consegna a</p>
+                          <p class="text-sm font-bold text-indigo-900 leading-snug">{{ stop.destinazione.destinatario }}</p>
+                          <p v-if="stop.destinazione.referente || stop.destinazione.telefono" class="text-xs text-indigo-700">
+                            {{ [stop.destinazione.referente, stop.destinazione.telefono].filter(Boolean).join(' · ') }}
+                          </p>
+                          <p v-if="stop.destinazione.note" class="text-[11px] text-indigo-600 italic mt-0.5">{{ stop.destinazione.note }}</p>
+                        </div>
+
                         <div class="flex items-center flex-wrap gap-2 mb-4">
                            <span v-if="stop.billingError" :title="stop.billingError" class="text-[10px] font-black bg-red-100 text-red-700 border border-red-200 px-2 py-1 rounded-lg uppercase tracking-wider">⚠ Errore fatturazione</span>
                            <span v-if="stop.type === 'DDT'" class="text-[10px] font-black bg-slate-900 text-white px-2 py-1 rounded-lg uppercase tracking-wider shadow-sm">DDT</span>

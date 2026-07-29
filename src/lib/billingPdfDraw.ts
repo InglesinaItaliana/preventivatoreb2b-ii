@@ -6,6 +6,8 @@
 // Unità: mm, formato A4 (210×297). Il `doc` va creato con { unit:'mm', format:'a4' }.
 // ============================================================================
 
+import type { DestinazioneMerce } from './destinazione';
+
 // Dati dell'azienda emittente stampati in intestazione.
 // La fonte di verità è REVISO (GET /self → .company), pubblicata su
 // settings/company dalla function syncCompanyInfo e letta a runtime da
@@ -79,6 +81,13 @@ export interface PdfDocData {
   number?: string | number;
   date: string; // già formattata (es. 07/06/2026)
   customer: { name: string; piva?: string; address?: string; zip?: string; city?: string; province?: string };
+  /**
+   * Luogo di consegna diverso dall'indirizzo del cliente (solo DDT). Deve dire
+   * ESATTAMENTE quello che dice il documento su Reviso: questo PDF è la copia di
+   * cortesia dello stesso DDT, e due versioni che divergono sono peggio di una
+   * sola. Su Reviso è il blocco "LUOGO DI DESTINAZIONE".
+   */
+  destinazione?: DestinazioneMerce;
   reference?: string;
   lines: PdfLine[];
   showPrices: boolean;
@@ -199,6 +208,25 @@ export function drawBillingDocument(
     data.customer.province].filter(Boolean).join(' · ');
   if (addr) { y += 4.8; doc.text(addr, M, y); }
   if (data.customer.piva) { y += 4.8; doc.text(`P.IVA ${data.customer.piva}`, M, y); }
+
+  // ── LUOGO DI DESTINAZIONE ──────────────────────────────────────────────────
+  // Stesso blocco che stampa Reviso quando la merce non va all'indirizzo del
+  // cliente. Assente = consegna standard: nessun blocco, come oggi.
+  if (data.destinazione) {
+    const d = data.destinazione;
+    y += 7;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); setText(DIM);
+    doc.text('LUOGO DI DESTINAZIONE', M, y);
+    y += 5;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(10); setText(INK);
+    doc.text(d.destinatario || '—', M, y);
+    doc.setFont('helvetica', 'normal'); doc.setFontSize(9); setText(MID);
+    const rigaDest = [d.indirizzo, [d.cap, d.citta].filter(Boolean).join(' '), d.provincia]
+      .filter(Boolean).join(' · ');
+    if (rigaDest) { y += 4.8; doc.text(rigaDest, M, y); }
+    const contatto = [d.referente, d.telefono].filter(Boolean).join(' · ');
+    if (contatto) { y += 4.8; doc.text(contatto, M, y); }
+  }
 
   // riferimento / commessa (a destra, stesso blocco)
   if (data.reference) {

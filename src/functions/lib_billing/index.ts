@@ -15,6 +15,11 @@ export { getCicConfig, getActiveBackend } from './cicConfig';
 export { CicProvider, createCicProvider } from './cicProvider';
 export { CicClient } from './cicClient';
 export { buildDdtLines, isDeliveryTariff, isRigaConsegna, DELIVERY_TARIFF_CODES } from './ddtLines';
+export {
+  buildDestinationBlock, destinazioneKey, destinazioneComune, hasDestinazione,
+  formatDestinazione, normalizzaProvincia, provinciaNumber, validaDestinazione,
+  PROVINCE_CIC, type DestinazioneMerce, type EsitoDestinazione,
+} from './destinazione';
 export { fetchCompanyInfo, mapSelfToCompany, diffCompany, type CompanyInfo } from './companyInfo';
 
 /**

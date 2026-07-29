@@ -45,6 +45,11 @@ for (const [kind, nome] of [['order', 'ordine'], ['ddt', 'ddt'], ['quotation', '
   const data: PdfDocData = kind === 'ddt'
     ? { ...base, kind, showPrices: false, lines: righe.map(({ code, description, qty }) => ({ code, description, qty })),
         net: undefined, vat: undefined, gross: undefined, vatRate: undefined,
+        destinazione: {
+          destinatario: 'Cantiere Rossi & C. snc', indirizzo: 'Via Giuseppe Verdi 42',
+          cap: '20121', citta: 'Milano', provincia: 'MI',
+          referente: 'Sig. Rossi', telefono: '02 1234567',
+        },
         transport: { causale: 'VENDITA', deliveredBy: 'Mittente', packages: 3, date: '28/07/2026' } }
     : { ...base, kind };
   drawBillingDocument(doc, data, undefined, COMPANY_REVISO);
