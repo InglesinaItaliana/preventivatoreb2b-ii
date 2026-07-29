@@ -248,6 +248,44 @@ export function drawBillingDocument(
 
   y = Math.max(yl, yr);
 
+  // ── TRASPORTO (DDT) ────────────────────────────────────────────────────────
+  // Fra le intestazioni e le righe merce: sono i dati del viaggio, non del
+  // documento. Compatto: le colonne si adattano al numero di campi, così non si
+  // va a capo per un campo solo (era il caso della sola data di trasporto).
+  if (data.transport) {
+    const tb = data.transport;
+    const fields: [string, string][] = [
+      ['Causale trasporto', tb.causale || 'VENDITA'],
+      ['Trasporto a mezzo', tb.deliveredBy || 'Mittente'],
+    ];
+    if (tb.carrier) fields.push(['Vettore / Corriere', tb.carrier]);
+    if (tb.packages != null) fields.push(['Colli', String(tb.packages)]);
+    if (tb.weight != null) fields.push(['Peso', `${tb.weight} kg`]);
+    if (tb.tracking) fields.push(['Tracking', tb.tracking]);
+    if (tb.date) fields.push(['Data trasporto', tb.date]);
+    // Righe bilanciate: max 5 campi per riga, poi si distribuiscono in parti
+    // uguali (7 campi = 4+3, non 5+2 con una riga quasi vuota).
+    const rowsN = Math.ceil(fields.length / 5);
+    const cols = Math.ceil(fields.length / rowsN);
+    const cellW = (RIGHT - M) / cols;
+    const cellH = 8.5;
+    const boxH = 15.3 + (rowsN - 1) * cellH;
+    y += 7;
+    setFill(TINT); setDraw(LINE); doc.setLineWidth(0.3);
+    doc.roundedRect(M, y, RIGHT - M, boxH, 1.5, 1.5, 'FD');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(7); setText(DIM);
+    doc.text('TRASPORTO', M + 4, y + 4.6);
+    fields.forEach((f, i) => {
+      const r = Math.floor(i / cols), c = i % cols;
+      const cx = M + 4 + c * cellW, cy = y + 9 + r * cellH;
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(6.8); setText(DIM);
+      doc.text(f[0], cx, cy);
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); setText(INK);
+      doc.text(f[1], cx, cy + 3.8);
+    });
+    y += boxH;
+  }
+
   // ── RIFERIMENTO ────────────────────────────────────────────────────────────
   // Sul DDT sta sopra le righe, a sinistra: è l'etichetta della merce che segue,
   // e la metà destra dell'intestazione è occupata dal luogo di destinazione.
@@ -354,45 +392,6 @@ export function drawBillingDocument(
     doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); setText(DIM); doc.text('NOTE', M, y);
     y += 4.5; doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); setText(MID);
     doc.text(noteLines, M, y);
-  }
-
-  // ── TRASPORTO (DDT) ────────────────────────────────────────────────────────
-  // In fondo alla pagina, sopra il footer: come sul DDT di Reviso, e come serve a
-  // chi lo firma. Ancorato al fondo, non al flusso, così il documento ha sempre
-  // lo stesso aspetto a prescindere da quante righe di merce ci sono.
-  if (data.transport) {
-    const tb = data.transport;
-    const fields: [string, string][] = [
-      ['Causale trasporto', tb.causale || 'VENDITA'],
-      ['Trasporto a mezzo', tb.deliveredBy || 'Mittente'],
-    ];
-    if (tb.carrier) fields.push(['Vettore / Corriere', tb.carrier]);
-    if (tb.packages != null) fields.push(['Colli', String(tb.packages)]);
-    if (tb.weight != null) fields.push(['Peso', `${tb.weight} kg`]);
-    if (tb.tracking) fields.push(['Tracking', tb.tracking]);
-    if (tb.date) fields.push(['Data trasporto', tb.date]);
-    const cols = 3;
-    const rowsN = Math.ceil(fields.length / cols);
-    const cellW = (RIGHT - M) / cols;
-    const cellH = 11;
-    const boxH = 8 + rowsN * cellH;
-    const FONDO = 283;                   // limite oltre il quale si tocca il footer
-    let boxY = FONDO - boxH;
-    // Se le righe merce arrivano fin quaggiù, il blocco va sulla pagina dopo:
-    // sovrapporlo alla tabella renderebbe illeggibili tutti e due.
-    if (y + 6 > boxY) { doc.addPage(); y = 18; boxY = FONDO - boxH; }
-    setFill(TINT); setDraw(LINE); doc.setLineWidth(0.3);
-    doc.roundedRect(M, boxY, RIGHT - M, boxH, 1.5, 1.5, 'FD');
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(7); setText(DIM);
-    doc.text('TRASPORTO', M + 4, boxY + 5.5);
-    fields.forEach((f, i) => {
-      const r = Math.floor(i / cols), c = i % cols;
-      const cx = M + 4 + c * cellW, cy = boxY + 11 + r * cellH;
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(7); setText(DIM);
-      doc.text(f[0], cx, cy);
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(9); setText(INK);
-      doc.text(f[1], cx, cy + 4.5);
-    });
   }
 
   // ── FOOTER ───────────────────────────────────────────────────────────────────
