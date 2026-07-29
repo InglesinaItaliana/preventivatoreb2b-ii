@@ -19,6 +19,11 @@ import { annuncioDaMostrare, segnaAnnuncioVisto, ANNUNCIO_DETTAGLIO_PREZZO } fro
 import { useClientiSuggeriti } from '../composables/useClientiSuggeriti';
 import { onAuthStateChanged } from 'firebase/auth';
 import OrderModals from '../components/OrderModals.vue';
+import DestinazioneModal from '../components/DestinazioneModal.vue';
+import {
+  hasDestinazione, formatDestinazione,
+  type DestinazioneMerce, type DestinazioneSalvata,
+} from '../lib/destinazione';
 import { STATUS_DETAILS } from '../types';
 import { getCustomerPricingContext } from '../logic/customerConfig';
 import { TourGuideClient } from "@sjmc11/tourguidejs/src/Tour";
@@ -751,6 +756,46 @@ const onConfirmSign = async (url: string) => {
   } catch(e) { console.error(e); alert("Errore conferma."); }
 };
 
+// --- DESTINAZIONE MERCE (luogo di consegna diverso dalla sede) ---------------
+// Il cliente la sceglie qui, dove l'ordine nasce davvero: dal builder col
+// bottone ORDINA. Sul preventivo va salvata una COPIA, non un riferimento alla
+// rubrica: se domani il cliente corregge l'indirizzo salvato, gli ordini già
+// partiti — e i DDT già emessi — devono restare quelli che erano.
+const rubricaCliente = ref<DestinazioneSalvata[]>([]);
+const indirizzoCliente = ref('');
+const showDestinazioneModal = ref(false);
+/** Destinazione già presente sul preventivo caricato (se lo si sta riaprendo). */
+const destinazioneSalvata = ref<DestinazioneMerce | null>(null);
+const destinazioneScelta = ref<DestinazioneMerce | null>(null);
+const salvaDestInRubrica = ref<{ salva: boolean; etichetta: string }>({ salva: false, etichetta: '' });
+
+const onDestinazioneConfermata = (p: { destinazione: DestinazioneMerce | null; salvaInRubrica: boolean; etichetta: string }) => {
+  destinazioneScelta.value = p.destinazione;
+  salvaDestInRubrica.value = { salva: p.salvaInRubrica, etichetta: p.etichetta };
+  showDestinazioneModal.value = false;
+};
+
+/** Aggiunge la destinazione alla rubrica del cliente. Non blocca l'ordine se fallisce. */
+const salvaDestinazioneInRubrica = async () => {
+  const dest = destinazioneScelta.value;
+  const uid = auth.currentUser?.uid;
+  if (!dest || !salvaDestInRubrica.value.salva || !uid) return;
+  try {
+    const voce: DestinazioneSalvata = {
+      ...dest,
+      id: `d${Date.now()}`,
+      etichetta: salvaDestInRubrica.value.etichetta || dest.citta,
+    };
+    const nuova = [...rubricaCliente.value, voce];
+    await updateDoc(doc(db, 'users', uid), { destinazioni: nuova });
+    rubricaCliente.value = nuova;
+  } catch (e) {
+    // L'ordine vale più della rubrica: se questo fallisce, l'indirizzo resta
+    // comunque sull'ordine.
+    console.error('Rubrica destinazioni: salvataggio fallito', e);
+  }
+};
+
 const richiediConfermaOrdine = () => {
   if (!profileLoaded.value) return showCustomToast("Caricamento profilo in corso, attendi un istante...");
   // 1. Validazioni preliminari base (vuoto o senza riferimento)
@@ -764,10 +809,15 @@ const richiediConfermaOrdine = () => {
   // Il controllo avverrà nel momento della conferma finale dentro il modale.
 
   // 2. Reset Variabili Modale
-  orderDateInput.value = ''; 
+  orderDateInput.value = '';
   currentDetraction.value = userDefaultDetraction.value; // Reset al default
   isDetractionLocked.value = true;                       // Riblocca lucchetto
-  
+  // Riparte da ciò che è già sul preventivo (se lo si sta riaprendo).
+  destinazioneScelta.value = hasDestinazione(destinazioneSalvata.value)
+    ? (destinazioneSalvata.value as DestinazioneMerce)
+    : null;
+  salvaDestInRubrica.value = { salva: false, etichetta: '' };
+
   // 3. Apri Modale
   showOrderDateModal.value = true;
 };
@@ -784,9 +834,12 @@ const confermaOrdineConData = async () => {
   // Aggiorna il ref che verrà usato da salvaPreventivo
   dataConsegnaPrevista.value = orderDateInput.value;
   showOrderDateModal.value = false;
-  
+
   // Chiama la funzione originale per salvare
   await salvaPreventivo('ORDINA');
+  // Dopo l'ordine, non prima: la rubrica è un di più e non deve poter far
+  // fallire l'invio.
+  await salvaDestinazioneInRubrica();
 };
 
 const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADMIN_VALIDA' | 'ADMIN_RIFIUTA' | 'ADMIN_FIRMA' | 'FORCE_EDIT' | 'CREA_PREVENTIVO_ADMIN' | 'CREA_ORDINE_ADMIN') => {
@@ -865,6 +918,17 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
     };
     if (azione === 'ORDINA' && currentDetraction.value !== userDefaultDetraction.value) {
         docData.order_detraction_value = currentDetraction.value;
+    }
+    // Luogo di consegna: si scrive una COPIA sul preventivo. Solo sull'azione
+    // ORDINA, che è l'unica in cui la modale l'ha impostata.
+    // ⚠️ deleteField() SOLO sul documento esistente: questo salvataggio finisce
+    // in addDoc() quando il preventivo è nuovo, e addDoc rifiuta le sentinelle di
+    // cancellazione — ci si romperebbe l'invio dell'ordine nel caso più comune
+    // (cliente che compone e ordina senza salvare prima). Su un documento nuovo
+    // il campo semplicemente non si scrive.
+    if (azione === 'ORDINA') {
+        if (destinazioneScelta.value) docData.destinazione = destinazioneScelta.value;
+        else if (currentDocId.value) docData.destinazione = deleteField();
     }
     if (azioneOrdine) {
       // Sentinella per il watchdog: se il flusso muore tra questo salvataggio e
@@ -1036,6 +1100,9 @@ const caricaPreventivo = async () => {
     scontoApplicato.value = d.scontoPercentuale || 0;
     listaAllegati.value = d.allegati || [];
     dataConsegnaPrevista.value = d.dataConsegnaPrevista || '';
+    // Luogo di consegna già scelto su questo preventivo: la modale ORDINA
+    // riparte da qui invece di ripresentare "indirizzo abituale".
+    destinazioneSalvata.value = hasDestinazione(d.destinazione) ? (d.destinazione as DestinazioneMerce) : null;
 
     // Mappatura elementi (invariata)
     preventivo.value = d.elementi.map((el: any) => ({
@@ -1253,6 +1320,9 @@ onMounted(async() => {
           if (userSnap.exists()) {
             const d = userSnap.data();
             userDefaultDetraction.value = d.detraction_value !== undefined ? d.detraction_value : 21;
+            rubricaCliente.value = Array.isArray(d.destinazioni) ? d.destinazioni : [];
+            indirizzoCliente.value = [d.indirizzo, [d.cap, d.citta].filter(Boolean).join(' '), d.provincia ? `(${d.provincia})` : '']
+              .filter(Boolean).join(', ').replace(', (', ' (');
             // Annuncio della lente: una volta sola, e solo al cliente (l'admin
             // la novità la conosce). Riusa questo snapshot: nessuna lettura in più.
             if (!isAdmin.value && annuncioDaMostrare(d, ANNUNCIO_DETTAGLIO_PREZZO)) {
@@ -1994,6 +2064,29 @@ onMounted(async() => {
           </div>
 
           <div class="space-y-2">
+            <label class="text-xs font-bold text-gray-400 uppercase tracking-wider ml-1">Consegna</label>
+            <div class="rounded-xl p-3 border flex items-center justify-between gap-3 shadow-sm"
+                 :class="destinazioneScelta ? 'bg-indigo-50 border-indigo-200' : 'bg-gray-50 border-gray-200'">
+              <div class="min-w-0">
+                <p class="text-sm font-bold truncate" :class="destinazioneScelta ? 'text-indigo-900' : 'text-gray-700'">
+                  {{ destinazioneScelta ? destinazioneScelta.destinatario : 'Indirizzo abituale' }}
+                </p>
+                <p class="text-[11px] truncate" :class="destinazioneScelta ? 'text-indigo-600' : 'text-gray-500'">
+                  {{ destinazioneScelta ? formatDestinazione(destinazioneScelta) : (indirizzoCliente || 'La tua sede') }}
+                </p>
+              </div>
+              <button
+                type="button"
+                @click="showDestinazioneModal = true"
+                class="shrink-0 px-3 py-2 rounded-lg border text-xs font-bold transition-colors bg-white"
+                :class="destinazioneScelta ? 'border-indigo-300 text-indigo-700 hover:bg-indigo-50' : 'border-gray-200 text-gray-600 hover:bg-gray-100'"
+              >
+                Cambia
+              </button>
+            </div>
+          </div>
+
+          <div class="space-y-2">
             <label class="text-xs font-bold text-gray-400 uppercase tracking-wider ml-1">Detrazione (sigillatura + spessore canalini)</label>
             <div class="bg-gray-50 rounded-xl p-1.5 border border-gray-200 flex items-center justify-between shadow-sm">
               
@@ -2098,6 +2191,16 @@ onMounted(async() => {
 
       </div>
     </div>
+
+    <DestinazioneModal
+      :show="showDestinazioneModal"
+      :destinazione="destinazioneScelta"
+      :rubrica="rubricaCliente"
+      :indirizzo-cliente="indirizzoCliente"
+      :nome-cliente="clienteEmail"
+      @close="showDestinazioneModal = false"
+      @confirm="onDestinazioneConfermata"
+    />
 </template>
 
 <style scoped>
