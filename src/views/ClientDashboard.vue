@@ -27,8 +27,14 @@
     PrinterIcon
   } from '@heroicons/vue/24/solid';
   import OrderModals from '../components/OrderModals.vue';
-  
-  const showArchive = ref(false); 
+  import DestinazioneModal from '../components/DestinazioneModal.vue';
+  import BadgeDestinazione from '../components/shared/BadgeDestinazione.vue';
+  import {
+    hasDestinazione, formatDestinazione,
+    type DestinazioneMerce, type DestinazioneSalvata,
+  } from '../lib/destinazione';
+
+  const showArchive = ref(false);
   const router = useRouter();
   const listaMieiPreventivi = ref<any[]>([]);
   const loading = ref(true);
@@ -145,6 +151,42 @@ const confermaRicezione = async (order: any) => {
     uploadedFiles.value.splice(index, 1);
   };
   
+  // --- DESTINAZIONE MERCE (luogo di consegna diverso dalla sede) ---
+  // Vive sul preventivo come COPIA (non un riferimento alla rubrica): se il
+  // cliente domani corregge l'indirizzo in rubrica, gli ordini già partiti — e i
+  // DDT già emessi — devono restare quelli che erano.
+  const rubricaCliente = ref<DestinazioneSalvata[]>([]);
+  const indirizzoCliente = ref('');
+  const showDestinazioneModal = ref(false);
+  /** Scelta in corso nella modale di conferma, non ancora salvata. */
+  const destinazioneScelta = ref<DestinazioneMerce | null>(null);
+  const salvaDestInRubrica = ref<{ salva: boolean; etichetta: string }>({ salva: false, etichetta: '' });
+
+  const onDestinazioneConfermata = (p: { destinazione: DestinazioneMerce | null; salvaInRubrica: boolean; etichetta: string }) => {
+    destinazioneScelta.value = p.destinazione;
+    salvaDestInRubrica.value = { salva: p.salvaInRubrica, etichetta: p.etichetta };
+    showDestinazioneModal.value = false;
+  };
+
+  /** Aggiunge la destinazione alla rubrica del cliente. Non blocca l'ordine se fallisce. */
+  const salvaInRubricaSePrevisto = async (uid: string, dest: DestinazioneMerce | null) => {
+    if (!dest || !salvaDestInRubrica.value.salva) return;
+    try {
+      const voce: DestinazioneSalvata = {
+        ...dest,
+        id: `d${Date.now()}`,
+        etichetta: salvaDestInRubrica.value.etichetta || dest.citta,
+      };
+      const nuova = [...rubricaCliente.value, voce];
+      await updateDoc(doc(db, 'users', uid), { destinazioni: nuova });
+      rubricaCliente.value = nuova;
+    } catch (e) {
+      // L'ordine è più importante della rubrica: se il salvataggio fallisce
+      // l'indirizzo resta comunque sull'ordine.
+      console.error('Rubrica destinazioni: salvataggio fallito', e);
+    }
+  };
+
   const userDefaultDetraction = ref(50);
   const currentDetraction = ref(50);
   const isDetractionLocked = ref(true);
@@ -161,9 +203,12 @@ const confermaRicezione = async (order: any) => {
         clientName.value = data.ragioneSociale || data.email;
         localStorage.setItem('clientName', clientName.value);
         userDefaultDetraction.value = data.detraction_value !== undefined ? data.detraction_value : 21;
-        
+        rubricaCliente.value = Array.isArray(data.destinazioni) ? data.destinazioni : [];
+        indirizzoCliente.value = [data.indirizzo, [data.cap, data.citta].filter(Boolean).join(' '), data.provincia ? `(${data.provincia})` : '']
+          .filter(Boolean).join(', ').replace(', (', ' (');
+
         // Controllo se ha già fatto il tour
-        tourCompleted.value = !!data.tourCompleted; 
+        tourCompleted.value = !!data.tourCompleted;
       }
     } catch (e) { 
       console.error("Errore profilo", e); 
@@ -322,6 +367,9 @@ const confermaRicezione = async (order: any) => {
     uploadedFiles.value = [];
     currentDetraction.value = userDefaultDetraction.value;
     isDetractionLocked.value = true;
+    // Riparte da ciò che è già sull'ordine (se il preventivo ne aveva una).
+    destinazioneScelta.value = hasDestinazione(p?.destinazione) ? (p.destinazione as DestinazioneMerce) : null;
+    salvaDestInRubrica.value = { salva: false, etichetta: '' };
     showConfirmQuoteModal.value = true;
   };
   
@@ -425,9 +473,16 @@ const confermaRicezione = async (order: any) => {
       if (currentDetraction.value !== userDefaultDetraction.value) {
         updatePayload.order_detraction_value = currentDetraction.value;
       }
-  
+
+      // Luogo di consegna: si scrive una COPIA sull'ordine, oppure si cancella il
+      // campo se il cliente è tornato all'indirizzo abituale (lasciare una
+      // destinazione vecchia manderebbe la merce nel posto sbagliato).
+      updatePayload.destinazione = destinazioneScelta.value ?? deleteField();
+
       await updateDoc(doc(db, 'preventivi', selectedOrder.value.id), updatePayload);
-      
+      const uid = auth.currentUser?.uid;
+      if (uid) await salvaInRubricaSePrevisto(uid, destinazioneScelta.value);
+
       showConfirmQuoteModal.value = false;
       openResultModal("Richiesta Inviata", "Il preventivo è stato inviato correttamente per l'elaborazione.", "SUCCESS");
     } catch (e) {
@@ -649,6 +704,7 @@ const confermaRicezione = async (order: any) => {
                 </div>
                 <div class="flex flex-col items-start">
                   <h3 class="font-bold text-xl text-gray-900 leading-tight">{{ p.commessa || 'Senza Nome' }}</h3>
+                  <BadgeDestinazione :destinazione="p.destinazione" class="mt-1" />
                   <div v-if="p.elementi" class="flex flex-col gap-1 mt-2 items-start">
                     <span v-for="(riga, idx) in getRiepilogoPulito(p.elementi)" :key="idx" 
                           class="text-[10px] bg-gray-50 px-2 py-1 rounded border text-gray-600">
@@ -712,6 +768,7 @@ const confermaRicezione = async (order: any) => {
                 </div>
                 <div class="flex flex-col items-start">
                   <h3 class="font-bold text-xl text-gray-900 leading-tight">{{ p.commessa || 'Senza Nome' }}</h3>
+                  <BadgeDestinazione :destinazione="p.destinazione" class="mt-1" />
                   <div v-if="p.dataConsegnaPrevista" class="mt-2 flex items-center gap-1.5 px-3 py-1 bg-stone-200 border border-stone-300 rounded shadow-sm">
                       <TruckIcon class="h-4 w-4" /> <span class="text-xs font-bold text-black uppercase">Prevista il {{ formatDateShort(p.dataConsegnaPrevista) }}</span>
                   </div>
@@ -769,6 +826,7 @@ const confermaRicezione = async (order: any) => {
                 </div>    
                 <div class="flex flex-col items-start">
                   <h3 class="font-bold text-xl text-gray-900 leading-tight">{{ p.commessa || 'Senza Nome' }}</h3>
+                  <BadgeDestinazione :destinazione="p.destinazione" class="mt-1" />
                   <div v-if="p.dataConsegnaPrevista" class="mt-2 flex items-center gap-1.5 px-3 py-1 bg-stone-200 border border-stone-300 rounded shadow-sm">
                     <TruckIcon class="h-4 w-4" /> <span class="text-xs font-bold text-black uppercase">Prevista il {{ formatDateShort(p.dataConsegnaPrevista) }}</span>
                   </div>
@@ -817,6 +875,7 @@ const confermaRicezione = async (order: any) => {
   </div>
                 <div class="flex flex-col items-start">
                   <h3 class="font-bold text-xl text-gray-900 leading-tight">{{ p.commessa || 'Senza Nome' }}</h3>
+                  <BadgeDestinazione :destinazione="p.destinazione" class="mt-1" />
                   <div v-if="p.dataConsegnaPrevista && p.stato !== 'SHIPPED'" class="mt-2 flex items-center gap-1.5 px-3 py-1 bg-stone-200 border border-stone-300 rounded shadow-sm">
                     <TruckIcon class="h-4 w-4" /> <span class="text-xs font-bold text-black uppercase">Prevista il {{ formatDateShort(p.dataConsegnaPrevista) }}</span>
                   </div>
@@ -916,6 +975,25 @@ const confermaRicezione = async (order: any) => {
               Seleziona una data a partire da {{ minDays }} giorni da oggi. L'azienda farà il possibile per rispettarla.
             </p>
           </div>
+          <div class="mb-6 bg-white p-4 rounded-xl border shadow-sm flex items-center justify-between gap-3"
+               :class="destinazioneScelta ? 'border-indigo-200 ring-1 ring-indigo-100' : 'border-gray-200'">
+            <div class="min-w-0">
+              <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Consegna</label>
+              <p class="text-[11px] truncate" :class="destinazioneScelta ? 'text-indigo-700 font-bold' : 'text-gray-500'">
+                {{ destinazioneScelta
+                  ? `${destinazioneScelta.destinatario} — ${formatDestinazione(destinazioneScelta)}`
+                  : (indirizzoCliente || 'Indirizzo abituale') }}
+              </p>
+            </div>
+            <button
+              type="button"
+              @click="showDestinazioneModal = true"
+              class="shrink-0 px-3 py-2 rounded-full border text-xs font-bold transition-colors"
+              :class="destinazioneScelta ? 'border-indigo-300 text-indigo-700 hover:bg-indigo-50' : 'border-gray-300 text-gray-600 hover:bg-gray-50'"
+            >
+              Cambia
+            </button>
+          </div>
           <div class="mb-6 bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center justify-between">
             <div>
               <label class="block text-xs font-bold text-gray-700 uppercase mb-1">Detrazione</label>
@@ -1001,6 +1079,16 @@ const confermaRicezione = async (order: any) => {
         </div>
       </div>
     </div>
+    <DestinazioneModal
+      :show="showDestinazioneModal"
+      :destinazione="destinazioneScelta"
+      :rubrica="rubricaCliente"
+      :indirizzo-cliente="indirizzoCliente"
+      :nome-cliente="clientName"
+      @close="showDestinazioneModal = false"
+      @confirm="onDestinazioneConfermata"
+    />
+
     <!-- Annuncio one-time: pulsante stampa -->
     <div v-if="showPrintPopup" class="fixed inset-0 z-[9999] overflow-y-auto bg-gray-900/50 backdrop-blur-sm transition-opacity duration-300 flex items-center justify-center p-4">
       <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 text-center transform transition-all">

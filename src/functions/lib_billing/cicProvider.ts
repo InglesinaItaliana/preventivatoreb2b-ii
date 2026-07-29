@@ -15,6 +15,7 @@
 
 import { CicClient } from './cicClient';
 import { CicConfig, getCicConfig } from './cicConfig';
+import { buildDestinationBlock } from './destinazione';
 import { round2, roundTo10 } from './rounding';
 import {
   BillingProvider, CustomerInput, CustomerRef, DocumentInput, DocumentResult,
@@ -327,7 +328,11 @@ export class CicProvider implements BillingProvider {
     });
 
     const ddt = {
-      references: null, affectsInStockCounter: true, destination: null, quotation: null,
+      references: null, affectsInStockCounter: true,
+      // Luogo di consegna diverso dall'indirizzo del cliente. null (consegna
+      // standard) = il layout ricopia il destinatario: comportamento storico.
+      destination: buildDestinationBlock(input.destination),
+      quotation: null,
       paymentDetails: {
         date: input.date,
         paymentTerms: { id: this.cfg.defaultPaymentTermsNumber, metaData: null },

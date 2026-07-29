@@ -12,7 +12,14 @@ import {
   getCountFromServer
 } from 'firebase/firestore';
 import { db } from '../firebase';
+import { getDoc, deleteField } from 'firebase/firestore';
 import { useRouter } from 'vue-router';
+import DestinazioneModal from '../components/DestinazioneModal.vue';
+import BadgeDestinazione from '../components/shared/BadgeDestinazione.vue';
+import {
+  destinazioneComune, stessaDestinazione, hasDestinazione, formatDestinazione,
+  type DestinazioneMerce, type DestinazioneSalvata,
+} from '../lib/destinazione';
 // IMPORT CONFIGURAZIONE CONDIVISA (Modifica richiesta)
 import OrderModals from '../components/OrderModals.vue';
 import { httpsCallable } from 'firebase/functions'; // Importa functions
@@ -160,9 +167,76 @@ const canCancel = (stato: string) => {
   return !forbidden.includes(stato);
 };
 
+// --- DESTINAZIONE MERCE (inserimento per conto del cliente) -----------------
+// L'indirizzo alternativo arriva tanto dal portale quanto per telefono, quindi
+// deve poterlo mettere anche chi è in ufficio. Modificabile finché non esiste il
+// DDT: da lì in poi il luogo di consegna è stampato su un documento emesso.
+const showDestModal = ref(false);
+const ordineDestinazione = ref<any | null>(null);
+const rubricaOrdine = ref<DestinazioneSalvata[]>([]);
+const salvandoDestinazione = ref(false);
+
+const destinazioneEditabile = (p: any) => !(p?.cic_ddt_id || p?.fic_ddt_id);
+
+const apriDestinazione = async (p: any) => {
+  ordineDestinazione.value = p;
+  rubricaOrdine.value = [];
+  showDestModal.value = true;
+  // La rubrica è del cliente: si legge al volo, non si duplica in POPS.
+  try {
+    if (p?.clienteUID) {
+      const snap = await getDoc(doc(db, 'users', p.clienteUID));
+      const d = snap.data();
+      if (Array.isArray(d?.destinazioni)) rubricaOrdine.value = d!.destinazioni;
+    }
+  } catch (e) {
+    console.error('Rubrica destinazioni non leggibile', e);
+  }
+};
+
+const salvaDestinazione = async (payload: { destinazione: DestinazioneMerce | null; salvaInRubrica: boolean; etichetta: string }) => {
+  const p = ordineDestinazione.value;
+  if (!p) return;
+  salvandoDestinazione.value = true;
+  try {
+    await updateDoc(doc(db, 'preventivi', p.id), {
+      destinazione: payload.destinazione ?? deleteField(),
+    });
+    // Aggiornamento ottimistico: la lista è già in onSnapshot, ma il badge deve
+    // cambiare subito anche se lo snapshot arriva un istante dopo.
+    p.destinazione = payload.destinazione ?? undefined;
+
+    if (payload.destinazione && payload.salvaInRubrica && p.clienteUID) {
+      const voce: DestinazioneSalvata = {
+        ...payload.destinazione,
+        id: `d${Date.now()}`,
+        etichetta: payload.etichetta || payload.destinazione.citta,
+      };
+      await updateDoc(doc(db, 'users', p.clienteUID), { destinazioni: [...rubricaOrdine.value, voce] });
+    }
+    showDestModal.value = false;
+    showCustomToast(payload.destinazione
+      ? `Destinazione aggiornata: ${formatDestinazione(payload.destinazione)}`
+      : 'Consegna riportata all\'indirizzo abituale');
+  } catch (e) {
+    console.error('Salvataggio destinazione fallito', e);
+    showCustomToast('❌ Non è stato possibile salvare la destinazione.');
+  } finally {
+    salvandoDestinazione.value = false;
+  }
+};
+
 // Funzione chiamata dalla conferma della Modale
 const handleCreaDdt = async (datiDdt: any) => {
     try {
+        // Ultima rete prima della callable: un DDT ha un solo luogo di consegna.
+        // Il server rifiuta comunque, ma qui l'operatore lo scopre PRIMA di
+        // premere il bottone che emette un documento fiscale.
+        const esitoDest = destinazioneComune(ordiniInSpedizione.value.map((o: any) => o.destinazione));
+        if (!esitoDest.ok) {
+            showCustomToast(`⚠️ ${esitoDest.errore}`);
+            return;
+        }
         const createDdtFn = httpsCallable(functions, 'creaDdtCumulativo');
         
         // Prepariamo i dati: ci servono gli ID di firestore degli ordini selezionati
@@ -647,9 +721,11 @@ const isOrderDimmed = (p: any) => {
   // Se non c'è nessuna spedizione attiva, nessuno è dimmed
   if (!spedizioneAttivaCliente.value) return false;
   // Se l'ordine non è READY, non ci interessa (o possiamo lasciarlo normale)
-  if (p.stato !== 'READY') return true; 
+  if (p.stato !== 'READY') return true;
   // Se l'ordine non è del cliente attivo, è dimmed
-  return p.clienteEmail !== spedizioneAttivaCliente.value;
+  if (p.clienteEmail !== spedizioneAttivaCliente.value) return true;
+  // Stesso cliente ma altro luogo di consegna: non può salire su questo DDT.
+  return !stessaDestinazione(p.destinazione, ordiniInSpedizione.value[0]?.destinazione);
 };
 
 // Funzione per raggruppare gli articoli (Escludendo gli EXTRA)
@@ -693,12 +769,18 @@ const toggleSpedizione = (preventivo: any) => {
   // Ignora se non è pronto
   if (preventivo.stato !== 'READY') return;
 
-  // CASO 1: Nessuna spedizione attiva -> Attivo questo cliente e seleziono TUTTI i suoi ordini READY
+  // CASO 1: Nessuna spedizione attiva -> Attivo questo cliente e seleziono i suoi
+  // ordini READY DIRETTI NELLO STESSO POSTO. Un DDT ha un solo luogo di consegna:
+  // selezionare in automatico anche gli ordini con destinazione diversa
+  // manderebbe la merce (e la fattura, che su CiC nasce dal DDT) all'indirizzo
+  // sbagliato. Chi consegna sempre in sede non vede alcuna differenza: la chiave
+  // di una consegna standard è la stessa per tutti.
   if (!spedizioneAttivaCliente.value) {
     spedizioneAttivaCliente.value = preventivo.clienteEmail;
-    // Riempie l'array con TUTTI gli ordini pronti di questo cliente
-    ordiniInSpedizione.value = listaPreventivi.value.filter(p => 
-      p.clienteEmail === preventivo.clienteEmail && p.stato === 'READY'
+    ordiniInSpedizione.value = listaPreventivi.value.filter(p =>
+      p.clienteEmail === preventivo.clienteEmail
+      && p.stato === 'READY'
+      && stessaDestinazione(p.destinazione, preventivo.destinazione)
     );
     return;
   }
@@ -721,7 +803,12 @@ const toggleSpedizione = (preventivo: any) => {
       annullaSpedizione();
     }
   } else {
-    // B) Non è selezionato (ma è del cliente attivo) -> LO AGGIUNGO
+    // B) Non è selezionato (ma è del cliente attivo) -> LO AGGIUNGO, se va nello
+    // stesso posto degli altri già selezionati.
+    if (!stessaDestinazione(preventivo.destinazione, ordiniInSpedizione.value[0]?.destinazione)) {
+      showCustomToast('Questo ordine ha un luogo di consegna diverso: serve un DDT a parte.');
+      return;
+    }
     ordiniInSpedizione.value.push(preventivo);
   }
 };
@@ -1095,6 +1182,7 @@ onUnmounted(() => {
                                   <p class="text-xs text-gray-500">• {{ formatDate(getEffectiveDate(p)) }}</p>
                                   <span class="text-xs text-gray-500">• Rif. {{ p.commessa || 'Senza Nome' }}</span>
                                   <span v-if="p.billingError" :title="p.billingError" class="text-[9px] px-2 py-0.5 rounded border uppercase font-bold bg-red-100 text-red-700 border-red-200">⚠ Errore fatturazione</span>
+                                  <BadgeDestinazione :destinazione="p.destinazione" />
                                 </div>
                                 <div v-if="p.elementi" class="flex flex-col gap-1 mt-2 items-start">
                                   <span v-for="(riga, idx) in getRiepilogoPulito(p.elementi)" :key="idx" 
@@ -1168,6 +1256,19 @@ onUnmounted(() => {
                           <span class="text-xs text-gray-500">• Rif. {{ p.commessa || 'Senza Nome' }}</span>
                           <span v-if="p.isReopened" class="text-[9px] px-2 py-0.5 rounded border uppercase font-bold bg-purple-100 text-purple-700 border-purple-200">RIAPERTO</span>
                           <span v-if="p.billingError" :title="p.billingError" class="text-[9px] px-2 py-0.5 rounded border uppercase font-bold bg-red-100 text-red-700 border-red-200">⚠ Errore fatturazione</span>
+                          <!-- Destinazione: badge se c'è, pin spento se no. Cliccabile finché non
+                               esiste il DDT, poi il luogo di consegna è su un documento emesso. -->
+                          <button
+                            v-if="destinazioneEditabile(p)"
+                            type="button"
+                            @click.stop="apriDestinazione(p)"
+                            :title="hasDestinazione(p.destinazione) ? 'Modifica il luogo di consegna' : 'Imposta un luogo di consegna diverso'"
+                            class="shrink-0"
+                          >
+                            <BadgeDestinazione v-if="hasDestinazione(p.destinazione)" :destinazione="p.destinazione" />
+                            <span v-else class="text-[9px] px-2 py-0.5 rounded border uppercase font-bold bg-gray-50 text-gray-400 border-gray-200 hover:text-indigo-600 hover:border-indigo-200 transition-colors">Destinazione</span>
+                          </button>
+                          <BadgeDestinazione v-else :destinazione="p.destinazione" />
                         </div>
                         <div v-if="p.elementi" class="flex flex-col gap-1 mt-2 items-start">
                           <span v-for="(riga, idx) in getRiepilogoPulito(p.elementi)" :key="idx" 
@@ -1215,11 +1316,20 @@ onUnmounted(() => {
 
     </div>
   </div>
-  <DdtModal 
+  <DdtModal
     :show="showDdtModal"
     :orders="ordiniInSpedizione"
     @close="showDdtModal = false"
     @confirm="handleCreaDdt"
+  />
+  <DestinazioneModal
+    :show="showDestModal"
+    :destinazione="ordineDestinazione?.destinazione"
+    :rubrica="rubricaOrdine"
+    :nome-cliente="ordineDestinazione?.cliente"
+    :salvataggio-in-corso="salvandoDestinazione"
+    @close="showDestModal = false"
+    @confirm="salvaDestinazione"
   />
   <OrderModals
       :show="showModals"

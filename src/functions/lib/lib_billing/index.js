@@ -20,7 +20,7 @@ var __exportStar = (this && this.__exportStar) || function(m, exports) {
     for (var p in m) if (p !== "default" && !Object.prototype.hasOwnProperty.call(exports, p)) __createBinding(exports, m, p);
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.diffCompany = exports.mapSelfToCompany = exports.fetchCompanyInfo = exports.DELIVERY_TARIFF_CODES = exports.isRigaConsegna = exports.isDeliveryTariff = exports.buildDdtLines = exports.CicClient = exports.createCicProvider = exports.CicProvider = exports.getActiveBackend = exports.getCicConfig = exports.computeTotals = exports.round2 = void 0;
+exports.diffCompany = exports.mapSelfToCompany = exports.fetchCompanyInfo = exports.PROVINCE_CIC = exports.validaDestinazione = exports.provinciaNumber = exports.normalizzaProvincia = exports.formatDestinazione = exports.hasDestinazione = exports.destinazioneComune = exports.destinazioneKey = exports.buildDestinationBlock = exports.DELIVERY_TARIFF_CODES = exports.isRigaConsegna = exports.isDeliveryTariff = exports.buildDdtLines = exports.CicClient = exports.createCicProvider = exports.CicProvider = exports.getActiveBackend = exports.getCicConfig = exports.computeTotals = exports.round2 = void 0;
 exports.getBillingProvider = getBillingProvider;
 const cicProvider_1 = require("./cicProvider");
 const cicConfig_1 = require("./cicConfig");
@@ -41,6 +41,16 @@ Object.defineProperty(exports, "buildDdtLines", { enumerable: true, get: functio
 Object.defineProperty(exports, "isDeliveryTariff", { enumerable: true, get: function () { return ddtLines_1.isDeliveryTariff; } });
 Object.defineProperty(exports, "isRigaConsegna", { enumerable: true, get: function () { return ddtLines_1.isRigaConsegna; } });
 Object.defineProperty(exports, "DELIVERY_TARIFF_CODES", { enumerable: true, get: function () { return ddtLines_1.DELIVERY_TARIFF_CODES; } });
+var destinazione_1 = require("./destinazione");
+Object.defineProperty(exports, "buildDestinationBlock", { enumerable: true, get: function () { return destinazione_1.buildDestinationBlock; } });
+Object.defineProperty(exports, "destinazioneKey", { enumerable: true, get: function () { return destinazione_1.destinazioneKey; } });
+Object.defineProperty(exports, "destinazioneComune", { enumerable: true, get: function () { return destinazione_1.destinazioneComune; } });
+Object.defineProperty(exports, "hasDestinazione", { enumerable: true, get: function () { return destinazione_1.hasDestinazione; } });
+Object.defineProperty(exports, "formatDestinazione", { enumerable: true, get: function () { return destinazione_1.formatDestinazione; } });
+Object.defineProperty(exports, "normalizzaProvincia", { enumerable: true, get: function () { return destinazione_1.normalizzaProvincia; } });
+Object.defineProperty(exports, "provinciaNumber", { enumerable: true, get: function () { return destinazione_1.provinciaNumber; } });
+Object.defineProperty(exports, "validaDestinazione", { enumerable: true, get: function () { return destinazione_1.validaDestinazione; } });
+Object.defineProperty(exports, "PROVINCE_CIC", { enumerable: true, get: function () { return destinazione_1.PROVINCE_CIC; } });
 var companyInfo_1 = require("./companyInfo");
 Object.defineProperty(exports, "fetchCompanyInfo", { enumerable: true, get: function () { return companyInfo_1.fetchCompanyInfo; } });
 Object.defineProperty(exports, "mapSelfToCompany", { enumerable: true, get: function () { return companyInfo_1.mapSelfToCompany; } });

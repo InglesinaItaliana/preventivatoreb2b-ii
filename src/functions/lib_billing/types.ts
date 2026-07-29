@@ -10,6 +10,8 @@
 // preventivo. Vedi docs/risorsexCiC/piano-migrazione-cic.html.
 // ============================================================================
 
+import type { DestinazioneMerce } from './destinazione';
+
 export type BillingBackend = 'fic' | 'cic';
 
 export type DocType = 'order' | 'quotation' | 'delivery_note';
@@ -106,6 +108,13 @@ export interface DeliveryNoteInput {
   lines: LineInput[];      // su CiC i prezzi sono opzionali: serve prodotto + qty
   shipping: ShippingInput;
   visibleSubject?: string;
+  /**
+   * Luogo di consegna diverso dall'indirizzo del cliente → "LUOGO DI
+   * DESTINAZIONE" sul DDT. Assente = consegna standard: il layout ricopia il
+   * destinatario, che è il comportamento storico. Un DDT ha UN SOLO luogo di
+   * destinazione: il chiamante deve aver già rifiutato i mix.
+   */
+  destination?: DestinazioneMerce;
 }
 
 /** Esito creazione documento. */

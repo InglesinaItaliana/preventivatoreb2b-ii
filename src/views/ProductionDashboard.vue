@@ -5,6 +5,7 @@ import { db, auth } from '../firebase';
 import { useRouter } from 'vue-router';
 import { STATUS_DETAILS } from '../types';
 import OrderModals from '../components/OrderModals.vue';
+import BadgeDestinazione from '../components/shared/BadgeDestinazione.vue';
 
 // IMPORT ICONE HEROICONS (Ridotte all'essenziale per Produzione)
 import {
@@ -420,6 +421,9 @@ onUnmounted(() => { if (unsubscribe) unsubscribe(); });
                              <div>
                                 <div class="flex items-center gap-2">
                                     <h3 class="text-xl font-bold text-gray-900">{{ p.cliente }}</h3>
+                                    <!-- Qui si etichettano i colli: se la merce va altrove
+                                         va saputo mentre si imballa, non al carico. -->
+                                    <BadgeDestinazione :destinazione="p.destinazione" />
                                 </div>
                                 <div v-if="p.dataConsegnaPrevista" class="mt-1 flex items-center gap-1 px-2 py-0.5 bg-yellow-100 border border-yellow-200 rounded text-yellow-800 w-fit">
                                     <TruckIcon class="h-3 w-3" />

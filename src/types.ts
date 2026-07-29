@@ -1,3 +1,5 @@
+import type { DestinazioneMerce } from './lib/destinazione';
+
 export type Categoria = 'INGLESINA' | 'DUPLEX' | 'MUNTIN' | 'CANALINO' | 'EXTRA';
 export type Modello = 'VARSAVIA' | 'GERMANELLA' | 'ALLUMINIO' | 'BORDO_CALDO' | 'MANUALE';
 
@@ -135,6 +137,14 @@ export interface PreventivoDocumento {
   dataScadenza: any;
 
   datiLegali?: DatiLegali; // <--- NUOVO CAMPO OPZIONALE
+
+  /**
+   * Luogo di consegna diverso dall'indirizzo del cliente. È una COPIA, non un
+   * riferimento alla rubrica: se il cliente domani corregge l'indirizzo salvato,
+   * gli ordini già partiti e i DDT già emessi devono restare quelli che erano.
+   * Assente = consegna all'indirizzo abituale. Vedi src/lib/destinazione.ts.
+   */
+  destinazione?: DestinazioneMerce;
 
   // BILLING (migrazione FiC→CiC). 'billingBackend' è congelato alla creazione
   // del primo documento; assente = FiC (comportamento storico). Vedi lib_billing.

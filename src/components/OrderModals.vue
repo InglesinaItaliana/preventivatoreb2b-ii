@@ -3,8 +3,9 @@ import { ref, computed, watch } from 'vue';
 import { 
   CheckCircleIcon, DocumentTextIcon, CogIcon, ClipboardDocumentIcon, ClipboardDocumentCheckIcon, EyeIcon 
 } from '@heroicons/vue/24/solid';
-import { resolveBackend } from '../lib/billing';
+import { resolveBackend, totaleTrasporto } from '../lib/billing';
 import { openOrderPdf } from '../lib/billingPdf';
+import { hasDestinazione, formatDestinazione } from '../lib/destinazione';
 
 const props = defineProps<{
   show: boolean;
@@ -96,6 +97,14 @@ const copyToClipboard = (key: string, items: any[]) => {
 };
 
 const handleProductionConfirm = () => emit('confirmProduction');
+
+/**
+ * Quota di trasporto dell'ordine, mostrata sotto il totale nella modale di
+ * firma. È la voce che l'ufficio può ritoccare dopo la conferma del cliente
+ * (una destinazione diversa può cambiare la tariffa): vederla qui evita che si
+ * firmi una cifra senza sapere da cosa è composta.
+ */
+const trasporto = computed(() => totaleTrasporto(props.order?.elementi));
 </script>
 
 <template>
@@ -160,6 +169,26 @@ const handleProductionConfirm = () => emit('confirmProduction');
         
         <div class="bg-blue-50 border border-blue-100 p-4 rounded-xl text-sm text-blue-800">
           Controlla il documento e accetta le condizioni per procedere.
+        </div>
+
+        <!-- Cosa si sta firmando. Il totale può essere cambiato dopo la conferma
+             (es. il trasporto ritoccato per una destinazione diversa): mostrarlo
+             qui è l'unico modo perché il cliente lo veda senza aprire il PDF. -->
+        <div class="rounded-xl border border-gray-200 p-3 flex items-start justify-between gap-3">
+          <div class="min-w-0">
+            <p class="text-[10px] uppercase font-bold text-gray-400">Totale ordine</p>
+            <p class="text-lg font-bold text-gray-900 leading-tight">
+              {{ (order?.totaleScontato || order?.totaleImponibile || 0).toFixed(2) }} €
+            </p>
+            <p v-if="trasporto > 0" class="text-[11px] text-gray-500 mt-0.5">
+              di cui trasporto {{ trasporto.toFixed(2) }} €
+            </p>
+          </div>
+          <div v-if="hasDestinazione(order?.destinazione)" class="text-right min-w-0">
+            <p class="text-[10px] uppercase font-bold text-indigo-500">Consegna a</p>
+            <p class="text-xs font-bold text-indigo-900 truncate">{{ order.destinazione.destinatario }}</p>
+            <p class="text-[11px] text-indigo-700 truncate">{{ formatDestinazione(order.destinazione) }}</p>
+          </div>
         </div>
 
         <div class="border border-gray-200 rounded-xl p-4 flex items-center gap-4 bg-white shadow-sm hover:border-blue-300 transition-colors">
