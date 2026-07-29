@@ -27,6 +27,10 @@
     PrinterIcon
   } from '@heroicons/vue/24/solid';
   import OrderModals from '../components/OrderModals.vue';
+  import {
+    annuncioDaMostrare, segnaAnnuncioVisto,
+    ANNUNCIO_STAMPA_DOCUMENTI, LEGACY_LS_STAMPA,
+  } from '../composables/useAnnunci';
   import DestinazioneModal from '../components/DestinazioneModal.vue';
   import BadgeDestinazione from '../components/shared/BadgeDestinazione.vue';
   import {
@@ -209,9 +213,20 @@ const confermaRicezione = async (order: any) => {
 
         // Controllo se ha già fatto il tour
         tourCompleted.value = !!data.tourCompleted;
+
+        // Annuncio stampa: migrazione auto-sanante da localStorage a Firestore.
+        // Chi l'aveva già chiuso NON deve rivederselo solo perché abbiamo
+        // cambiato deposito → se il vecchio flag c'è, si scrive la chiave e si
+        // sta zitti. Chi non l'ha mai visto lo vede adesso.
+        if (annuncioDaMostrare(data, ANNUNCIO_STAMPA_DOCUMENTI)) {
+          let giaVistoPrima = false;
+          try { giaVistoPrima = !!localStorage.getItem(LEGACY_LS_STAMPA); } catch { /* storage negato */ }
+          if (giaVistoPrima) segnaAnnuncioVisto(uid, ANNUNCIO_STAMPA_DOCUMENTI);
+          else showPrintPopup.value = true;
+        }
       }
-    } catch (e) { 
-      console.error("Errore profilo", e); 
+    } catch (e) {
+      console.error("Errore profilo", e);
     } finally {
       profileLoaded.value = true;
       checkAndStartTour(); // Riprova a lanciare il tour se i dati erano già pronti
@@ -596,9 +611,17 @@ const confermaRicezione = async (order: any) => {
     }).toUpperCase().replace(/\./g, ''); 
   };
   
-  // Annuncio one-time della funzione "stampa documento" sulle card (mostrato 1 volta).
+  // Annuncio one-time della funzione "stampa documento" sulle card.
+  // Lo stato è passato da localStorage a users/{uid}.annunciVisti (localStorage è
+  // per-browser: lo stesso cliente se lo rivedeva dal telefono e dopo ogni
+  // pulizia cache). La decisione di mostrarlo vive in caricaProfilo, che ha già
+  // in mano lo snapshot utente: nessuna lettura in più.
   const showPrintPopup = ref(false);
-  const closePrintPopup = () => { try { localStorage.setItem('pops_print_feature_seen', '1'); } catch (e) {} showPrintPopup.value = false; };
+  const closePrintPopup = () => {
+    showPrintPopup.value = false;
+    const uid = auth.currentUser?.uid;
+    if (uid) segnaAnnuncioVisto(uid, ANNUNCIO_STAMPA_DOCUMENTI);
+  };
 
   onMounted(async() => {
     onAuthStateChanged(auth, (user) => {
@@ -614,7 +637,6 @@ const confermaRicezione = async (order: any) => {
       const s = await getDoc(doc(db, 'settings', 'general'));
       if (s.exists()) minDays.value = s.data().minProcessingDays || 14;
     } catch(e) { console.error(e); }
-    try { if (!localStorage.getItem('pops_print_feature_seen')) showPrintPopup.value = true; } catch (e) {}
   });
   onUnmounted(() => { 
   if (unsub1) unsub1();   

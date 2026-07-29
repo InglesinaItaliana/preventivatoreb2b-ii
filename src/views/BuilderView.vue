@@ -15,7 +15,8 @@ import { calculatePrice } from '../logic/pricing';
 import { costruisciDettaglio, type Dettaglio } from '../logic/priceBreakdown';
 import PriceBreakdownModal from '../components/PriceBreakdownModal.vue';
 import AnnuncioPrezzoModal from '../components/AnnuncioPrezzoModal.vue';
-import { annuncioDaMostrare, segnaAnnuncioVisto, ANNUNCIO_DETTAGLIO_PREZZO } from '../composables/useAnnunci';
+import { annuncioDaMostrare, segnaAnnuncioVisto, ANNUNCIO_DETTAGLIO_PREZZO, ANNUNCIO_DESTINAZIONE } from '../composables/useAnnunci';
+import AnnuncioDestinazioneModal from '../components/AnnuncioDestinazioneModal.vue';
 import { useClientiSuggeriti } from '../composables/useClientiSuggeriti';
 import { onAuthStateChanged } from 'firebase/auth';
 import OrderModals from '../components/OrderModals.vue';
@@ -319,6 +320,16 @@ const chiudiAnnuncio = () => {
   showAnnuncio.value = false;
   const uid = auth.currentUser?.uid;
   if (uid) segnaAnnuncioVisto(uid, ANNUNCIO_DETTAGLIO_PREZZO);
+};
+
+// Annuncio "destinazione merce". Uno alla volta: se il cliente deve ancora
+// vedere quello del prezzo, questo aspetta il prossimo accesso — due popup in
+// fila all'apertura non li legge nessuno.
+const showAnnuncioDest = ref(false);
+const chiudiAnnuncioDest = () => {
+  showAnnuncioDest.value = false;
+  const uid = auth.currentUser?.uid;
+  if (uid) segnaAnnuncioVisto(uid, ANNUNCIO_DESTINAZIONE);
 };
 
 // --- Modale "come si compone il prezzo" ------------------------------------
@@ -1327,6 +1338,8 @@ onMounted(async() => {
             // la novità la conosce). Riusa questo snapshot: nessuna lettura in più.
             if (!isAdmin.value && annuncioDaMostrare(d, ANNUNCIO_DETTAGLIO_PREZZO)) {
               showAnnuncio.value = true;
+            } else if (!isAdmin.value && annuncioDaMostrare(d, ANNUNCIO_DESTINAZIONE)) {
+              showAnnuncioDest.value = true;
             }
           }
         } catch (e) {
@@ -2007,6 +2020,7 @@ onMounted(async() => {
     />
 
     <AnnuncioPrezzoModal :show="showAnnuncio" @close="chiudiAnnuncio" />
+    <AnnuncioDestinazioneModal :show="showAnnuncioDest" @close="chiudiAnnuncioDest" />
     <div 
       v-if="showToast" 
       class="fixed inset-0 z-[60] flex items-center justify-center transition-all duration-300"

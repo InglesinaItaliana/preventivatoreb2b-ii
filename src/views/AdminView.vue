@@ -15,6 +15,9 @@ import { db } from '../firebase';
 import { getDoc, deleteField } from 'firebase/firestore';
 import { useRouter } from 'vue-router';
 import DestinazioneModal from '../components/DestinazioneModal.vue';
+import AnnuncioDestinazioneAdminModal from '../components/AnnuncioDestinazioneAdminModal.vue';
+import { auth } from '../firebase';
+import { annuncioDaMostrare, segnaAnnuncioVisto, ANNUNCIO_DESTINAZIONE_ADMIN } from '../composables/useAnnunci';
 import BadgeDestinazione from '../components/shared/BadgeDestinazione.vue';
 import {
   destinazioneComune, stessaDestinazione, hasDestinazione, formatDestinazione,
@@ -875,10 +878,42 @@ const mostraDaSpedire = () => {
   }
 };
 
+// --- Annuncio della novità allo staff (una volta sola) ----------------------
+// Lo stato vive su team/{uid}.annunciVisti, NON su users/: lo staff in `users`
+// non ha alcun documento, e scriverlo lì creerebbe clienti fantasma
+// nell'anagrafica. Sul doc di team può scrivere solo un ADMIN
+// (`allow write: if isAdmin()` in firestore.rules) — che è esattamente il
+// pubblico di questo annuncio: PRODUZIONE e LOGISTICA non lo vedono.
+const showAnnuncioAdmin = ref(false);
+
+const chiudiAnnuncioAdmin = () => {
+  showAnnuncioAdmin.value = false;
+  const uid = auth.currentUser?.uid;
+  if (uid) segnaAnnuncioVisto(uid, ANNUNCIO_DESTINAZIONE_ADMIN, 'team');
+};
+
+const verificaAnnuncioAdmin = async () => {
+  const uid = auth.currentUser?.uid;
+  if (!uid) return;
+  try {
+    const snap = await getDoc(doc(db, 'team', uid));
+    const d = snap.data();
+    // Solo ruolo ADMIN: il commerciale usa questa stessa pagina ma non puo
+    // scrivere sul proprio doc di team, e mostrargli un annuncio che non si
+    // chiude mai sarebbe peggio che non mostrarlo.
+    if (d?.role === 'ADMIN' && annuncioDaMostrare(d, ANNUNCIO_DESTINAZIONE_ADMIN)) {
+      showAnnuncioAdmin.value = true;
+    }
+  } catch (e) {
+    console.warn('[annunci] doc team non leggibile', e);
+  }
+};
+
 onMounted(() => {
   //caricaAnagrafica();
   caricaTutti();
   fetchServerCounts(); // <--- AGGIUNGI QUESTO
+  verificaAnnuncioAdmin();
 });
 
 onUnmounted(() => {
@@ -1322,6 +1357,7 @@ onUnmounted(() => {
     @close="showDdtModal = false"
     @confirm="handleCreaDdt"
   />
+  <AnnuncioDestinazioneAdminModal :show="showAnnuncioAdmin" @close="chiudiAnnuncioAdmin" />
   <DestinazioneModal
     :show="showDestModal"
     :destinazione="ordineDestinazione?.destinazione"
