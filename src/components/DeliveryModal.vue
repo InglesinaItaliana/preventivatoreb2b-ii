@@ -123,7 +123,7 @@ const confirmDelivery = () => {
           <!-- Chi firma può non essere il cliente: se la merce va altrove, dirlo
                a chi sta per far firmare la consegna. -->
           <div v-if="hasDestinazione(order?.destinazione)" class="mt-3 pt-3 border-t border-gray-100">
-            <p class="text-xs text-indigo-500 font-bold uppercase mb-1">📍 Consegna a</p>
+            <p class="text-xs text-indigo-500 font-bold uppercase mb-1">Consegna a</p>
             <p v-for="(riga, i) in righeDestinazione(order?.destinazione)" :key="i"
                class="text-sm text-indigo-900 leading-snug" :class="i === 0 ? 'font-bold' : ''">{{ riga }}</p>
           </div>

@@ -174,7 +174,7 @@ const handleProductionConfirm = () => emit('confirmProduction');
             </p>
           </div>
           <div v-if="hasDestinazione(order?.destinazione)" class="text-right min-w-0">
-            <p class="text-[10px] uppercase font-bold text-indigo-500">📍 Consegna a</p>
+            <p class="text-[10px] uppercase font-bold text-indigo-500">Consegna a</p>
             <p class="text-xs font-bold text-indigo-900 truncate">{{ order.destinazione.destinatario }}</p>
             <p class="text-[11px] text-indigo-700 truncate">{{ formatDestinazione(order.destinazione) }}</p>
           </div>

@@ -30,7 +30,6 @@ const riga = computed(() => formatDestinazione(props.destinazione));
     class="inline-flex items-center gap-1 rounded border uppercase font-bold bg-indigo-50 text-indigo-700 border-indigo-200 whitespace-nowrap"
     :class="size === 'mini' ? 'text-[9px] px-2 py-0.5' : 'text-[10px] px-2.5 py-1'"
   >
-    <span aria-hidden="true">📍</span>
     <span>Altra destinazione</span>
     <span v-if="size === 'full'" class="font-medium normal-case text-indigo-600">· {{ riga }}</span>
   </span>

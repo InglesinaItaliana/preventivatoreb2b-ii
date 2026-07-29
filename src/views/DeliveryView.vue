@@ -1070,7 +1070,7 @@ const isSelected = (ids: string[]) => {
                              non scoprirlo al cancello. Referente e telefono servono
                              a chi consegna, quindi vanno in chiaro, non nel tooltip. -->
                         <div v-if="stop.destinazione" class="mb-3 -mt-1 px-3 py-2 rounded-xl bg-indigo-50 border border-indigo-200">
-                          <p class="text-[10px] font-black text-indigo-500 uppercase tracking-wider">📍 Consegna a</p>
+                          <p class="text-[10px] font-black text-indigo-500 uppercase tracking-wider">Consegna a</p>
                           <p class="text-sm font-bold text-indigo-900 leading-snug">{{ stop.destinazione.destinatario }}</p>
                           <p v-if="stop.destinazione.referente || stop.destinazione.telefono" class="text-xs text-indigo-700">
                             {{ [stop.destinazione.referente, stop.destinazione.telefono].filter(Boolean).join(' · ') }}

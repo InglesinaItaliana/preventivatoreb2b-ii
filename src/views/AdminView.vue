@@ -216,8 +216,8 @@ const salvaDestinazione = async (payload: { destinazione: DestinazioneMerce | nu
     }
     showDestModal.value = false;
     showCustomToast(payload.destinazione
-      ? `📍 Destinazione aggiornata: ${formatDestinazione(payload.destinazione)}`
-      : '📍 Consegna riportata all\'indirizzo abituale');
+      ? `Destinazione aggiornata: ${formatDestinazione(payload.destinazione)}`
+      : 'Consegna riportata all\'indirizzo abituale');
   } catch (e) {
     console.error('Salvataggio destinazione fallito', e);
     showCustomToast('❌ Non è stato possibile salvare la destinazione.');
@@ -1266,7 +1266,7 @@ onUnmounted(() => {
                             class="shrink-0"
                           >
                             <BadgeDestinazione v-if="hasDestinazione(p.destinazione)" :destinazione="p.destinazione" />
-                            <span v-else class="text-[9px] px-2 py-0.5 rounded border uppercase font-bold bg-gray-50 text-gray-400 border-gray-200 hover:text-indigo-600 hover:border-indigo-200 transition-colors">📍 Destinazione</span>
+                            <span v-else class="text-[9px] px-2 py-0.5 rounded border uppercase font-bold bg-gray-50 text-gray-400 border-gray-200 hover:text-indigo-600 hover:border-indigo-200 transition-colors">Destinazione</span>
                           </button>
                           <BadgeDestinazione v-else :destinazione="p.destinazione" />
                         </div>

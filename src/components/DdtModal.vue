@@ -138,7 +138,7 @@
                            scritto dove va la merce, e da cui nascerà la fattura.
                            Qui la destinazione si mostra per intero, non come badge. -->
                       <div v-if="destinazioneDdt" class="mt-4 p-3 rounded-xl border border-indigo-200 bg-indigo-50">
-                        <p class="text-[10px] font-bold text-indigo-500 uppercase mb-1">📍 Consegna a un altro indirizzo</p>
+                        <p class="text-[10px] font-bold text-indigo-500 uppercase mb-1">Consegna a un altro indirizzo</p>
                         <p v-for="(riga, i) in righeDestinazione(destinazioneDdt)" :key="i"
                            class="text-sm text-indigo-900 leading-snug" :class="i === 0 ? 'font-bold' : ''">{{ riga }}</p>
                         <p v-if="destinazioneDdt.note" class="text-[11px] text-indigo-700 mt-1 italic">{{ destinazioneDdt.note }}</p>
