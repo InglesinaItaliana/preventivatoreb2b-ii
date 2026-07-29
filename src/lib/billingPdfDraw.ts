@@ -196,77 +196,76 @@ export function drawBillingDocument(
   let y = 44;
   setDraw(AMBER); doc.setLineWidth(0.9); doc.line(M, y, RIGHT, y);
 
-  // ── DESTINATARIO ───────────────────────────────────────────────────────────
-  y += 8;
+  // ── DESTINATARIO (sx) · LUOGO DI DESTINAZIONE (dx) ─────────────────────────
+  // Affiancati come sul DDT di Reviso: chi compra a sinistra, dove va la merce a
+  // destra. Due cursori verticali indipendenti, poi si riprende dal più basso.
+  const bandY = y + 8;
+  const COL2 = 108;                       // colonna destra
+  const COL2W = RIGHT - COL2;
+  // Senza destinazione la colonna sinistra si prende tutta la larghezza: ordini e
+  // preventivi restano identici a prima.
+  const leftW = data.destinazione ? COL2 - M - 8 : RIGHT - M;
+
+  let yl = bandY;
   doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); setText(DIM);
-  doc.text('DESTINATARIO', M, y);
-  y += 5;
+  doc.text('DESTINATARIO', M, yl);
+  yl += 5;
   doc.setFont('helvetica', 'bold'); doc.setFontSize(11); setText(INK);
-  doc.text(data.customer.name || '—', M, y);
+  for (const ln of doc.splitTextToSize(data.customer.name || '—', leftW) as string[]) {
+    doc.text(ln, M, yl); yl += 5;
+  }
+  yl -= 5;
   doc.setFont('helvetica', 'normal'); doc.setFontSize(9); setText(MID);
   const addr = [data.customer.address, [data.customer.zip, data.customer.city].filter(Boolean).join(' '),
     data.customer.province].filter(Boolean).join(' · ');
-  if (addr) { y += 4.8; doc.text(addr, M, y); }
-  if (data.customer.piva) { y += 4.8; doc.text(`P.IVA ${data.customer.piva}`, M, y); }
+  if (addr) {
+    for (const ln of doc.splitTextToSize(addr, leftW) as string[]) { yl += 4.8; doc.text(ln, M, yl); }
+  }
+  if (data.customer.piva) { yl += 4.8; doc.text(`P.IVA ${data.customer.piva}`, M, yl); }
 
-  // ── LUOGO DI DESTINAZIONE ──────────────────────────────────────────────────
-  // Stesso blocco che stampa Reviso quando la merce non va all'indirizzo del
-  // cliente. Assente = consegna standard: nessun blocco, come oggi.
+  let yr = bandY;
   if (data.destinazione) {
     const d = data.destinazione;
-    y += 7;
     doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); setText(DIM);
-    doc.text('LUOGO DI DESTINAZIONE', M, y);
-    y += 5;
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(10); setText(INK);
-    doc.text(d.destinatario || '—', M, y);
+    doc.text('LUOGO DI DESTINAZIONE', COL2, yr);
+    yr += 5;
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(11); setText(INK);
+    for (const ln of doc.splitTextToSize(d.destinatario || '—', COL2W) as string[]) {
+      doc.text(ln, COL2, yr); yr += 5;
+    }
+    yr -= 5;
     doc.setFont('helvetica', 'normal'); doc.setFontSize(9); setText(MID);
     const rigaDest = [d.indirizzo, [d.cap, d.citta].filter(Boolean).join(' '), d.provincia]
       .filter(Boolean).join(' · ');
-    if (rigaDest) { y += 4.8; doc.text(rigaDest, M, y); }
+    if (rigaDest) {
+      for (const ln of doc.splitTextToSize(rigaDest, COL2W) as string[]) { yr += 4.8; doc.text(ln, COL2, yr); }
+    }
     const contatto = [d.referente, d.telefono].filter(Boolean).join(' · ');
-    if (contatto) { y += 4.8; doc.text(contatto, M, y); }
+    if (contatto) {
+      for (const ln of doc.splitTextToSize(contatto, COL2W) as string[]) { yr += 4.8; doc.text(ln, COL2, yr); }
+    }
   }
 
-  // riferimento / commessa (a destra, stesso blocco)
+  y = Math.max(yl, yr);
+
+  // ── RIFERIMENTO ────────────────────────────────────────────────────────────
+  // Sul DDT sta sopra le righe, a sinistra: è l'etichetta della merce che segue,
+  // e la metà destra dell'intestazione è occupata dal luogo di destinazione.
+  // Su ordine e preventivo resta in alto a destra, dov'è sempre stato.
   if (data.reference) {
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); setText(DIM);
-    doc.text('RIFERIMENTO', RIGHT, 53, { align: 'right' });
-    doc.setFont('helvetica', 'normal'); doc.setFontSize(10); setText(INK);
-    doc.text(String(data.reference), RIGHT, 58.5, { align: 'right' });
-  }
-
-  // ── TRASPORTO (DDT) ──────────────────────────────────────────────────────────
-  if (data.transport) {
-    y += 8;
-    const tb = data.transport;
-    const fields: [string, string][] = [
-      ['Causale trasporto', tb.causale || 'VENDITA'],
-      ['Trasporto a mezzo', tb.deliveredBy || 'Mittente'],
-    ];
-    if (tb.carrier) fields.push(['Vettore / Corriere', tb.carrier]);
-    if (tb.packages != null) fields.push(['Colli', String(tb.packages)]);
-    if (tb.weight != null) fields.push(['Peso', `${tb.weight} kg`]);
-    if (tb.tracking) fields.push(['Tracking', tb.tracking]);
-    if (tb.date) fields.push(['Data trasporto', tb.date]);
-    const cols = 3;
-    const rowsN = Math.ceil(fields.length / cols);
-    const cellW = (RIGHT - M) / cols;
-    const cellH = 11;
-    const boxH = 8 + rowsN * cellH;
-    setFill(TINT); setDraw(LINE); doc.setLineWidth(0.3);
-    doc.roundedRect(M, y, RIGHT - M, boxH, 1.5, 1.5, 'FD');
-    doc.setFont('helvetica', 'bold'); doc.setFontSize(7); setText(DIM);
-    doc.text('TRASPORTO', M + 4, y + 5.5);
-    fields.forEach((f, i) => {
-      const r = Math.floor(i / cols), c = i % cols;
-      const cx = M + 4 + c * cellW, cy = y + 11 + r * cellH;
-      doc.setFont('helvetica', 'normal'); doc.setFontSize(7); setText(DIM);
-      doc.text(f[0], cx, cy);
-      doc.setFont('helvetica', 'bold'); doc.setFontSize(9); setText(INK);
-      doc.text(f[1], cx, cy + 4.5);
-    });
-    y += boxH;
+    if (data.kind === 'ddt') {
+      y += 9;
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); setText(DIM);
+      doc.text('RIFERIMENTO', M, y);
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(10); setText(INK);
+      doc.text(String(data.reference), M + 26, y);
+      y -= 3; // la tabella parte comunque con il suo respiro (y += 10 sotto)
+    } else {
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); setText(DIM);
+      doc.text('RIFERIMENTO', RIGHT, 53, { align: 'right' });
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(10); setText(INK);
+      doc.text(String(data.reference), RIGHT, 58.5, { align: 'right' });
+    }
   }
 
   // ── TABELLA RIGHE ──────────────────────────────────────────────────────────
@@ -355,6 +354,45 @@ export function drawBillingDocument(
     doc.setFont('helvetica', 'bold'); doc.setFontSize(7.5); setText(DIM); doc.text('NOTE', M, y);
     y += 4.5; doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5); setText(MID);
     doc.text(noteLines, M, y);
+  }
+
+  // ── TRASPORTO (DDT) ────────────────────────────────────────────────────────
+  // In fondo alla pagina, sopra il footer: come sul DDT di Reviso, e come serve a
+  // chi lo firma. Ancorato al fondo, non al flusso, così il documento ha sempre
+  // lo stesso aspetto a prescindere da quante righe di merce ci sono.
+  if (data.transport) {
+    const tb = data.transport;
+    const fields: [string, string][] = [
+      ['Causale trasporto', tb.causale || 'VENDITA'],
+      ['Trasporto a mezzo', tb.deliveredBy || 'Mittente'],
+    ];
+    if (tb.carrier) fields.push(['Vettore / Corriere', tb.carrier]);
+    if (tb.packages != null) fields.push(['Colli', String(tb.packages)]);
+    if (tb.weight != null) fields.push(['Peso', `${tb.weight} kg`]);
+    if (tb.tracking) fields.push(['Tracking', tb.tracking]);
+    if (tb.date) fields.push(['Data trasporto', tb.date]);
+    const cols = 3;
+    const rowsN = Math.ceil(fields.length / cols);
+    const cellW = (RIGHT - M) / cols;
+    const cellH = 11;
+    const boxH = 8 + rowsN * cellH;
+    const FONDO = 283;                   // limite oltre il quale si tocca il footer
+    let boxY = FONDO - boxH;
+    // Se le righe merce arrivano fin quaggiù, il blocco va sulla pagina dopo:
+    // sovrapporlo alla tabella renderebbe illeggibili tutti e due.
+    if (y + 6 > boxY) { doc.addPage(); y = 18; boxY = FONDO - boxH; }
+    setFill(TINT); setDraw(LINE); doc.setLineWidth(0.3);
+    doc.roundedRect(M, boxY, RIGHT - M, boxH, 1.5, 1.5, 'FD');
+    doc.setFont('helvetica', 'bold'); doc.setFontSize(7); setText(DIM);
+    doc.text('TRASPORTO', M + 4, boxY + 5.5);
+    fields.forEach((f, i) => {
+      const r = Math.floor(i / cols), c = i % cols;
+      const cx = M + 4 + c * cellW, cy = boxY + 11 + r * cellH;
+      doc.setFont('helvetica', 'normal'); doc.setFontSize(7); setText(DIM);
+      doc.text(f[0], cx, cy);
+      doc.setFont('helvetica', 'bold'); doc.setFontSize(9); setText(INK);
+      doc.text(f[1], cx, cy + 4.5);
+    });
   }
 
   // ── FOOTER ───────────────────────────────────────────────────────────────────
