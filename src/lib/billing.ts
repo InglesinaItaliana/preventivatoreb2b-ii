@@ -6,6 +6,7 @@
 // ============================================================================
 
 import type { PreventivoDocumento } from '../types';
+import { round2 } from './billingTotals';
 
 export type BillingBackend = 'fic' | 'cic';
 
@@ -52,6 +53,25 @@ export function isRigaConsegna(e: any): boolean {
 /** Tariffa "spedizione a mezzo corriere" — specchio di SPEDIZIONE_NAME/CODE (functions/lib_billing/ddtLines.ts). */
 const SPEDIZIONE_NAME = 'Spedizione';
 const SPEDIZIONE_CODE = 'L004';
+
+/**
+ * Quanto, di un ordine, è trasporto. Serve a mostrarlo al cliente accanto al
+ * totale nel momento in cui firma: il trasporto è la voce che l'ufficio può
+ * ritoccare dopo la conferma (es. per una destinazione diversa), ed è giusto
+ * che si veda senza dover aprire il PDF.
+ *
+ * ⚠️ Nessuno sconto: il trasporto non prende MAI lo sconto d'ordine — stessa
+ * regola di computeTotals, che sulle righe di consegna riceve discountPct 0.
+ * Arrotondamento per riga con round2 canonico, così la cifra combacia col
+ * documento su CiC invece di divergere di un centesimo.
+ */
+export function totaleTrasporto(elementi: unknown): number {
+  if (!Array.isArray(elementi)) return 0;
+  const somma = elementi
+    .filter((e) => isRigaConsegna(e))
+    .reduce((acc, e) => acc + round2((Number(e?.quantita) || 1) * (Number(e?.prezzo_unitario) || 0)), 0);
+  return round2(somma);
+}
 
 /**
  * Righe che vanno sul DDT, a partire dagli elementi di uno o più ordini:

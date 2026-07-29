@@ -6,7 +6,7 @@
 // ============================================================================
 
 import { describe, it, expect } from 'vitest';
-import { resolveBackend, billingInfo, ddtElementi, isDeliveryTariff } from '../billing';
+import { resolveBackend, billingInfo, ddtElementi, isDeliveryTariff, totaleTrasporto } from '../billing';
 import { computeTotals as feTotals, round2 as feRound2 } from '../billingTotals';
 import { computeTotals as beTotals, round2 as beRound2 } from '../../functions/lib_billing/rounding';
 import { buildDdtLines } from '../../functions/lib_billing/ddtLines';
@@ -173,5 +173,66 @@ describe('anti-drift: ddtElementi (PDF) === buildDdtLines (DDT fiscale)', () => 
     const fe = ddtElementi(elementi, 'INTERNAL').filter((e: any) => isDeliveryTariff(e.descrizioneCompleta));
     expect(fe).toHaveLength(1);
     expect(fe[0].prezzo_unitario).toBe(45);
+  });
+});
+
+// ============================================================================
+// totaleTrasporto — la cifra che il cliente vede sotto il totale quando firma.
+// È denaro: se sbaglia, il cliente firma un dettaglio che non corrisponde al
+// documento. Regola: il trasporto NON prende mai lo sconto d'ordine.
+// ============================================================================
+describe('totaleTrasporto', () => {
+  const merce = { categoria: 'INGLESINA', descrizioneCompleta: 'Inglesina ORO', quantita: 4, prezzo_unitario: 48.5 };
+  const consegna = { categoria: 'EXTRA', descrizioneCompleta: 'Consegna Diretta V3', quantita: 1, prezzo_unitario: 60 };
+
+  it('somma solo le righe di consegna, non la merce', () => {
+    expect(totaleTrasporto([merce, consegna])).toBe(60);
+  });
+
+  it('senza righe di consegna è zero (e il dettaglio resta nascosto)', () => {
+    expect(totaleTrasporto([merce])).toBe(0);
+  });
+
+  it('ritiro in sede e spedizione contano come trasporto', () => {
+    expect(totaleTrasporto([{ ...consegna, descrizioneCompleta: 'Ritiro in sede', prezzo_unitario: 0 }])).toBe(0);
+    expect(totaleTrasporto([{ ...consegna, descrizioneCompleta: 'Spedizione', prezzo_unitario: 25 }])).toBe(25);
+  });
+
+  it('tiene conto della quantità', () => {
+    expect(totaleTrasporto([{ ...consegna, quantita: 2, prezzo_unitario: 30 }])).toBe(60);
+  });
+
+  it('una riga EXTRA che NON è una tariffa di consegna non conta', () => {
+    // Le voci extra generiche (lavorazioni, supplementi) non sono trasporto.
+    expect(totaleTrasporto([{ categoria: 'EXTRA', descrizioneCompleta: 'Supplemento curvatura', quantita: 1, prezzo_unitario: 40 }])).toBe(0);
+  });
+
+  it('input malformato non fa esplodere la modale di firma', () => {
+    expect(totaleTrasporto(undefined)).toBe(0);
+    expect(totaleTrasporto(null)).toBe(0);
+    expect(totaleTrasporto('non un array')).toBe(0);
+    expect(totaleTrasporto([null, undefined, {}])).toBe(0);
+  });
+
+  it('usa il round2 canonico, come il documento su CiC', () => {
+    // 3 × 12,335 = 37,005 → 37,01 half-up, non 37,00 del troncamento binario.
+    expect(totaleTrasporto([{ ...consegna, quantita: 3, prezzo_unitario: 12.335 }])).toBe(37.01);
+  });
+
+  it('coincide con computeTotals quando c\'è solo il trasporto', () => {
+    // La cifra mostrata al cliente deve venire dalla stessa aritmetica del totale.
+    const righe = [{ qty: 1, unitNetPrice: 78, discountPct: 0 }];
+    expect(totaleTrasporto([{ ...consegna, prezzo_unitario: 78 }])).toBe(feTotals(righe, 20, 22).net);
+  });
+
+  it('lo sconto d\'ordine NON tocca il trasporto', () => {
+    // Con sconto 20% la merce scende, il trasporto no: è la regola commerciale
+    // che vale su ordine, DDT e fattura.
+    const conSconto = feTotals(
+      [{ qty: 4, unitNetPrice: 48.5 }, { qty: 1, unitNetPrice: 60, discountPct: 0 }],
+      20, 22,
+    );
+    expect(conSconto.lineNets[1]).toBe(60);
+    expect(totaleTrasporto([merce, consegna])).toBe(60);
   });
 });

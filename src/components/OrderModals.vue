@@ -3,7 +3,7 @@ import { ref, computed, watch } from 'vue';
 import { 
   CheckCircleIcon, DocumentTextIcon, CogIcon, ClipboardDocumentIcon, ClipboardDocumentCheckIcon, EyeIcon 
 } from '@heroicons/vue/24/solid';
-import { resolveBackend } from '../lib/billing';
+import { resolveBackend, totaleTrasporto } from '../lib/billing';
 import { openOrderPdf } from '../lib/billingPdf';
 import { hasDestinazione, formatDestinazione } from '../lib/destinazione';
 
@@ -97,6 +97,14 @@ const copyToClipboard = (key: string, items: any[]) => {
 };
 
 const handleProductionConfirm = () => emit('confirmProduction');
+
+/**
+ * Quota di trasporto dell'ordine, mostrata sotto il totale nella modale di
+ * firma. È la voce che l'ufficio può ritoccare dopo la conferma del cliente
+ * (una destinazione diversa può cambiare la tariffa): vederla qui evita che si
+ * firmi una cifra senza sapere da cosa è composta.
+ */
+const trasporto = computed(() => totaleTrasporto(props.order?.elementi));
 </script>
 
 <template>
@@ -171,6 +179,9 @@ const handleProductionConfirm = () => emit('confirmProduction');
             <p class="text-[10px] uppercase font-bold text-gray-400">Totale ordine</p>
             <p class="text-lg font-bold text-gray-900 leading-tight">
               {{ (order?.totaleScontato || order?.totaleImponibile || 0).toFixed(2) }} €
+            </p>
+            <p v-if="trasporto > 0" class="text-[11px] text-gray-500 mt-0.5">
+              di cui trasporto {{ trasporto.toFixed(2) }} €
             </p>
           </div>
           <div v-if="hasDestinazione(order?.destinazione)" class="text-right min-w-0">
