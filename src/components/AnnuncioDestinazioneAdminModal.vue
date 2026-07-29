@@ -56,7 +56,7 @@ const emit = defineEmits<{ (e: 'close'): void }>();
         <!-- Il vincolo: è la parte che cambia davvero il lavoro -->
         <div class="rounded-xl border border-amber-300 bg-amber-50 p-4">
           <div class="flex gap-3">
-            <ExclamationTriangleIcon class="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+            <ExclamationTriangleIcon class="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
             <div>
               <p class="text-sm font-bold text-amber-900 leading-snug mb-1">
                 Un DDT ha un solo luogo di consegna
@@ -73,7 +73,7 @@ const emit = defineEmits<{ (e: 'close'): void }>();
 
         <ul class="space-y-3">
           <li class="flex gap-3">
-            <CurrencyEuroIcon class="h-5 w-5 text-gray-400 shrink-0 mt-0.5" />
+            <CurrencyEuroIcon class="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
             <p class="text-sm text-gray-600 leading-snug">
               Una destinazione diversa può cambiare la tariffa:
               <strong class="text-gray-900">verifica il trasporto</strong> prima di portare
@@ -81,7 +81,7 @@ const emit = defineEmits<{ (e: 'close'): void }>();
             </p>
           </li>
           <li class="flex gap-3">
-            <TruckIcon class="h-5 w-5 text-gray-400 shrink-0 mt-0.5" />
+            <TruckIcon class="h-5 w-5 text-amber-500 shrink-0 mt-0.5" />
             <p class="text-sm text-gray-600 leading-snug">
               L'indirizzo finisce sul <strong class="text-gray-900">DDT</strong> — e quindi
               sulla fattura che ne nasce — e guida il
