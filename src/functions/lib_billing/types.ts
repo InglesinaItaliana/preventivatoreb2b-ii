@@ -38,6 +38,22 @@ export interface CustomerRef {
    * non deve più inserirlo a mano. Fonte di verità = CiC (non duplicato in POPS).
    */
   defaultDiscountPct?: number;
+  /**
+   * Anagrafica copiata dal master cliente CiC. Serve al blocco `owner` del DDT:
+   * il layout Reviso stampa i campi DEL DOCUMENTO, non quelli del cliente → se
+   * non li ricopiamo qui, il DDT esce col solo nome e senza indirizzo, anche
+   * quando su Reviso l'anagrafica è completa (verificato sul DDT #88, 2026-07).
+   * Tutti opzionali: `provinceNumber` non esiste per i clienti esteri.
+   */
+  address?: string;
+  zip?: string;
+  city?: string;
+  /** ProvinceReference di Reviso: NUMERO, non sigla (Milano = 58, Taranto = 94). */
+  provinceNumber?: number;
+  /** ISO2 (IT, DE, MT). */
+  countryCode?: string;
+  /** Nome esteso del paese, così come lo stampa Reviso ("Italia", "Malta"). */
+  country?: string;
 }
 
 /** Riga documento, prima dell'arrotondamento (prezzi unitari netti). */
