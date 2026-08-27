@@ -27,10 +27,7 @@
     PrinterIcon
   } from '@heroicons/vue/24/solid';
   import OrderModals from '../components/OrderModals.vue';
-  import {
-    annuncioDaMostrare, segnaAnnuncioVisto,
-    ANNUNCIO_STAMPA_DOCUMENTI, LEGACY_LS_STAMPA,
-  } from '../composables/useAnnunci';
+  import NovitaPanel from '../components/novita/NovitaPanel.vue';
   import DestinazioneModal from '../components/DestinazioneModal.vue';
   import BadgeDestinazione from '../components/shared/BadgeDestinazione.vue';
   import {
@@ -214,16 +211,6 @@ const confermaRicezione = async (order: any) => {
         // Controllo se ha già fatto il tour
         tourCompleted.value = !!data.tourCompleted;
 
-        // Annuncio stampa: migrazione auto-sanante da localStorage a Firestore.
-        // Chi l'aveva già chiuso NON deve rivederselo solo perché abbiamo
-        // cambiato deposito → se il vecchio flag c'è, si scrive la chiave e si
-        // sta zitti. Chi non l'ha mai visto lo vede adesso.
-        if (annuncioDaMostrare(data, ANNUNCIO_STAMPA_DOCUMENTI)) {
-          let giaVistoPrima = false;
-          try { giaVistoPrima = !!localStorage.getItem(LEGACY_LS_STAMPA); } catch { /* storage negato */ }
-          if (giaVistoPrima) segnaAnnuncioVisto(uid, ANNUNCIO_STAMPA_DOCUMENTI);
-          else showPrintPopup.value = true;
-        }
       }
     } catch (e) {
       console.error("Errore profilo", e);
@@ -611,17 +598,11 @@ const confermaRicezione = async (order: any) => {
     }).toUpperCase().replace(/\./g, ''); 
   };
   
-  // Annuncio one-time della funzione "stampa documento" sulle card.
-  // Lo stato è passato da localStorage a users/{uid}.annunciVisti (localStorage è
-  // per-browser: lo stesso cliente se lo rivedeva dal telefono e dopo ogni
-  // pulizia cache). La decisione di mostrarlo vive in caricaProfilo, che ha già
-  // in mano lo snapshot utente: nessuna lettura in più.
-  const showPrintPopup = ref(false);
-  const closePrintPopup = () => {
-    showPrintPopup.value = false;
-    const uid = auth.currentUser?.uid;
-    if (uid) segnaAnnuncioVisto(uid, ANNUNCIO_STAMPA_DOCUMENTI);
-  };
+  // Il popup one-time della funzione "stampa documento" è stato ritirato: la
+  // novità vive nel pannello (lib/novita.ts, 'stampa-documenti-v1'), dove resta
+  // consultabile invece di sparire dopo il primo "Ho capito". Della vecchia
+  // scheda è rimasta la sola idea utile — far VEDERE il pulsante — nel campo
+  // `pulsante` della voce di registro.
 
   onMounted(async() => {
     onAuthStateChanged(auth, (user) => {
@@ -662,8 +643,9 @@ const confermaRicezione = async (order: any) => {
           </div>
   
           <div class="flex items-center gap-3 mt-4 md:mt-0">
-            <button 
-              @click="startOnboardingTour" 
+            <NovitaPanel id="tour-novita" />
+            <button
+              @click="startOnboardingTour"
               class="bg-white hover:bg-gray-50 border border-gray-200 text-gray-600 px-3 py-2 rounded-full font-bold shadow-sm flex items-center gap-2 transition-transform active:scale-95 text-xs"
             >
                 <QuestionMarkCircleIcon class="h-5 w-5 text-amber-500" /> GUIDA
@@ -1110,20 +1092,6 @@ const confermaRicezione = async (order: any) => {
       @close="showDestinazioneModal = false"
       @confirm="onDestinazioneConfermata"
     />
-
-    <!-- Annuncio one-time: pulsante stampa -->
-    <div v-if="showPrintPopup" class="fixed inset-0 z-[9999] overflow-y-auto bg-gray-900/50 backdrop-blur-sm transition-opacity duration-300 flex items-center justify-center p-4">
-      <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 text-center transform transition-all">
-        <div class="mx-auto mb-4 h-16 w-16 rounded-full bg-amber-400 flex items-center justify-center">
-          <PrinterIcon class="h-9 w-9 text-amber-950" />
-        </div>
-        <h3 class="text-xl font-bold text-gray-900 mb-2">Novità: stampa i tuoi documenti</h3>
-        <p class="text-gray-500 mb-6 text-sm">Ora su ogni card trovi il pulsante
-          <span class="inline-flex items-center justify-center align-middle h-5 w-5 rounded bg-amber-400 text-amber-950"><PrinterIcon class="h-3 w-3" /></span>:
-          cliccalo per <strong>visualizzare e stampare il PDF</strong> del tuo preventivo o ordine.</p>
-        <button @click="closePrintPopup" class="px-6 py-2 rounded-lg bg-amber-400 text-amber-950 font-bold hover:bg-amber-300 shadow-md transition-colors">Ho capito</button>
-      </div>
-    </div>
 
     <div v-if="resultModal.show" class="fixed inset-0 z-[9999] overflow-y-auto bg-gray-900/50 backdrop-blur-sm transition-opacity duration-300 flex items-center justify-center p-4">
       <div class="bg-white rounded-[2rem] shadow-2xl max-w-sm w-full transform transition-all scale-100 p-6 text-center animate-in fade-in zoom-in duration-200">

@@ -17,21 +17,18 @@ import { db } from '../firebase';
 
 /** Chiavi degli annunci. Una chiave nuova = un annuncio nuovo da mostrare. */
 export const ANNUNCIO_DETTAGLIO_PREZZO = 'dettaglio-prezzo-v1';
-/** Stampa dei documenti dalle card. Prima viveva in localStorage, vedi sotto. */
-export const ANNUNCIO_STAMPA_DOCUMENTI = 'stampa-documenti-v1';
 /** Destinazione merce — versione per il CLIENTE (users/*). */
 export const ANNUNCIO_DESTINAZIONE = 'destinazione-merce-v1';
 /** Destinazione merce — versione per lo STAFF admin (team/*). */
 export const ANNUNCIO_DESTINAZIONE_ADMIN = 'destinazione-merce-admin-v1';
 
 /**
- * Chiave localStorage usata PRIMA che gli annunci si spostassero su Firestore.
- * Serve solo alla migrazione auto-sanante di ANNUNCIO_STAMPA_DOCUMENTI: chi
- * l'aveva già chiuso non deve rivederselo solo perché abbiamo cambiato deposito.
- * Si può cancellare (qui e in ClientDashboard) quando tutti i clienti attivi
- * saranno passati almeno una volta — indicativamente dopo qualche settimana.
+ * ANNUNCIO RITIRATO — 'stampa-documenti-v1' (con la sua chiave localStorage
+ * storica 'pops_print_feature_seen') non è più un popup: la novità vive nel
+ * pannello, in `lib/novita.ts`, dove resta consultabile invece di sparire dopo
+ * il primo "Ho capito". La stringa resta negli `annunciVisti` dei clienti che
+ * l'avevano già chiuso: è innocua, nessuno la legge più.
  */
-export const LEGACY_LS_STAMPA = 'pops_print_feature_seen';
 
 /**
  * Funzione pura sui dati del doc utente che il chiamante ha già in mano: così

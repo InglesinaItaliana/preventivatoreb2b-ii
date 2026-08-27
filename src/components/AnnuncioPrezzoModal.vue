@@ -1,14 +1,27 @@
 <script setup lang="ts">
+/**
+ * Nata come popup one-time nel preventivatore, ora si apre anche dal pannello
+ * novità della dashboard: il testo deve dire DOVE si trova la lente, perché chi
+ * legge può non essere nella pagina che la contiene.
+ */
+import { onMounted, onUnmounted } from 'vue';
 import { MagnifyingGlassIcon, CheckCircleIcon } from '@heroicons/vue/24/solid';
 
-defineProps<{ show: boolean }>();
+const props = defineProps<{ show: boolean }>();
 const emit = defineEmits<{ (e: 'close'): void }>();
+
+// Esc e clic sul fondale chiudono, come nelle altre schede del pannello. Il
+// contenuto non va perso: resta consultabile dal pannello novità.
+const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape' && props.show) emit('close'); };
+onMounted(() => document.addEventListener('keydown', onEsc));
+onUnmounted(() => document.removeEventListener('keydown', onEsc));
 </script>
 
 <template>
   <div
     v-if="show"
     class="fixed inset-0 z-[999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+    @click.self="emit('close')"
   >
     <div class="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col animate-in fade-in zoom-in duration-200">
 
@@ -25,7 +38,7 @@ const emit = defineEmits<{ (e: 'close'): void }>();
       <div class="p-5 space-y-4 overflow-auto">
 
         <p class="text-sm text-gray-600 leading-relaxed">
-          Accanto al totale di ogni riga del preventivo trovi una lente.
+          Nel preventivatore, accanto al totale di ogni riga, trovi una lente.
           Cliccala: si apre il dettaglio di come quel prezzo è stato calcolato.
         </p>
 

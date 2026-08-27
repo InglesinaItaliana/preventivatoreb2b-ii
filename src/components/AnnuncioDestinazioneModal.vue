@@ -1,20 +1,33 @@
 <script setup lang="ts">
 /**
- * Annuncio one-time al CLIENTE: si può far consegnare a un indirizzo diverso
- * dalla propria sede. Mostrato nel builder, che è dove la novità si incontra
- * (bottone ORDINA), non in dashboard dove si leggerebbe lontano dal punto d'uso.
+ * Annuncio al CLIENTE: si può far consegnare a un indirizzo diverso dalla
+ * propria sede. Compare come popup nel builder, che è dove la novità si
+ * incontra (bottone ORDINA), ma si riapre anche dal pannello novità della
+ * dashboard: il testo dice quindi DOVE si trova il comando, perché chi legge
+ * può non essere nella pagina che lo contiene.
  *
  * Registro tecnico-neutro: POPS non usa la voce LYRA (v. docs/LYRA.md, scope
  * limitato alla suite SIDERA). Niente emoji: icone vere.
  */
+import { onMounted, onUnmounted } from 'vue';
 import { MapPinIcon, BookmarkIcon, BanknotesIcon } from '@heroicons/vue/24/solid';
 
-defineProps<{ show: boolean }>();
+const props = defineProps<{ show: boolean }>();
 const emit = defineEmits<{ (e: 'close'): void }>();
+
+// Esc e clic sul fondale chiudono, come nelle altre schede del pannello. Il
+// contenuto non va perso: resta consultabile dal pannello novità.
+const onEsc = (e: KeyboardEvent) => { if (e.key === 'Escape' && props.show) emit('close'); };
+onMounted(() => document.addEventListener('keydown', onEsc));
+onUnmounted(() => document.removeEventListener('keydown', onEsc));
 </script>
 
 <template>
-  <div v-if="show" class="fixed inset-0 z-[999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+  <div
+    v-if="show"
+    class="fixed inset-0 z-[999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+    @click.self="emit('close')"
+  >
     <div class="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[90vh] flex flex-col animate-in fade-in zoom-in duration-200">
 
       <div class="bg-amber-400 p-5 text-amber-950 shrink-0 rounded-t-xl">
@@ -29,7 +42,7 @@ const emit = defineEmits<{ (e: 'close'): void }>();
       <div class="p-5 space-y-4 overflow-auto">
 
         <p class="text-sm text-gray-600 leading-relaxed">
-          Quando confermi un ordine, sotto la data di consegna trovi la riga
+          Quando confermi un ordine, nel preventivatore, sotto la data di consegna trovi la riga
           <strong class="text-gray-900">Consegna</strong>. Se la merce non deve arrivare
           alla tua sede, premi <strong class="text-gray-900">Cambia</strong> e indica dove
           mandarla: un cantiere, un altro magazzino, il tuo cliente finale.
