@@ -148,14 +148,14 @@ const formula = computed(() => {
             <dl class="text-sm space-y-1.5">
               <template v-if="d.regime === 'SOLO_TELAIO'">
                 <div class="flex justify-between gap-4">
-                  <dt class="text-gray-500">Canalino perimetrale</dt>
+                  <dt class="text-gray-500">{{ d.descrizioneCanalino || 'Canalino perimetrale' }}</dt>
                   <dd class="font-medium text-gray-900 tabular-nums">{{ rate(d.tariffaCanalino) }}</dd>
                 </div>
               </template>
               <template v-else>
                 <div class="flex justify-between gap-4">
                   <dt class="text-gray-500">
-                    Griglia
+                    {{ d.descrizioneGriglia ? `Griglia: ${d.descrizioneGriglia}` : 'Griglia' }}
                     <span v-if="d.tariffaConcordata" class="text-purple-600 font-bold text-[11px] uppercase ml-1">concordata</span>
                   </dt>
                   <dd class="font-medium text-gray-900 tabular-nums">{{ rate(d.tariffaGriglia) }}</dd>

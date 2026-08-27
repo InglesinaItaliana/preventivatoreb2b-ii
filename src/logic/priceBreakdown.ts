@@ -68,6 +68,7 @@ export interface Dettaglio {
   tariffaGriglia: number;
   tariffaCanalino: number;
   tariffaConcordata: boolean;    // profilo senza prezzo di listino → prezzo/m concordato
+  descrizioneGriglia: string;    // "VARSAVIA 26 BIANCO" — il canalino la sua l'ha sempre avuta
   descrizioneCanalino: string;
 
   // ③ Regola
@@ -116,11 +117,11 @@ export interface Dettaglio {
 const REGIME: Record<Regime, { label: string; discriminante: string }> = {
   INCROCIO: {
     label: 'Griglia a incrocio',
-    discriminante: 'Montanti verticali e traversi orizzontali insieme.',
+    discriminante: 'Almeno 1 incrocio.',
   },
   PARALLELE: {
     label: 'Suddivisioni in una sola direzione',
-    discriminante: 'Più elementi tutti nella stessa direzione (solo orizzontali o solo verticali).',
+    discriminante: 'Telai con più orizzontali o più verticali.',
   },
   SINGOLA: {
     label: 'Suddivisione singola',
@@ -174,15 +175,30 @@ function formattaPct(pct: number): string {
   return `${new Intl.NumberFormat('it-IT', { maximumFractionDigits: 2 }).format(pct)}%`;
 }
 
+/**
+ * L'eccezione storica: un telaio con SOLI orizzontali e SENZA canalino viene
+ * quotato con la regola dell'incrocio pur non avendo nessun incrocio (l'override
+ * sta in tutti e tre i motori). Su quelle righe "Almeno 1 incrocio" sarebbe
+ * falso, e il cliente ha il disegno davanti: lo vedrebbe.
+ */
+function discriminanteDi(regime: Regime, verticali: number, orizzontali: number): string {
+  if (regime === 'INCROCIO' && (!verticali || !orizzontali)) {
+    return 'Telai con soli orizzontali e senza canalino: si applica la regola dell\'incrocio.';
+  }
+  return REGIME[regime].discriminante;
+}
+
 function descriviRegime(
   regime: Regime,
   maggiorazionePct: number | null,
   voci: SupplementoPricing[],
   conCanalino: boolean,
+  verticali: number,
+  orizzontali: number,
 ): { regimeLabel: string; regimeSpiegazione: string } {
   return {
     regimeLabel: REGIME[regime].label,
-    regimeSpiegazione: `${REGIME[regime].discriminante} ${spiegaMeccanismo(regime, maggiorazionePct, voci, conCanalino)}`,
+    regimeSpiegazione: `${discriminanteDi(regime, verticali, orizzontali)} ${spiegaMeccanismo(regime, maggiorazionePct, voci, conCanalino)}`,
   };
 }
 
@@ -238,6 +254,13 @@ export function costruisciDettaglio(
   if (r.tacca) lavorazioni.push('Tacca');
   if (r.nonEquidistanti) lavorazioni.push('Suddivisioni non equidistanti');
 
+  // Il profilo scelto, accanto alla sua tariffa: il canalino la sua descrizione
+  // ce l'ha sempre avuta (infoCanalino), la griglia no — e due tariffe al metro
+  // affiancate senza sapere a cosa si riferiscono non si controllano.
+  const descrizioneGriglia = [r.modello, r.dimensione, r.finitura]
+    .filter(x => x && x !== '-' && x !== 'MANUALE')
+    .join(' ');
+
   const comune = {
     baseInserita: r.base_mm,
     altezzaInserita: r.altezza_mm,
@@ -249,6 +272,7 @@ export function costruisciDettaglio(
     quantita: qty,
     metriPezzo,
     metriTotali,
+    descrizioneGriglia,
     prezzoPezzo: r.prezzo_unitario,
     totaleRiga: r.prezzo_totale,
     tariffaEffettiva: metriTotali > 0 ? r.prezzo_totale / metriTotali : null,
@@ -281,7 +305,7 @@ export function costruisciDettaglio(
       tariffaConcordata: !!r.customVarPrice && Number(r.customVarPrice) > 0,
       descrizioneCanalino: r.infoCanalino || '',
       regime,
-      ...descriviRegime(regime, maggiorazionePct, voci, tariffaCanalino > 0 && !voci.length),
+      ...descriviRegime(regime, maggiorazionePct, voci, tariffaCanalino > 0 && !voci.length, r.righe, r.colonne),
       maggiorazionePct,
       supplementi: voci.map(v => ({ label: labelSupplemento(v, p.taglia), importo: v.importo })),
       taglia: p.taglia ?? null,
@@ -303,7 +327,7 @@ export function costruisciDettaglio(
       tariffaConcordata: false,
       descrizioneCanalino: r.infoCanalino || '',
       regime: 'SOLO_TELAIO',
-      ...descriviRegime('SOLO_TELAIO', null, [], false),
+      ...descriviRegime('SOLO_TELAIO', null, [], false, r.righe, r.colonne),
       maggiorazionePct: null,
       supplementi: [],
       taglia: null,
@@ -387,7 +411,7 @@ export function costruisciDettaglio(
     tariffaConcordata,
     descrizioneCanalino: r.infoCanalino || '',
     regime,
-    ...descriviRegime(regime, maggiorazionePct, voci, tariffaCanalino > 0 && !voci.length),
+    ...descriviRegime(regime, maggiorazionePct, voci, tariffaCanalino > 0 && !voci.length, r.righe, r.colonne),
     maggiorazionePct,
     supplementi: voci.map(v => ({ label: labelSupplemento(v, taglia), importo: v.importo })),
     taglia,

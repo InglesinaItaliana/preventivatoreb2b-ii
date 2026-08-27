@@ -384,4 +384,45 @@ describe('priceBreakdown: la catena mostrata riproduce il prezzo del motore', ()
       }
     }
   });
+
+  it('le discriminanti sono il criterio, non la descrizione del disegno', () => {
+    for (const conScontrino of [false, true]) {
+      expect(dettaglioDa('2026-a', 2, 2, 'ALLUMINIO', conScontrino).regimeSpiegazione)
+        .toMatch(/^Almeno 1 incrocio\./);
+      expect(dettaglioDa('2026-a', 0, 2, 'ALLUMINIO', conScontrino).regimeSpiegazione)
+        .toMatch(/^Telai con più orizzontali o più verticali\./);
+      expect(dettaglioDa('2025-a', 0, 2, 'ALLUMINIO', conScontrino).regimeSpiegazione)
+        .toMatch(/^Telai con più orizzontali o più verticali\./);
+    }
+  });
+
+  // L'override storico: soli orizzontali e nessun canalino vengono quotati con la
+  // regola dell'incrocio pur non avendo nessun incrocio. Dire "almeno 1 incrocio"
+  // lì sarebbe falso, e il cliente ha il disegno davanti.
+  it('soli orizzontali senza canalino: non si dice che c\'è un incrocio', () => {
+    for (const conScontrino of [false, true]) {
+      for (const listino of LISTINI) {
+        const d = dettaglioDa(listino, 3, 0, '', conScontrino);
+        expect(d.regime).toBe('INCROCIO');
+        expect(d.regimeSpiegazione).not.toMatch(/Almeno 1 incrocio/);
+        expect(d.regimeSpiegazione).toMatch(/senza canalino/);
+      }
+    }
+  });
+
+  it('la tariffa della griglia porta il profilo a cui si riferisce', () => {
+    for (const conScontrino of [false, true]) {
+      expect(dettaglioDa('2026-a', 2, 2, 'ALLUMINIO', conScontrino).descrizioneGriglia)
+        .toBe('VARSAVIA 26 BIANCO');
+    }
+    // Sul solo telaio non c'è nessuna griglia da nominare.
+    const catalog = useCatalogStore();
+    const riga = rigaDa(1010, 1200, 0, 0, 'ALLUMINIO', 1, 6.3);
+    riga.categoria = 'CANALINO' as any;
+    riga.modello = 'MANUALE' as any;
+    riga.dimensione = '-';
+    riga.finitura = '-';
+    riga.codice = 'C111';
+    expect(costruisciDettaglio(riga, '2026-a', catalog)!.descrizioneGriglia).toBe('');
+  });
 });
