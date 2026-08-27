@@ -157,6 +157,119 @@ describe('priceBreakdown: la catena mostrata riproduce il prezzo del motore', ()
     expect(costruisciDettaglio(riga, '2025-a', catalog)).toBeNull();
   });
 
+  // --- LA STRADA NUOVA: LO SCONTRINO ---------------------------------------
+  // Da quando la riga si porta dietro la catena (RigaPricing), la modale legge
+  // invece di dedurre. Le due strade devono raccontare la STESSA cosa, o il
+  // cliente vedrebbe cambiare la spiegazione di un prezzo che non è cambiato.
+  it.each(LISTINI)('listino %s: leggere lo scontrino dice quanto dedurre', (listino) => {
+    const catalog = useCatalogStore();
+    for (const [base, altezza] of MISURE) {
+      for (const [oriz, vert] of SUDDIVISIONI) {
+        for (const tipoCanalino of CANALINI) {
+          const input: PricingInput = {
+            base_mm: base, altezza_mm: altezza, qty: 2,
+            num_orizzontali: oriz, num_verticali: vert,
+            tipo_canalino: tipoCanalino,
+            isSoloCanalino: false,
+            prezzo_unitario_griglia: TARIFFA_GRIGLIA,
+            prezzo_unitario_canalino: tipoCanalino ? TARIFFA_CANALINO : 0,
+          };
+          const { prezzo_unitario, pricing } = calculatePrice(input, listino);
+
+          const dedotto = costruisciDettaglio(rigaDa(base, altezza, oriz, vert, tipoCanalino, 2, prezzo_unitario), listino, catalog)!;
+          const conScontrino = rigaDa(base, altezza, oriz, vert, tipoCanalino, 2, prezzo_unitario);
+          conScontrino.pricing = pricing;
+          const letto = costruisciDettaglio(conScontrino, listino, catalog)!;
+
+          expect(letto.riconcilia).toBe(true);
+          expect(letto.prezzoRicostruito).toBeCloseTo(dedotto.prezzoRicostruito, 10);
+          expect(letto.regime).toBe(dedotto.regime);
+          expect(letto.metriPezzo).toBeCloseTo(dedotto.metriPezzo, 10);
+          expect(letto.metriTotali).toBeCloseTo(dedotto.metriTotali, 10);
+          expect(letto.metrica).toBe(dedotto.metrica);
+          expect(letto.moltiplicatore).toBe(dedotto.moltiplicatore);
+          expect(letto.taglia).toBe(dedotto.taglia);
+          expect(letto.supplementi).toEqual(dedotto.supplementi);
+          expect(letto.tariffaGriglia).toBe(dedotto.tariffaGriglia);
+
+          // UNICA differenza voluta: sulle righe 2026 con costi fissi il canalino
+          // NON entra nel prezzo (rientra come profilo perimetrale a forfait).
+          // La deduzione lo pesca comunque dal listino e la modale lo stampa come
+          // se contasse; lo scontrino no, perché il motore non l'ha usato.
+          if (!letto.supplementi.length) {
+            expect(letto.tariffaCanalino).toBe(dedotto.tariffaCanalino);
+          } else {
+            expect(letto.tariffaCanalino).toBe(0);
+          }
+        }
+      }
+    }
+  });
+
+  it.each(LISTINI)('listino %s: scontrino del solo telaio', (listino) => {
+    const catalog = useCatalogStore();
+    for (const codice of ['C111', 'C112', 'C211', 'C311']) {
+      const { prezzo_unitario, pricing } = calculatePrice({
+        base_mm: 1010, altezza_mm: 1200, qty: 2,
+        num_orizzontali: 0, num_verticali: 0,
+        tipo_canalino: 'ALLUMINIO',
+        codice_canalino: codice,
+        isSoloCanalino: true,
+        prezzo_unitario_griglia: 0,
+        prezzo_unitario_canalino: TARIFFA_CANALINO,
+      }, listino);
+
+      const riga = rigaDa(1010, 1200, 0, 0, 'ALLUMINIO', 2, prezzo_unitario);
+      riga.categoria = 'CANALINO' as any;
+      riga.codice = codice;
+      riga.pricing = pricing;
+
+      const d = costruisciDettaglio(riga, listino, catalog)!;
+      expect(d.regime).toBe('SOLO_TELAIO');
+      expect(d.metrica).toBe('perimetro');
+      expect(d.tariffaCanalino).toBeGreaterThan(0);
+      expect(d.riconcilia).toBe(true);
+    }
+  });
+
+  it('scontrino: il listino di oggi non lo tocca (è la ragione per cui esiste)', () => {
+    const catalog = useCatalogStore();
+    const input: PricingInput = {
+      base_mm: 1000, altezza_mm: 1000, qty: 1,
+      num_orizzontali: 2, num_verticali: 2,
+      tipo_canalino: 'ALLUMINIO',
+      isSoloCanalino: false,
+      prezzo_unitario_griglia: TARIFFA_GRIGLIA,
+      prezzo_unitario_canalino: TARIFFA_CANALINO,
+    };
+    const { prezzo_unitario, pricing } = calculatePrice(input, '2025-a');
+    const riga = rigaDa(1000, 1000, 2, 2, 'ALLUMINIO', 1, prezzo_unitario);
+    riga.pricing = pricing;
+
+    // Stesso scenario del test della guardia qui sotto: il listino sale dopo
+    // l'offerta. Con lo scontrino la riga continua a spiegarsi da sé.
+    catalog.listino.INGLESINA.VARSAVIA['26'].BIANCO.prezzo = 15.5;
+
+    const d = costruisciDettaglio(riga, '2025-a', catalog)!;
+    expect(d.riconcilia).toBe(true);
+    expect(d.tariffaGriglia).toBe(TARIFFA_GRIGLIA);
+  });
+
+  it('scontrino malformato: non esplode, semplicemente non riconcilia', () => {
+    const catalog = useCatalogStore();
+    const riga = rigaDa(1000, 1000, 2, 2, 'ALLUMINIO', 1, 42);
+    // Le righe del preventivo sono scrivibili dal client: uno scontrino storto
+    // deve degradare, non far saltare la modale.
+    riga.pricing = { listino: '2026-a', regime: 'BOH', metrica: 'boh', metriPezzo: null, taglia: undefined } as any;
+
+    const d = costruisciDettaglio(riga, '2026-a', catalog)!;
+    expect(d).not.toBeNull();
+    expect(d.riconcilia).toBe(false);
+    expect(d.regimeLabel).toBeTruthy();
+    expect(d.supplementi).toEqual([]);
+    expect(d.metrica).toBe('sviluppo');
+  });
+
   // --- LA GUARDIA ----------------------------------------------------------
   it('listino cambiato dopo l\'offerta: NON riconcilia, e la modale non inventa', () => {
     const catalog = useCatalogStore();

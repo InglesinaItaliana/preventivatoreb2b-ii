@@ -81,6 +81,52 @@ export interface RiepilogoRiga {
   quantitaTotale: number;
 }
 
+/**
+ * SCONTRINO DEL CALCOLO — la catena che ha prodotto il prezzo della riga,
+ * congelata sulla riga stessa nel momento in cui il motore l'ha calcolata.
+ *
+ * Perché sta qui e non si ricava a posteriori: i prezzi del listino cambiano,
+ * i motori cambiano (la maggiorazione LEALI è stata azzerata il 2026-06-26) e
+ * certe leve stanno nel codice, non in Firestore. Senza questo scontrino,
+ * spiegare al cliente un prezzo di sei mesi fa significa dedurlo con il motore
+ * di oggi — cioè, a volte, mentire.
+ *
+ * Assente sulle righe battute prima di questa modifica e su quelle a prezzo
+ * deciso a mano (EXTRA, spedizioni): lì si torna alla deduzione con guardia
+ * (`priceBreakdown.ts`).
+ */
+export type RegimePricing =
+  | 'INCROCIO'      // verticali e orizzontali insieme
+  | 'PARALLELE'     // più elementi nella stessa direzione
+  | 'SINGOLA'       // un solo elemento sull'intero telaio
+  | 'SOLO_TELAIO'   // nessuna griglia: si paga il canalino perimetrale
+  | 'NESSUNA';      // nessuna suddivisione interna
+
+/** Voce al metro: si sommano tutte e si moltiplicano per i metri. */
+export interface TariffaPricing {
+  tipo: 'griglia' | 'canalino' | 'telaio';
+  codice?: string;
+  valore: number;                 // €/m (per 'telaio' è il moltiplicatore del canalino)
+}
+
+/** Voce a forfait: si somma a valle, non c'entra con i metri. */
+export interface SupplementoPricing {
+  tipo: 'attrezzaggio' | 'perimetrale';
+  codice: string;
+  importo: number;                // €
+}
+
+export interface RigaPricing {
+  listino: string;                // motore che ha calcolato (es. '2026-a')
+  regime: RegimePricing;
+  metrica: 'sviluppo' | 'perimetro';
+  metriPezzo: number;
+  tariffe: TariffaPricing[];
+  maggiorazionePct: number | null; // 20 = +20% (listini lineari); null = nessuna
+  supplementi: SupplementoPricing[];
+  taglia: 'S' | 'M' | 'L' | 'XL' | null;
+}
+
 export interface RigaPreventivo {
   id: string;
   categoria: Categoria;
@@ -101,6 +147,9 @@ export interface RigaPreventivo {
   prezzo_totale: number;
   
   customVarPrice?: number | null;
+
+  /** Scontrino del calcolo (v. RigaPricing). Assente sulle righe storiche. */
+  pricing?: RigaPricing;
 
   requiresValidation?: boolean;
   nonEquidistanti?: boolean;
@@ -145,6 +194,15 @@ export interface PreventivoDocumento {
    * Assente = consegna all'indirizzo abituale. Vedi src/lib/destinazione.ts.
    */
   destinazione?: DestinazioneMerce;
+
+  /**
+   * Listino con cui è stato costruito questo documento, congelato alla prima
+   * creazione come `billingBackend`. Serve a due cose: le righe aggiunte
+   * riaprendo un preventivo vecchio nascono con lo stesso motore delle altre
+   * (niente documenti con due listini dentro), e la lente del prezzo sa con
+   * cosa spiegarle. Assente = documento anteriore a questa modifica.
+   */
+  listino?: string;
 
   // BILLING (migrazione FiC→CiC). 'billingBackend' è congelato alla creazione
   // del primo documento; assente = FiC (comportamento storico). Vedi lib_billing.

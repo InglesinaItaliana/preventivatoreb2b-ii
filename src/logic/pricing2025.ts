@@ -1,8 +1,10 @@
 // src/logic/pricing2025.ts
 
 import { useCatalogStore } from '../Data/catalog';
-import type { PricingInput } from './pricing';
+import type { PricingInput, PricingResult } from './pricing';
+import type { TariffaPricing } from '../types';
 import { metriGriglia, metriPerimetro } from './geometry';
+import { pricingSoloTelaio, regimeDaComplessita } from './listini';
 
 // --- HELPER E COSTANTI (Duplicati qui per mantenere il file indipendente) ---
 
@@ -15,7 +17,7 @@ const MOLTIPLICATORI_SOLO_CANALINO: Record<string, number> = {
 
 // --- LOGICA DI CALCOLO 2025 (Identica alla 2026 per ora) ---
 
-export function calculateLogic2025(input: PricingInput) {
+export function calculateLogic2025(input: PricingInput): PricingResult {
   const catalog = useCatalogStore();
   if (!catalog.isLoaded) return { prezzo_unitario: 0, prezzo_totale: 0 };
 
@@ -25,6 +27,7 @@ export function calculateLogic2025(input: PricingInput) {
   // --- LOGICA DEDICATA: SOLO CANALINO ---
   if (input.isSoloCanalino) {
     let prezzo_unitario = 0;
+    let moltiplicatoreUsato = 0;
     
     if (input.codice_canalino) {
       const code = input.codice_canalino.toUpperCase();
@@ -32,11 +35,16 @@ export function calculateLogic2025(input: PricingInput) {
       
       if (moltiplicatore) {
         prezzo_unitario = metri_perimetro * moltiplicatore;
+        moltiplicatoreUsato = moltiplicatore;
       }
     }
     
     const prezzo_totale = prezzo_unitario * input.qty;
-    return { prezzo_unitario, prezzo_totale };
+    return {
+      prezzo_unitario,
+      prezzo_totale,
+      pricing: pricingSoloTelaio(metri_perimetro, input.codice_canalino, moltiplicatoreUsato, '2025-a'),
+    };
   }
   // --------------------------------------
 
@@ -82,5 +90,24 @@ export function calculateLogic2025(input: PricingInput) {
   
   const prezzo_totale = prezzo_unitario * input.qty;
 
-  return { prezzo_unitario, prezzo_totale };
+  // --- SCONTRINO ---
+  // Listino lineare: tutto al metro, la lavorazione pesa come maggiorazione
+  // percentuale sulla somma delle due tariffe. Nessun costo fisso.
+  const tariffe: TariffaPricing[] = [{ tipo: 'griglia', valore: input.prezzo_unitario_griglia }];
+  if (input.prezzo_unitario_canalino) tariffe.push({ tipo: 'canalino', valore: input.prezzo_unitario_canalino });
+
+  return {
+    prezzo_unitario,
+    prezzo_totale,
+    pricing: {
+      listino: '2025-a',
+      regime: regimeDaComplessita(complessita),
+      metrica: 'sviluppo',
+      metriPezzo: metri_griglia,
+      tariffe,
+      maggiorazionePct: complessita === 2 ? 20 : complessita === 3 ? 50 : null,
+      supplementi: [],
+      taglia: null,
+    },
+  };
 }

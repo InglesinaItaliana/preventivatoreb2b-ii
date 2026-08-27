@@ -16,12 +16,21 @@
 //    dei preventivi vecchi: la maggiorazione LEALI è stata azzerata il
 //    2026-06-26 (era +1,00 €/m), quindi una riga LEALI battuta prima di quella
 //    data NON è più riproducibile dal motore di oggi. Su quelle righe la guardia
-//    scatta ed è l'unica cosa che ci impedisce di mentire al cliente. Quando
-//    arriverà il listino versionato (snapshot di prezzi + regole salvato sul
-//    preventivo), questo modulo smetterà di dedurre e comincerà a leggere.
+//    scatta ed è l'unica cosa che ci impedisce di mentire al cliente.
+//
+// DUE STRADE, da quando le righe si portano dietro lo scontrino (RigaPricing):
+//
+//  • riga CON scontrino → si LEGGE. Tariffe, supplementi e maggiorazione sono
+//    quelli che il motore ha davvero usato quel giorno, congelati sulla riga:
+//    nessuna deduzione, nessuna dipendenza dal listino di oggi. La guardia
+//    resta accesa lo stesso, costa niente.
+//  • riga SENZA scontrino (tutto lo storico, e le righe a prezzo manuale) → si
+//    DEDUCE, come prima, col motore indicato da `activeList`. È la strada che
+//    può fallire, ed è per questo che la guardia esiste.
 
-import type { RigaPreventivo } from '../types';
+import type { RigaPreventivo, RegimePricing, SupplementoPricing } from '../types';
 import { metriGriglia, metriPerimetro, roundMm } from './geometry';
+import { ricostruisciPrezzoUnitario } from './listini';
 
 // Stessi moltiplicatori dei motori (solo telaio: perimetro × moltiplicatore).
 const MOLTIPLICATORI_SOLO_CANALINO: Record<string, number> = {
@@ -34,7 +43,7 @@ const PERIMETRALE_CODES: Record<string, Record<string, string>> = {
   'FIBRA':       { S: 'S011', M: 'S012', L: 'S013', XL: 'S014' },
 };
 
-export type Regime = 'INCROCIO' | 'PARALLELE' | 'SINGOLA' | 'SOLO_TELAIO' | 'NESSUNA';
+export type Regime = RegimePricing;
 
 export interface VoceSupplemento {
   label: string;
@@ -107,6 +116,16 @@ const LABEL: Record<Regime, { label: string; spiegazione: string }> = {
   },
 };
 
+/**
+ * Il testo delle voci fisse vive nel frontend, non nello scontrino: sullo
+ * scontrino si salva il TIPO (e il codice), così riscrivere una dicitura non
+ * costringe a riscrivere i preventivi già salvati.
+ */
+function labelSupplemento(v: SupplementoPricing, taglia: string | null): string {
+  if (v.tipo === 'attrezzaggio') return 'Contributo di attrezzaggio';
+  return taglia ? `Profilo perimetrale (taglia ${taglia})` : 'Profilo perimetrale';
+}
+
 function prezzoDaListino(catalog: any, categoria: string, modello: string, dimensione: string, finitura: string): number {
   return catalog?.listino?.[categoria]?.[modello]?.[dimensione]?.[finitura]?.prezzo || 0;
 }
@@ -166,6 +185,41 @@ export function costruisciDettaglio(
     lavorazioni,
   };
 
+  // --- STRADA 1: LA RIGA HA LO SCONTRINO → SI LEGGE -------------------------
+  if (r.pricing) {
+    const p = r.pricing;
+    const metri = Number(p.metriPezzo) || 0;
+    const tariffe = Array.isArray(p.tariffe) ? p.tariffe : [];
+    const voci = Array.isArray(p.supplementi) ? p.supplementi : [];
+    // Un regime che non conosciamo (doc scritto a mano, formato futuro) non deve
+    // far esplodere la modale: si degrada a "nessuna suddivisione" e la guardia
+    // penserà al resto.
+    const regime: Regime = LABEL[p.regime] ? p.regime : 'NESSUNA';
+    const ricostruito = ricostruisciPrezzoUnitario(p);
+    return {
+      ...comune,
+      metriPezzo: metri,
+      metriTotali: metri * qty,
+      tariffaEffettiva: metri * qty > 0 ? r.prezzo_totale / (metri * qty) : null,
+      metrica: p.metrica === 'perimetro' ? 'perimetro' : 'sviluppo',
+      tariffaGriglia: tariffe.find(t => t.tipo === 'griglia')?.valore ?? 0,
+      // Il 'telaio' (moltiplicatore del solo canalino) occupa la stessa casella
+      // del canalino: è lì che la modale va a prenderlo per il solo telaio.
+      tariffaCanalino: tariffe.find(t => t.tipo === 'canalino' || t.tipo === 'telaio')?.valore ?? 0,
+      tariffaConcordata: !!r.customVarPrice && Number(r.customVarPrice) > 0,
+      descrizioneCanalino: r.infoCanalino || '',
+      regime,
+      regimeLabel: LABEL[regime].label,
+      regimeSpiegazione: LABEL[regime].spiegazione,
+      moltiplicatore: p.maggiorazionePct ? 1 + p.maggiorazionePct / 100 : null,
+      supplementi: voci.map(v => ({ label: labelSupplemento(v, p.taglia), importo: v.importo })),
+      taglia: p.taglia ?? null,
+      riconcilia: Math.abs(ricostruito - r.prezzo_unitario) < 0.005,
+      prezzoRicostruito: ricostruito,
+    };
+  }
+
+  // --- STRADA 2: DEDUZIONE (righe storiche) ---------------------------------
   // --- SOLO TELAIO: perimetro × moltiplicatore del canalino ------------------
   if (soloTelaio) {
     const molt = r.codice ? (MOLTIPLICATORI_SOLO_CANALINO[r.codice.toUpperCase()] ?? 0) : 0;
