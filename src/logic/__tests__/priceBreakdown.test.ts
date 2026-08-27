@@ -18,7 +18,9 @@ import type { RigaPreventivo } from '../../types';
 const TARIFFA_GRIGLIA = 14;
 const TARIFFA_CANALINO = 2.5;
 
-const LISTINI = ['2025-a', '2025x', '2026-a'];
+// '2025-x' è la scrittura che salva davvero il modale cliente per LEALI: sta
+// nella matrice perché è quella che gira in produzione.
+const LISTINI = ['2025-a', '2025x', '2025-x', '2026-a'];
 const MISURE: Array<[number, number]> = [[1010, 1010], [600, 700], [2450, 2000], [1050, 1050]];
 // [orizzontali, verticali] — nella riga: colonne = orizzontali, righe = verticali
 const SUDDIVISIONI: Array<[number, number]> = [[0, 0], [1, 0], [0, 1], [2, 0], [0, 2], [2, 2], [3, 1], [5, 4]];
@@ -187,20 +189,17 @@ describe('priceBreakdown: la catena mostrata riproduce il prezzo del motore', ()
           expect(letto.metriPezzo).toBeCloseTo(dedotto.metriPezzo, 10);
           expect(letto.metriTotali).toBeCloseTo(dedotto.metriTotali, 10);
           expect(letto.metrica).toBe(dedotto.metrica);
-          expect(letto.moltiplicatore).toBe(dedotto.moltiplicatore);
+          expect(letto.maggiorazionePct).toBe(dedotto.maggiorazionePct);
           expect(letto.taglia).toBe(dedotto.taglia);
           expect(letto.supplementi).toEqual(dedotto.supplementi);
           expect(letto.tariffaGriglia).toBe(dedotto.tariffaGriglia);
 
-          // UNICA differenza voluta: sulle righe 2026 con costi fissi il canalino
-          // NON entra nel prezzo (rientra come profilo perimetrale a forfait).
-          // La deduzione lo pesca comunque dal listino e la modale lo stampa come
-          // se contasse; lo scontrino no, perché il motore non l'ha usato.
-          if (!letto.supplementi.length) {
-            expect(letto.tariffaCanalino).toBe(dedotto.tariffaCanalino);
-          } else {
-            expect(letto.tariffaCanalino).toBe(0);
-          }
+          // Sulle righe con costi fissi il canalino non entra nel prezzo (rientra
+          // come profilo perimetrale a forfait): nessuna delle due strade lo
+          // espone come tariffa al metro, o il cliente sommerebbe una voce che
+          // nel conto non c'è.
+          expect(letto.tariffaCanalino).toBe(dedotto.tariffaCanalino);
+          if (letto.supplementi.length) expect(letto.tariffaCanalino).toBe(0);
         }
       }
     }
@@ -293,5 +292,96 @@ describe('priceBreakdown: la catena mostrata riproduce il prezzo del motore', ()
     // Quello che resta vero anche così: i metri e la tariffa effettivamente pagata.
     expect(d.metriTotali).toBeGreaterThan(0);
     expect(d.tariffaEffettiva).toBeCloseTo(prezzo_unitario / d.metriTotali, 10);
+  });
+
+  // --- IL BLOCCO ③: QUELLO CHE SI LEGGE È QUELLO CHE SI PAGA ---------------
+  // Il testo del regime non è decorazione: è la frase che il cliente confronta
+  // con la cifra. Questi test la inchiodano ai numeri della riga.
+
+  function dettaglioDa(listino: string, oriz: number, vert: number, canalino = 'ALLUMINIO', conScontrino = false) {
+    const catalog = useCatalogStore();
+    const input: PricingInput = {
+      base_mm: 1010, altezza_mm: 1010, qty: 1,
+      num_orizzontali: oriz, num_verticali: vert,
+      tipo_canalino: canalino,
+      isSoloCanalino: false,
+      prezzo_unitario_griglia: TARIFFA_GRIGLIA,
+      prezzo_unitario_canalino: canalino ? TARIFFA_CANALINO : 0,
+    };
+    const { prezzo_unitario, pricing } = calculatePrice(input, listino);
+    const riga = rigaDa(1010, 1010, oriz, vert, canalino, 1, prezzo_unitario);
+    if (conScontrino) riga.pricing = pricing;
+    return costruisciDettaglio(riga, listino, catalog)!;
+  }
+
+  it('2026: le suddivisioni in una direzione NON sono maggiorate, sono a voci fisse', () => {
+    for (const conScontrino of [false, true]) {
+      for (const [oriz, vert] of [[0, 2], [0, 1]] as Array<[number, number]>) {
+        const d = dettaglioDa('2026-a', oriz, vert, 'ALLUMINIO', conScontrino);
+        expect(d.maggiorazionePct).toBeNull();
+        expect(d.regimeSpiegazione).not.toMatch(/maggiorat/i);
+        expect(d.regimeSpiegazione).toMatch(/attrezzaggio/);
+        expect(d.regimeSpiegazione).toMatch(/profilo perimetrale/);
+      }
+    }
+  });
+
+  it('2026: parallele e singola costano con la stessa regola, e il testo lo dice', () => {
+    const parallele = dettaglioDa('2026-a', 0, 2);
+    const singola = dettaglioDa('2026-a', 0, 1);
+    // Stesso meccanismo (la frase dopo la discriminante), discriminante diversa.
+    expect(parallele.regimeSpiegazione.split('. ')[1]).toBe(singola.regimeSpiegazione.split('. ')[1]);
+    expect(parallele.regimeLabel).not.toBe(singola.regimeLabel);
+  });
+
+  it('la suddivisione singola dice solo chi è, non quanto rende', () => {
+    const d = dettaglioDa('2025-a', 0, 1);
+    expect(d.regimeLabel).toBe('Suddivisione singola');
+    expect(d.regimeSpiegazione).toMatch(/Un solo elemento sull'intero telaio \(orizzontale o verticale\)\./);
+    expect(d.regimeSpiegazione).not.toMatch(/resa|efficien/i);
+  });
+
+  it('listini lineari: la maggiorazione si dice in percentuale', () => {
+    expect(dettaglioDa('2025-a', 0, 2).regimeSpiegazione).toMatch(/maggiorata del 20%/);
+    expect(dettaglioDa('2025-a', 0, 1).regimeSpiegazione).toMatch(/maggiorata del 50%/);
+    // Su LEALI la singola costa come le parallele.
+    expect(dettaglioDa('2025x', 0, 1).regimeSpiegazione).toMatch(/maggiorata del 20%/);
+    expect(dettaglioDa('2025x', 0, 2).regimeSpiegazione).toMatch(/maggiorata del 20%/);
+  });
+
+  it('nessun testo parla più di moltiplicatori', () => {
+    for (const listino of LISTINI) {
+      for (const [oriz, vert] of SUDDIVISIONI) {
+        const d = dettaglioDa(listino, oriz, vert);
+        expect(d.regimeSpiegazione).not.toMatch(/× ?1[,.]/);
+      }
+    }
+  });
+
+  it('INVARIANTE: la frase e i numeri della riga dicono la stessa cosa', () => {
+    for (const conScontrino of [false, true]) {
+      for (const listino of LISTINI) {
+        for (const [oriz, vert] of SUDDIVISIONI) {
+          for (const canalino of CANALINI) {
+            const d = dettaglioDa(listino, oriz, vert, canalino, conScontrino);
+            const dicePercentuale = /maggiorata del ([\d,]+)%/.exec(d.regimeSpiegazione);
+            const diceVociFisse = /attrezzaggio|profilo perimetrale/.test(d.regimeSpiegazione);
+
+            expect(!!dicePercentuale).toBe(d.maggiorazionePct !== null);
+            if (dicePercentuale) {
+              expect(Number(dicePercentuale[1]!.replace(',', '.'))).toBe(d.maggiorazionePct);
+            }
+            expect(diceVociFisse).toBe(d.supplementi.length > 0);
+
+            // E se dice "griglia + canalino", il canalino deve davvero entrare
+            // nel conto al metro.
+            if (/griglia \+ canalino/.test(d.regimeSpiegazione)) {
+              expect(d.tariffaCanalino).toBeGreaterThan(0);
+              expect(d.supplementi.length).toBe(0);
+            }
+          }
+        }
+      }
+    }
   });
 });

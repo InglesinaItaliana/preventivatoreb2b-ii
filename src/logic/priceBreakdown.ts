@@ -74,8 +74,8 @@ export interface Dettaglio {
   regime: Regime;
   regimeLabel: string;
   regimeSpiegazione: string;
-  moltiplicatore: number | null; // maggiorazione (listino lineare)
-  supplementi: VoceSupplemento[];// voci fisse (listino con supplementi)
+  maggiorazionePct: number | null; // 20 = +20% (listini lineari); null = nessuna
+  supplementi: VoceSupplemento[];  // voci fisse (2026: attrezzaggio + perimetrale)
   taglia: 'S' | 'M' | 'L' | 'XL' | null;
 
   // ④ Totali
@@ -93,28 +93,98 @@ export interface Dettaglio {
   lavorazioni: string[];
 }
 
-const LABEL: Record<Regime, { label: string; spiegazione: string }> = {
+/**
+ * IL BLOCCO ③, IN DUE PEZZI.
+ *
+ * La discriminante (CHI è questa riga) e il meccanismo (COME si paga) sono
+ * scritti separatamente, per due motivi.
+ *
+ * Primo: la discriminante è l'unica cosa che il cliente può verificare da sé
+ * guardando il disegno — quante suddivisioni ci sono e in che direzione — e non
+ * ha bisogno di giustificazioni. La vecchia formulazione ("la lavorazione è meno
+ * efficiente", "la resa più bassa") spiegava la nostra economia, non il suo
+ * prezzo, ed è uscita.
+ *
+ * Secondo: il meccanismo NON dipende dal regime, dipende dal listino. Nel 2026
+ * suddivisioni parallele e singole non prendono nessuna maggiorazione — il
+ * canalino esce dal conto al metro e rientra come profilo perimetrale a forfait
+ * — mentre nei listini 2025 succede l'opposto. Un testo fisso per regime
+ * mentirebbe su metà delle righe. Qui il meccanismo si legge dai numeri della
+ * riga (c'è una percentuale? ci sono voci fisse?), quindi non può divergere dal
+ * conto che gli sta sotto.
+ */
+const REGIME: Record<Regime, { label: string; discriminante: string }> = {
   INCROCIO: {
     label: 'Griglia a incrocio',
-    spiegazione: 'La griglia ha sia montanti verticali sia traversi orizzontali: le tariffe di griglia e canalino si sommano, senza maggiorazioni.',
+    discriminante: 'Montanti verticali e traversi orizzontali insieme.',
   },
   PARALLELE: {
-    label: 'Suddivisioni parallele',
-    spiegazione: 'Le suddivisioni corrono tutte nella stessa direzione: la lavorazione è meno efficiente e la tariffa viene maggiorata.',
+    label: 'Suddivisioni in una sola direzione',
+    discriminante: 'Più elementi tutti nella stessa direzione (solo orizzontali o solo verticali).',
   },
   SINGOLA: {
     label: 'Suddivisione singola',
-    spiegazione: 'Una sola suddivisione sull\'intero telaio: è la lavorazione con la resa più bassa e la maggiorazione più alta.',
+    discriminante: 'Un solo elemento sull\'intero telaio (orizzontale o verticale).',
   },
   SOLO_TELAIO: {
     label: 'Solo telaio',
-    spiegazione: 'Nessuna griglia: si paga il canalino perimetrale, quindi il metro di riferimento è il perimetro del telaio.',
+    discriminante: 'Nessuna griglia interna: si paga il canalino perimetrale.',
   },
   NESSUNA: {
     label: 'Nessuna suddivisione',
-    spiegazione: 'Il telaio non ha suddivisioni interne: non c\'è sviluppo di griglia da quotare.',
+    discriminante: 'Il telaio non ha suddivisioni interne.',
   },
 };
+
+/** Elenco in italiano: "a", "a e b". */
+function elenco(voci: string[]): string {
+  if (voci.length <= 1) return voci[0] || '';
+  return `${voci.slice(0, -1).join(', ')} e ${voci[voci.length - 1]}`;
+}
+
+/**
+ * Il meccanismo, ricavato dai numeri della riga e non da una tabella per
+ * listino: quello che si legge qui è quello che si vede nella formula sotto.
+ */
+function spiegaMeccanismo(
+  regime: Regime,
+  maggiorazionePct: number | null,
+  voci: SupplementoPricing[],
+  conCanalino: boolean,
+): string {
+  if (regime === 'SOLO_TELAIO') return 'Il metro di riferimento è il perimetro del telaio.';
+  if (regime === 'NESSUNA') return 'Non c\'è sviluppo di griglia da quotare.';
+
+  const tariffa = conCanalino ? 'Tariffa griglia + canalino' : 'Tariffa griglia';
+
+  if (maggiorazionePct) return `${tariffa} al metro, maggiorata del ${formattaPct(maggiorazionePct)}.`;
+
+  if (voci.length) {
+    const nomi = voci.map(v => v.tipo === 'attrezzaggio'
+      ? 'il contributo di attrezzaggio'
+      : 'il profilo perimetrale (in base alla taglia del telaio)');
+    return `${tariffa} al metro, più ${elenco(nomi)}.`;
+  }
+
+  return `${tariffa} al metro, senza maggiorazioni.`;
+}
+
+/** 20 → "20%", 12.5 → "12,5%". Le percentuali si leggono meglio dei ×1,2. */
+function formattaPct(pct: number): string {
+  return `${new Intl.NumberFormat('it-IT', { maximumFractionDigits: 2 }).format(pct)}%`;
+}
+
+function descriviRegime(
+  regime: Regime,
+  maggiorazionePct: number | null,
+  voci: SupplementoPricing[],
+  conCanalino: boolean,
+): { regimeLabel: string; regimeSpiegazione: string } {
+  return {
+    regimeLabel: REGIME[regime].label,
+    regimeSpiegazione: `${REGIME[regime].discriminante} ${spiegaMeccanismo(regime, maggiorazionePct, voci, conCanalino)}`,
+  };
+}
 
 /**
  * Il testo delle voci fisse vive nel frontend, non nello scontrino: sullo
@@ -194,8 +264,10 @@ export function costruisciDettaglio(
     // Un regime che non conosciamo (doc scritto a mano, formato futuro) non deve
     // far esplodere la modale: si degrada a "nessuna suddivisione" e la guardia
     // penserà al resto.
-    const regime: Regime = LABEL[p.regime] ? p.regime : 'NESSUNA';
+    const regime: Regime = REGIME[p.regime] ? p.regime : 'NESSUNA';
     const ricostruito = ricostruisciPrezzoUnitario(p);
+    const maggiorazionePct = Number(p.maggiorazionePct) || null;
+    const tariffaCanalino = tariffe.find(t => t.tipo === 'canalino' || t.tipo === 'telaio')?.valore ?? 0;
     return {
       ...comune,
       metriPezzo: metri,
@@ -205,13 +277,12 @@ export function costruisciDettaglio(
       tariffaGriglia: tariffe.find(t => t.tipo === 'griglia')?.valore ?? 0,
       // Il 'telaio' (moltiplicatore del solo canalino) occupa la stessa casella
       // del canalino: è lì che la modale va a prenderlo per il solo telaio.
-      tariffaCanalino: tariffe.find(t => t.tipo === 'canalino' || t.tipo === 'telaio')?.valore ?? 0,
+      tariffaCanalino,
       tariffaConcordata: !!r.customVarPrice && Number(r.customVarPrice) > 0,
       descrizioneCanalino: r.infoCanalino || '',
       regime,
-      regimeLabel: LABEL[regime].label,
-      regimeSpiegazione: LABEL[regime].spiegazione,
-      moltiplicatore: p.maggiorazionePct ? 1 + p.maggiorazionePct / 100 : null,
+      ...descriviRegime(regime, maggiorazionePct, voci, tariffaCanalino > 0 && !voci.length),
+      maggiorazionePct,
       supplementi: voci.map(v => ({ label: labelSupplemento(v, p.taglia), importo: v.importo })),
       taglia: p.taglia ?? null,
       riconcilia: Math.abs(ricostruito - r.prezzo_unitario) < 0.005,
@@ -232,9 +303,8 @@ export function costruisciDettaglio(
       tariffaConcordata: false,
       descrizioneCanalino: r.infoCanalino || '',
       regime: 'SOLO_TELAIO',
-      regimeLabel: LABEL.SOLO_TELAIO.label,
-      regimeSpiegazione: LABEL.SOLO_TELAIO.spiegazione,
-      moltiplicatore: null,
+      ...descriviRegime('SOLO_TELAIO', null, [], false),
+      maggiorazionePct: null,
       supplementi: [],
       taglia: null,
       riconcilia: Math.abs(ricostruito - r.prezzo_unitario) < 0.005,
@@ -267,8 +337,8 @@ export function costruisciDettaglio(
   if (senzaCanalino && soloOrizzontali) regime = 'INCROCIO';
 
   let taglia: 'S' | 'M' | 'L' | 'XL' | null = null;
-  let moltiplicatore: number | null = null;
-  const supplementi: VoceSupplemento[] = [];
+  let maggiorazionePct: number | null = null;
+  const voci: SupplementoPricing[] = [];
   let ricostruito = 0;
 
   const listinoLineare = activeList === '2025-a' || activeList === '2025x' || activeList === '2025-x';
@@ -278,11 +348,12 @@ export function costruisciDettaglio(
     // (Il listino "LEALI" oggi non applica alcun rincaro sulle tariffe: la voce
     // esiste nel motore ma vale 0 dal 2026-06-26.)
     const leali = activeList === '2025x' || activeList === '2025-x';
-    if (regime === 'PARALLELE') moltiplicatore = 1.2;
-    else if (regime === 'SINGOLA') moltiplicatore = leali ? 1.2 : 1.5;
+    if (regime === 'PARALLELE') maggiorazionePct = 20;
+    else if (regime === 'SINGOLA') maggiorazionePct = leali ? 20 : 50;
 
     const tariffaSomma = tariffaGriglia + tariffaCanalino;
-    ricostruito = regime === 'NESSUNA' ? 0 : metriPezzo * tariffaSomma * (moltiplicatore ?? 1);
+    const fattore = maggiorazionePct ? 1 + maggiorazionePct / 100 : 1;
+    ricostruito = regime === 'NESSUNA' ? 0 : metriPezzo * tariffaSomma * fattore;
   } else {
     // Listino con costi fissi: incrocio resta al metro puro; parallele e singola
     // pagano attrezzaggio + profilo perimetrale, dimensionati sulla taglia.
@@ -298,8 +369,8 @@ export function costruisciDettaglio(
       const codePerimetrale = PERIMETRALE_CODES[tipoCanalino.toUpperCase()]?.[taglia];
       const perimetrale = codePerimetrale ? supplemento(catalog, codePerimetrale) : 0;
 
-      if (setup) supplementi.push({ label: 'Contributo di attrezzaggio', importo: setup });
-      if (perimetrale) supplementi.push({ label: `Profilo perimetrale (taglia ${taglia})`, importo: perimetrale });
+      if (setup) voci.push({ tipo: 'attrezzaggio', codice: sviluppo < 2.0 ? 'S001' : 'S002', importo: setup });
+      if (perimetrale) voci.push({ tipo: 'perimetrale', codice: codePerimetrale || '', importo: perimetrale });
 
       ricostruito = (metriPezzo * tariffaGriglia) + perimetrale + setup;
     }
@@ -309,14 +380,16 @@ export function costruisciDettaglio(
     ...comune,
     metrica: 'sviluppo',
     tariffaGriglia,
-    tariffaCanalino,
+    // Col canalino a forfait (voci fisse) la sua tariffa al metro NON entra nel
+    // prezzo: mostrarla nel blocco ② farebbe sballare il conto a chi la somma.
+    // Il suo costo è già dentro il profilo perimetrale, elencato nel blocco ③.
+    tariffaCanalino: voci.length ? 0 : tariffaCanalino,
     tariffaConcordata,
     descrizioneCanalino: r.infoCanalino || '',
     regime,
-    regimeLabel: LABEL[regime].label,
-    regimeSpiegazione: LABEL[regime].spiegazione,
-    moltiplicatore,
-    supplementi,
+    ...descriviRegime(regime, maggiorazionePct, voci, tariffaCanalino > 0 && !voci.length),
+    maggiorazionePct,
+    supplementi: voci.map(v => ({ label: labelSupplemento(v, taglia), importo: v.importo })),
     taglia,
     riconcilia: Math.abs(ricostruito - r.prezzo_unitario) < 0.005,
     prezzoRicostruito: ricostruito,

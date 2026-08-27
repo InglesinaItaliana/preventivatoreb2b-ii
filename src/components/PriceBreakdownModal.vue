@@ -17,24 +17,42 @@ const n = (v: number) => nf.format(v);
 const eur = (v: number) => `${nf.format(v)} €`;
 const mt = (v: number) => `${nf.format(v)} m`;
 const rate = (v: number) => `${nf.format(v)} €/m`;
+// Le percentuali si scrivono senza decimali inutili: "20%", non "20,00%".
+const pf = new Intl.NumberFormat('it-IT', { maximumFractionDigits: 2 });
+const pct = (v: number) => `${pf.format(v)}%`;
 
 const d = computed(() => props.dettaglio);
 
 // La catena aritmetica del blocco ③, scritta come la leggerebbe il cliente.
+//
+// Due regole. La maggiorazione si dice in PERCENTUALE ("+20%") e non come
+// moltiplicatore ("× 1,2"): il cliente non deve tradurre. Il parziale su cui si
+// applica NON si stampa, però: arrotondato ai centesimi e rimoltiplicato può
+// dare un centesimo di differenza dal prezzo vero (1,05 × 16,50 = 17,325 → a
+// video 17,33, che +50% farebbe 26,00 invece di 25,99), e una riga che non
+// torna per un centesimo è peggio di una riga con un passaggio in meno.
+// Seconda regola: una tariffa che vale zero non si stampa — sommarla a video e
+// non nel conto fa sembrare sbagliato un prezzo giusto.
 const formula = computed(() => {
   const x = d.value;
   if (!x) return '';
   if (x.regime === 'SOLO_TELAIO') {
     return `${mt(x.metriPezzo)} × ${rate(x.tariffaCanalino)} = ${eur(x.prezzoRicostruito)}`;
   }
-  const tariffe = x.supplementi.length
-    ? rate(x.tariffaGriglia)
-    : `(${n(x.tariffaGriglia)} + ${n(x.tariffaCanalino)} €/m)`;
-  const molt = x.moltiplicatore ? ` × ${n(x.moltiplicatore)}` : '';
-  const parziale = x.supplementi.length
+  // Quando ci sono voci fisse il canalino è già dentro il profilo perimetrale:
+  // la sua tariffa al metro non entra nel conto e non va scritta.
+  const conCanalino = !x.supplementi.length && x.tariffaCanalino > 0;
+  const tariffe = conCanalino
+    ? `(${n(x.tariffaGriglia)} + ${n(x.tariffaCanalino)} €/m)`
+    : rate(x.tariffaGriglia);
+  const maggiorazione = x.maggiorazionePct ? ` + ${pct(x.maggiorazionePct)}` : '';
+  // Con le voci fisse il conto si chiude sotto l'elenco dei supplementi (là
+  // l'aritmetica è additiva e i centesimi tornano sempre), qui si mostra il
+  // parziale al metro.
+  const risultato = x.supplementi.length
     ? x.metriPezzo * x.tariffaGriglia
     : x.prezzoRicostruito;
-  return `${mt(x.metriPezzo)} × ${tariffe}${molt} = ${eur(parziale)}`;
+  return `${mt(x.metriPezzo)} × ${tariffe}${maggiorazione} = ${eur(risultato)}`;
 });
 </script>
 
@@ -172,6 +190,10 @@ const formula = computed(() => {
               <div v-for="s in d.supplementi" :key="s.label" class="flex justify-between gap-4">
                 <dt class="text-gray-500">+ {{ s.label }}</dt>
                 <dd class="font-medium text-gray-900 tabular-nums">{{ eur(s.importo) }}</dd>
+              </div>
+              <div class="flex justify-between gap-4 pt-2 mt-1 border-t border-gray-200">
+                <dt class="font-bold text-gray-900 uppercase text-xs tracking-wide self-center">Prezzo a pezzo</dt>
+                <dd class="font-bold text-gray-900 tabular-nums">{{ eur(d.prezzoRicostruito) }}</dd>
               </div>
             </dl>
           </section>
