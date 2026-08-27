@@ -5,7 +5,7 @@ Un unico codebase Vue 3 + TypeScript + Vite + Firebase con due anime:
 1. **POPS** — preventivatore B2B per inglesine (preventivi → ordini → produzione → DDT/consegne). **LIVE IN PRODUZIONE** su https://preventivatoreb2b-ii.web.app, usato quotidianamente dal team.
 2. **Suite SIDERA** — PWA interne (QUASAR, CEPHEID, PULSAR, NEBULA, NOVA) sotto `/sidera`, `/pulsar/`, ecc. In uso reale solo da Gionata: rischio basso, ma condivide shell/router/functions con POPS.
 
-*Mappa aggiornata al 2026-07-14 — se la struttura cambia in modo sostanziale, aggiornare questo file.*
+*Mappa aggiornata al 2026-07-30 — se la struttura cambia in modo sostanziale, aggiornare questo file.*
 
 ## Regole operative
 
@@ -42,7 +42,7 @@ src/
   composables/                      # per modulo; auth in composables/sidera/ (NON shared/)
   logic/                            # motore prezzi POPS + logic/griglie/ (geometria, puro TS, testato)
   Data/catalog.ts                   # store Pinia del listino
-  lib/                              # billing client-side + PDF (billing.ts, billingTotals.ts, billingPdf.ts, billingPdfDraw.ts)
+  lib/                              # billing client-side + PDF (billing.ts, billingTotals.ts, billingPdf.ts, billingPdfDraw.ts) + novita.ts (registro novità clienti)
   functions/                        # Cloud Functions (codebase separato CommonJS): index.ts + lib_billing/ lib_listino/ lib_bugs/ lib_mcp/ lib_md/ lib_yjs/
 docs/                               # documenti autoritativi (v. fondo)
 public/                             # manifest PWA statici (*.webmanifest), icone, SW FCM per-scope
@@ -66,6 +66,13 @@ firestore.rules, firestore.indexes.json, firebase.json
 | `/calcoli`, `/stack`, `/onboarding` | CalcoliLavorazioni, StackVisualizer, OnboardingView | utilità |
 
 Modali chiave in `src/components/`: `OrderModals.vue`, `DdtModal.vue`, `DeliveryModal.vue`, `ArchiveModal.vue`, `PriceBreakdownModal.vue`, `delivery/TripManageModal.vue`.
+
+## Novità ai clienti (due canali distinti)
+
+- **Popup one-time**, per ACCOUNT: `composables/useAnnunci.ts` (chiavi `ANNUNCIO_*`, stato in `users/{uid}.annunciVisti[]` per i clienti e `team/{uid}` per lo staff) + una modale illustrata per annuncio (`AnnuncioPrezzoModal.vue`, `AnnuncioDestinazione{,Admin}Modal.vue`). Ferma l'utente una volta e non torna più.
+- **Pannello novità**, per POSTAZIONE: pulsante FIRE con badge in `ClientDashboard` (`components/novita/NovitaPanel.vue`), registro in `lib/novita.ts`, stato letto in localStorage (`pops_novita_lette`, v. `composables/useNovita.ts`). Le novità restano consultabili; badge NOVITÀ per 7 giorni dalla `data`; al primo avvio su un PC l'arretrato oltre i 7 giorni parte già letto. Niente Firestore, quindi **nessuna statistica di lettura**.
+- **Pubblicare una novità** = una voce in `NOVITA` (`lib/novita.ts`, id mai riusato) + eventuale riga nella mappa `MODALI` del pannello; senza modale la tendina mostra titolo e sommario. Import delle modali **statici** di proposito (un chunk async non esiste più sulle schede aperte da prima del deploy). Test: `lib/__tests__/novita.test.ts`, `composables/__tests__/useNovita.dom.test.ts`.
+- **Voce del registro**: `tipo` (`funzione`/`miglioramento`/`avviso`) dà colore del medaglione ed etichetta; `icona` (opzionale, chiave di `IconaNovita` — non il componente, così `lib/novita.ts` resta puro TS) dice di cosa parla la novità, con fallback per tipo. Le mappe `ICONE`/`STILE_TIPO` nel pannello sono tipizzate `Record<Tipo…, …>`: aggiungere un valore all'unione senza registrarlo **non compila**.
 
 ## Ciclo di vita ordine (il percorso caldo)
 
