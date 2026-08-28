@@ -47,6 +47,7 @@ export type Regime = RegimePricing;
 
 export interface VoceSupplemento {
   label: string;
+  criterio: string;   // la fascia che ha scelto l'importo ('' se non ricavabile)
   importo: number;
 }
 
@@ -76,7 +77,7 @@ export interface Dettaglio {
   regimeLabel: string;
   regimeSpiegazione: string;
   maggiorazionePct: number | null; // 20 = +20% (listini lineari); null = nessuna
-  supplementi: VoceSupplemento[];  // voci fisse (2026: attrezzaggio + perimetrale)
+  supplementi: VoceSupplemento[];  // voci fisse (2026: allestimento telaio + materiale perimetrale)
   taglia: 'S' | 'M' | 'L' | 'XL' | null;
 
   // ④ Totali
@@ -108,7 +109,7 @@ export interface Dettaglio {
  *
  * Secondo: il meccanismo NON dipende dal regime, dipende dal listino. Nel 2026
  * suddivisioni parallele e singole non prendono nessuna maggiorazione — il
- * canalino esce dal conto al metro e rientra come profilo perimetrale a forfait
+ * canalino esce dal conto al metro e rientra come materiale perimetrale a forfait
  * — mentre nei listini 2025 succede l'opposto. Un testo fisso per regime
  * mentirebbe su metà delle righe. Qui il meccanismo si legge dai numeri della
  * riga (c'è una percentuale? ci sono voci fisse?), quindi non può divergere dal
@@ -162,8 +163,8 @@ function spiegaMeccanismo(
 
   if (voci.length) {
     const nomi = voci.map(v => v.tipo === 'attrezzaggio'
-      ? 'il contributo di attrezzaggio'
-      : 'il profilo perimetrale (in base alla taglia del telaio)');
+      ? 'il contributo di allestimento telaio'
+      : 'il contributo materiale perimetrale');
     return `${tariffa} al metro, più ${elenco(nomi)}.`;
   }
 
@@ -203,13 +204,46 @@ function descriviRegime(
 }
 
 /**
- * Il testo delle voci fisse vive nel frontend, non nello scontrino: sullo
- * scontrino si salva il TIPO (e il codice), così riscrivere una dicitura non
- * costringe a riscrivere i preventivi già salvati.
+ * Come si chiama la voce fissa quando il listino non lo dice: sorgente CSV di
+ * ripiego (il foglio il nome non ce l'ha) o codice sparito dal listino.
+ * Devono restare uguali ai `modello` di `listino_base`, o la stessa voce
+ * cambierebbe nome a seconda di quale sorgente ha risposto quel giorno.
  */
-function labelSupplemento(v: SupplementoPricing, taglia: string | null): string {
-  if (v.tipo === 'attrezzaggio') return 'Contributo di attrezzaggio';
-  return taglia ? `Profilo perimetrale (taglia ${taglia})` : 'Profilo perimetrale';
+const NOMI_VOCE: Record<SupplementoPricing['tipo'], string> = {
+  attrezzaggio: 'Contributo allestimento telaio',
+  perimetrale: 'Contributo materiale perimetrale',
+};
+
+/**
+ * Le voci fisse: come si chiamano e, soprattutto, PERCHÉ questa riga è finita
+ * in quella fascia. Nome e casistica si leggono dal LISTINO, non da qui.
+ *
+ * Sullo scontrino si salva il TIPO e il CODICE, mai il testo: così riscrivere
+ * una dicitura non costringe a riscrivere i preventivi già salvati, ed è sempre
+ * la riga a dire quale casella del listino guardare. Ricopiare quei testi nel
+ * codice creerebbe una seconda verità che il giorno in cui una soglia si sposta
+ * resterebbe indietro in silenzio — e il cliente leggerebbe un criterio mentre
+ * ne paga un altro.
+ *
+ * La casistica segue la stessa regola delle discriminanti del regime: dice la
+ * soglia che ha scelto l'importo e nient'altro. È verificabile dal cliente,
+ * perché sviluppo e perimetro li ha già davanti nel blocco ①.
+ */
+function descriviSupplemento(
+  v: SupplementoPricing,
+  taglia: string | null,
+  catalog: any,
+): { label: string; criterio: string } {
+  const voce = v.codice ? catalog?.supplementiMap?.[v.codice.toUpperCase()] : null;
+  // Senza casistica dal listino resta la taglia, ma SOLO sul perimetrale: la
+  // taglia è la sua fascia. L'allestimento telaio lo sceglie lo sviluppo della
+  // griglia, e affiancargli la taglia sarebbe una risposta alla domanda
+  // sbagliata — meglio tacere che indicare il metro che non c'entra.
+  const ripiego = v.tipo === 'perimetrale' && taglia ? `taglia ${taglia}` : '';
+  return {
+    label: (voce?.nome || '').trim() || NOMI_VOCE[v.tipo],
+    criterio: (voce?.casistica || '').trim() || ripiego,
+  };
 }
 
 function prezzoDaListino(catalog: any, categoria: string, modello: string, dimensione: string, finitura: string): number {
@@ -307,7 +341,7 @@ export function costruisciDettaglio(
       regime,
       ...descriviRegime(regime, maggiorazionePct, voci, tariffaCanalino > 0 && !voci.length, r.righe, r.colonne),
       maggiorazionePct,
-      supplementi: voci.map(v => ({ label: labelSupplemento(v, p.taglia), importo: v.importo })),
+      supplementi: voci.map(v => ({ ...descriviSupplemento(v, p.taglia ?? null, catalog), importo: v.importo })),
       taglia: p.taglia ?? null,
       riconcilia: Math.abs(ricostruito - r.prezzo_unitario) < 0.005,
       prezzoRicostruito: ricostruito,
@@ -380,7 +414,7 @@ export function costruisciDettaglio(
     ricostruito = regime === 'NESSUNA' ? 0 : metriPezzo * tariffaSomma * fattore;
   } else {
     // Listino con costi fissi: incrocio resta al metro puro; parallele e singola
-    // pagano attrezzaggio + profilo perimetrale, dimensionati sulla taglia.
+    // pagano allestimento telaio + materiale perimetrale, dimensionati sulla taglia.
     if (perimetro < 2.5) taglia = 'S';
     else if (perimetro < 5.0) taglia = 'M';
     else if (perimetro < 7.5) taglia = 'L';
@@ -406,14 +440,14 @@ export function costruisciDettaglio(
     tariffaGriglia,
     // Col canalino a forfait (voci fisse) la sua tariffa al metro NON entra nel
     // prezzo: mostrarla nel blocco ② farebbe sballare il conto a chi la somma.
-    // Il suo costo è già dentro il profilo perimetrale, elencato nel blocco ③.
+    // Il suo costo è già dentro il contributo materiale perimetrale, nel blocco ③.
     tariffaCanalino: voci.length ? 0 : tariffaCanalino,
     tariffaConcordata,
     descrizioneCanalino: r.infoCanalino || '',
     regime,
     ...descriviRegime(regime, maggiorazionePct, voci, tariffaCanalino > 0 && !voci.length, r.righe, r.colonne),
     maggiorazionePct,
-    supplementi: voci.map(v => ({ label: labelSupplemento(v, taglia), importo: v.importo })),
+    supplementi: voci.map(v => ({ ...descriviSupplemento(v, taglia, catalog), importo: v.importo })),
     taglia,
     riconcilia: Math.abs(ricostruito - r.prezzo_unitario) < 0.005,
     prezzoRicostruito: ricostruito,

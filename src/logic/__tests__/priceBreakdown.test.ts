@@ -69,6 +69,26 @@ describe('priceBreakdown: la catena mostrata riproduce il prezzo del motore', ()
       S007: 11, S008: 15, S009: 19, S010: 23,
       S011: 9,  S012: 13, S013: 17, S014: 21,
     };
+    // Nome e casistica di ogni supplemento, copiati dal listino di produzione:
+    // sono i due testi che la lente mostra al cliente sotto la voce fissa.
+    const ALLESTIMENTO = 'Contributo allestimento telaio';
+    const PERIMETRALE = 'Contributo materiale perimetrale';
+    catalog.supplementiMap = {
+      S001: { nome: ALLESTIMENTO, casistica: 'tot m griglia < 2' },
+      S002: { nome: ALLESTIMENTO, casistica: 'tot m griglia > 2' },
+      S003: { nome: PERIMETRALE, casistica: 'perimetro < di 2,5m' },
+      S004: { nome: PERIMETRALE, casistica: 'perimetro < di 5m' },
+      S005: { nome: PERIMETRALE, casistica: 'perimetro < di 7,5m' },
+      S006: { nome: PERIMETRALE, casistica: 'perimetro oltre 7,5m' },
+      S007: { nome: PERIMETRALE, casistica: 'perimetro < di 2,5m' },
+      S008: { nome: PERIMETRALE, casistica: 'perimetro < di 5m' },
+      S009: { nome: PERIMETRALE, casistica: 'perimetro < di 7,5m' },
+      S010: { nome: PERIMETRALE, casistica: 'perimetro oltre 7,5m' },
+      S011: { nome: PERIMETRALE, casistica: 'perimetro < di 2,5m' },
+      S012: { nome: PERIMETRALE, casistica: 'perimetro < di 5m' },
+      S013: { nome: PERIMETRALE, casistica: 'perimetro < di 7,5m' },
+      S014: { nome: PERIMETRALE, casistica: 'perimetro oltre 7,5m' },
+    };
     catalog.isLoaded = true;
   });
 
@@ -320,8 +340,78 @@ describe('priceBreakdown: la catena mostrata riproduce il prezzo del motore', ()
         const d = dettaglioDa('2026-a', oriz, vert, 'ALLUMINIO', conScontrino);
         expect(d.maggiorazionePct).toBeNull();
         expect(d.regimeSpiegazione).not.toMatch(/maggiorat/i);
-        expect(d.regimeSpiegazione).toMatch(/attrezzaggio/);
-        expect(d.regimeSpiegazione).toMatch(/profilo perimetrale/);
+        expect(d.regimeSpiegazione).toMatch(/allestimento telaio/);
+        expect(d.regimeSpiegazione).toMatch(/materiale perimetrale/);
+      }
+    }
+  });
+
+  it('le voci fisse dicono in che fascia \u00e8 caduta la riga, con le parole del listino', () => {
+    // 1010\u00d71010 \u2192 misure a 1050: perimetro 4,20 m (taglia M \u2192 S004).
+    // Un solo verticale \u2192 sviluppo 1,05 m (S001); due \u2192 2,10 m (S002).
+    for (const conScontrino of [false, true]) {
+      const sotto = dettaglioDa('2026-a', 0, 1, 'ALLUMINIO', conScontrino);
+      expect(sotto.supplementi.map(s => `${s.label} \u2014 ${s.criterio}`)).toEqual([
+        'Contributo allestimento telaio \u2014 tot m griglia < 2',
+        'Contributo materiale perimetrale \u2014 perimetro < di 5m',
+      ]);
+
+      const sopra = dettaglioDa('2026-a', 0, 2, 'ALLUMINIO', conScontrino);
+      expect(sopra.supplementi[0]!.criterio).toBe('tot m griglia > 2');
+    }
+  });
+
+  it('senza listino la voce non resta anonima, e si chiama come nel listino', () => {
+    // Sorgente CSV di ripiego (il foglio il nome non ce l'ha) o codice sparito:
+    // la lente ricade sui nomi scritti nel codice, che devono restare identici
+    // ai `modello` di listino_base — o la stessa voce cambierebbe nome a
+    // seconda di quale sorgente ha risposto quel giorno.
+    const catalog = useCatalogStore();
+    catalog.supplementiMap = {};
+
+    const d = dettaglioDa('2026-a', 0, 1, 'ALLUMINIO', true);
+    expect(d.supplementi.map(v => v.label)).toEqual([
+      'Contributo allestimento telaio',
+      'Contributo materiale perimetrale',
+    ]);
+    // Niente casistica dal listino: resta la taglia, che \u00e8 vera comunque.
+    expect(d.supplementi[1]!.criterio).toBe('taglia M');
+    expect(d.supplementi[0]!.criterio).toBe('');
+  });
+
+  it('la casistica mostrata \u00e8 quella del codice che ha davvero scelto l\u0027importo', () => {
+    // Anti-deriva: la lente non deve raccontare una fascia e addebitarne un\u0027altra.
+    // Le misure sono scelte per cadere una per taglia (perimetro 2,4 / 4,8 / 7,2 / 7,8 m).
+    const catalog = useCatalogStore();
+    const CODICI: Record<string, Record<string, string>> = {
+      'ALLUMINIO':   { S: 'S003', M: 'S004', L: 'S005', XL: 'S006' },
+      'BORDO CALDO': { S: 'S007', M: 'S008', L: 'S009', XL: 'S010' },
+    };
+    const ATTESE: Array<[number, number, 'S' | 'M' | 'L' | 'XL']> = [
+      [600, 600, 'S'], [1200, 1200, 'M'], [1800, 1800, 'L'], [2000, 1900, 'XL'],
+    ];
+
+    for (const canalino of ['ALLUMINIO', 'BORDO CALDO']) {
+      for (const [b, h, taglia] of ATTESE) {
+        const input: PricingInput = {
+          base_mm: b, altezza_mm: h, qty: 1,
+          num_orizzontali: 0, num_verticali: 1,
+          tipo_canalino: canalino, isSoloCanalino: false,
+          prezzo_unitario_griglia: TARIFFA_GRIGLIA,
+          prezzo_unitario_canalino: TARIFFA_CANALINO,
+        };
+        const { prezzo_unitario, pricing } = calculatePrice(input, '2026-a');
+        const riga = rigaDa(b, h, 0, 1, canalino, 1, prezzo_unitario);
+        riga.pricing = pricing;
+
+        const d = costruisciDettaglio(riga, '2026-a', catalog)!;
+        const codice = CODICI[canalino]![taglia]!;
+        expect(d.taglia).toBe(taglia);
+        expect(d.supplementi.find(v => v.label === 'Contributo materiale perimetrale')!.criterio)
+          .toBe(catalog.supplementiMap[codice]!.casistica);
+        // e l'importo addebitato \u00e8 quello di QUEL codice, non di un altro
+        expect(d.supplementi.find(v => v.label === 'Contributo materiale perimetrale')!.importo)
+          .toBe(catalog.codiciMap[codice]);
       }
     }
   });
@@ -365,7 +455,7 @@ describe('priceBreakdown: la catena mostrata riproduce il prezzo del motore', ()
           for (const canalino of CANALINI) {
             const d = dettaglioDa(listino, oriz, vert, canalino, conScontrino);
             const dicePercentuale = /maggiorata del ([\d,]+)%/.exec(d.regimeSpiegazione);
-            const diceVociFisse = /attrezzaggio|profilo perimetrale/.test(d.regimeSpiegazione);
+            const diceVociFisse = /allestimento telaio|materiale perimetrale/.test(d.regimeSpiegazione);
 
             expect(!!dicePercentuale).toBe(d.maggiorazionePct !== null);
             if (dicePercentuale) {

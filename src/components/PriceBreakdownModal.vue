@@ -39,7 +39,7 @@ const formula = computed(() => {
   if (x.regime === 'SOLO_TELAIO') {
     return `${mt(x.metriPezzo)} × ${rate(x.tariffaCanalino)} = ${eur(x.prezzoRicostruito)}`;
   }
-  // Quando ci sono voci fisse il canalino è già dentro il profilo perimetrale:
+  // Quando ci sono voci fisse il canalino è già dentro il materiale perimetrale:
   // la sua tariffa al metro non entra nel conto e non va scritta.
   const conCanalino = !x.supplementi.length && x.tariffaCanalino > 0;
   const tariffe = conCanalino
@@ -187,9 +187,17 @@ const formula = computed(() => {
             <p class="text-sm font-mono text-gray-800 tabular-nums">{{ formula }}</p>
 
             <dl v-if="d.supplementi.length" class="text-sm space-y-1.5 mt-3 pt-3 border-t border-gray-100">
-              <div v-for="s in d.supplementi" :key="s.label" class="flex justify-between gap-4">
-                <dt class="text-gray-500">+ {{ s.label }}</dt>
-                <dd class="font-medium text-gray-900 tabular-nums">{{ eur(s.importo) }}</dd>
+              <!-- Chiave per indice, non per label: il nome della voce ora arriva
+                   dal listino, e due voci rinominate uguali collidono. La lista
+                   è statica e non si riordina, quindi l'indice è la chiave giusta. -->
+              <div v-for="(s, i) in d.supplementi" :key="i" class="flex justify-between gap-4">
+                <dt class="text-gray-500">
+                  + {{ s.label }}
+                  <!-- La fascia in cui è caduta la riga: è quella che ha scelto
+                       l'importo, e il cliente la ritrova nei metri del blocco ①. -->
+                  <span v-if="s.criterio" class="block text-[11px] text-gray-400 leading-tight">{{ s.criterio }}</span>
+                </dt>
+                <dd class="font-medium text-gray-900 tabular-nums self-start">{{ eur(s.importo) }}</dd>
               </div>
               <div class="flex justify-between gap-4 pt-2 mt-1 border-t border-gray-200">
                 <dt class="font-bold text-gray-900 uppercase text-xs tracking-wide self-center">Prezzo a pezzo</dt>

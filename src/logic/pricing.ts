@@ -157,10 +157,10 @@ function calculateLogic2026(input: PricingInput, catalog: any): PricingResult {
     }
   } else if (complessita === 2 || complessita === 3) {
     // Nel 2026 le suddivisioni in una sola direzione non prendono maggiorazioni:
-    // il canalino esce dal conto al metro e rientra come profilo perimetrale a
-    // forfait, più il contributo di attrezzaggio.
+    // il canalino esce dal conto al metro e rientra come materiale perimetrale a
+    // forfait, più il contributo di allestimento telaio.
     tariffe.push({ tipo: 'griglia', valore: input.prezzo_unitario_griglia });
-    // Ordine: come le mostra la modale (prima l'attrezzaggio, poi il profilo).
+    // Ordine: come le mostra la modale (prima l'allestimento, poi il perimetrale).
     if (costo_setup) supplementi.push({ tipo: 'attrezzaggio', codice: codice_setup, importo: costo_setup });
     if (costo_perimetrale) supplementi.push({ tipo: 'perimetrale', codice: codice_perimetrale, importo: costo_perimetrale });
   }
