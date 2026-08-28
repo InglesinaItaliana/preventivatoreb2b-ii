@@ -1,14 +1,16 @@
 // src/logic/pricing2025x.ts
 
 import { useCatalogStore } from '../Data/catalog';
-import type { PricingInput } from './pricing';
+import type { PricingInput, PricingResult } from './pricing';
+import type { TariffaPricing } from '../types';
 import { metriGriglia, metriPerimetro } from './geometry';
+import { pricingSoloTelaio, regimeDaComplessita } from './listini';
 
 const MOLTIPLICATORI_SOLO_CANALINO: Record<string, number> = {
   'C111': 1.5, 'C112': 2.0, 'C211': 2.5, 'C311': 3.0
 };
 
-export function calculateLogic2025x(input: PricingInput) {
+export function calculateLogic2025x(input: PricingInput): PricingResult {
   const catalog = useCatalogStore();
   if (!catalog.isLoaded) return { prezzo_unitario: 0, prezzo_totale: 0 };
 
@@ -25,6 +27,7 @@ export function calculateLogic2025x(input: PricingInput) {
 
   if (input.isSoloCanalino) {
     let prezzo_unitario = 0;
+    let moltiplicatoreUsato = 0;
     
     if (input.codice_canalino) {
       const code = input.codice_canalino.toUpperCase();
@@ -32,11 +35,16 @@ export function calculateLogic2025x(input: PricingInput) {
       
       if (moltiplicatore) {
         prezzo_unitario = metri_perimetro * moltiplicatore;
+        moltiplicatoreUsato = moltiplicatore;
       }
     }
     
     const prezzo_totale = prezzo_unitario * input.qty;
-    return { prezzo_unitario, prezzo_totale };
+    return {
+      prezzo_unitario,
+      prezzo_totale,
+      pricing: pricingSoloTelaio(metri_perimetro, input.codice_canalino, moltiplicatoreUsato, '2025x'),
+    };
   }
   // --------------------------------------
   
@@ -78,5 +86,26 @@ export function calculateLogic2025x(input: PricingInput) {
   }
 
   const prezzo_totale = prezzo_unitario * input.qty;
-  return { prezzo_unitario, prezzo_totale };
+
+  // --- SCONTRINO ---
+  // Le tariffe registrate sono quelle EFFETTIVAMENTE usate, cioè comprensive
+  // della maggiorazione LEALI (oggi 0): se un giorno tornasse a 1,00 lo
+  // scontrino resterebbe vero senza toccare niente qui sotto.
+  const tariffe: TariffaPricing[] = [{ tipo: 'griglia', valore: pGrigliaAumentato }];
+  if (pCanalinoAumentato) tariffe.push({ tipo: 'canalino', valore: pCanalinoAumentato });
+
+  return {
+    prezzo_unitario,
+    prezzo_totale,
+    pricing: {
+      listino: '2025x',
+      regime: regimeDaComplessita(complessita),
+      metrica: 'sviluppo',
+      metriPezzo: metri_griglia,
+      tariffe,
+      maggiorazionePct: complessita === 2 || complessita === 3 ? 20 : null,
+      supplementi: [],
+      taglia: null,
+    },
+  };
 }

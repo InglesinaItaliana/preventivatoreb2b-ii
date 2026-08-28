@@ -27,6 +27,7 @@ import {
 } from '../lib/destinazione';
 import { STATUS_DETAILS } from '../types';
 import { getCustomerPricingContext } from '../logic/customerConfig';
+import { nomeListino, stessoListino } from '../logic/listini';
 import { TourGuideClient } from "@sjmc11/tourguidejs/src/Tour";
 import "@sjmc11/tourguidejs/dist/css/tour.min.css";
 import {
@@ -53,7 +54,19 @@ import {
   MagnifyingGlassIcon
 } from '@heroicons/vue/24/solid'
 
+// LISTINO — due valori distinti, e non è pignoleria:
+//  • currentPriceList = quello che il CLIENTE ha oggi (da getCustomerPricingContext)
+//  • listinoDocumento = quello con cui QUESTO preventivo è stato costruito,
+//    letto dal documento e congelato lì alla prima creazione.
+// Comanda il documento: una riga aggiunta riaprendo un preventivo di tre mesi fa
+// deve nascere con lo stesso motore delle sue sorelle, altrimenti si firma un
+// documento con due listini dentro e non se ne accorge nessuno.
+// (Restano separati anche per una ragione meccanica: il contesto prezzi del
+//  cliente arriva da una callback async che può atterrare DOPO il caricamento
+//  del preventivo, e sovrascriverebbe il listino congelato.)
 const currentPriceList = ref('2026-a');
+const listinoDocumento = ref<string | null>(null);
+const listinoAttivo = computed(() => listinoDocumento.value || currentPriceList.value);
 const toastMessage = ref('');
 const showToast = ref(false);
 const dataConsegnaPrevista = ref('');
@@ -338,11 +351,90 @@ const dettaglioDescrizione = ref('');
 const dettaglioCodice = ref('');
 
 const apriDettaglio = (r: RigaPreventivo) => {
-  const d = costruisciDettaglio(r, currentPriceList.value, catalog);
+  const d = costruisciDettaglio(r, listinoAttivo.value, catalog);
   if (!d) return;
   dettaglioAperto.value = d;
   dettaglioDescrizione.value = r.descrizioneCompleta;
   dettaglioCodice.value = r.codice || '';
+};
+
+// --- Listino congelato: divergenza e riallineamento -------------------------
+// Il documento comanda, ma quando il cliente nel frattempo è passato a un altro
+// listino l'admin deve poterlo sapere e, se è il caso, riallineare. Non è un
+// dettaglio estetico: è l'unica strada per far cambiare listino a un preventivo
+// aperto, e passa da una decisione esplicita invece che da chi riapre cosa.
+const divergenzaListino = computed(() =>
+  !!listinoDocumento.value && !stessoListino(listinoDocumento.value, currentPriceList.value)
+);
+
+/**
+ * Ricalcola TUTTE le righe col listino che il cliente ha oggi. O tutto o niente:
+ * ricalcolarne una sola ricrea esattamente il documento a due listini che il
+ * congelamento serve a evitare. Le righe EXTRA (supplementi, spedizione) non si
+ * toccano: hanno un prezzo deciso a mano, non calcolato.
+ */
+const riallineaListino = () => {
+  if (!isAdmin.value || isLocked.value || !divergenzaListino.value) return;
+
+  const nuovoListino = currentPriceList.value;
+  const ricalcolate: Array<{ riga: RigaPreventivo; risultato: ReturnType<typeof calculatePrice> }> = [];
+
+  for (const r of preventivo.value) {
+    if (!r || r.categoria === 'EXTRA') continue;
+
+    const soloCanalinoRiga = r.categoria === 'CANALINO';
+    const grigliaObj = (catalog.listino as any)?.[r.categoria]?.[r.modello]?.[r.dimensione]?.[r.finitura];
+    // Il prezzo/m concordato dall'admin vince sul listino, come nel motore.
+    const concordato = r.customVarPrice && Number(r.customVarPrice) > 0 ? Number(r.customVarPrice) : 0;
+    const canalinoObj = r.rawCanalino
+      ? (catalog.listino as any)?.CANALINO?.[r.rawCanalino.tipo]?.[r.rawCanalino.dim]?.[r.rawCanalino.fin]
+      : null;
+
+    const risultato = calculatePrice({
+      base_mm: r.base_mm || 0,
+      altezza_mm: r.altezza_mm || 0,
+      qty: r.quantita || 1,
+      num_orizzontali: r.colonne || 0,
+      num_verticali: r.righe || 0,
+      tipo_canalino: r.rawCanalino?.tipo || '',
+      codice_canalino: soloCanalinoRiga ? (r.codice || '') : (canalinoObj?.cod || ''),
+      isSoloCanalino: soloCanalinoRiga,
+      prezzo_unitario_griglia: concordato || grigliaObj?.prezzo || 0,
+      prezzo_unitario_canalino: canalinoObj?.prezzo || 0,
+    }, nuovoListino);
+
+    // Guardia: una riga che aveva un prezzo e ora vale zero significa che
+    // l'articolo non si trova più nel listino (finitura rinominata, prodotto
+    // ritirato). Meglio fermare tutto che scrivere uno zero sul preventivo.
+    if (r.prezzo_unitario > 0 && risultato.prezzo_unitario <= 0) {
+      showCustomToast(`Riallineamento annullato: "${r.descrizioneCompleta}" non ha un prezzo nel ${nomeListino(nuovoListino)}.`);
+      return;
+    }
+    ricalcolate.push({ riga: r, risultato });
+  }
+
+  if (!ricalcolate.length) {
+    showCustomToast("Nessuna riga da ricalcolare.");
+    return;
+  }
+
+  const totaleOra = ricalcolate.reduce((t, x) => t + x.riga.prezzo_totale, 0);
+  const totaleDopo = ricalcolate.reduce((t, x) => t + x.risultato.prezzo_totale, 0);
+
+  openConfirm(
+    `Ricalcolo ${ricalcolate.length} righe con il ${nomeListino(nuovoListino)}: ` +
+    `${totaleOra.toFixed(2)} € → ${totaleDopo.toFixed(2)} €. ` +
+    `Le righe extra e la spedizione restano invariate. Poi va salvato.`,
+    () => {
+      for (const { riga, risultato } of ricalcolate) {
+        riga.prezzo_unitario = risultato.prezzo_unitario;
+        riga.prezzo_totale = risultato.prezzo_totale;
+        riga.pricing = risultato.pricing;
+      }
+      listinoDocumento.value = nuovoListino;
+      showCustomToast(`Preventivo riallineato al ${nomeListino(nuovoListino)}. Ricordati di salvare.`);
+    }
+  );
 };
 
 const showConfigurationPanels = computed(() => {
@@ -573,7 +665,7 @@ const aggiungi = () => {
     isSoloCanalino: soloCanalino.value,
     prezzo_unitario_griglia: basePriceGriglia, // FIX: Qui ora basePriceGriglia è visibile
     prezzo_unitario_canalino: pCanalino
-  }, currentPriceList.value);
+  }, listinoAttivo.value);
   const codiceFinale = soloCanalino.value ? codCanalino : codGriglia;
 
   // --- 4. DESCRIZIONE ---
@@ -619,7 +711,12 @@ const aggiungi = () => {
 
     // FIX: Campo requiresValidation inserito UNA SOLA VOLTA
     requiresValidation: isVarsavia45Rivestita, 
-    customVarPrice: (isAdmin.value && adminCustomPrice.value) ? Number(adminCustomPrice.value) : null
+    customVarPrice: (isAdmin.value && adminCustomPrice.value) ? Number(adminCustomPrice.value) : null,
+
+    // Scontrino del calcolo: tariffe, supplementi e maggiorazione che il motore
+    // ha appena usato, congelati sulla riga. Serve a spiegare questo prezzo fra
+    // sei mesi senza dedurlo col listino di allora (v. RigaPricing in types.ts).
+    pricing: result.pricing
   });
 
   // Reset
@@ -685,6 +782,7 @@ const nuovaCommessa = () => {
     // Logica di reset esistente...
     preventivo.value = [];
     currentDocId.value = null;
+    listinoDocumento.value = null;
     ficOrderUrl.value = '';
     statoCorrente.value = 'DRAFT';
     riferimentoCommessa.value = '';
@@ -927,6 +1025,13 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
       elementi: preventivo.value.map(r => JSON.parse(JSON.stringify(r))),
       dataConsegnaPrevista: dataConsegnaPrevista.value || null
     };
+    // LISTINO — si scrive alla PRIMA creazione e poi non si tocca più (come
+    // billingBackend). Sui documenti che ne hanno già uno lo si riscrive uguale;
+    // su quelli storici che non ce l'hanno NON si stampiglia il listino di oggi:
+    // sarebbe una data di nascita inventata. Quelli li sistema il backfill.
+    if (!currentDocId.value || listinoDocumento.value) {
+      docData.listino = listinoAttivo.value;
+    }
     if (azione === 'ORDINA' && currentDetraction.value !== userDefaultDetraction.value) {
         docData.order_detraction_value = currentDetraction.value;
     }
@@ -970,6 +1075,8 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
       const ref = await addDoc(collection(db, 'preventivi'), docData);
       currentDocId.value = ref.id;
       codiceRicerca.value = codice;
+      // Da qui in poi il documento esiste e comanda lui.
+      listinoDocumento.value = docData.listino || null;
     }
 
     statoCorrente.value = nuovoStato;
@@ -1107,6 +1214,9 @@ const caricaPreventivo = async () => {
     riferimentoCommessa.value = d.commessa;
     clienteEmail.value = d.clienteEmail || '';
     statoCorrente.value = d.stato || 'DRAFT';
+    // Listino congelato sul documento. Assente sui preventivi anteriori a questa
+    // modifica: lì si continua col listino del cliente, com'è sempre stato.
+    listinoDocumento.value = typeof d.listino === 'string' ? d.listino : null;
     noteCliente.value = d.noteCliente || '';
     scontoApplicato.value = d.scontoPercentuale || 0;
     listaAllegati.value = d.allegati || [];
@@ -1845,6 +1955,27 @@ onMounted(async() => {
               </div>
             </template>
           </div>
+        </div>
+
+        <!-- LISTINO DEL DOCUMENTO — solo per l'admin: al cliente il congelamento
+             non deve dire niente, deve solo funzionare (i prezzi non cambiano). -->
+        <div v-if="isAdmin && divergenzaListino" class="px-5 py-3 bg-amber-50 border-b border-amber-200 flex flex-wrap items-center justify-between gap-3">
+          <div class="text-[13px] text-amber-900 leading-snug">
+            <b>Listino del preventivo: {{ nomeListino(listinoDocumento) }}.</b>
+            Il cliente oggi è sul {{ nomeListino(currentPriceList) }}.
+            Le righe che aggiungi qui nascono con il listino del preventivo.
+          </div>
+          <button
+            v-if="!isLocked"
+            @click="riallineaListino()"
+            class="shrink-0 bg-amber-400 hover:bg-amber-300 text-amber-950 border border-amber-500 px-3 py-2 rounded-lg font-bold text-xs shadow-sm transition-all"
+            title="Ricalcola tutte le righe con il listino attuale del cliente"
+          >
+            RIALLINEA AL {{ nomeListino(currentPriceList).toUpperCase() }}
+          </button>
+        </div>
+        <div v-else-if="isAdmin && currentDocId && !listinoDocumento" class="px-5 py-2 bg-gray-50/60 border-b border-gray-200/60 text-[11px] text-gray-400">
+          Listino non registrato su questo preventivo (creato prima del congelamento): le righe nuove userebbero il {{ nomeListino(currentPriceList) }}.
         </div>
 
         <div id="tour-builder-list" class="p-5 border-b border-gray-200/60 flex justify-between items-center bg-gray-50/60 backdrop-blur-sm">

@@ -16,12 +16,21 @@
 //    dei preventivi vecchi: la maggiorazione LEALI è stata azzerata il
 //    2026-06-26 (era +1,00 €/m), quindi una riga LEALI battuta prima di quella
 //    data NON è più riproducibile dal motore di oggi. Su quelle righe la guardia
-//    scatta ed è l'unica cosa che ci impedisce di mentire al cliente. Quando
-//    arriverà il listino versionato (snapshot di prezzi + regole salvato sul
-//    preventivo), questo modulo smetterà di dedurre e comincerà a leggere.
+//    scatta ed è l'unica cosa che ci impedisce di mentire al cliente.
+//
+// DUE STRADE, da quando le righe si portano dietro lo scontrino (RigaPricing):
+//
+//  • riga CON scontrino → si LEGGE. Tariffe, supplementi e maggiorazione sono
+//    quelli che il motore ha davvero usato quel giorno, congelati sulla riga:
+//    nessuna deduzione, nessuna dipendenza dal listino di oggi. La guardia
+//    resta accesa lo stesso, costa niente.
+//  • riga SENZA scontrino (tutto lo storico, e le righe a prezzo manuale) → si
+//    DEDUCE, come prima, col motore indicato da `activeList`. È la strada che
+//    può fallire, ed è per questo che la guardia esiste.
 
-import type { RigaPreventivo } from '../types';
+import type { RigaPreventivo, RegimePricing, SupplementoPricing } from '../types';
 import { metriGriglia, metriPerimetro, roundMm } from './geometry';
+import { ricostruisciPrezzoUnitario } from './listini';
 
 // Stessi moltiplicatori dei motori (solo telaio: perimetro × moltiplicatore).
 const MOLTIPLICATORI_SOLO_CANALINO: Record<string, number> = {
@@ -34,10 +43,11 @@ const PERIMETRALE_CODES: Record<string, Record<string, string>> = {
   'FIBRA':       { S: 'S011', M: 'S012', L: 'S013', XL: 'S014' },
 };
 
-export type Regime = 'INCROCIO' | 'PARALLELE' | 'SINGOLA' | 'SOLO_TELAIO' | 'NESSUNA';
+export type Regime = RegimePricing;
 
 export interface VoceSupplemento {
   label: string;
+  criterio: string;   // la fascia che ha scelto l'importo ('' se non ricavabile)
   importo: number;
 }
 
@@ -59,14 +69,15 @@ export interface Dettaglio {
   tariffaGriglia: number;
   tariffaCanalino: number;
   tariffaConcordata: boolean;    // profilo senza prezzo di listino → prezzo/m concordato
+  descrizioneGriglia: string;    // "VARSAVIA 26 BIANCO" — il canalino la sua l'ha sempre avuta
   descrizioneCanalino: string;
 
   // ③ Regola
   regime: Regime;
   regimeLabel: string;
   regimeSpiegazione: string;
-  moltiplicatore: number | null; // maggiorazione (listino lineare)
-  supplementi: VoceSupplemento[];// voci fisse (listino con supplementi)
+  maggiorazionePct: number | null; // 20 = +20% (listini lineari); null = nessuna
+  supplementi: VoceSupplemento[];  // voci fisse (2026: allestimento telaio + materiale perimetrale)
   taglia: 'S' | 'M' | 'L' | 'XL' | null;
 
   // ④ Totali
@@ -84,28 +95,156 @@ export interface Dettaglio {
   lavorazioni: string[];
 }
 
-const LABEL: Record<Regime, { label: string; spiegazione: string }> = {
+/**
+ * IL BLOCCO ③, IN DUE PEZZI.
+ *
+ * La discriminante (CHI è questa riga) e il meccanismo (COME si paga) sono
+ * scritti separatamente, per due motivi.
+ *
+ * Primo: la discriminante è l'unica cosa che il cliente può verificare da sé
+ * guardando il disegno — quante suddivisioni ci sono e in che direzione — e non
+ * ha bisogno di giustificazioni. La vecchia formulazione ("la lavorazione è meno
+ * efficiente", "la resa più bassa") spiegava la nostra economia, non il suo
+ * prezzo, ed è uscita.
+ *
+ * Secondo: il meccanismo NON dipende dal regime, dipende dal listino. Nel 2026
+ * suddivisioni parallele e singole non prendono nessuna maggiorazione — il
+ * canalino esce dal conto al metro e rientra come materiale perimetrale a forfait
+ * — mentre nei listini 2025 succede l'opposto. Un testo fisso per regime
+ * mentirebbe su metà delle righe. Qui il meccanismo si legge dai numeri della
+ * riga (c'è una percentuale? ci sono voci fisse?), quindi non può divergere dal
+ * conto che gli sta sotto.
+ */
+const REGIME: Record<Regime, { label: string; discriminante: string }> = {
   INCROCIO: {
     label: 'Griglia a incrocio',
-    spiegazione: 'La griglia ha sia montanti verticali sia traversi orizzontali: le tariffe di griglia e canalino si sommano, senza maggiorazioni.',
+    discriminante: 'Almeno 1 incrocio.',
   },
   PARALLELE: {
-    label: 'Suddivisioni parallele',
-    spiegazione: 'Le suddivisioni corrono tutte nella stessa direzione: la lavorazione è meno efficiente e la tariffa viene maggiorata.',
+    label: 'Suddivisioni in una sola direzione',
+    discriminante: 'Telai con più orizzontali o più verticali.',
   },
   SINGOLA: {
     label: 'Suddivisione singola',
-    spiegazione: 'Una sola suddivisione sull\'intero telaio: è la lavorazione con la resa più bassa e la maggiorazione più alta.',
+    discriminante: 'Un solo elemento sull\'intero telaio (orizzontale o verticale).',
   },
   SOLO_TELAIO: {
     label: 'Solo telaio',
-    spiegazione: 'Nessuna griglia: si paga il canalino perimetrale, quindi il metro di riferimento è il perimetro del telaio.',
+    discriminante: 'Nessuna griglia interna: si paga il canalino perimetrale.',
   },
   NESSUNA: {
     label: 'Nessuna suddivisione',
-    spiegazione: 'Il telaio non ha suddivisioni interne: non c\'è sviluppo di griglia da quotare.',
+    discriminante: 'Il telaio non ha suddivisioni interne.',
   },
 };
+
+/** Elenco in italiano: "a", "a e b". */
+function elenco(voci: string[]): string {
+  if (voci.length <= 1) return voci[0] || '';
+  return `${voci.slice(0, -1).join(', ')} e ${voci[voci.length - 1]}`;
+}
+
+/**
+ * Il meccanismo, ricavato dai numeri della riga e non da una tabella per
+ * listino: quello che si legge qui è quello che si vede nella formula sotto.
+ */
+function spiegaMeccanismo(
+  regime: Regime,
+  maggiorazionePct: number | null,
+  voci: SupplementoPricing[],
+  conCanalino: boolean,
+): string {
+  if (regime === 'SOLO_TELAIO') return 'Il metro di riferimento è il perimetro del telaio.';
+  if (regime === 'NESSUNA') return 'Non c\'è sviluppo di griglia da quotare.';
+
+  const tariffa = conCanalino ? 'Tariffa griglia + canalino' : 'Tariffa griglia';
+
+  if (maggiorazionePct) return `${tariffa} al metro, maggiorata del ${formattaPct(maggiorazionePct)}.`;
+
+  if (voci.length) {
+    const nomi = voci.map(v => v.tipo === 'attrezzaggio'
+      ? 'il contributo di allestimento telaio'
+      : 'il contributo materiale perimetrale');
+    return `${tariffa} al metro, più ${elenco(nomi)}.`;
+  }
+
+  return `${tariffa} al metro, senza maggiorazioni.`;
+}
+
+/** 20 → "20%", 12.5 → "12,5%". Le percentuali si leggono meglio dei ×1,2. */
+function formattaPct(pct: number): string {
+  return `${new Intl.NumberFormat('it-IT', { maximumFractionDigits: 2 }).format(pct)}%`;
+}
+
+/**
+ * L'eccezione storica: un telaio con SOLI orizzontali e SENZA canalino viene
+ * quotato con la regola dell'incrocio pur non avendo nessun incrocio (l'override
+ * sta in tutti e tre i motori). Su quelle righe "Almeno 1 incrocio" sarebbe
+ * falso, e il cliente ha il disegno davanti: lo vedrebbe.
+ */
+function discriminanteDi(regime: Regime, verticali: number, orizzontali: number): string {
+  if (regime === 'INCROCIO' && (!verticali || !orizzontali)) {
+    return 'Telai con soli orizzontali e senza canalino: si applica la regola dell\'incrocio.';
+  }
+  return REGIME[regime].discriminante;
+}
+
+function descriviRegime(
+  regime: Regime,
+  maggiorazionePct: number | null,
+  voci: SupplementoPricing[],
+  conCanalino: boolean,
+  verticali: number,
+  orizzontali: number,
+): { regimeLabel: string; regimeSpiegazione: string } {
+  return {
+    regimeLabel: REGIME[regime].label,
+    regimeSpiegazione: `${discriminanteDi(regime, verticali, orizzontali)} ${spiegaMeccanismo(regime, maggiorazionePct, voci, conCanalino)}`,
+  };
+}
+
+/**
+ * Come si chiama la voce fissa quando il listino non lo dice: sorgente CSV di
+ * ripiego (il foglio il nome non ce l'ha) o codice sparito dal listino.
+ * Devono restare uguali ai `modello` di `listino_base`, o la stessa voce
+ * cambierebbe nome a seconda di quale sorgente ha risposto quel giorno.
+ */
+const NOMI_VOCE: Record<SupplementoPricing['tipo'], string> = {
+  attrezzaggio: 'Contributo allestimento telaio',
+  perimetrale: 'Contributo materiale perimetrale',
+};
+
+/**
+ * Le voci fisse: come si chiamano e, soprattutto, PERCHÉ questa riga è finita
+ * in quella fascia. Nome e casistica si leggono dal LISTINO, non da qui.
+ *
+ * Sullo scontrino si salva il TIPO e il CODICE, mai il testo: così riscrivere
+ * una dicitura non costringe a riscrivere i preventivi già salvati, ed è sempre
+ * la riga a dire quale casella del listino guardare. Ricopiare quei testi nel
+ * codice creerebbe una seconda verità che il giorno in cui una soglia si sposta
+ * resterebbe indietro in silenzio — e il cliente leggerebbe un criterio mentre
+ * ne paga un altro.
+ *
+ * La casistica segue la stessa regola delle discriminanti del regime: dice la
+ * soglia che ha scelto l'importo e nient'altro. È verificabile dal cliente,
+ * perché sviluppo e perimetro li ha già davanti nel blocco ①.
+ */
+function descriviSupplemento(
+  v: SupplementoPricing,
+  taglia: string | null,
+  catalog: any,
+): { label: string; criterio: string } {
+  const voce = v.codice ? catalog?.supplementiMap?.[v.codice.toUpperCase()] : null;
+  // Senza casistica dal listino resta la taglia, ma SOLO sul perimetrale: la
+  // taglia è la sua fascia. L'allestimento telaio lo sceglie lo sviluppo della
+  // griglia, e affiancargli la taglia sarebbe una risposta alla domanda
+  // sbagliata — meglio tacere che indicare il metro che non c'entra.
+  const ripiego = v.tipo === 'perimetrale' && taglia ? `taglia ${taglia}` : '';
+  return {
+    label: (voce?.nome || '').trim() || NOMI_VOCE[v.tipo],
+    criterio: (voce?.casistica || '').trim() || ripiego,
+  };
+}
 
 function prezzoDaListino(catalog: any, categoria: string, modello: string, dimensione: string, finitura: string): number {
   return catalog?.listino?.[categoria]?.[modello]?.[dimensione]?.[finitura]?.prezzo || 0;
@@ -149,6 +288,13 @@ export function costruisciDettaglio(
   if (r.tacca) lavorazioni.push('Tacca');
   if (r.nonEquidistanti) lavorazioni.push('Suddivisioni non equidistanti');
 
+  // Il profilo scelto, accanto alla sua tariffa: il canalino la sua descrizione
+  // ce l'ha sempre avuta (infoCanalino), la griglia no — e due tariffe al metro
+  // affiancate senza sapere a cosa si riferiscono non si controllano.
+  const descrizioneGriglia = [r.modello, r.dimensione, r.finitura]
+    .filter(x => x && x !== '-' && x !== 'MANUALE')
+    .join(' ');
+
   const comune = {
     baseInserita: r.base_mm,
     altezzaInserita: r.altezza_mm,
@@ -160,12 +306,49 @@ export function costruisciDettaglio(
     quantita: qty,
     metriPezzo,
     metriTotali,
+    descrizioneGriglia,
     prezzoPezzo: r.prezzo_unitario,
     totaleRiga: r.prezzo_totale,
     tariffaEffettiva: metriTotali > 0 ? r.prezzo_totale / metriTotali : null,
     lavorazioni,
   };
 
+  // --- STRADA 1: LA RIGA HA LO SCONTRINO → SI LEGGE -------------------------
+  if (r.pricing) {
+    const p = r.pricing;
+    const metri = Number(p.metriPezzo) || 0;
+    const tariffe = Array.isArray(p.tariffe) ? p.tariffe : [];
+    const voci = Array.isArray(p.supplementi) ? p.supplementi : [];
+    // Un regime che non conosciamo (doc scritto a mano, formato futuro) non deve
+    // far esplodere la modale: si degrada a "nessuna suddivisione" e la guardia
+    // penserà al resto.
+    const regime: Regime = REGIME[p.regime] ? p.regime : 'NESSUNA';
+    const ricostruito = ricostruisciPrezzoUnitario(p);
+    const maggiorazionePct = Number(p.maggiorazionePct) || null;
+    const tariffaCanalino = tariffe.find(t => t.tipo === 'canalino' || t.tipo === 'telaio')?.valore ?? 0;
+    return {
+      ...comune,
+      metriPezzo: metri,
+      metriTotali: metri * qty,
+      tariffaEffettiva: metri * qty > 0 ? r.prezzo_totale / (metri * qty) : null,
+      metrica: p.metrica === 'perimetro' ? 'perimetro' : 'sviluppo',
+      tariffaGriglia: tariffe.find(t => t.tipo === 'griglia')?.valore ?? 0,
+      // Il 'telaio' (moltiplicatore del solo canalino) occupa la stessa casella
+      // del canalino: è lì che la modale va a prenderlo per il solo telaio.
+      tariffaCanalino,
+      tariffaConcordata: !!r.customVarPrice && Number(r.customVarPrice) > 0,
+      descrizioneCanalino: r.infoCanalino || '',
+      regime,
+      ...descriviRegime(regime, maggiorazionePct, voci, tariffaCanalino > 0 && !voci.length, r.righe, r.colonne),
+      maggiorazionePct,
+      supplementi: voci.map(v => ({ ...descriviSupplemento(v, p.taglia ?? null, catalog), importo: v.importo })),
+      taglia: p.taglia ?? null,
+      riconcilia: Math.abs(ricostruito - r.prezzo_unitario) < 0.005,
+      prezzoRicostruito: ricostruito,
+    };
+  }
+
+  // --- STRADA 2: DEDUZIONE (righe storiche) ---------------------------------
   // --- SOLO TELAIO: perimetro × moltiplicatore del canalino ------------------
   if (soloTelaio) {
     const molt = r.codice ? (MOLTIPLICATORI_SOLO_CANALINO[r.codice.toUpperCase()] ?? 0) : 0;
@@ -178,9 +361,8 @@ export function costruisciDettaglio(
       tariffaConcordata: false,
       descrizioneCanalino: r.infoCanalino || '',
       regime: 'SOLO_TELAIO',
-      regimeLabel: LABEL.SOLO_TELAIO.label,
-      regimeSpiegazione: LABEL.SOLO_TELAIO.spiegazione,
-      moltiplicatore: null,
+      ...descriviRegime('SOLO_TELAIO', null, [], false, r.righe, r.colonne),
+      maggiorazionePct: null,
       supplementi: [],
       taglia: null,
       riconcilia: Math.abs(ricostruito - r.prezzo_unitario) < 0.005,
@@ -213,8 +395,8 @@ export function costruisciDettaglio(
   if (senzaCanalino && soloOrizzontali) regime = 'INCROCIO';
 
   let taglia: 'S' | 'M' | 'L' | 'XL' | null = null;
-  let moltiplicatore: number | null = null;
-  const supplementi: VoceSupplemento[] = [];
+  let maggiorazionePct: number | null = null;
+  const voci: SupplementoPricing[] = [];
   let ricostruito = 0;
 
   const listinoLineare = activeList === '2025-a' || activeList === '2025x' || activeList === '2025-x';
@@ -224,14 +406,15 @@ export function costruisciDettaglio(
     // (Il listino "LEALI" oggi non applica alcun rincaro sulle tariffe: la voce
     // esiste nel motore ma vale 0 dal 2026-06-26.)
     const leali = activeList === '2025x' || activeList === '2025-x';
-    if (regime === 'PARALLELE') moltiplicatore = 1.2;
-    else if (regime === 'SINGOLA') moltiplicatore = leali ? 1.2 : 1.5;
+    if (regime === 'PARALLELE') maggiorazionePct = 20;
+    else if (regime === 'SINGOLA') maggiorazionePct = leali ? 20 : 50;
 
     const tariffaSomma = tariffaGriglia + tariffaCanalino;
-    ricostruito = regime === 'NESSUNA' ? 0 : metriPezzo * tariffaSomma * (moltiplicatore ?? 1);
+    const fattore = maggiorazionePct ? 1 + maggiorazionePct / 100 : 1;
+    ricostruito = regime === 'NESSUNA' ? 0 : metriPezzo * tariffaSomma * fattore;
   } else {
     // Listino con costi fissi: incrocio resta al metro puro; parallele e singola
-    // pagano attrezzaggio + profilo perimetrale, dimensionati sulla taglia.
+    // pagano allestimento telaio + materiale perimetrale, dimensionati sulla taglia.
     if (perimetro < 2.5) taglia = 'S';
     else if (perimetro < 5.0) taglia = 'M';
     else if (perimetro < 7.5) taglia = 'L';
@@ -244,8 +427,8 @@ export function costruisciDettaglio(
       const codePerimetrale = PERIMETRALE_CODES[tipoCanalino.toUpperCase()]?.[taglia];
       const perimetrale = codePerimetrale ? supplemento(catalog, codePerimetrale) : 0;
 
-      if (setup) supplementi.push({ label: 'Contributo di attrezzaggio', importo: setup });
-      if (perimetrale) supplementi.push({ label: `Profilo perimetrale (taglia ${taglia})`, importo: perimetrale });
+      if (setup) voci.push({ tipo: 'attrezzaggio', codice: sviluppo < 2.0 ? 'S001' : 'S002', importo: setup });
+      if (perimetrale) voci.push({ tipo: 'perimetrale', codice: codePerimetrale || '', importo: perimetrale });
 
       ricostruito = (metriPezzo * tariffaGriglia) + perimetrale + setup;
     }
@@ -255,14 +438,16 @@ export function costruisciDettaglio(
     ...comune,
     metrica: 'sviluppo',
     tariffaGriglia,
-    tariffaCanalino,
+    // Col canalino a forfait (voci fisse) la sua tariffa al metro NON entra nel
+    // prezzo: mostrarla nel blocco ② farebbe sballare il conto a chi la somma.
+    // Il suo costo è già dentro il contributo materiale perimetrale, nel blocco ③.
+    tariffaCanalino: voci.length ? 0 : tariffaCanalino,
     tariffaConcordata,
     descrizioneCanalino: r.infoCanalino || '',
     regime,
-    regimeLabel: LABEL[regime].label,
-    regimeSpiegazione: LABEL[regime].spiegazione,
-    moltiplicatore,
-    supplementi,
+    ...descriviRegime(regime, maggiorazionePct, voci, tariffaCanalino > 0 && !voci.length, r.righe, r.colonne),
+    maggiorazionePct,
+    supplementi: voci.map(v => ({ ...descriviSupplemento(v, taglia, catalog), importo: v.importo })),
     taglia,
     riconcilia: Math.abs(ricostruito - r.prezzo_unitario) < 0.005,
     prezzoRicostruito: ricostruito,
