@@ -260,11 +260,19 @@ function supplemento(catalog: any, code: string): number {
  * Costruisce il dettaglio di una riga. Ritorna null per le righe che un prezzo
  * "costruito" non ce l'hanno (EXTRA, spedizioni, supplementi manuali): lì il
  * prezzo è deciso a mano e non c'è nessuna catena da spiegare.
+ *
+ * `maggiorazioneLeali` è la leva congelata sul preventivo a cui la riga
+ * appartiene, e conta solo per la strada 2 (deduzione): serve a spiegare le
+ * righe di un documento di un'altra epoca con la leva di ALLORA invece che con
+ * quella di oggi, altrimenti la guardia scatterebbe su preventivi perfettamente
+ * spiegabili. Omessa = leva di oggi, come nel motore. Le righe con lo scontrino
+ * non la usano: la loro leva è già dentro le tariffe che si portano dietro.
  */
 export function costruisciDettaglio(
   r: RigaPreventivo,
   activeList: string,
   catalog: any,
+  maggiorazioneLeali?: number,
 ): Dettaglio | null {
   if (r.categoria === 'EXTRA') return null;
 
@@ -410,12 +418,13 @@ export function costruisciDettaglio(
 
     // Su LEALI le tariffe che il prezzo usa non sono quelle di listino: c'è la
     // maggiorazione, che sta nel codice (v. tariffeLeali in listini.ts, la
-    // stessa funzione del motore). Questa deduzione applica la leva DI OGGI,
-    // come già fa con i prezzi di listino di oggi: è la stessa scommessa, e su
-    // una riga di un'altra epoca — la leva è stata spenta fra il 2026-06-26 e
-    // il 2026-09-03 — la guardia scatta e la lente non mostra la scomposizione.
+    // stessa funzione del motore). Qui si applica quella del DOCUMENTO, che il
+    // chiamante conosce; senza, quella di oggi. Resta la scommessa di sempre
+    // sui prezzi di listino, che questa strada rilegge da quello di oggi: su
+    // una riga battuta con un prezzo poi cambiato la guardia scatta, ed è
+    // giusto così.
     if (leali) {
-      const t = tariffeLeali(tariffaGriglia, tariffaCanalino, senzaCanalino);
+      const t = tariffeLeali(tariffaGriglia, tariffaCanalino, senzaCanalino, maggiorazioneLeali);
       tariffaGriglia = t.griglia;
       tariffaCanalino = t.canalino;
     }

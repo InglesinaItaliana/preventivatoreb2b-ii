@@ -17,6 +17,16 @@ export interface PricingInput {
   isSoloCanalino?: boolean; // Flag per attivare la logica dedicata
   prezzo_unitario_griglia: number;
   prezzo_unitario_canalino: number;
+  /**
+   * LEVA LEALI congelata sul preventivo (solo listino '2025x'/'2025-x').
+   *
+   * Omessa = si quota con la leva DI OGGI. Il default è di proposito il prezzo
+   * corrente e non zero: un motore che, se non gli dici niente, quota sotto
+   * listino perde soldi in silenzio. Chi sa che il documento è di un'altra
+   * epoca lo dice esplicitamente — oggi solo BuilderView, che è l'unico posto
+   * che ha il documento sotto mano.
+   */
+  maggiorazioneLeali?: number;
 }
 
 /**

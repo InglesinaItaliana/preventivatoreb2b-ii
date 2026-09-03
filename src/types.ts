@@ -205,6 +205,23 @@ export interface PreventivoDocumento {
    */
   listino?: string;
 
+  /**
+   * Maggiorazione LEALI congelata su questo documento (solo listino
+   * '2025x'/'2025-x'; sugli altri è scritta ma non la guarda nessuno).
+   *
+   * Esiste perché il listino congelato qui sopra non basta: su LEALI il prezzo
+   * è cambiato senza che cambiasse l'id del listino, visto che la leva sta nel
+   * codice. Un preventivo aperto avrebbe continuato a mostrare '2025x' e
+   * intanto le righe nuove sarebbero nate a un prezzo diverso dalle sorelle.
+   *
+   * ⚠️ ASSENTE HA UN SIGNIFICATO: documento nato prima che la maggiorazione
+   * venisse riaccesa (2026-09-03), quindi quota a leva 0 — righe vecchie e
+   * righe aggiunte oggi. Non stampigliare il valore corrente su un documento
+   * che non ce l'ha: lo si farebbe passare in silenzio ai prezzi nuovi.
+   * Si scrive alla creazione, o quando l'admin riallinea di sua volontà.
+   */
+  maggiorazioneLeali?: number;
+
   // BILLING (migrazione FiC→CiC). 'billingBackend' è congelato alla creazione
   // del primo documento; assente = FiC (comportamento storico). Vedi lib_billing.
   billingBackend?: 'fic' | 'cic';

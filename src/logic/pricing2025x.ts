@@ -63,7 +63,14 @@ export function calculateLogic2025x(input: PricingInput): PricingResult {
   // --- MAGGIORAZIONE LEALI (+€/ml su griglia e canalino) ---
   // La leva, la sua storia e la regola del canalino mancante stanno in
   // listini.ts, condivise con la lente del prezzo: qui si applicano e basta.
-  const t = tariffeLeali(input.prezzo_unitario_griglia, input.prezzo_unitario_canalino, senzaCanalino);
+  // `input.maggiorazioneLeali` è quella congelata sul preventivo che si sta
+  // quotando; assente = leva di oggi (v. PricingInput).
+  const t = tariffeLeali(
+    input.prezzo_unitario_griglia,
+    input.prezzo_unitario_canalino,
+    senzaCanalino,
+    input.maggiorazioneLeali,
+  );
   const tariffaSomma = t.griglia + t.canalino;
   // ----------------------------------------
 

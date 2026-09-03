@@ -67,10 +67,71 @@ export function tariffeLeali(
   griglia: number,
   canalino: number,
   senzaCanalino: boolean,
+  maggiorazione: number = MAGGIORAZIONE_LEALI,
 ): { griglia: number; canalino: number } {
-  const g = griglia + MAGGIORAZIONE_LEALI;
-  const c = canalino + MAGGIORAZIONE_LEALI;
+  const m = Number.isFinite(maggiorazione) ? maggiorazione : MAGGIORAZIONE_LEALI;
+  const g = griglia + m;
+  const c = canalino + m;
   return senzaCanalino ? { griglia: g + c, canalino: 0 } : { griglia: g, canalino: c };
+}
+
+/**
+ * La leva che vale per UN preventivo, dal valore congelato sul suo documento.
+ *
+ * La regola sta tutta nell'assenza del campo. I preventivi nascono in un solo
+ * punto del codebase (addDoc in BuilderView), e da lì in poi il campo c'è
+ * sempre: quindi "campo assente" identifica ESATTAMENTE i documenti nati prima
+ * che la leva venisse riaccesa, cioè quelli che devono restare al prezzo con
+ * cui sono stati quotati — righe vecchie e righe aggiunte oggi comprese, o si
+ * firmerebbe un preventivo con due prezzi dentro.
+ *
+ * È un insieme chiuso e destinato a estinguersi da solo: riguarda i documenti
+ * che esistevano al momento del deploy, non una regola che vale in avanti.
+ *
+ * ⚠️ Vale per un documento GIÀ SALVATO. Un preventivo nuovo, che un documento
+ * ancora non ce l'ha, quota con la leva di oggi: v. `maggiorazioneAttiva` in
+ * BuilderView, che è l'unico posto che conosce questa differenza.
+ */
+export function maggiorazioneCongelata(valoreSulDocumento: unknown): number {
+  return typeof valoreSulDocumento === 'number' && Number.isFinite(valoreSulDocumento)
+    ? valoreSulDocumento
+    : 0;
+}
+
+/**
+ * La leva con cui deve quotare il preventivo che si ha davanti.
+ *
+ * Due casi, e sbagliare a distinguerli costa in tutte e due le direzioni:
+ *
+ *  • documento GIÀ SALVATO → la leva congelata sopra. Un preventivo aperto
+ *    resta al prezzo con cui è stato quotato, righe aggiunte oggi comprese.
+ *    Prenderlo per nuovo lo riprezzerebbe sotto il naso del cliente.
+ *  • preventivo NUOVO, che un documento ancora non ce l'ha → la leva di oggi.
+ *    Prenderlo per vecchio lo farebbe nascere sotto listino, e nessuno se ne
+ *    accorgerebbe guardando il totale.
+ *
+ * @param documentoSalvato  esiste già un documento su Firestore per questo preventivo
+ * @param valoreSulDocumento  il campo `maggiorazioneLeali` letto dal documento
+ */
+export function maggiorazioneDelPreventivo(documentoSalvato: boolean, valoreSulDocumento: unknown): number {
+  return documentoSalvato ? maggiorazioneCongelata(valoreSulDocumento) : MAGGIORAZIONE_LEALI;
+}
+
+/**
+ * Questo preventivo quota a prezzi di un'altra epoca?
+ *
+ * È la domanda a cui risponde il banner di riallineamento in BuilderView, e sta
+ * qui perché il modo in cui può sbagliare non è visibile guardandola: se si
+ * dimenticasse il vincolo sul listino, si accenderebbe su OGNI preventivo
+ * anteriore al campo — cioè su quasi tutto l'archivio — per una leva che su
+ * quei listini non esiste nemmeno. Un banner che urla sempre non lo legge più
+ * nessuno, ed è lo stesso banner che deve farsi notare il giorno che serve.
+ *
+ * @param listinoAttivo    il listino con cui il documento sta quotando
+ * @param maggiorazioneAttiva  la leva con cui sta quotando (già risolta)
+ */
+export function prezziDiAltraEpoca(listinoAttivo: string | null | undefined, maggiorazioneAttiva: number): boolean {
+  return stessoListino(listinoAttivo, '2025x') && maggiorazioneAttiva !== MAGGIORAZIONE_LEALI;
 }
 
 /**

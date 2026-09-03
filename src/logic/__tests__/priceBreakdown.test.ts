@@ -516,3 +516,109 @@ describe('priceBreakdown: la catena mostrata riproduce il prezzo del motore', ()
     expect(costruisciDettaglio(riga, '2026-a', catalog)!.descrizioneGriglia).toBe('');
   });
 });
+
+// ============================================================================
+// LA LEVA CONGELATA SUL PREVENTIVO
+//
+// Un preventivo LEALI nato prima che la maggiorazione venisse riaccesa deve
+// continuare a quotare come allora, righe nuove comprese, o si firma un
+// documento con due prezzi dentro. Questi test coprono il giro completo:
+// il motore quota con la leva del documento, e la lente la sa spiegare.
+// ============================================================================
+describe('leva LEALI congelata sul documento', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    const catalog = useCatalogStore();
+    catalog.listino = {
+      INGLESINA: { VARSAVIA: { '26': { BIANCO: { prezzo: TARIFFA_GRIGLIA, cod: 'G214' } } } },
+      CANALINO: { ALLUMINIO: { '16': { NATURALE: { prezzo: TARIFFA_CANALINO, cod: 'C111' } } } },
+    };
+    catalog.codiciMap = {};
+    catalog.isLoaded = true;
+  });
+
+  const inputDa = (oriz: number, vert: number, canalino: string, leva?: number): PricingInput => ({
+    base_mm: 1000, altezza_mm: 1000, qty: 2,
+    num_orizzontali: oriz, num_verticali: vert,
+    tipo_canalino: canalino,
+    isSoloCanalino: false,
+    prezzo_unitario_griglia: TARIFFA_GRIGLIA,
+    prezzo_unitario_canalino: canalino ? TARIFFA_CANALINO : 0,
+    maggiorazioneLeali: leva,
+  });
+
+  // Le combinazioni che contano: con e senza canalino, i tre regimi.
+  const CASI: Array<[number, number, string]> = [
+    [2, 2, 'ALLUMINIO'], [2, 0, 'ALLUMINIO'], [0, 1, 'ALLUMINIO'],
+    [2, 2, ''], [2, 0, ''], [0, 1, ''],
+  ];
+
+  it('leva 0: il preventivo vecchio quota come prima del rincaro', () => {
+    for (const [oriz, vert, canalino] of CASI) {
+      const vecchio = calculatePrice(inputDa(oriz, vert, canalino, 0), '2025x');
+      const oggi = calculatePrice(inputDa(oriz, vert, canalino), '2025x');
+      // Il rincaro c'è e si vede: se questi due coincidessero, la leva del
+      // documento non starebbe facendo niente.
+      expect(vecchio.prezzo_unitario).toBeLessThan(oggi.prezzo_unitario);
+      // +2,00 €/m di sviluppo (la leva vale su entrambe le tariffe), ×1,2 nei
+      // regimi maggiorati.
+      const metri = vecchio.pricing!.metriPezzo;
+      const fattore = vecchio.pricing!.maggiorazionePct ? 1.2 : 1;
+      expect(oggi.prezzo_unitario - vecchio.prezzo_unitario).toBeCloseTo(metri * 2 * fattore, 10);
+    }
+  });
+
+  it('leva 0: la lente riconcilia le righe del preventivo vecchio', () => {
+    const catalog = useCatalogStore();
+    for (const [oriz, vert, canalino] of CASI) {
+      const { prezzo_unitario, pricing } = calculatePrice(inputDa(oriz, vert, canalino, 0), '2025x');
+      const riga = rigaDa(1000, 1000, oriz, vert, canalino, 2, prezzo_unitario);
+
+      // Strada 2 (deduzione, righe senza scontrino): serve la leva del documento.
+      const dedotto = costruisciDettaglio(riga, '2025x', catalog, 0)!;
+      expect(dedotto.riconcilia).toBe(true);
+
+      // Strada 1 (scontrino): la leva è già dentro le tariffe congelate, quindi
+      // riconcilia SENZA che nessuno gliela passi. È il motivo per cui lo
+      // scontrino esiste.
+      const conScontrino = rigaDa(1000, 1000, oriz, vert, canalino, 2, prezzo_unitario);
+      conScontrino.pricing = pricing;
+      expect(costruisciDettaglio(conScontrino, '2025x', catalog)!.riconcilia).toBe(true);
+    }
+  });
+
+  it('la guardia scatta se si spiega una riga vecchia con la leva di oggi', () => {
+    // Il caso che il parametro serve a evitare: senza, la lente mostrerebbe al
+    // cliente una scomposizione che non torna col prezzo che sta pagando.
+    const catalog = useCatalogStore();
+    const { prezzo_unitario } = calculatePrice(inputDa(2, 2, 'ALLUMINIO', 0), '2025x');
+    const riga = rigaDa(1000, 1000, 2, 2, 'ALLUMINIO', 2, prezzo_unitario);
+    expect(costruisciDettaglio(riga, '2025x', catalog)!.riconcilia).toBe(false);
+    expect(costruisciDettaglio(riga, '2025x', catalog, 0)!.riconcilia).toBe(true);
+  });
+
+  it('la leva non tocca gli altri listini', () => {
+    const catalog = useCatalogStore();
+    for (const listino of ['2025-a', '2026-a']) {
+      const conLeva = calculatePrice(inputDa(2, 2, 'ALLUMINIO', 0), listino);
+      const senza = calculatePrice(inputDa(2, 2, 'ALLUMINIO'), listino);
+      expect(conLeva.prezzo_unitario).toBe(senza.prezzo_unitario);
+      const riga = rigaDa(1000, 1000, 2, 2, 'ALLUMINIO', 2, senza.prezzo_unitario);
+      expect(costruisciDettaglio(riga, listino, catalog, 0)!.riconcilia).toBe(true);
+    }
+  });
+
+  it('il solo telaio non conosce la maggiorazione', () => {
+    // Il ramo solo-canalino va a moltiplicatori sul perimetro: la leva non lo
+    // ha mai toccato, né prima né dopo.
+    const base = {
+      base_mm: 1010, altezza_mm: 1200, qty: 2,
+      num_orizzontali: 0, num_verticali: 0,
+      tipo_canalino: 'ALLUMINIO', codice_canalino: 'C111',
+      isSoloCanalino: true,
+      prezzo_unitario_griglia: 0, prezzo_unitario_canalino: TARIFFA_CANALINO,
+    };
+    expect(calculatePrice({ ...base, maggiorazioneLeali: 0 }, '2025x').prezzo_unitario)
+      .toBe(calculatePrice(base, '2025x').prezzo_unitario);
+  });
+});
