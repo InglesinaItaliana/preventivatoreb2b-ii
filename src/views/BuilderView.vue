@@ -27,7 +27,7 @@ import {
 } from '../lib/destinazione';
 import { STATUS_DETAILS } from '../types';
 import { getCustomerPricingContext } from '../logic/customerConfig';
-import { nomeListino, stessoListino } from '../logic/listini';
+import { nomeListino, stessoListino, maggiorazioneDelPreventivo, prezziDiAltraEpoca, MAGGIORAZIONE_LEALI } from '../logic/listini';
 import { TourGuideClient } from "@sjmc11/tourguidejs/src/Tour";
 import "@sjmc11/tourguidejs/dist/css/tour.min.css";
 import {
@@ -67,6 +67,8 @@ import {
 const currentPriceList = ref('2026-a');
 const listinoDocumento = ref<string | null>(null);
 const listinoAttivo = computed(() => listinoDocumento.value || currentPriceList.value);
+
+// (La leva LEALI congelata sta più sotto, insieme a currentDocId da cui dipende.)
 const toastMessage = ref('');
 const showToast = ref(false);
 const dataConsegnaPrevista = ref('');
@@ -210,6 +212,19 @@ const clienteEmail = ref('');
 const riferimentoCommessa = ref('');
 const currentDocId = ref<string | null>(null);
 const statoCorrente = ref<StatoPreventivo>('DRAFT');
+// LEVA LEALI — stessa storia del listino, un gradino più in basso: il listino
+// congelato dice QUALE motore, questa dice con quale maggiorazione. Serve
+// perché su LEALI il prezzo è cambiato senza che cambiasse l'id del listino
+// (la leva sta nel codice), quindi il congelamento del listino da solo non
+// avrebbe protetto niente.
+//
+// Su un documento GIÀ SALVATO l'assenza del campo significa "nato prima della
+// riaccensione" e vale 0 — v. maggiorazioneCongelata in listini.ts. Su un
+// preventivo nuovo, che un documento ancora non ce l'ha, vale la leva di oggi.
+const maggiorazioneDocumento = ref<number | null>(null);
+const maggiorazioneAttiva = computed(() =>
+  maggiorazioneDelPreventivo(!!currentDocId.value, maggiorazioneDocumento.value)
+);
 
 const showModals = ref(false);
 const modalMode = ref<'FAST' | 'SIGN'>('FAST');
@@ -351,7 +366,7 @@ const dettaglioDescrizione = ref('');
 const dettaglioCodice = ref('');
 
 const apriDettaglio = (r: RigaPreventivo) => {
-  const d = costruisciDettaglio(r, listinoAttivo.value, catalog);
+  const d = costruisciDettaglio(r, listinoAttivo.value, catalog, maggiorazioneAttiva.value);
   if (!d) return;
   dettaglioAperto.value = d;
   dettaglioDescrizione.value = r.descrizioneCompleta;
@@ -367,6 +382,23 @@ const divergenzaListino = computed(() =>
   !!listinoDocumento.value && !stessoListino(listinoDocumento.value, currentPriceList.value)
 );
 
+// La seconda divergenza: stesso listino, prezzo diverso. Su LEALI la
+// maggiorazione sta nel codice, quindi un preventivo può essere fermo a un
+// prezzo vecchio pur avendo l'id di listino giusto — il controllo sugli id non
+// se ne accorgerebbe mai, e l'admin si troverebbe a firmare prezzi di due
+// epoche senza un segnale.
+//
+// Vincolata a LEALI di proposito: su ogni altro listino la leva non esiste e il
+// confronto accenderebbe un banner su tutti i preventivi anteriori al campo,
+// cioè rumore su documenti che non hanno nessun problema.
+// Si guarda il listino DEL DOCUMENTO, non listinoAttivo: quest'ultimo ripiega
+// sul listino del cliente, e su un preventivo storico senza campo `listino`
+// affermeremmo un'epoca che non conosciamo. Quel caso ha già la sua nota grigia
+// qui sotto, che dice la cosa vera ("listino non registrato").
+const divergenzaMaggiorazione = computed(() =>
+  !!currentDocId.value && prezziDiAltraEpoca(listinoDocumento.value, maggiorazioneAttiva.value)
+);
+
 /**
  * Ricalcola TUTTE le righe col listino che il cliente ha oggi. O tutto o niente:
  * ricalcolarne una sola ricrea esattamente il documento a due listini che il
@@ -374,7 +406,7 @@ const divergenzaListino = computed(() =>
  * toccano: hanno un prezzo deciso a mano, non calcolato.
  */
 const riallineaListino = () => {
-  if (!isAdmin.value || isLocked.value || !divergenzaListino.value) return;
+  if (!isAdmin.value || isLocked.value || (!divergenzaListino.value && !divergenzaMaggiorazione.value)) return;
 
   const nuovoListino = currentPriceList.value;
   const ricalcolate: Array<{ riga: RigaPreventivo; risultato: ReturnType<typeof calculatePrice> }> = [];
@@ -401,6 +433,9 @@ const riallineaListino = () => {
       isSoloCanalino: soloCanalinoRiga,
       prezzo_unitario_griglia: concordato || grigliaObj?.prezzo || 0,
       prezzo_unitario_canalino: canalinoObj?.prezzo || 0,
+      // Riallineare vuol dire proprio passare ai prezzi di OGGI: qui la leva
+      // congelata sul documento non si usa, si sostituisce.
+      maggiorazioneLeali: MAGGIORAZIONE_LEALI,
     }, nuovoListino);
 
     // Guardia: una riga che aveva un prezzo e ora vale zero significa che
@@ -421,8 +456,14 @@ const riallineaListino = () => {
   const totaleOra = ricalcolate.reduce((t, x) => t + x.riga.prezzo_totale, 0);
   const totaleDopo = ricalcolate.reduce((t, x) => t + x.risultato.prezzo_totale, 0);
 
+  // Due riallineamenti diversi dietro lo stesso pulsante: cambiare listino, o
+  // restare sullo stesso listino e passare ai suoi prezzi di oggi. Vanno detti
+  // in modo diverso, o l'admin conferma una cosa credendone un'altra.
+  const soloMaggiorazione = !divergenzaListino.value;
   openConfirm(
-    `Ricalcolo ${ricalcolate.length} righe con il ${nomeListino(nuovoListino)}: ` +
+    (soloMaggiorazione
+      ? `Ricalcolo ${ricalcolate.length} righe con i prezzi ATTUALI del ${nomeListino(nuovoListino)}: `
+      : `Ricalcolo ${ricalcolate.length} righe con il ${nomeListino(nuovoListino)}: `) +
     `${totaleOra.toFixed(2)} € → ${totaleDopo.toFixed(2)} €. ` +
     `Le righe extra e la spedizione restano invariate. Poi va salvato.`,
     () => {
@@ -432,7 +473,12 @@ const riallineaListino = () => {
         riga.pricing = risultato.pricing;
       }
       listinoDocumento.value = nuovoListino;
-      showCustomToast(`Preventivo riallineato al ${nomeListino(nuovoListino)}. Ricordati di salvare.`);
+      maggiorazioneDocumento.value = MAGGIORAZIONE_LEALI;
+      showCustomToast(
+        soloMaggiorazione
+          ? `Preventivo riallineato ai prezzi attuali del ${nomeListino(nuovoListino)}. Ricordati di salvare.`
+          : `Preventivo riallineato al ${nomeListino(nuovoListino)}. Ricordati di salvare.`
+      );
     }
   );
 };
@@ -664,7 +710,10 @@ const aggiungi = () => {
     codice_canalino: codCanalino,
     isSoloCanalino: soloCanalino.value,
     prezzo_unitario_griglia: basePriceGriglia, // FIX: Qui ora basePriceGriglia è visibile
-    prezzo_unitario_canalino: pCanalino
+    prezzo_unitario_canalino: pCanalino,
+    // La riga nasce col prezzo del preventivo a cui si aggiunge, non con quello
+    // di oggi: è la stessa ragione per cui il listino è congelato.
+    maggiorazioneLeali: maggiorazioneAttiva.value,
   }, listinoAttivo.value);
   const codiceFinale = soloCanalino.value ? codCanalino : codGriglia;
 
@@ -783,6 +832,7 @@ const nuovaCommessa = () => {
     preventivo.value = [];
     currentDocId.value = null;
     listinoDocumento.value = null;
+    maggiorazioneDocumento.value = null;
     ficOrderUrl.value = '';
     statoCorrente.value = 'DRAFT';
     riferimentoCommessa.value = '';
@@ -1032,6 +1082,18 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
     if (!currentDocId.value || listinoDocumento.value) {
       docData.listino = listinoAttivo.value;
     }
+    // LEVA LEALI — stessa regola, e per una ragione più stringente: qui il
+    // campo ASSENTE ha un significato ("preventivo nato prima della
+    // riaccensione, quota al prezzo di allora"). Stampigliare la leva di oggi
+    // salvando un preventivo vecchio lo farebbe passare in silenzio ai prezzi
+    // nuovi — cioè il danno esatto che questo campo esiste per evitare.
+    // Si scrive quindi solo alla creazione, o se il documento una leva ce
+    // l'ha già (compreso il caso in cui è appena stato riallineato).
+    if (!currentDocId.value) {
+      docData.maggiorazioneLeali = MAGGIORAZIONE_LEALI;
+    } else if (maggiorazioneDocumento.value !== null) {
+      docData.maggiorazioneLeali = maggiorazioneDocumento.value;
+    }
     if (azione === 'ORDINA' && currentDetraction.value !== userDefaultDetraction.value) {
         docData.order_detraction_value = currentDetraction.value;
     }
@@ -1077,6 +1139,8 @@ const salvaPreventivo = async (azione?: 'RICHIEDI_VALIDAZIONE' | 'ORDINA' | 'ADM
       codiceRicerca.value = codice;
       // Da qui in poi il documento esiste e comanda lui.
       listinoDocumento.value = docData.listino || null;
+      maggiorazioneDocumento.value =
+        typeof docData.maggiorazioneLeali === 'number' ? docData.maggiorazioneLeali : null;
     }
 
     statoCorrente.value = nuovoStato;
@@ -1217,6 +1281,9 @@ const caricaPreventivo = async () => {
     // Listino congelato sul documento. Assente sui preventivi anteriori a questa
     // modifica: lì si continua col listino del cliente, com'è sempre stato.
     listinoDocumento.value = typeof d.listino === 'string' ? d.listino : null;
+    // Leva LEALI congelata. Assente = preventivo nato prima della riaccensione:
+    // resta al prezzo con cui è stato quotato, righe nuove comprese.
+    maggiorazioneDocumento.value = typeof d.maggiorazioneLeali === 'number' ? d.maggiorazioneLeali : null;
     noteCliente.value = d.noteCliente || '';
     scontoApplicato.value = d.scontoPercentuale || 0;
     listaAllegati.value = d.allegati || [];
@@ -1972,6 +2039,27 @@ onMounted(async() => {
             title="Ricalcola tutte le righe con il listino attuale del cliente"
           >
             RIALLINEA AL {{ nomeListino(currentPriceList).toUpperCase() }}
+          </button>
+        </div>
+        <!-- PREZZI DEL DOCUMENTO — stesso listino, prezzo di un'altra epoca.
+             Il preventivo è nato prima che la maggiorazione LEALI tornasse
+             attiva e continua a quotare come allora, righe nuove comprese.
+             Ha il suo banner perché è una cosa diversa dal cambio di listino:
+             qui non si sceglie un altro listino, si passa ai prezzi di oggi
+             dello stesso. -->
+        <div v-else-if="isAdmin && divergenzaMaggiorazione" class="px-5 py-3 bg-amber-50 border-b border-amber-200 flex flex-wrap items-center justify-between gap-3">
+          <div class="text-[13px] text-amber-900 leading-snug">
+            <b>Prezzi congelati: questo preventivo quota al {{ nomeListino(listinoAttivo) }} com'era quando è nato.</b>
+            Il {{ nomeListino(listinoAttivo) }} nel frattempo è cambiato.
+            Le righe che aggiungi qui nascono con i prezzi del preventivo, non con quelli di oggi.
+          </div>
+          <button
+            v-if="!isLocked"
+            @click="riallineaListino()"
+            class="shrink-0 bg-amber-400 hover:bg-amber-300 text-amber-950 border border-amber-500 px-3 py-2 rounded-lg font-bold text-xs shadow-sm transition-all"
+            title="Ricalcola tutte le righe con i prezzi attuali del listino"
+          >
+            RIALLINEA AI PREZZI DI OGGI
           </button>
         </div>
         <div v-else-if="isAdmin && currentDocId && !listinoDocumento" class="px-5 py-2 bg-gray-50/60 border-b border-gray-200/60 text-[11px] text-gray-400">

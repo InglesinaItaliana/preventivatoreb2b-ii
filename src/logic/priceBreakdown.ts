@@ -13,10 +13,11 @@
 //    della riga.
 //
 // 2. LA RICONCILIAZIONE NON È PARANOIA. I motori possono cambiare sotto i piedi
-//    dei preventivi vecchi: la maggiorazione LEALI è stata azzerata il
-//    2026-06-26 (era +1,00 €/m), quindi una riga LEALI battuta prima di quella
-//    data NON è più riproducibile dal motore di oggi. Su quelle righe la guardia
-//    scatta ed è l'unica cosa che ci impedisce di mentire al cliente.
+//    dei preventivi vecchi: la maggiorazione LEALI (+1,00 €/m) è stata azzerata
+//    il 2026-06-26 e riattivata il 2026-09-03, quindi una riga LEALI battuta
+//    nella finestra di mezzo NON è più riproducibile dal motore di oggi. Su
+//    quelle righe la guardia scatta ed è l'unica cosa che ci impedisce di
+//    mentire al cliente.
 //
 // DUE STRADE, da quando le righe si portano dietro lo scontrino (RigaPricing):
 //
@@ -30,7 +31,7 @@
 
 import type { RigaPreventivo, RegimePricing, SupplementoPricing } from '../types';
 import { metriGriglia, metriPerimetro, roundMm } from './geometry';
-import { ricostruisciPrezzoUnitario } from './listini';
+import { ricostruisciPrezzoUnitario, tariffeLeali } from './listini';
 
 // Stessi moltiplicatori dei motori (solo telaio: perimetro × moltiplicatore).
 const MOLTIPLICATORI_SOLO_CANALINO: Record<string, number> = {
@@ -259,11 +260,19 @@ function supplemento(catalog: any, code: string): number {
  * Costruisce il dettaglio di una riga. Ritorna null per le righe che un prezzo
  * "costruito" non ce l'hanno (EXTRA, spedizioni, supplementi manuali): lì il
  * prezzo è deciso a mano e non c'è nessuna catena da spiegare.
+ *
+ * `maggiorazioneLeali` è la leva congelata sul preventivo a cui la riga
+ * appartiene, e conta solo per la strada 2 (deduzione): serve a spiegare le
+ * righe di un documento di un'altra epoca con la leva di ALLORA invece che con
+ * quella di oggi, altrimenti la guardia scatterebbe su preventivi perfettamente
+ * spiegabili. Omessa = leva di oggi, come nel motore. Le righe con lo scontrino
+ * non la usano: la loro leva è già dentro le tariffe che si portano dietro.
  */
 export function costruisciDettaglio(
   r: RigaPreventivo,
   activeList: string,
   catalog: any,
+  maggiorazioneLeali?: number,
 ): Dettaglio | null {
   if (r.categoria === 'EXTRA') return null;
 
@@ -374,12 +383,12 @@ export function costruisciDettaglio(
   // Tariffa griglia: il prezzo/m concordato (profili senza prezzo di listino)
   // vince sul listino, esattamente come nel motore.
   const tariffaConcordata = !!r.customVarPrice && Number(r.customVarPrice) > 0;
-  const tariffaGriglia = tariffaConcordata
+  let tariffaGriglia = tariffaConcordata
     ? Number(r.customVarPrice)
     : prezzoDaListino(catalog, r.categoria, r.modello, r.dimensione, r.finitura);
 
   const tipoCanalino = r.rawCanalino?.tipo || '';
-  const tariffaCanalino = r.rawCanalino
+  let tariffaCanalino = r.rawCanalino
     ? prezzoDaListino(catalog, 'CANALINO', r.rawCanalino.tipo, r.rawCanalino.dim, r.rawCanalino.fin)
     : 0;
 
@@ -403,11 +412,22 @@ export function costruisciDettaglio(
 
   if (listinoLineare) {
     // Tutto al metro: nessun costo fisso, la lavorazione pesa come maggiorazione.
-    // (Il listino "LEALI" oggi non applica alcun rincaro sulle tariffe: la voce
-    // esiste nel motore ma vale 0 dal 2026-06-26.)
     const leali = activeList === '2025x' || activeList === '2025-x';
     if (regime === 'PARALLELE') maggiorazionePct = 20;
     else if (regime === 'SINGOLA') maggiorazionePct = leali ? 20 : 50;
+
+    // Su LEALI le tariffe che il prezzo usa non sono quelle di listino: c'è la
+    // maggiorazione, che sta nel codice (v. tariffeLeali in listini.ts, la
+    // stessa funzione del motore). Qui si applica quella del DOCUMENTO, che il
+    // chiamante conosce; senza, quella di oggi. Resta la scommessa di sempre
+    // sui prezzi di listino, che questa strada rilegge da quello di oggi: su
+    // una riga battuta con un prezzo poi cambiato la guardia scatta, ed è
+    // giusto così.
+    if (leali) {
+      const t = tariffeLeali(tariffaGriglia, tariffaCanalino, senzaCanalino, maggiorazioneLeali);
+      tariffaGriglia = t.griglia;
+      tariffaCanalino = t.canalino;
+    }
 
     const tariffaSomma = tariffaGriglia + tariffaCanalino;
     const fattore = maggiorazionePct ? 1 + maggiorazionePct / 100 : 1;

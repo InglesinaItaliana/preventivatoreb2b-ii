@@ -4,7 +4,7 @@ import { useCatalogStore } from '../Data/catalog';
 import type { PricingInput, PricingResult } from './pricing';
 import type { TariffaPricing } from '../types';
 import { metriGriglia, metriPerimetro } from './geometry';
-import { pricingSoloTelaio, regimeDaComplessita } from './listini';
+import { pricingSoloTelaio, regimeDaComplessita, tariffeLeali } from './listini';
 
 const MOLTIPLICATORI_SOLO_CANALINO: Record<string, number> = {
   'C111': 1.5, 'C112': 2.0, 'C211': 2.5, 'C311': 3.0
@@ -13,13 +13,6 @@ const MOLTIPLICATORI_SOLO_CANALINO: Record<string, number> = {
 export function calculateLogic2025x(input: PricingInput): PricingResult {
   const catalog = useCatalogStore();
   if (!catalog.isLoaded) return { prezzo_unitario: 0, prezzo_totale: 0 };
-
-  // --- MAGGIORAZIONE LEALI (+€/ml su griglia e canalino) ---
-  // DISATTIVATA (0) il 2026-06-26 su richiesta. Per RIATTIVARLA rimettere 1.00.
-  const MAGGIORAZIONE_LEALI = 0; // era 1.00
-  const pGrigliaAumentato = input.prezzo_unitario_griglia + MAGGIORAZIONE_LEALI;
-  const pCanalinoAumentato = input.prezzo_unitario_canalino + MAGGIORAZIONE_LEALI;
-  // ----------------------------------------
 
   // Metri lineari (misure arrotondate ai 50mm dentro geometry.ts)
   const metri_perimetro = metriPerimetro(input.base_mm, input.altezza_mm);
@@ -67,18 +60,32 @@ export function calculateLogic2025x(input: PricingInput): PricingResult {
   // Costi Accessori
  
 
-  // --- CALCOLO FINALE (Usando le variabili aumentate) ---
+  // --- MAGGIORAZIONE LEALI (+€/ml su griglia e canalino) ---
+  // La leva, la sua storia e la regola del canalino mancante stanno in
+  // listini.ts, condivise con la lente del prezzo: qui si applicano e basta.
+  // `input.maggiorazioneLeali` è quella congelata sul preventivo che si sta
+  // quotando; assente = leva di oggi (v. PricingInput).
+  const t = tariffeLeali(
+    input.prezzo_unitario_griglia,
+    input.prezzo_unitario_canalino,
+    senzaCanalino,
+    input.maggiorazioneLeali,
+  );
+  const tariffaSomma = t.griglia + t.canalino;
+  // ----------------------------------------
+
+  // --- CALCOLO FINALE (Usando le tariffe maggiorate) ---
   let prezzo_unitario = 0;
 
   switch (complessita) {
     case 1: // INCROCIO
-      prezzo_unitario = metri_griglia * (pGrigliaAumentato + pCanalinoAumentato);
+      prezzo_unitario = metri_griglia * tariffaSomma;
       break;
     case 2: // PARALLELE
-        prezzo_unitario = (metri_griglia * ((pGrigliaAumentato + pCanalinoAumentato)* 1.2));
+        prezzo_unitario = (metri_griglia * (tariffaSomma * 1.2));
       break;
     case 3: // SINGOLA
-      prezzo_unitario = (metri_griglia * ((pGrigliaAumentato + pCanalinoAumentato)* 1.2));
+      prezzo_unitario = (metri_griglia * (tariffaSomma * 1.2));
       break;
     default:
       prezzo_unitario = 0;
@@ -89,10 +96,10 @@ export function calculateLogic2025x(input: PricingInput): PricingResult {
 
   // --- SCONTRINO ---
   // Le tariffe registrate sono quelle EFFETTIVAMENTE usate, cioè comprensive
-  // della maggiorazione LEALI (oggi 0): se un giorno tornasse a 1,00 lo
-  // scontrino resterebbe vero senza toccare niente qui sotto.
-  const tariffe: TariffaPricing[] = [{ tipo: 'griglia', valore: pGrigliaAumentato }];
-  if (pCanalinoAumentato) tariffe.push({ tipo: 'canalino', valore: pCanalinoAumentato });
+  // della maggiorazione LEALI: lo scontrino resta vero qualunque valore abbia
+  // la leva, e resta vero anche dopo che la leva cambia ancora.
+  const tariffe: TariffaPricing[] = [{ tipo: 'griglia', valore: t.griglia }];
+  if (t.canalino) tariffe.push({ tipo: 'canalino', valore: t.canalino });
 
   return {
     prezzo_unitario,
