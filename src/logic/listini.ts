@@ -33,6 +33,47 @@ export function stessoListino(a?: string | null, b?: string | null): boolean {
 }
 
 /**
+ * MAGGIORAZIONE LEALI — la leva di prezzo del listino '2025x'/'2025-x'.
+ *
+ * Sta nel CODICE e non nel listino, quindi la sua storia va scritta qui o non
+ * la sa più nessuno:
+ *
+ *   attiva 1,00 → fino al 2026-06-26
+ *   azzerata 0  → dal 2026-06-26 al 2026-09-03
+ *   attiva 1,00 → dal 2026-09-03. Per spegnerla di nuovo: 0 QUI, e basta.
+ */
+export const MAGGIORAZIONE_LEALI = 1.00;
+
+/**
+ * Le tariffe EFFETTIVE di una riga LEALI: quelle che il prezzo usa davvero.
+ *
+ * Due cose che sembrano dettagli e non lo sono.
+ *
+ * 1. La maggiorazione si somma a ENTRAMBE le tariffe, quindi su una riga con
+ *    canalino pesa il doppio (+2,00 €/m di sviluppo, +2,40 nei regimi al 20%).
+ * 2. Il motore la somma anche quando il canalino NON c'è: lì entra due volte
+ *    lo stesso. È sempre stato così — con la leva a 0 la seconda quota valeva 0
+ *    e non si vedeva. Il prezzo è quello e non si tocca; ma la quota "del
+ *    canalino" su una riga che il canalino non ce l'ha va sommata alla griglia,
+ *    unica voce vera della riga, o la lente mostrerebbe al cliente una voce
+ *    "Canalino 1,00 €/m" su una riga senza canalino.
+ *
+ * Una sola implementazione, condivisa dal motore e dalla lente: sono due strade
+ * sullo stesso prezzo e devono dire la stessa cifra. L'associazione delle somme
+ * è quella storica del motore, così il totale resta identico al centesimo di
+ * bit rispetto a prima che questa funzione esistesse.
+ */
+export function tariffeLeali(
+  griglia: number,
+  canalino: number,
+  senzaCanalino: boolean,
+): { griglia: number; canalino: number } {
+  const g = griglia + MAGGIORAZIONE_LEALI;
+  const c = canalino + MAGGIORAZIONE_LEALI;
+  return senzaCanalino ? { griglia: g + c, canalino: 0 } : { griglia: g, canalino: c };
+}
+
+/**
  * LA formula, unica per tutti i motori:
  *
  *     metri × (somma delle tariffe al metro) × (1 + maggiorazione) + supplementi

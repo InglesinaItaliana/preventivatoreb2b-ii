@@ -135,7 +135,7 @@ function refLogic2025(input: PricingInput) {
 
 // --- RIFERIMENTO: pricing2025x.ts @ main (LEALI) ----------------------------
 function refLogic2025x(input: PricingInput) {
-  const MAGGIORAZIONE_LEALI = 0; // disattivata il 2026-06-26, come in prod
+  const MAGGIORAZIONE_LEALI = 1.00; // riattivata il 2026-09-03, come in prod
   const pGrigliaAumentato = input.prezzo_unitario_griglia + MAGGIORAZIONE_LEALI;
   const pCanalinoAumentato = input.prezzo_unitario_canalino + MAGGIORAZIONE_LEALI;
 

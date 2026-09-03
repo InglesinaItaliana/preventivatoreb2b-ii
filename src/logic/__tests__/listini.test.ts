@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { nomeListino, stessoListino, ricostruisciPrezzoUnitario } from '../listini';
+import { nomeListino, stessoListino, ricostruisciPrezzoUnitario, tariffeLeali, MAGGIORAZIONE_LEALI } from '../listini';
 import type { RigaPricing } from '../../types';
 
 describe('anagrafica listini', () => {
@@ -60,5 +60,46 @@ describe('la formula unica dello scontrino', () => {
 
   it('nessuna tariffa = nessun prezzo', () => {
     expect(ricostruisciPrezzoUnitario(base)).toBe(0);
+  });
+});
+
+// ============================================================================
+// LA MAGGIORAZIONE LEALI
+//
+// È una leva di prezzo che vive nel codice e non nel listino: nessuno la vede
+// da Firestore, nessuno se ne accorge se cambia. Questi test dicono ad alta
+// voce quanto vale e come si applica, così spegnerla o riaccenderla è una
+// decisione esplicita e non un effetto collaterale.
+// ============================================================================
+describe('maggiorazione LEALI', () => {
+  it('vale 1,00 €/m ed è ATTIVA', () => {
+    // Se questo test fallisce non è un bug: qualcuno ha mosso la leva. Va
+    // aggiornato insieme alla decisione commerciale, mai "per far passare i test".
+    expect(MAGGIORAZIONE_LEALI).toBe(1.00);
+  });
+
+  it('si somma a entrambe le tariffe: su una riga col canalino pesa il doppio', () => {
+    const t = tariffeLeali(14, 2.5, false);
+    expect(t.griglia).toBe(15);
+    expect(t.canalino).toBe(3.5);
+    // +2,00 €/m di sviluppo rispetto alle tariffe di listino (14 + 2,5 = 16,5).
+    expect(t.griglia + t.canalino).toBe(18.5);
+  });
+
+  it('senza canalino la seconda quota resta nel conto, ma sulla griglia', () => {
+    // Il motore somma la quota del canalino anche quando il canalino non c'è:
+    // il prezzo la contiene e non si tocca. Esporla come voce "Canalino"
+    // mostrerebbe però al cliente una riga che sulla sua inglesina non esiste.
+    const t = tariffeLeali(14, 0, true);
+    expect(t.canalino).toBe(0);
+    expect(t.griglia).toBe(16);
+    // Il totale è lo stesso di prima che la quota venisse accorpata.
+    expect(t.griglia + t.canalino).toBe((14 + 1) + (0 + 1));
+  });
+
+  it('la tariffa concordata parte da sé, non dal listino', () => {
+    // Il prezzo/m concordato sostituisce quello di listino, poi la
+    // maggiorazione si applica sopra: è la stessa cascata del motore.
+    expect(tariffeLeali(23.5, 2.5, false).griglia).toBe(24.5);
   });
 });

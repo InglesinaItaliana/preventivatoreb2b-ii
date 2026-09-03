@@ -86,7 +86,8 @@ export interface RiepilogoRiga {
  * congelata sulla riga stessa nel momento in cui il motore l'ha calcolata.
  *
  * Perché sta qui e non si ricava a posteriori: i prezzi del listino cambiano,
- * i motori cambiano (la maggiorazione LEALI è stata azzerata il 2026-06-26) e
+ * i motori cambiano (la maggiorazione LEALI è stata azzerata il 2026-06-26 e
+ * riattivata il 2026-09-03) e
  * certe leve stanno nel codice, non in Firestore. Senza questo scontrino,
  * spiegare al cliente un prezzo di sei mesi fa significa dedurlo con il motore
  * di oggi — cioè, a volte, mentire.
