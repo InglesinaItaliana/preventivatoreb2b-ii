@@ -391,8 +391,12 @@ const divergenzaListino = computed(() =>
 // Vincolata a LEALI di proposito: su ogni altro listino la leva non esiste e il
 // confronto accenderebbe un banner su tutti i preventivi anteriori al campo,
 // cioè rumore su documenti che non hanno nessun problema.
+// Si guarda il listino DEL DOCUMENTO, non listinoAttivo: quest'ultimo ripiega
+// sul listino del cliente, e su un preventivo storico senza campo `listino`
+// affermeremmo un'epoca che non conosciamo. Quel caso ha già la sua nota grigia
+// qui sotto, che dice la cosa vera ("listino non registrato").
 const divergenzaMaggiorazione = computed(() =>
-  !!currentDocId.value && prezziDiAltraEpoca(listinoAttivo.value, maggiorazioneAttiva.value)
+  !!currentDocId.value && prezziDiAltraEpoca(listinoDocumento.value, maggiorazioneAttiva.value)
 );
 
 /**
@@ -2046,7 +2050,7 @@ onMounted(async() => {
         <div v-else-if="isAdmin && divergenzaMaggiorazione" class="px-5 py-3 bg-amber-50 border-b border-amber-200 flex flex-wrap items-center justify-between gap-3">
           <div class="text-[13px] text-amber-900 leading-snug">
             <b>Prezzi congelati: questo preventivo quota al {{ nomeListino(listinoAttivo) }} com'era quando è nato.</b>
-            Il {{ nomeListino(listinoAttivo) }} nel frattempo è aumentato.
+            Il {{ nomeListino(listinoAttivo) }} nel frattempo è cambiato.
             Le righe che aggiungi qui nascono con i prezzi del preventivo, non con quelli di oggi.
           </div>
           <button

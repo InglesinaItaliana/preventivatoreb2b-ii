@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { setActivePinia, createPinia } from 'pinia';
 import { useCatalogStore } from '../../Data/catalog';
 import { calculatePrice, type PricingInput } from '../pricing';
+import { ricostruisciPrezzoUnitario } from '../listini';
 
 // ============================================================================
 // TEST DIFFERENZIALE — l'estrazione della geometria in geometry.ts non deve aver
@@ -134,8 +135,10 @@ function refLogic2025(input: PricingInput) {
 }
 
 // --- RIFERIMENTO: pricing2025x.ts @ main (LEALI) ----------------------------
-function refLogic2025x(input: PricingInput) {
-  const MAGGIORAZIONE_LEALI = 1.00; // riattivata il 2026-09-03, come in prod
+// La leva è un parametro perché servono due fotografie: quella di oggi (1,00) e
+// quella con cui la produzione ha quotato fino al 2026-09-03 (0), che è il
+// prezzo che i preventivi già aperti devono continuare a fare.
+function refLogic2025x(input: PricingInput, MAGGIORAZIONE_LEALI = 1.00) {
   const pGrigliaAumentato = input.prezzo_unitario_griglia + MAGGIORAZIONE_LEALI;
   const pCanalinoAumentato = input.prezzo_unitario_canalino + MAGGIORAZIONE_LEALI;
 
@@ -268,6 +271,37 @@ describe('equivalenza motori di prezzo: main vs geometry.ts estratta', () => {
         expect(ottenuto.prezzo_unitario).toBe(atteso.prezzo_unitario);
         expect(ottenuto.prezzo_totale).toBe(atteso.prezzo_totale);
       }
+    }
+  });
+
+  // ------------------------------------------------------------------------
+  // LA PROMESSA AI PREVENTIVI APERTI
+  //
+  // Un preventivo LEALI nato prima della riaccensione continua a quotare con la
+  // leva spenta. Qui si verifica che "leva spenta" significhi il prezzo ESATTO
+  // che girava in produzione fino al 2026-09-03 — non un prezzo simile, lo
+  // stesso numero, su tutta la matrice. È la garanzia che il cliente non veda
+  // cambiare una cifra che gli è già stata data.
+  // ------------------------------------------------------------------------
+  it('leva spenta: prezzo identico a quello che girava in produzione fino al 2026-09-03', () => {
+    for (const input of casiGriglia()) {
+      const atteso = refLogic2025x(input, 0);
+      for (const alias of ['2025x', '2025-x']) {
+        const ottenuto = calculatePrice({ ...input, maggiorazioneLeali: 0 }, alias);
+        expect(ottenuto.prezzo_unitario).toBe(atteso.prezzo_unitario);
+        expect(ottenuto.prezzo_totale).toBe(atteso.prezzo_totale);
+      }
+    }
+  });
+
+  it('leva spenta: lo scontrino della riga riproduce il prezzo con cui è stata quotata', () => {
+    // Le righe aggiunte oggi a un preventivo vecchio si portano dietro tariffe
+    // vecchie: se lo scontrino non tornasse, la lente mostrerebbe al cliente una
+    // scomposizione diversa dalla cifra che sta pagando.
+    for (const input of casiGriglia()) {
+      const r = calculatePrice({ ...input, maggiorazioneLeali: 0 }, '2025x');
+      if (!r.pricing) continue;
+      expect(ricostruisciPrezzoUnitario(r.pricing)).toBeCloseTo(r.prezzo_unitario, 10);
     }
   });
 
