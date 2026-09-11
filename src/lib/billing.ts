@@ -131,3 +131,25 @@ export function billingInfo(p: PreventivoLike | null | undefined): BillingInfo {
     billingError: p?.billingError,
   };
 }
+
+/**
+ * Chiave del DDT di un ordine (CiC o FiC), normalizzata a stringa perché su
+ * Firestore l'id CiC è numerico. null = nessun DDT ancora emesso.
+ */
+export function ddtKey(p: PreventivoLike | null | undefined): string | null {
+  const id = p?.cic_ddt_id ?? p?.fic_ddt_id;
+  return id == null ? null : String(id);
+}
+
+/**
+ * Gli ordini di `lista` che viaggiano sullo STESSO DDT di `order`.
+ * Un DDT cumulativo raccoglie N ordini e il suo PDF deve contenerli tutti: un
+ * documento che ne mostra uno solo dice meno della merce che è arrivata.
+ * Senza DDT, o se l'ordine è l'unico, torna il solo `order`.
+ */
+export function ordiniStessoDdt<T extends PreventivoLike>(order: T, lista: readonly T[]): T[] {
+  const chiave = ddtKey(order);
+  if (!chiave) return [order];
+  const gruppo = lista.filter((o) => ddtKey(o) === chiave);
+  return gruppo.length > 1 ? gruppo : [order];
+}
