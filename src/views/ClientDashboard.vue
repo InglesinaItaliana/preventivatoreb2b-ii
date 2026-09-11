@@ -9,7 +9,7 @@
   import { TourGuideClient } from "@sjmc11/tourguidejs/src/Tour"; // Importazione JS
   import "@sjmc11/tourguidejs/dist/css/tour.min.css"; // Importazione CSS Stile
   import { httpsCallable } from 'firebase/functions';
-  import { resolveBackend } from '../lib/billing';
+  import { ordiniStessoDdt, resolveBackend } from '../lib/billing';
   import { openDdtPdf, openQuotationPdf, openOrderPdf } from '../lib/billingPdf';
   import { 
     DocumentTextIcon, 
@@ -538,7 +538,9 @@ const confermaRicezione = async (order: any) => {
   
   const apriDdt = async (ficId: string | number, fallbackUrl?: string, order?: any) => {
     // CiC: nessun URL pubblico → POPS genera il PDF (Opzione B). FiC: invariato.
-    if (order && resolveBackend(order) === 'cic') { openDdtPdf(order); return; }
+    // Il PDF deve essere fedele al DDT: se è cumulativo porta TUTTI gli ordini che
+    // lo compongono, non solo quello della card (stessa raccolta di confermaRicezione).
+    if (order && resolveBackend(order) === 'cic') { openDdtPdf(ordiniStessoDdt(order, listaMieiPreventivi.value)); return; }
     try {
         // Mostra un feedback visivo se possibile, o usa un cursore wait
         document.body.style.cursor = 'wait';

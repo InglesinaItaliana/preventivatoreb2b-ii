@@ -29,7 +29,7 @@ import { httpsCallable } from 'firebase/functions'; // Importa functions
 import { functions } from '../firebase'; // Assicurati di esportare 'functions' dal tuo firebase.ts
 import DdtModal from '../components/DdtModal.vue'; // Importa il nuovo componente
 import { STATUS_DETAILS, ACTIVE_STATUSES } from '../types';
-import { resolveBackend } from '../lib/billing';
+import { ordiniStessoDdt, resolveBackend } from '../lib/billing';
 import { openDdtPdf } from '../lib/billingPdf';
 import ArchiveModal from '../components/ArchiveModal.vue'; // Importa Modale
 
@@ -659,8 +659,10 @@ const getActionData = (p: any) => {
     return { 
       text: 'VEDI DDT', 
       class: 'text-amber-950 border-amber-500 bg-amber-400  hover:bg-amber-300 rounded-full', 
-      // Apre il PDF del DDT se disponibile, altrimenti apre l'editor
-      action: () => apriDdt(p.fic_ddt_id, p.fic_ddt_url, p),
+      // Apre il PDF del DDT se disponibile, altrimenti apre l'editor.
+      // Il DDT può essere cumulativo: si passano TUTTI i suoi ordini (come fa il
+      // pulsante APRI DDT dell'intestazione del gruppo), non solo questa card.
+      action: () => apriDdt(p.fic_ddt_id, p.fic_ddt_url, { ...p, items: ordiniStessoDdt(p, listaPreventivi.value) }),
       icon: DocumentTextIcon
     };
     return null;

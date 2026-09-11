@@ -6,7 +6,7 @@
 // ============================================================================
 
 import { describe, it, expect } from 'vitest';
-import { resolveBackend, billingInfo, ddtElementi, isDeliveryTariff, totaleTrasporto } from '../billing';
+import { resolveBackend, billingInfo, ddtElementi, isDeliveryTariff, totaleTrasporto, ddtKey, ordiniStessoDdt } from '../billing';
 import { computeTotals as feTotals, round2 as feRound2 } from '../billingTotals';
 import { computeTotals as beTotals, round2 as beRound2 } from '../../functions/lib_billing/rounding';
 import { buildDdtLines } from '../../functions/lib_billing/ddtLines';
@@ -234,5 +234,51 @@ describe('totaleTrasporto', () => {
     );
     expect(conSconto.lineNets[1]).toBe(60);
     expect(totaleTrasporto([merce, consegna])).toBe(60);
+  });
+});
+
+describe('ordiniStessoDdt — il PDF del DDT cumulativo li deve portare tutti', () => {
+  const a = { id: 'a', cic_ddt_id: 132 };
+  const b = { id: 'b', cic_ddt_id: 132 };
+  const c = { id: 'c', cic_ddt_id: 140 };
+  const bozza = { id: 'd' };
+
+  it('raccoglie gli ordini che condividono il DDT', () => {
+    expect(ordiniStessoDdt(a, [a, b, c, bozza]).map((o) => o.id)).toEqual(['a', 'b']);
+  });
+
+  it('ordine unico sul suo DDT: torna solo lui', () => {
+    expect(ordiniStessoDdt(c, [a, b, c])).toEqual([c]);
+  });
+
+  it('senza DDT non raggruppa (le bozze non sono un gruppo)', () => {
+    expect(ordiniStessoDdt(bozza, [bozza, { id: 'e' }])).toEqual([bozza]);
+  });
+
+  it('id numerico e stringa sono lo stesso DDT (Firestore non garantisce il tipo)', () => {
+    const num = { id: 'n', cic_ddt_id: 132 };
+    const str = { id: 's', cic_ddt_id: '132' };
+    expect(ordiniStessoDdt(num, [num, str]).map((o) => o.id)).toEqual(['n', 's']);
+  });
+
+  it('DDT FiC: stessa regola sul suo campo', () => {
+    const f1 = { id: 'f1', fic_ddt_id: 77 };
+    const f2 = { id: 'f2', fic_ddt_id: 77 };
+    expect(ordiniStessoDdt(f1, [f1, f2, a]).map((o) => o.id)).toEqual(['f1', 'f2']);
+  });
+
+  it('un DDT FiC e uno CiC con lo stesso numero NON sono lo stesso DDT', () => {
+    // I due backend numerano per conto proprio: un cliente con ordini di prima e
+    // di dopo la migrazione non deve stampare un PDF che mescola due documenti.
+    const cic = { id: 'cic', cic_ddt_id: 132 };
+    const fic = { id: 'fic', fic_ddt_id: 132 };
+    expect(ordiniStessoDdt(cic, [cic, fic])).toEqual([cic]);
+    expect(ordiniStessoDdt(fic, [cic, fic])).toEqual([fic]);
+  });
+
+  it('ddtKey: null quando il DDT non c\'è ancora', () => {
+    expect(ddtKey(bozza)).toBeNull();
+    expect(ddtKey(null)).toBeNull();
+    expect(ddtKey(a)).toBe('cic:132');
   });
 });
