@@ -133,12 +133,17 @@ export function billingInfo(p: PreventivoLike | null | undefined): BillingInfo {
 }
 
 /**
- * Chiave del DDT di un ordine (CiC o FiC), normalizzata a stringa perché su
- * Firestore l'id CiC è numerico. null = nessun DDT ancora emesso.
+ * Chiave del DDT di un ordine. Porta il backend davanti all'id perché CiC e FiC
+ * numerano i propri documenti ognuno per conto suo: senza prefisso un DDT FiC e
+ * uno CiC con lo stesso numero interno finirebbero nello stesso gruppo, e un
+ * cliente con ordini di prima e di dopo la migrazione stamperebbe un PDF che
+ * mescola due documenti diversi. Stringa anche perché su Firestore l'id è
+ * numerico. null = nessun DDT ancora emesso.
  */
 export function ddtKey(p: PreventivoLike | null | undefined): string | null {
-  const id = p?.cic_ddt_id ?? p?.fic_ddt_id;
-  return id == null ? null : String(id);
+  if (p?.cic_ddt_id != null) return `cic:${p.cic_ddt_id}`;
+  if (p?.fic_ddt_id != null) return `fic:${p.fic_ddt_id}`;
+  return null;
 }
 
 /**

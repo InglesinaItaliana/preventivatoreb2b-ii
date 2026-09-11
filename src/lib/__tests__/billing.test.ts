@@ -267,9 +267,18 @@ describe('ordiniStessoDdt — il PDF del DDT cumulativo li deve portare tutti', 
     expect(ordiniStessoDdt(f1, [f1, f2, a]).map((o) => o.id)).toEqual(['f1', 'f2']);
   });
 
+  it('un DDT FiC e uno CiC con lo stesso numero NON sono lo stesso DDT', () => {
+    // I due backend numerano per conto proprio: un cliente con ordini di prima e
+    // di dopo la migrazione non deve stampare un PDF che mescola due documenti.
+    const cic = { id: 'cic', cic_ddt_id: 132 };
+    const fic = { id: 'fic', fic_ddt_id: 132 };
+    expect(ordiniStessoDdt(cic, [cic, fic])).toEqual([cic]);
+    expect(ordiniStessoDdt(fic, [cic, fic])).toEqual([fic]);
+  });
+
   it('ddtKey: null quando il DDT non c\'è ancora', () => {
     expect(ddtKey(bozza)).toBeNull();
     expect(ddtKey(null)).toBeNull();
-    expect(ddtKey(a)).toBe('132');
+    expect(ddtKey(a)).toBe('cic:132');
   });
 });
