@@ -16,6 +16,11 @@
 //   - NON crea anagrafiche: riusa l'entity di un ordine storico esistente.
 //   - NON scrive su Firestore. Non rinnova il token se non glielo chiedi.
 //
+// PREREQUISITI
+//   gcloud auth application-default login   (account info@inglesinaitaliana.it)
+//   Node 20+ (usa fetch nativo); firebase-admin si risolve da src/functions/.
+//   Solo per --refresh servono FIC_CLIENT_ID e FIC_CLIENT_SECRET nell'ambiente.
+//
 // USO
 //   node risorsexCiC/probe-fic-prezzi.mjs              # sola lettura
 //   node risorsexCiC/probe-fic-prezzi.mjs --apply      # crea + cancella
