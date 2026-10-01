@@ -32,15 +32,11 @@ var __importStar = (this && this.__importStar) || (function () {
         return result;
     };
 })();
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.isCoreAdminUser = isCoreAdminUser;
 exports.registerBugFunctions = registerBugFunctions;
 const functions = __importStar(require("firebase-functions/v1"));
 const admin = __importStar(require("firebase-admin"));
-const axios_1 = __importDefault(require("axios"));
 const rateLimit_1 = require("../lib_mcp/rateLimit");
 const SUPER_ADMIN = 'info@inglesinaitaliana.it';
 function normEmail(email) {
@@ -102,36 +98,6 @@ function categoryFromUi(label) {
     };
     return (_a = map[label]) !== null && _a !== void 0 ? _a : 'funzionale';
 }
-function notionStatusToBug(status) {
-    var _a;
-    const map = {
-        'Da Analizzare': 'da_analizzare',
-        'In Corso': 'in_corso',
-        'Risolto': 'risolto',
-        'Non Riproducibile': 'non_riproducibile',
-    };
-    return (_a = map[status !== null && status !== void 0 ? status : '']) !== null && _a !== void 0 ? _a : 'da_analizzare';
-}
-function notionCategoryToBug(cat) {
-    var _a;
-    const map = {
-        'UI/Grafica': 'ui',
-        'Errore Funzionale': 'funzionale',
-        'Performance': 'performance',
-        'Dati Errati': 'dati',
-        'Suggerimento': 'suggerimento',
-    };
-    return (_a = map[cat !== null && cat !== void 0 ? cat : '']) !== null && _a !== void 0 ? _a : 'funzionale';
-}
-function notionPriorityToBug(p) {
-    var _a;
-    const map = {
-        Alta: 'alta',
-        Media: 'media',
-        Bassa: 'bassa',
-    };
-    return (_a = map[p !== null && p !== void 0 ? p : '']) !== null && _a !== void 0 ? _a : 'media';
-}
 async function nextBugNumber(db) {
     const year = new Date().getFullYear();
     const counterRef = db.doc('counters/bugs');
@@ -184,10 +150,6 @@ async function notifyCoreAdminsNewBug(db, bugNumber, title) {
     catch (e) {
         console.error('[bugs] FCM notify failed', e);
     }
-}
-function richTextPlain(prop) {
-    var _a;
-    return ((_a = prop === null || prop === void 0 ? void 0 : prop.rich_text) !== null && _a !== void 0 ? _a : []).map((t) => { var _a; return (_a = t.plain_text) !== null && _a !== void 0 ? _a : ''; }).join('');
 }
 /** Token FCM idonei alle notifiche bug: solo browser desktop (non PWA QUASAR/mobile). */
 function isDesktopBugNotifyToken(val) {
@@ -400,110 +362,6 @@ function registerBugFunctions() {
         });
         return { success: true, taskId: taskRef.id };
     });
-    const importBugsFromNotion = functions
-        .region('europe-west1')
-        .https.onCall(async (_data, context) => {
-        var _a, _b, _c, _d, _e, _f, _g, _h, _j, _k, _l, _m, _o, _p, _q, _r, _s, _t, _u, _v, _w, _x, _y, _z;
-        if (!context.auth) {
-            throw new functions.https.HttpsError('unauthenticated', 'Richiesto login');
-        }
-        const email = normEmail(context.auth.token.email);
-        const db = admin.firestore();
-        if (!(await isCoreAdminUser(db, email))) {
-            throw new functions.https.HttpsError('permission-denied', 'Solo CORE admin');
-        }
-        const configDoc = await db.collection('config').doc('notion').get();
-        if (!configDoc.exists) {
-            throw new functions.https.HttpsError('failed-precondition', 'config/notion mancante');
-        }
-        const NOTION_API_KEY = (_a = configDoc.data()) === null || _a === void 0 ? void 0 : _a.NOTION_API_KEY;
-        const NOTION_DB_ID = (_b = configDoc.data()) === null || _b === void 0 ? void 0 : _b.NOTION_DB_ID;
-        if (!NOTION_API_KEY || !NOTION_DB_ID) {
-            throw new functions.https.HttpsError('failed-precondition', 'Chiavi Notion mancanti');
-        }
-        let imported = 0;
-        let updated = 0;
-        let cursor;
-        do {
-            const body = { page_size: 100 };
-            if (cursor)
-                body.start_cursor = cursor;
-            const response = await axios_1.default.post(`https://api.notion.com/v1/databases/${NOTION_DB_ID}/query`, body, {
-                headers: {
-                    Authorization: `Bearer ${NOTION_API_KEY}`,
-                    'Notion-Version': '2022-06-28',
-                    'Content-Type': 'application/json',
-                },
-            });
-            for (const page of ((_d = (_c = response.data) === null || _c === void 0 ? void 0 : _c.results) !== null && _d !== void 0 ? _d : [])) {
-                const pageId = String((_e = page.id) !== null && _e !== void 0 ? _e : '');
-                if (!pageId)
-                    continue;
-                const docId = pageId.replace(/-/g, '');
-                // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                const props = ((_f = page.properties) !== null && _f !== void 0 ? _f : {});
-                const existing = await db.collection('bugs').doc(docId).get();
-                const title = ((_h = (_g = props['Titolo Bug']) === null || _g === void 0 ? void 0 : _g.title) !== null && _h !== void 0 ? _h : []).map((t) => { var _a; return (_a = t.plain_text) !== null && _a !== void 0 ? _a : ''; }).join('') || 'Senza titolo';
-                const status = notionStatusToBug((_k = (_j = props['Status']) === null || _j === void 0 ? void 0 : _j.status) === null || _k === void 0 ? void 0 : _k.name);
-                const category = notionCategoryToBug((_m = (_l = props['Categoria']) === null || _l === void 0 ? void 0 : _l.select) === null || _m === void 0 ? void 0 : _m.name);
-                const priority = notionPriorityToBug((_p = (_o = props['Priorità']) === null || _o === void 0 ? void 0 : _o.select) === null || _p === void 0 ? void 0 : _p.name);
-                const description = richTextPlain(props['Dettagli']);
-                const pageUrl = String((_r = (_q = props['Pagina/URL']) === null || _q === void 0 ? void 0 : _q.url) !== null && _r !== void 0 ? _r : '');
-                const reportedBy = richTextPlain(props['Segnalato Da']) || 'import';
-                const technicalRaw = richTextPlain(props['Contesto Tecnico']);
-                let technicalContext = {};
-                try {
-                    technicalContext = JSON.parse(technicalRaw || '{}');
-                }
-                catch (_0) {
-                    technicalContext = { raw: technicalRaw };
-                }
-                const dateStart = (_t = (_s = props['Data Segnalazione']) === null || _s === void 0 ? void 0 : _s.date) === null || _t === void 0 ? void 0 : _t.start;
-                const createdTs = dateStart
-                    ? admin.firestore.Timestamp.fromDate(new Date(dateStart))
-                    : admin.firestore.Timestamp.now();
-                const payload = {
-                    bugNumber: existing.exists ? ((_v = (_u = existing.data()) === null || _u === void 0 ? void 0 : _u.bugNumber) !== null && _v !== void 0 ? _v : `NOTION-${docId.slice(0, 8).toUpperCase()}`) : `NOTION-${docId.slice(0, 8).toUpperCase()}`,
-                    title: title.slice(0, 200),
-                    description: description.slice(0, 4000),
-                    status,
-                    category,
-                    priority,
-                    pageUrl,
-                    affectedArea: parseAffectedArea(pageUrl, String((_w = technicalContext.path) !== null && _w !== void 0 ? _w : '')),
-                    preventivoCodice: parsePreventivoCodice(pageUrl),
-                    reportedBy,
-                    reportedByUid: '',
-                    reporterType: 'client',
-                    reporterCompany: null,
-                    technicalContext,
-                    internalNotes: '',
-                    assigneeUid: null,
-                    linkedTaskId: null,
-                    linkedTaskProjectId: null,
-                    duplicateOf: null,
-                    source: 'import_notion',
-                    notionPageId: pageId,
-                    statusHistory: [{
-                            status,
-                            by: 'import',
-                            byEmail: email,
-                            at: createdTs,
-                        }],
-                    createdAt: existing.exists ? (_y = (_x = existing.data()) === null || _x === void 0 ? void 0 : _x.createdAt) !== null && _y !== void 0 ? _y : createdTs : createdTs,
-                    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-                    resolvedAt: status === 'risolto' ? createdTs : null,
-                };
-                await db.collection('bugs').doc(docId).set(payload, { merge: true });
-                if (existing.exists)
-                    updated++;
-                else
-                    imported++;
-            }
-            cursor = ((_z = response.data) === null || _z === void 0 ? void 0 : _z.has_more) ? response.data.next_cursor : undefined;
-        } while (cursor);
-        return { success: true, imported, updated, total: imported + updated };
-    });
-    return { submitBug, updateBug, promoteBugToTask, importBugsFromNotion };
+    return { submitBug, updateBug, promoteBugToTask };
 }
 //# sourceMappingURL=bugs.js.map

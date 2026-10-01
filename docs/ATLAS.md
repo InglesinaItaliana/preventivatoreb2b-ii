@@ -1289,7 +1289,7 @@ Il rischio #1 è il **drift di schema**: client (TipTap) e Cloud Functions (migr
 
 ### Pezzi principali
 - `src/composables/nebula/FirestoreYjsProvider.ts` — provider client (echo-suppression 2 livelli, batching ~350ms, awareness ~300ms, re-baseline post-compaction).
-- CF (`src/functions/index.ts`): `initYDoc`/`backfillYDocs` (migrazione first-writer-wins, **lazy** alla 1ª apertura), `nebulaYjsMaintenance` (compaction no-loss + proiezione `content`), `snapshotDoc`/`restoreDoc` (history via `updateYFragment`), `awarenessCleanup`.
+- CF (`src/functions/index.ts`): `initYDoc` (migrazione first-writer-wins, **lazy** alla 1ª apertura), `nebulaYjsMaintenance` (compaction no-loss + proiezione `content`), `snapshotDoc`/`restoreDoc` (history via `updateYFragment`), `awarenessCleanup`.
 - Converter MCP markdown⇄ProseMirror `src/functions/lib_md/markdown.ts` (link, tabelle, checkbox, mention, embed): l'output **deve** essere accettato da `nebulaSchema.nodeFromJSON`, altrimenti `applyJSONToYDoc` lancia in scrittura.
 
 ### Se aggiungi un nodo/mark all'editor NEBULA
