@@ -627,7 +627,7 @@ Scelta architetturale: **provider Firestore-native** (NO Cloud Run/Hocuspocus/We
 - [x] Deps: `yjs` + `@tiptap/y-tiptap` + `extension-collaboration(+caret)@3.23.6` (client) e stack tiptap/prosemirror (functions). `yjs` deduplicato a 1 copia.
 - [x] **Schema headless condiviso** `src/functions/lib_yjs/pmSchema.ts` (linchpin anti-drift) + helper `ydoc.ts`. Round-trip semantico verificato su tutti i nodi (test vitest 9/9).
 - [x] **FirestoreYjsProvider** `src/composables/nebula/FirestoreYjsProvider.ts` (echo-suppression 2 livelli, batching 350ms, awareness 300ms, re-baseline post-compaction).
-- [x] CF: `initYDoc` + `backfillYDocs` (migrazione first-writer-wins), `nebulaYjsMaintenance` (compaction no-loss + proiezione `content`), `snapshotDoc`/`restoreDoc` (history via `updateYFragment`), `awarenessCleanup`.
+- [x] CF: `initYDoc` (migrazione first-writer-wins, lazy alla prima apertura), `nebulaYjsMaintenance` (compaction no-loss + proiezione `content`), `snapshotDoc`/`restoreDoc` (history via `updateYFragment`), `awarenessCleanup`.
 - [x] Rules `yupdates` (append-only, create writer) + `awareness`; indici CG; kill-switch `core/nebula.collabEnabled`.
 - [x] Vitest introdotto; `manualChunks` Vite include lo stack Yjs nel chunk lazy.
 
@@ -639,7 +639,7 @@ Scelta architetturale: **provider Firestore-native** (NO Cloud Run/Hocuspocus/We
 
 **Resta (operativo, NON codice — richiede autorizzazione + deploy):**
 - [ ] Deploy ATOMICO `functions,hosting` + rules + indici (l'editor ora richiede le CF: deploy parziale lo romperebbe).
-- [ ] `backfillYDocs` (callable, CORE admin) su tutti i doc esistenti.
+- [x] ~~`backfillYDocs` su tutti i doc esistenti~~ — non necessario: la migrazione è lazy (`initYDoc` alla prima apertura). Funzione rimossa il 01/10/2026.
 - [ ] Verifica two-browser; opzionale: pre-deploy con `core/nebula.collabEnabled=false`, validare, poi flip ON.
 
 **Note tecniche scoperte in implementazione:**

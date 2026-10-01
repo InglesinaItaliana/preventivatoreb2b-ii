@@ -1,6 +1,5 @@
 import * as functions from 'firebase-functions/v1';
 import * as admin from 'firebase-admin';
-import axios from 'axios';
 import { checkRateLimit } from '../lib_mcp/rateLimit';
 
 const SUPER_ADMIN = 'info@inglesinaitaliana.it';
@@ -58,36 +57,6 @@ function categoryFromUi(label: string): BugCategory {
   return map[label] ?? 'funzionale';
 }
 
-function notionStatusToBug(status: string | undefined): BugStatus {
-  const map: Record<string, BugStatus> = {
-    'Da Analizzare': 'da_analizzare',
-    'In Corso': 'in_corso',
-    'Risolto': 'risolto',
-    'Non Riproducibile': 'non_riproducibile',
-  };
-  return map[status ?? ''] ?? 'da_analizzare';
-}
-
-function notionCategoryToBug(cat: string | undefined): BugCategory {
-  const map: Record<string, BugCategory> = {
-    'UI/Grafica': 'ui',
-    'Errore Funzionale': 'funzionale',
-    'Performance': 'performance',
-    'Dati Errati': 'dati',
-    'Suggerimento': 'suggerimento',
-  };
-  return map[cat ?? ''] ?? 'funzionale';
-}
-
-function notionPriorityToBug(p: string | undefined): BugPriority {
-  const map: Record<string, BugPriority> = {
-    Alta: 'alta',
-    Media: 'media',
-    Bassa: 'bassa',
-  };
-  return map[p ?? ''] ?? 'media';
-}
-
 async function nextBugNumber(db: FirebaseFirestore.Firestore): Promise<string> {
   const year = new Date().getFullYear();
   const counterRef = db.doc('counters/bugs');
@@ -141,10 +110,6 @@ async function notifyCoreAdminsNewBug(
   } catch (e) {
     console.error('[bugs] FCM notify failed', e);
   }
-}
-
-function richTextPlain(prop: { rich_text?: Array<{ plain_text?: string }> } | undefined): string {
-  return (prop?.rich_text ?? []).map((t) => t.plain_text ?? '').join('');
 }
 
 /** Token FCM idonei alle notifiche bug: solo browser desktop (non PWA QUASAR/mobile). */
@@ -366,119 +331,5 @@ export function registerBugFunctions() {
       return { success: true, taskId: taskRef.id };
     });
 
-  const importBugsFromNotion = functions
-    .region('europe-west1')
-    .https.onCall(async (_data, context) => {
-      if (!context.auth) {
-        throw new functions.https.HttpsError('unauthenticated', 'Richiesto login');
-      }
-      const email = normEmail(context.auth.token.email);
-      const db = admin.firestore();
-      if (!(await isCoreAdminUser(db, email))) {
-        throw new functions.https.HttpsError('permission-denied', 'Solo CORE admin');
-      }
-
-      const configDoc = await db.collection('config').doc('notion').get();
-      if (!configDoc.exists) {
-        throw new functions.https.HttpsError('failed-precondition', 'config/notion mancante');
-      }
-      const NOTION_API_KEY = configDoc.data()?.NOTION_API_KEY as string;
-      const NOTION_DB_ID = configDoc.data()?.NOTION_DB_ID as string;
-      if (!NOTION_API_KEY || !NOTION_DB_ID) {
-        throw new functions.https.HttpsError('failed-precondition', 'Chiavi Notion mancanti');
-      }
-
-      let imported = 0;
-      let updated = 0;
-      let cursor: string | undefined;
-
-      do {
-        const body: Record<string, unknown> = { page_size: 100 };
-        if (cursor) body.start_cursor = cursor;
-
-        const response = await axios.post<{
-          results?: unknown[]
-          has_more?: boolean
-          next_cursor?: string
-        }>(
-          `https://api.notion.com/v1/databases/${NOTION_DB_ID}/query`,
-          body,
-          {
-            headers: {
-              Authorization: `Bearer ${NOTION_API_KEY}`,
-              'Notion-Version': '2022-06-28',
-              'Content-Type': 'application/json',
-            },
-          },
-        );
-
-        for (const page of (response.data?.results ?? []) as Array<Record<string, unknown>>) {
-          const pageId = String(page.id ?? '');
-          if (!pageId) continue;
-          const docId = pageId.replace(/-/g, '');
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const props = (page.properties ?? {}) as any;
-          const existing = await db.collection('bugs').doc(docId).get();
-
-          const title = (props['Titolo Bug']?.title ?? []).map((t: { plain_text?: string }) => t.plain_text ?? '').join('') || 'Senza titolo';
-          const status = notionStatusToBug(props['Status']?.status?.name as string | undefined);
-          const category = notionCategoryToBug(props['Categoria']?.select?.name as string | undefined);
-          const priority = notionPriorityToBug(props['Priorità']?.select?.name as string | undefined);
-          const description = richTextPlain(props['Dettagli']);
-          const pageUrl = String(props['Pagina/URL']?.url ?? '');
-          const reportedBy = richTextPlain(props['Segnalato Da']) || 'import';
-          const technicalRaw = richTextPlain(props['Contesto Tecnico']);
-          let technicalContext: Record<string, unknown> = {};
-          try { technicalContext = JSON.parse(technicalRaw || '{}'); } catch { technicalContext = { raw: technicalRaw }; }
-
-          const dateStart = props['Data Segnalazione']?.date?.start as string | undefined;
-          const createdTs = dateStart
-            ? admin.firestore.Timestamp.fromDate(new Date(dateStart))
-            : admin.firestore.Timestamp.now();
-
-          const payload = {
-            bugNumber: existing.exists ? (existing.data()?.bugNumber ?? `NOTION-${docId.slice(0, 8).toUpperCase()}`) : `NOTION-${docId.slice(0, 8).toUpperCase()}`,
-            title: title.slice(0, 200),
-            description: description.slice(0, 4000),
-            status,
-            category,
-            priority,
-            pageUrl,
-            affectedArea: parseAffectedArea(pageUrl, String(technicalContext.path ?? '')),
-            preventivoCodice: parsePreventivoCodice(pageUrl),
-            reportedBy,
-            reportedByUid: '',
-            reporterType: 'client',
-            reporterCompany: null,
-            technicalContext,
-            internalNotes: '',
-            assigneeUid: null,
-            linkedTaskId: null,
-            linkedTaskProjectId: null,
-            duplicateOf: null,
-            source: 'import_notion',
-            notionPageId: pageId,
-            statusHistory: [{
-              status,
-              by: 'import',
-              byEmail: email,
-              at: createdTs,
-            }],
-            createdAt: existing.exists ? existing.data()?.createdAt ?? createdTs : createdTs,
-            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-            resolvedAt: status === 'risolto' ? createdTs : null,
-          };
-
-          await db.collection('bugs').doc(docId).set(payload, { merge: true });
-          if (existing.exists) updated++;
-          else imported++;
-        }
-
-        cursor = response.data?.has_more ? response.data.next_cursor : undefined;
-      } while (cursor);
-
-      return { success: true, imported, updated, total: imported + updated };
-    });
-
-  return { submitBug, updateBug, promoteBugToTask, importBugsFromNotion };
+  return { submitBug, updateBug, promoteBugToTask };
 }

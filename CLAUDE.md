@@ -10,6 +10,8 @@ Un unico codebase Vue 3 + TypeScript + Vite + Firebase con due anime:
 ## Regole operative
 
 - POPS è live: **mai modificare codice senza autorizzazione esplicita**; lavorare sempre su feature branch.
+- **Nuove Cloud Functions in v2** (`firebase-functions/v2/...`, `region: 'europe-west1'` esplicita): le v1 esistenti restano v1 fino alla migrazione completa (entro 31/10/2027; una funzione non passa da v1 a v2 con lo stesso nome). In v2 un'istanza serve più richieste insieme: niente stato mutabile a livello di modulo senza tenerne conto. Il primo trigger Firestore v2 (database `eur3`) va verificato.
+- **Eliminare una function**: prima `firebase functions:delete <nome> --region europe-west1`, poi il merge della PR che la toglie dal codice (la CI non cancella le funzioni senza conferma e il deploy fallisce; se invece si cancella solo in produzione, il deploy successivo la ricrea).
 - `src/functions/index.ts` (~4300 righe) contiene le funzioni di fatturazione live (FiC/CiC): solo blocchi additivi; `npm --prefix src/functions run build` (tsc) deve uscire 0 prima di ogni deploy functions.
 - Prima del deploy hosting: `npm run build` REALE (vue-tsc può passare dove `vite build` fallisce; un build fallito fa caricare a firebase il `dist/` stantio).
 - Account Firebase/gcloud: sempre `info@inglesinaitaliana.it`.
@@ -126,7 +128,7 @@ Regole d'accesso (`firestore.rules`): admin = custom claim `role=='ADMIN'` o ema
 
 # Cloud Functions (`src/functions/`)
 
-`index.ts` ~4300 righe, ~56 export, tutto v1 `europe-west1`. **Critiche POPS**: `generaOrdineFIC` (trigger emissione ordine), `creaDdtCumulativo`, `cancelOrder`, `resetOrderState`, `getFreshFicUrl`, `manageListino`, `manageCustomerDiscount` (admin-only: legge/scrive lo sconto cliente su CiC per P.IVA, via `getCustomerDiscount/setCustomerDiscount` del provider), sync (`syncProductsWithFic`, `syncCicMappings`, `importClientsFromFiC/CiC`), `autoDeliveredAfter7Days`, `sendInvitesToClients`.
+`index.ts` ~4300 righe, 55 export (al 01/10/2026), tutto v1 `europe-west1`. **Critiche POPS**: `generaOrdineFIC` (trigger emissione ordine), `creaDdtCumulativo`, `cancelOrder`, `resetOrderState`, `getFreshFicUrl`, `manageListino`, `manageCustomerDiscount` (admin-only: legge/scrive lo sconto cliente su CiC per P.IVA, via `getCustomerDiscount/setCustomerDiscount` del provider), sync (`syncProductsWithFic`, `syncCicMappings`, `importClientsFromFiC/CiC`), `autoDeliveredAfter7Days`, `sendInvitesToClients`.
 
 Il resto: team/claims (`syncTeamRoleToAuth`, `createTeamMember`, `changeTeamMemberEmail`, backfill vari), PULSAR push (`onNewPulsarMessage`), QUASAR activity+calendario (`logTaskActivity*`, `notifyOnAppointment`, `appointmentReminders`), NEBULA docs (`saveDoc`, `shareDoc`, `indexDocRefs`, `notifyOnMention`, Yjs `nebulaYjsMaintenance` + snapshot/restore/GC schedulati), MCP (`mcpSidera` canonico + alias `mcpNebula`, OAuth+PKCE in `lib_mcp/oauth.ts`, ~26 tool in `lib_mcp/server.ts`), bug tracker (`lib_bugs/`).
 
