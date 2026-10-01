@@ -30,3 +30,6 @@ risorseesterneperclaude/*.app-[0-9]*
 
 # Firebase deploy cache (per-machine, rigenerata a ogni deploy)
 .firebase/
+
+# Dump di dati reali clienti prodotti dagli script diagnostici CiC/FiC
+risorsexCiC/out/
