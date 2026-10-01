@@ -4304,3 +4304,6 @@ exports.syncCompanyInfoDaily = functions
         }
         return null;
     });
+
+// --- PILOTA functions v2 (2nd gen) — TEMPORANEO, vedi lib_pilot/pilotV2.ts ---
+export { pilotV2Ping, pilotV2Trigger } from './lib_pilot/pilotV2';

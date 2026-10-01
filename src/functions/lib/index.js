@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.autoDeliveredAfter7Days = exports.watchdogOrdiniOrfani = exports.creaOrdineBilling = exports.changeTeamMemberEmail = exports.createTeamMember = void 0;
+exports.pilotV2Trigger = exports.pilotV2Ping = exports.autoDeliveredAfter7Days = exports.watchdogOrdiniOrfani = exports.creaOrdineBilling = exports.changeTeamMemberEmail = exports.createTeamMember = void 0;
 const dotenv = __importStar(require("dotenv")); // <--- AGGIUNGI QUESTO
 dotenv.config(); // <--- E QUESTO (Carica subito il file .env)
 const functions = __importStar(require("firebase-functions/v1"));
@@ -3915,4 +3915,8 @@ exports.syncCompanyInfoDaily = functions
     }
     return null;
 });
+// --- PILOTA functions v2 (2nd gen) — TEMPORANEO, vedi lib_pilot/pilotV2.ts ---
+var pilotV2_1 = require("./lib_pilot/pilotV2");
+Object.defineProperty(exports, "pilotV2Ping", { enumerable: true, get: function () { return pilotV2_1.pilotV2Ping; } });
+Object.defineProperty(exports, "pilotV2Trigger", { enumerable: true, get: function () { return pilotV2_1.pilotV2Trigger; } });
 //# sourceMappingURL=index.js.map
