@@ -33,3 +33,10 @@ risorseesterneperclaude/*.app-[0-9]*
 
 # Dump di dati reali clienti prodotti dagli script diagnostici CiC/FiC
 risorsexCiC/out/
+
+# Documenti reali (ordini, DDT, fogli di calcolo) appoggiati per Claude: il repo è pubblico
+risorseesterneperclaude/*.pdf
+risorseesterneperclaude/*.xlsx
+
+# HTML generati per la consultazione via web, non da versionare
+docs/html-visualizzabili/
