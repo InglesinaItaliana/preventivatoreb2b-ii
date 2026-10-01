@@ -36,7 +36,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.pilotV2Trigger = exports.pilotV2Ping = exports.autoDeliveredAfter7Days = exports.watchdogOrdiniOrfani = exports.creaOrdineBilling = exports.changeTeamMemberEmail = exports.createTeamMember = void 0;
+exports.autoDeliveredAfter7Days = exports.watchdogOrdiniOrfani = exports.creaOrdineBilling = exports.changeTeamMemberEmail = exports.createTeamMember = void 0;
 const dotenv = __importStar(require("dotenv")); // <--- AGGIUNGI QUESTO
 dotenv.config(); // <--- E QUESTO (Carica subito il file .env)
 const functions = __importStar(require("firebase-functions/v1"));
@@ -3173,28 +3173,33 @@ exports.generateNebulaApiKey = functions
         label,
     };
 });
-exports.revokeNebulaApiKey = functions
-    .region('europe-west1')
-    .https.onCall(async (data, context) => {
-    if (!context.auth) {
-        throw new functions.https.HttpsError('unauthenticated', 'Richiesto login');
+// ── revokeNebulaApiKey — PRIMA FUNZIONE v2 (2nd gen), migrata dalla v1 il 01/10/2026 ──
+// Stessa logica e stesso nome della v1: il client la chiama per nome
+// (useApiKeys.ts), quindi non cambia nulla lato frontend. Una funzione non passa
+// da v1 a v2 in place: la v1 va cancellata prima del deploy (v. CLAUDE.md).
+const https_1 = require("firebase-functions/v2/https");
+const firestore_1 = require("firebase-admin/firestore");
+exports.revokeNebulaApiKey = (0, https_1.onCall)({ region: 'europe-west1' }, async (request) => {
+    var _a;
+    if (!request.auth) {
+        throw new https_1.HttpsError('unauthenticated', 'Richiesto login');
     }
-    const userEmail = nebulaNormalizeEmail(context.auth.token.email);
-    const id = data === null || data === void 0 ? void 0 : data.id;
+    const userEmail = nebulaNormalizeEmail(request.auth.token.email);
+    const id = (_a = request.data) === null || _a === void 0 ? void 0 : _a.id;
     if (!id)
-        throw new functions.https.HttpsError('invalid-argument', 'id mancante');
+        throw new https_1.HttpsError('invalid-argument', 'id mancante');
     const db = admin.firestore();
     const ref = db.collection('nebulaApiKeys').doc(id);
     const snap = await ref.get();
     if (!snap.exists)
-        throw new functions.https.HttpsError('not-found', 'Chiave non trovata');
+        throw new https_1.HttpsError('not-found', 'Chiave non trovata');
     const k = snap.data();
     if (k.userEmail !== userEmail) {
-        throw new functions.https.HttpsError('permission-denied', 'Non puoi revocare chiavi di altri utenti');
+        throw new https_1.HttpsError('permission-denied', 'Non puoi revocare chiavi di altri utenti');
     }
     await ref.update({
         revoked: true,
-        revokedAt: admin.firestore.FieldValue.serverTimestamp(),
+        revokedAt: firestore_1.FieldValue.serverTimestamp(),
     });
     return { id, revoked: true };
 });
@@ -3915,8 +3920,4 @@ exports.syncCompanyInfoDaily = functions
     }
     return null;
 });
-// --- PILOTA functions v2 (2nd gen) — TEMPORANEO, vedi lib_pilot/pilotV2.ts ---
-var pilotV2_1 = require("./lib_pilot/pilotV2");
-Object.defineProperty(exports, "pilotV2Ping", { enumerable: true, get: function () { return pilotV2_1.pilotV2Ping; } });
-Object.defineProperty(exports, "pilotV2Trigger", { enumerable: true, get: function () { return pilotV2_1.pilotV2Trigger; } });
 //# sourceMappingURL=index.js.map
