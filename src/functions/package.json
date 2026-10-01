@@ -9,7 +9,7 @@
         "logs": "firebase functions:log"
     },
     "engines": {
-        "node": "20"
+        "node": "22"
     },
     "main": "lib/index.js",
     "dependencies": {
@@ -38,7 +38,7 @@
     },
     "devDependencies": {
         "@types/axios": "^0.14.0",
-        "@types/node": "^20.0.0",
+        "@types/node": "^22.0.0",
         "typescript": "^5.0.0"
     }
 }
