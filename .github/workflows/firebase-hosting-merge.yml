@@ -1,4 +1,4 @@
-name: Deploy to Firebase Hosting on merge
+name: Deploy produzione (main)
 on:
   push:
     branches:
@@ -6,6 +6,20 @@ on:
   # Avvio manuale da GitHub (Actions → "Run workflow"): serve quando l'evento push
   # non arriva (è successo al merge della #132) o per rifare un deploy senza commit.
   workflow_dispatch:
+
+# Minimo indispensabile: lettura del repo + token OIDC per la Workload Identity
+# Federation (niente chiavi JSON di service account nei secret).
+permissions:
+  contents: read
+  id-token: write
+
+# Due merge ravvicinati NON devono deployare in parallelo: il più vecchio potrebbe
+# finire per ultimo e rimettere online codice superato. Si accodano, senza annullare
+# un deploy già partito (un deploy functions interrotto a metà è peggio di uno lento).
+concurrency:
+  group: deploy-produzione
+  cancel-in-progress: false
+
 jobs:
   build_and_deploy:
     # Pin a 22.04: l'immagine ubuntu-24.04 20260622.220 rompe il fetch del token
@@ -16,42 +30,57 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      # 1. Configurazione Variabili d'ambiente per le Functions
-      - name: Create .env file for Functions
-        run: |
-          echo "${{ secrets.ENV_FILE }}" > src/functions/.env
+      # Stessa major del runtime delle functions (engines.node): niente Node "a caso"
+      # preinstallato sul runner.
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            src/functions/package-lock.json
 
-      # 2. Installazione dipendenze Functions
       - name: Install Functions Dependencies
-        run: cd src/functions && npm ci
+        run: npm ci --prefix src/functions
 
-      # 3. Installazione dipendenze Frontend
       - name: Install Dependencies
         run: npm ci
 
-      # 4. Build Frontend (Vue)
-        # Questo corrisponde al tuo "npm run build"
+      # I test (anti-drift prezzi/totali/DDT inclusi) bloccano il deploy se falliscono.
+      - name: Test
+        run: npm run test
+
       - name: Build
         run: npm run build
 
-      # --- NUOVO STEP AGGIUNTO: Deploy delle Functions (Metodo Ufficiale) ---
+      # Il secret passa da variabile d'ambiente + printf: niente interpolazione nel
+      # testo dello script, quindi $, ` e \ dentro le credenziali arrivano intatti.
+      - name: Create .env file for Functions
+        env:
+          ENV_FILE: ${{ secrets.ENV_FILE }}
+        run: printf '%s\n' "$ENV_FILE" > src/functions/.env
+
+      # Credenziali temporanee via Workload Identity Federation: GitHub presenta il
+      # suo token OIDC, Google lo scambia con un token a vita breve del service
+      # account. Il provider accetta solo questo repo e solo refs/heads/main.
+      # L'action scrive il file credenziali e imposta GOOGLE_APPLICATION_CREDENTIALS.
+      - name: Autenticazione Google Cloud (WIF)
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/574612046430/locations/global/workloadIdentityPools/github/providers/github-repo
+          service_account: firebase-adminsdk-fbsvc@preventivatoreb2b-ii.iam.gserviceaccount.com
+
       - name: Install Firebase CLI
         # Pin esatto: la 15.22.2 (24/06/2026) ha rotto l'auth via service account
         # (GOOGLE_APPLICATION_CREDENTIALS) -> "Failed to authenticate". La 15.22.1
         # e' l'ultima funzionante. Rialzare quando una release successiva lo risolve.
         run: npm install -g firebase-tools@15.22.1
 
-      # Deploy Functions + Hosting via Firebase CLI (un unico metodo, niente action di terze parti).
-      # Sostituisce FirebaseExtended/action-hosting-deploy@v0 (deprecata, runtime Node 20).
-      # Usa lo stesso service account già impiegato per le functions.
-      # Le preview channel restano possibili in un workflow PR separato con
-      # `firebase hosting:channel:deploy <id>`.
-      - name: Deploy Functions + Hosting
+      # Tutto ciò che è su main va in produzione: functions, hosting, regole e indici
+      # Firestore, regole Storage. Gli indici presenti in produzione ma assenti dal file
+      # NON vengono cancellati (servirebbe --force): la CLI si limita a segnalarli.
+      - name: Deploy Functions + Hosting + Firestore + Storage
         run: |
-          # Path ASSOLUTO: se firebase fa cd nelle functions durante il predeploy,
-          # un path relativo per le credenziali non si risolverebbe piu'.
-          echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT_PREVENTIVATOREB2B_II }}' > "$GITHUB_WORKSPACE/sa-key.json"
-          export GOOGLE_APPLICATION_CREDENTIALS="$GITHUB_WORKSPACE/sa-key.json"
           # L'immagine runner ubuntu-24.04 20260622.220 ha introdotto "Premature close"
           # sul fetch di https://www.googleapis.com/oauth2/v4/token (problema IPv6/Happy-Eyeballs
           # nello stack di rete Node): forziamo la risoluzione IPv4.
@@ -60,8 +89,7 @@ jobs:
           ok=""
           for attempt in 1 2 3; do
             echo "::group::Deploy attempt $attempt"
-            if firebase deploy --only functions,hosting --project preventivatoreb2b-ii --non-interactive; then ok=1; echo "::endgroup::"; break; fi
+            if firebase deploy --only functions,hosting,firestore,storage --project preventivatoreb2b-ii --non-interactive; then ok=1; echo "::endgroup::"; break; fi
             echo "::endgroup::"; echo "tentativo $attempt fallito, retry tra 20s..."; sleep 20
           done
-          rm -f "$GITHUB_WORKSPACE/sa-key.json"
           [ -n "$ok" ] || { echo "tutti i tentativi di deploy falliti"; exit 1; }

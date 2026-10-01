@@ -308,6 +308,14 @@ Questo è un limite di Firebase. Per il nostro caso (POLARIS azione 1) significa
 
 ## 7. Deploy in produzione — ordine corretto
 
+> **Oggi il deploy lo fa la CI**, non a mano. Ci sono due workflow in `.github/workflows/`:
+> - **`ci-pr.yml` — "Controlli PR"**: su ogni PR verso `main` esegue test vitest, build del frontend e build delle functions. Non ha secret né credenziali. Se è rosso, non mergiare.
+> - **`firebase-hosting-merge.yml` — "Deploy produzione"**: su ogni push a `main` esegue test e build, poi `firebase deploy --only functions,hosting,firestore,storage`. Quindi **tutto ciò che è su `main` va in produzione**, comprese le regole Firestore/Storage e gli indici: una modifica fatta a mano dalla console Firebase viene sovrascritta al deploy successivo. Gli indici presenti solo in produzione non vengono cancellati, la CLI li segnala e basta.
+> - Autenticazione con **Workload Identity Federation**: GitHub ottiene un token temporaneo del service account `firebase-adminsdk-fbsvc`, e il provider `github/github-repo` accetta solo questo repo e solo `refs/heads/main`. Non c'è nessuna chiave JSON nei secret; l'unico secret rimasto è `ENV_FILE`, cioè il `.env` delle functions.
+> - Due merge ravvicinati si accodano (`concurrency`) e non deployano in parallelo.
+>
+> La procedura manuale qui sotto resta valida come riferimento e per le emergenze (CI giù).
+
 Quando una PR è mergiata in `main` e vuoi mandare in produzione:
 
 ```bash

@@ -13,7 +13,7 @@ Un unico codebase Vue 3 + TypeScript + Vite + Firebase con due anime:
 - `src/functions/index.ts` (~4300 righe) contiene le funzioni di fatturazione live (FiC/CiC): solo blocchi additivi; `npm --prefix src/functions run build` (tsc) deve uscire 0 prima di ogni deploy functions.
 - Prima del deploy hosting: `npm run build` REALE (vue-tsc può passare dove `vite build` fallisce; un build fallito fa caricare a firebase il `dist/` stantio).
 - Account Firebase/gcloud: sempre `info@inglesinaitaliana.it`.
-- Processo git/GitHub/deploy: `docs/WORKFLOW.md`. La CI deploya su push a `main`.
+- Processo git/GitHub/deploy: `docs/WORKFLOW.md`. La CI deploya su push a `main` functions, hosting, regole/indici Firestore e regole Storage (autenticazione WIF, nessuna chiave JSON); sulle PR esegue test e build (`.github/workflows/ci-pr.yml`).
 
 ## Comandi
 
