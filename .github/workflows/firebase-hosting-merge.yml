@@ -3,6 +3,9 @@ on:
   push:
     branches:
       - main
+  # Avvio manuale da GitHub (Actions → "Run workflow"): serve quando l'evento push
+  # non arriva (è successo al merge della #132) o per rifare un deploy senza commit.
+  workflow_dispatch:
 jobs:
   build_and_deploy:
     # Pin a 22.04: l'immagine ubuntu-24.04 20260622.220 rompe il fetch del token
