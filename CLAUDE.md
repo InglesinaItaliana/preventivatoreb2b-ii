@@ -25,7 +25,7 @@ Un unico codebase Vue 3 + TypeScript + Vite + Firebase con due anime:
 | Type-check frontend | `npx tsc --noEmit -p tsconfig.app.json` (nessuno script dedicato) |
 | Build functions | `npm --prefix src/functions run build` (tsc → `src/functions/lib/`, che è output compilato: NON editarlo) |
 
-Firebase: progetto `preventivatoreb2b-ii`, hosting single-site (`dist`, SPA rewrite), Firestore `eur3`, functions **v1** Node 20 regione **`europe-west1`**. Emulatori: auth 9099, functions 5001, firestore 8080.
+Firebase: progetto `preventivatoreb2b-ii`, hosting single-site (`dist`, SPA rewrite), Firestore `eur3`, functions **v1** Node 22 regione **`europe-west1`**. Emulatori: auth 9099, functions 5001, firestore 8080.
 
 ## Struttura
 

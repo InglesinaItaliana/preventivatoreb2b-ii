@@ -44,7 +44,7 @@ POLARIS è la roadmap che governa l'evoluzione architetturale di `preventivatore
 - Service Worker FCM unico (`public/firebase-messaging-sw.js`) registrato con scope `/`
 - Auth Firebase unica per tutti (POPS clienti B2B + team interno PRODUZIONE / LOGISTICA / ADMIN)
 - Firestore unico (collections: `chats`, `messages`, `tasks` (con discriminator `type`), `projects`, `obiettivi`, `team`, `clienti`, ...)
-- Cloud Functions `europe-west1`, Node 20 (deprecato 2026-04-30 → bumpare a Node 22 entro 2026-10-30)
+- Cloud Functions `europe-west1`, Node 22 (1st gen: deprecato 2027-04-30, dismesso 2027-10-31). Node 24 esiste solo per le functions 2nd gen → richiede la migrazione v1→v2 (cambia l'URL di `mcpSidera`; un nome non passa da 1st a 2nd gen in place)
 
 ---
 
