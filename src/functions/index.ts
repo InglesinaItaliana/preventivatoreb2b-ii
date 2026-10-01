@@ -3545,32 +3545,37 @@ exports.generateNebulaApiKey = functions
         };
     });
 
-exports.revokeNebulaApiKey = functions
-    .region('europe-west1')
-    .https.onCall(async (data, context) => {
-        if (!context.auth) {
-            throw new functions.https.HttpsError('unauthenticated', 'Richiesto login');
-        }
-        const userEmail = nebulaNormalizeEmail(context.auth.token.email);
-        const id: string | undefined = data?.id;
-        if (!id) throw new functions.https.HttpsError('invalid-argument', 'id mancante');
+// ── revokeNebulaApiKey — PRIMA FUNZIONE v2 (2nd gen), migrata dalla v1 il 01/10/2026 ──
+// Stessa logica e stesso nome della v1: il client la chiama per nome
+// (useApiKeys.ts), quindi non cambia nulla lato frontend. Una funzione non passa
+// da v1 a v2 in place: la v1 va cancellata prima del deploy (v. CLAUDE.md).
+import { onCall as onCallV2, HttpsError as HttpsErrorV2 } from 'firebase-functions/v2/https';
+import { FieldValue } from 'firebase-admin/firestore';
 
-        const db = admin.firestore();
-        const ref = db.collection('nebulaApiKeys').doc(id);
-        const snap = await ref.get();
-        if (!snap.exists) throw new functions.https.HttpsError('not-found', 'Chiave non trovata');
+exports.revokeNebulaApiKey = onCallV2({ region: 'europe-west1' }, async (request) => {
+    if (!request.auth) {
+        throw new HttpsErrorV2('unauthenticated', 'Richiesto login');
+    }
+    const userEmail = nebulaNormalizeEmail(request.auth.token.email);
+    const id: string | undefined = request.data?.id;
+    if (!id) throw new HttpsErrorV2('invalid-argument', 'id mancante');
 
-        const k = snap.data() as { userEmail?: string };
-        if (k.userEmail !== userEmail) {
-            throw new functions.https.HttpsError('permission-denied', 'Non puoi revocare chiavi di altri utenti');
-        }
+    const db = admin.firestore();
+    const ref = db.collection('nebulaApiKeys').doc(id);
+    const snap = await ref.get();
+    if (!snap.exists) throw new HttpsErrorV2('not-found', 'Chiave non trovata');
 
-        await ref.update({
-            revoked: true,
-            revokedAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-        return { id, revoked: true };
+    const k = snap.data() as { userEmail?: string };
+    if (k.userEmail !== userEmail) {
+        throw new HttpsErrorV2('permission-denied', 'Non puoi revocare chiavi di altri utenti');
+    }
+
+    await ref.update({
+        revoked: true,
+        revokedAt: FieldValue.serverTimestamp(),
     });
+    return { id, revoked: true };
+});
 
 exports.listNebulaApiKeys = functions
     .region('europe-west1')
@@ -4304,6 +4309,3 @@ exports.syncCompanyInfoDaily = functions
         }
         return null;
     });
-
-// --- PILOTA functions v2 (2nd gen) — TEMPORANEO, vedi lib_pilot/pilotV2.ts ---
-export { pilotV2Ping, pilotV2Trigger } from './lib_pilot/pilotV2';

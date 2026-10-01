@@ -18,7 +18,7 @@ MANUTENZIONE / PULIZIA CODICE (dal 01/10/2026)
 - [ ] NEBULA docs: estensione Link registrata due volte (`[tiptap warn] Duplicate extension names found: ['link']`), probabilmente StarterKit v3 la include già
 - [x] Functions: eliminate 7 funzioni una tantum (migrateAllTeamClaims, backfillTeamAvatars, auditAssigneeUids, backfillAssigneeUids, backfillMessageMembers, backfillYDocs, importBugsFromNotion): da 62 a 55 (01/10/2026)
 - [ ] mcpNebula: verificare dal 05/10 che le chiamate siano a zero (connettore claude.ai "Nebula" e voce Desktop rimossi il 01/10)
-- [ ] mcpNebula: revocare l'API key `nbk_` di Claude Desktop da NEBULA → "Connetti Claude"
+- [ ] mcpNebula: revocare l'API key `nbk_` di Claude Desktop da NEBULA → "Connetti Claude" (è anche il test reale della prima funzione v2, `revokeNebulaApiKey`)
 - [ ] mcpNebula: correggere `lib_mcp/oauth.ts` (MCP_BASE_URL punta ancora a mcpNebula)
 - [ ] mcpNebula: dopo 30 giorni senza chiamate, `firebase functions:delete mcpNebula --region europe-west1`, poi PR che lo toglie dal codice (index.ts + KNOWN_FNS in lib_mcp/server.ts)
 - [ ] Funzioni FiC dopo il passaggio a CiC (18/06): verificare quali non servono più (es. `syncAddressesFromFiC` "una tantum", `syncProductsWithFic`, `importClientsFromFiC`) con lo stesso metodo (frontend + log)
@@ -26,6 +26,7 @@ MANUTENZIONE / PULIZIA CODICE (dal 01/10/2026)
 - [ ] Functions: rimuovere la devDependency inutile `@types/axios` (axios ha già i suoi tipi)
 - [ ] CI: riprovare a sbloccare `firebase-tools` (fermo a 15.22.1) e `ubuntu-22.04` (ora che c'è WIF, in una PR a parte)
 - [ ] Test in emulatore (functions + firestore + auth + pubsub, progetto `demo-`, CiC simulato) per `generaOrdineFIC` e `creaDdtCumulativo`, poi in `ci-pr.yml`: oggi la CI testa solo la logica pura, non l'emissione reale dell'ordine (percorso dell'incidente "ordine orfano"). Base di partenza: lo smoke test usato per la verifica di Node 22. Serve Java 21 (in CI: `actions/setup-java`)
+- [x] Functions v2 operative (01/10/2026): pilota verificato (callable + trigger Firestore eur3), 3 permessi IAM dei service agent assegnati, prima funzione migrata: `revokeNebulaApiKey`
 - [ ] Entro 31/10/2027: migrazione functions v1 → v2 (2nd gen) e passaggio a Node 24 (cambia l'URL di `mcpSidera`; un nome non passa da 1st a 2nd gen in place)
 
 
