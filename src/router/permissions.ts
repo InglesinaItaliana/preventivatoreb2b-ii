@@ -37,6 +37,14 @@ export function isPathAllowedForRole(role: Role, path: string): boolean {
   return allowed.some(p => matchPath(path, p))
 }
 
+/** Path del team riservati ad ADMIN: gli altri ruoli rimbalzano sulla loro pagina post-login. */
+export const adminOnlyPaths = ['/griglie']
+
+/** True se `path` è una pagina riservata ad ADMIN. */
+export function isAdminOnlyPath(path: string): boolean {
+  return adminOnlyPaths.some(p => matchPath(path, p))
+}
+
 /** True se `path` è una pagina amministrativa vietata ai clienti. */
 export function isForbiddenClientPath(path: string): boolean {
   return forbiddenClientPaths.some(p => path.startsWith(p))

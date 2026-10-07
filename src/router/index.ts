@@ -3,7 +3,7 @@ import { auth, db } from '../firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { getTeamDoc } from '../composables/sidera/useTeamMembers';
 import { ENABLE_NEBULA_DOCS, detectScope, getScopeConfig } from '../views/sidera/scopeConfig';
-import { roleFallbackPath, isPathAllowedForRole, isForbiddenClientPath, type Role } from './permissions';
+import { roleFallbackPath, isPathAllowedForRole, isForbiddenClientPath, isAdminOnlyPath, postLoginRoute, type Role } from './permissions';
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -323,6 +323,12 @@ router.beforeEach(async (to, from, next) => {
         const fallback = roleFallbackPath[role];
         if (fallback && !isPathAllowedForRole(role, to.path)) {
           next(fallback);
+          return;
+        }
+
+        // Pagine riservate ad ADMIN (configuratore griglie): COMMERCIALE e altri rimbalzano.
+        if (role !== 'ADMIN' && isAdminOnlyPath(to.path)) {
+          next(postLoginRoute(role));
           return;
         }
 

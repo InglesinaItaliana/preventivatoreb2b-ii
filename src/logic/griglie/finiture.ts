@@ -17,6 +17,18 @@ export const GRUPPI: Record<FamigliaFinitura, string[]> = {
   RIVESTITO: ['RIVESTITA'],
 };
 
+/**
+ * Il bianco di serie (RAL 9010) è il profilo che si usa sempre: per lui conviene
+ * ottimizzare il taglio trasformando gli scarti in avanzi da magazzino, che
+ * verranno ripresi. Su un colore poco usato un avanzo a magazzino resta lì.
+ * Il BIANCO LE11 è un rivestito effetto legno: non conta.
+ */
+export function eBiancoDiSerie(finitura: string | null | undefined): boolean {
+  const f = (finitura ?? '').toUpperCase();
+  // «9010» come numero a sé, anche attaccato a «RAL» («RAL9010»), ma non dentro un altro numero
+  return /(^|\D)9010(\D|$)/.test(f) && !/\bLE\d+\b/.test(f);
+}
+
 /** Il gruppo del listino appartiene a questa famiglia? */
 export function appartiene(gruppo: string, famiglia: FamigliaFinitura): boolean {
   return GRUPPI[famiglia].includes(gruppo.trim().toUpperCase());
