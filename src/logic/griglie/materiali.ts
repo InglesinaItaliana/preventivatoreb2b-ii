@@ -48,8 +48,42 @@ export const PROFONDITA_CANALE = PROFILO_U.lato - PROFILO_U.spessore; // 18.5
 /** Spessore del pannello finito = profondità del telaio. Serve per gli ingombri. */
 export const SPESSORE_PANNELLO = PROFILO_U.lato; // 20
 
+/**
+ * Inglesina da 26: l'unico profilo con cui si fa lo stile PREMIUM, sia per la
+ * cornice sia per gli elementi interni.
+ *
+ * SORMONTO (dal foglio "calcoliLAVORAZIONI", tab Supporto): quanto della corsa di
+ * un orizzontale "mangia" ogni barra che attraversa. Vale 13 sulle verniciate e
+ * 14 sulle rivestite. Il pezzo che si incastra entra nella barra sormontata per
+ * (26 − sormonto)/2 per lato: 6,5 sulle verniciate, 6 sulle rivestite. Con 13 le
+ * due grandezze coincidono per caso (13/2 = 6,5): non scambiarle.
+ *
+ * Sezione 26×8 (scheda Varsavia), stecche da 3 m da 304 g l'una (≈ 101 g/m).
+ */
+export const INGLESINA_26 = {
+  larghezza: 26,
+  spessore: 8,
+  sormonto: { VERNICIATO: 13, RIVESTITO: 14 },
+  stecca: 3000,
+  pesoSteccaKg: 0.304,
+} as const;
+
+/**
+ * Minuteria del PREMIUM, per pezzo:
+ * - giunzione interna: una per INCROCIO verticale × orizzontale;
+ * - perno tondo: uno per ogni testa che si incastra nella cornice (cioè uno per
+ *   foro della cornice: 2 per verticale, 2 per fila di orizzontali);
+ * - giunzione a L: una per angolo della cornice, pesa come quella interna.
+ */
+export const MINUTERIA_PREMIUM = {
+  giunzionePesoKg: 0.169,
+  pernoPesoKg: 0.015,
+  giunzioneLPesoKg: 0.169,
+} as const;
+
 export const DEFAULT_GIOCO = 1;          // mm per lato, infilaggio barra nel canale
-export const DEFAULT_KERF = 2;           // mm, spessore della lama
+export const DEFAULT_KERF = 3;           // mm, spessore della lama
+export const DEFAULT_INTESTATURA = 20;   // mm rifilati in testa a ogni stecca nuova
 export const DEFAULT_MARGINE_MINIMO = 10; // mm fra il filo interno della cornice e il bordo dell'ultima barra
 
 /**

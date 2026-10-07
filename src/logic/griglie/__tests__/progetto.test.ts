@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { calcolaProgetto, calcolaImballaggio, type ConfigGriglia } from '../progetto';
-import { pianificaTaglio } from '../nesting';
+import { pianificaTaglio, AVANZO_MINIMO } from '../nesting';
 import { BARRA, PROFILO_U } from '../materiali';
 
 // Caso di riferimento, ricontrollabile a mano:
@@ -33,8 +33,8 @@ describe('LONDRA — geometria', () => {
   const p = calcolaProgetto(BASE);
 
   it('la barra va a battuta sul fondo del canale, meno il gioco', () => {
-    const verticale = p.barre.find((b) => b.etichetta === 'Barra verticale')!;
-    const orizzontale = p.barre.find((b) => b.etichetta === 'Barra orizzontale')!;
+    const verticale = p.barre.find((b) => b.etichetta === 'Verticale')!;
+    const orizzontale = p.barre.find((b) => b.etichetta === 'Orizzontale')!;
     // ingombro − 2×(spessore U + gioco)
     expect(verticale.lunghezza).toBe(2000 - 2 * (1.5 + 1)); // 1995
     expect(orizzontale.lunghezza).toBe(1000 - 2 * (1.5 + 1)); // 995
@@ -70,7 +70,7 @@ describe('LONDRA — geometria', () => {
   });
 
   it('i fori cadono sugli incroci, misurati dalla testa della barra', () => {
-    const verticale = p.barre.find((b) => b.etichetta === 'Barra verticale')!;
+    const verticale = p.barre.find((b) => b.etichetta === 'Verticale')!;
     expect(verticale.primoForo).toBe(97.5);        // asse 100 − testa 2,5
     expect(verticale.interasse).toBe(200);
     expect(verticale.nFori).toBe(10);
@@ -114,8 +114,8 @@ describe('LONDRA — geometria', () => {
     // verticali hanno lunghezze e quantità diverse, e ogni tipo sta tutto da una
     // parte sola. Le orizzontali sono a vista → una parete sola, e il lato a
     // vista resta senza teste di rivetto.
-    const oriz = p.barre.find((b) => b.etichetta === 'Barra orizzontale')!;
-    const vert = p.barre.find((b) => b.etichetta === 'Barra verticale')!;
+    const oriz = p.barre.find((b) => b.etichetta === 'Orizzontale')!;
+    const vert = p.barre.find((b) => b.etichetta === 'Verticale')!;
 
     expect(oriz.quantitaCieca).toBe(oriz.quantitaPerTelaio);
     expect(oriz.quantitaPassante).toBe(0);
@@ -126,8 +126,8 @@ describe('LONDRA — geometria', () => {
 
   it('invertendo lo strato a vista si invertono le forature', () => {
     const v = calcolaProgetto({ ...BASE, famigliaAVista: 'V' });
-    const oriz = v.barre.find((b) => b.etichetta === 'Barra orizzontale')!;
-    const vert = v.barre.find((b) => b.etichetta === 'Barra verticale')!;
+    const oriz = v.barre.find((b) => b.etichetta === 'Orizzontale')!;
+    const vert = v.barre.find((b) => b.etichetta === 'Verticale')!;
     expect(vert.quantitaCieca).toBe(vert.quantitaPerTelaio);
     expect(oriz.quantitaPassante).toBe(oriz.quantitaPerTelaio);
   });
@@ -173,20 +173,62 @@ describe('LONDRA — casi che salvano materiale', () => {
   });
 });
 
-describe('nesting — piano di taglio dalla stecca', () => {
-  it('non riempie una stecca oltre la sua lunghezza, trucioli inclusi', () => {
+describe('nesting — piano di taglio una misura alla volta', () => {
+  const pezziDi = (piano: ReturnType<typeof pianificaTaglio>) =>
+    piano.passi.reduce((t, p) => t + p.prelievi.reduce((u, q) => u + q.pezzi * q.ripetizioni, 0), 0);
+
+  it('una battuta per misura, dalla più lunga, anche se i codici sono diversi', () => {
     const piano = pianificaTaglio(
-      [{ etichetta: 'barra', lunghezza: 995, quantita: 10 }],
-      3000,
-      2,
+      [
+        { etichetta: 'A3', lunghezza: 540, quantita: 4 },
+        { etichetta: 'A1', lunghezza: 812, quantita: 2 },
+        { etichetta: 'B3', lunghezza: 540, quantita: 3 },
+      ],
+      3000, 2,
     );
-    for (const s of piano.stecche) {
-      const consumato = s.tagli.reduce((t, x) => t + x.lunghezza + 2, 0);
-      expect(consumato).toBeLessThanOrEqual(3000 + 1e-9);
-    }
-    // 995 × 3 = 2985, più due tagli (4 mm) = 2989 → tre pezzi per stecca
-    expect(piano.stecche[0]!.tagli).toHaveLength(3);
-    expect(piano.nStecche).toBe(4); // 10 pezzi → 3+3+3+1
+    expect(piano.passi.map((p) => p.lunghezza)).toEqual([812, 540]);
+    expect(piano.passi[1]!.quantita).toBe(7);
+    expect(piano.passi[1]!.codici).toEqual([{ etichetta: 'A3', quantita: 4 }, { etichetta: 'B3', quantita: 3 }]);
+  });
+
+  it('la stecca nuova si rifila in testa, ogni pezzo paga la lama', () => {
+    // 3000 − 10 di intestatura = 2990; 995 + 2 = 997 a pezzo → 2 pezzi (3 farebbero 2991)
+    const piano = pianificaTaglio([{ etichetta: 'barra', lunghezza: 995, quantita: 4 }], 3000, 2, { intestatura: 10 });
+    expect(piano.nStecche).toBe(2);
+    expect(piano.passi[0]!.prelievi).toEqual([
+      { da: 'NUOVA', lunghezza: 3000, pezzi: 2, avanzo: 2990 - 2 * 997, alBanco: false, ripetizioni: 2 },
+    ]);
+    // Senza intestatura i tre pezzi ci stanno
+    expect(pianificaTaglio([{ etichetta: 'barra', lunghezza: 995, quantita: 3 }], 3000, 2, { intestatura: 0 }).nStecche).toBe(1);
+  });
+
+  it('gli avanzi utili vanno al banco e la misura dopo li consuma prima delle stecche nuove', () => {
+    // Stecca da 3000: 2 × 1200 (+lama) = 2404 → spezzone da 586, buono per i 500
+    const piano = pianificaTaglio(
+      [
+        { etichetta: 'lunga', lunghezza: 1200, quantita: 4 },
+        { etichetta: 'corta', lunghezza: 500, quantita: 2 },
+      ],
+      3000, 2, { intestatura: 10 },
+    );
+    const [lunghe, corte] = piano.passi;
+    expect(lunghe!.prelievi).toEqual([{ da: 'NUOVA', lunghezza: 3000, pezzi: 2, avanzo: 586, alBanco: true, ripetizioni: 2 }]);
+    expect(corte!.prelievi).toEqual([{ da: 'SPEZZONE', lunghezza: 586, pezzi: 1, avanzo: 84, alBanco: false, ripetizioni: 2 }]);
+    expect(piano.nStecche).toBe(2);
+    expect(piano.avanzi).toEqual([84, 84]);
+  });
+
+  it('fra gli spezzoni sceglie il più corto in cui il pezzo ci sta', () => {
+    const piano = pianificaTaglio(
+      [
+        { etichetta: 'a', lunghezza: 2000, quantita: 1 },   // spezzone 988
+        { etichetta: 'b', lunghezza: 2500, quantita: 1 },   // spezzone 488
+        { etichetta: 'c', lunghezza: 400, quantita: 1 },
+      ],
+      3000, 2, { intestatura: 10 },
+    );
+    expect(piano.passi[2]!.prelievi[0]).toMatchObject({ da: 'SPEZZONE', lunghezza: 488, pezzi: 1 });
+    expect(piano.avanzi).toEqual([988, 86]);
   });
 
   it('non perde né inventa pezzi', () => {
@@ -194,25 +236,101 @@ describe('nesting — piano di taglio dalla stecca', () => {
       [
         { etichetta: 'verticale', lunghezza: 1995, quantita: 10 },
         { etichetta: 'orizzontale', lunghezza: 995, quantita: 10 },
+        { etichetta: 'traverso', lunghezza: 333, quantita: 7 },
       ],
       3000, 2,
     );
-    const tagliati = piano.stecche.flatMap((s) => s.tagli);
-    expect(tagliati).toHaveLength(20);
-    expect(piano.materialeUtile).toBe(10 * 1995 + 10 * 995);
+    expect(pezziDi(piano)).toBe(27);
+    expect(piano.materialeUtile).toBe(10 * 1995 + 10 * 995 + 7 * 333);
   });
 
-  it('sfrido = materiale comprato − materiale nei pezzi', () => {
-    const piano = pianificaTaglio([{ etichetta: 'x', lunghezza: 1000, quantita: 3 }], 3000, 2);
-    // 1000×3 = 3000, ma due tagli da 2 mm non ci stanno → 2 pezzi + 1
-    expect(piano.materialeAcquistato).toBe(piano.nStecche * 3000);
+  it('il materiale torna: pezzi + lama + intestature + avanzi = stecche comprate', () => {
+    const kerf = 2, intestatura = 10;
+    const piano = pianificaTaglio(
+      [
+        { etichetta: 'x', lunghezza: 1450, quantita: 5 },
+        { etichetta: 'y', lunghezza: 610, quantita: 9 },
+        { etichetta: 'z', lunghezza: 270, quantita: 12 },
+      ],
+      4000, kerf, { intestatura },
+    );
+    const pezzi = pezziDi(piano);
+    const avanzi = piano.avanzi.reduce((t, a) => t + a, 0);
+    const conto = piano.materialeUtile + pezzi * kerf + piano.nStecche * intestatura + avanzi;
+    expect(conto).toBeCloseTo(piano.materialeAcquistato, 6);
     expect(piano.sfrido).toBe(piano.materialeAcquistato - piano.materialeUtile);
   });
 
-  it('un pezzo più lungo della stecca non viene tagliato di nascosto: viene segnalato', () => {
-    const piano = pianificaTaglio([{ etichetta: 'enorme', lunghezza: 3500, quantita: 2 }], 3000, 2);
-    expect(piano.nonRicavabili).toHaveLength(1);
+  it('cento pezzi identici restano una riga: le stecche uguali si accorpano', () => {
+    const piano = pianificaTaglio([{ etichetta: 'barra', lunghezza: 990, quantita: 30 }], 3000, 2, { intestatura: 10 });
+    expect(piano.passi).toHaveLength(1);
+    expect(piano.passi[0]!.prelievi).toHaveLength(1);
+    expect(piano.passi[0]!.prelievi[0]).toMatchObject({ pezzi: 3, ripetizioni: 10 });
+  });
+
+  it('una lunghezza non numerica (errore nella distinta) si segnala, una nulla no', () => {
+    const piano = pianificaTaglio(
+      [
+        { etichetta: 'rotto', lunghezza: Number.NaN, quantita: 2 },
+        { etichetta: 'niente', lunghezza: 0, quantita: 2 },
+        { etichetta: 'buono', lunghezza: 500, quantita: 1 },
+      ],
+      3000, 3, { intestatura: 20 },
+    );
+    expect(piano.nonRicavabili.map((p) => p.etichetta)).toEqual(['rotto']);
+    expect(piano.passi.map((p) => p.lunghezza)).toEqual([500]);
+  });
+
+  it('un pezzo che non esce da una stecca nuova non viene tagliato di nascosto: viene segnalato', () => {
+    const piano = pianificaTaglio(
+      [
+        { etichetta: 'enorme', lunghezza: 3500, quantita: 2 },
+        { etichetta: 'al pelo', lunghezza: 2995, quantita: 1 },  // ci starebbe, ma non con l'intestatura
+      ],
+      3000, 2, { intestatura: 10 },
+    );
+    expect(piano.nonRicavabili.map((p) => p.etichetta)).toEqual(['enorme', 'al pelo']);
     expect(piano.nStecche).toBe(0);
+    expect(piano.passi).toHaveLength(0);
+  });
+});
+
+describe('nesting — piano ottimizzato sugli scarti', () => {
+  // La commessa di prova della scheda: col Best-Fit lascia quattro scarti sotto i 20 cm
+  const commessa = [[350, 4], [700, 4], [661, 2], [149, 12], [600, 2], [1200, 2], [1161, 1], [274, 4]]
+    .map(([lunghezza, quantita], i) => ({ etichetta: `p${i}`, lunghezza: lunghezza!, quantita: quantita! }));
+  const scarti = (p: ReturnType<typeof pianificaTaglio>) => p.avanzi.filter((a) => a < AVANZO_MINIMO);
+
+  it('meno scarti, qui senza barre in più', () => {
+    const base = pianificaTaglio(commessa, 3000, 3, { intestatura: 20 });
+    const ott = pianificaTaglio(commessa, 3000, 3, { intestatura: 20, ottimizza: true });
+    expect(ott.nStecche).toBe(base.nStecche);
+    expect(ott.materialeScarto).toBeLessThan(base.materialeScarto);
+    expect(scarti(base).length).toBeGreaterThan(0);
+    expect(scarti(ott).length).toBeLessThan(scarti(base).length);
+  });
+
+  it('non scarta mai più del Best-Fit (può aprire una barra in più) e non perde pezzi', () => {
+    let seme = 11;
+    const caso = () => (seme = (seme * 16807) % 2147483647) / 2147483647;
+    for (let n = 0; n < 40; n++) {
+      const pezzi = Array.from({ length: 2 + Math.floor(caso() * 4) }, (_, i) => ({
+        etichetta: `p${i}`, lunghezza: Math.round(120 + caso() * 1800), quantita: 1 + Math.floor(caso() * 10),
+      }));
+      const base = pianificaTaglio(pezzi, 3000, 3, { intestatura: 20 });
+      const ott = pianificaTaglio(pezzi, 3000, 3, { intestatura: 20, ottimizza: true });
+      expect(ott.materialeScarto).toBeLessThanOrEqual(base.materialeScarto + 1e-6);
+      const tagliati = ott.passi.reduce((t, p) => t + p.prelievi.reduce((u, q) => u + q.pezzi * q.ripetizioni, 0), 0);
+      expect(tagliati).toBe(pezzi.reduce((t, p) => t + p.quantita, 0));
+    }
+  });
+
+  it('«al banco» vuol dire che lo spezzone torna davvero, e i metri tornano: profilo + magazzino + scarto', () => {
+    const ott = pianificaTaglio(commessa, 3000, 3, { intestatura: 20, ottimizza: true });
+    const alBanco = ott.passi.flatMap((p) => p.prelievi).filter((q) => q.alBanco).reduce((t, q) => t + q.ripetizioni, 0);
+    const spezzoni = ott.passi.flatMap((p) => p.prelievi).filter((q) => q.da === 'SPEZZONE').reduce((t, q) => t + q.ripetizioni, 0);
+    expect(alBanco).toBe(spezzoni);
+    expect(ott.materialeUtile + ott.materialeMagazzino + ott.materialeScarto).toBeCloseTo(ott.materialeAcquistato, 6);
   });
 });
 
@@ -260,7 +378,7 @@ describe('LONDRA — distribuzione a SPAZI UGUALI', () => {
   });
 
   it('i fori usano il passo EFFETTIVO, non quello digitato col cursore', () => {
-    const verticale = p.barre.find((b) => b.etichetta === 'Barra verticale')!;
+    const verticale = p.barre.find((b) => b.etichetta === 'Verticale')!;
     expect(verticale.interasse).toBeCloseTo(p.passoEffettivoY, 9);
     expect(verticale.interasse).not.toBe(BASE.passoVerticale);
     for (let i = 1; i < verticale.posizioni.length; i++) {
@@ -301,7 +419,7 @@ describe('LONDRA — distribuzione a SPAZI UGUALI', () => {
     for (const v of vuoti) expect(v).toBeCloseTo(vuoti[0]!, 9);
     // Le barre restano lunghe quanto l'ingombro: le teste sporgono oltre
     // l'ultima barra incrociata, come d'uso nelle griglie da giardino.
-    const o = nuda.barre.find((b) => b.etichetta === 'Barra orizzontale')!;
+    const o = nuda.barre.find((b) => b.etichetta === 'Orizzontale')!;
     expect(o.lunghezza).toBe(1000);
     expect(nuda.assiVerticali[0]! - BARRA.larghezza / 2).toBeGreaterThan(0);
   });
@@ -318,8 +436,8 @@ describe('LONDRA — griglia nuda (senza bordo perimetrale)', () => {
 
   it('senza canale non c\'è rientro: la barra vale l\'ingombro pieno', () => {
     expect(nuda.testa).toBe(0);
-    const v = nuda.barre.find((b) => b.etichetta === 'Barra verticale')!;
-    const o = nuda.barre.find((b) => b.etichetta === 'Barra orizzontale')!;
+    const v = nuda.barre.find((b) => b.etichetta === 'Verticale')!;
+    const o = nuda.barre.find((b) => b.etichetta === 'Orizzontale')!;
     expect(v.lunghezza).toBe(2000);
     expect(o.lunghezza).toBe(1000);
   });
@@ -345,33 +463,8 @@ describe('LONDRA — griglia nuda (senza bordo perimetrale)', () => {
   });
 
   it('i fori partono dal filo del pannello, non dal fondo di un canale che non c\'è', () => {
-    const v = nuda.barre.find((b) => b.etichetta === 'Barra verticale')!;
+    const v = nuda.barre.find((b) => b.etichetta === 'Verticale')!;
     expect(v.primoForo).toBe(nuda.assiOrizzontali[0]);
-  });
-});
-
-describe('nesting — stecche accorpate per schema', () => {
-  it('cento pezzi identici non diventano cento righe da leggere', () => {
-    const piano = pianificaTaglio([{ etichetta: 'barra', lunghezza: 995, quantita: 30 }], 3000, 2);
-    // 10 stecche da 3 pezzi ciascuna → un solo schema, ripetuto 10 volte
-    expect(piano.nStecche).toBe(10);
-    expect(piano.gruppi).toHaveLength(1);
-    expect(piano.gruppi[0]!.ripetizioni).toBe(10);
-    expect(piano.gruppi[0]!.tagli).toHaveLength(3);
-  });
-
-  it('gli schemi diversi restano distinti, e le ripetizioni tornano', () => {
-    const piano = pianificaTaglio(
-      [
-        { etichetta: 'lunga', lunghezza: 1995, quantita: 4 },
-        { etichetta: 'corta', lunghezza: 995, quantita: 4 },
-      ],
-      3000, 2,
-    );
-    const totale = piano.gruppi.reduce((t, g) => t + g.ripetizioni, 0);
-    expect(totale).toBe(piano.nStecche);
-    const pezziNeiGruppi = piano.gruppi.reduce((t, g) => t + g.tagli.length * g.ripetizioni, 0);
-    expect(pezziNeiGruppi).toBe(8);
   });
 });
 

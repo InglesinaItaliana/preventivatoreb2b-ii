@@ -86,7 +86,7 @@
     if (role.value === 'LOGISTICA') return adminLinks.filter(l => l.route === '/delivery');
     return []; // I clienti o ruoli sconosciuti non vedono link admin
   });
-  const UNDER_CONSTRUCTION = ['/stack', '/calcoli', '/griglie'];
+  const UNDER_CONSTRUCTION = ['/stack', '/calcoli'];
   const standardLinks = computed(() => visibleLinks.value.filter(l => !UNDER_CONSTRUCTION.includes(l.route)));
 const constructionLinks = computed(() => {
   const base = visibleLinks.value.filter(l => UNDER_CONSTRUCTION.includes(l.route));
@@ -107,7 +107,7 @@ const constructionLinks = computed(() => {
     { label: 'Produzione', route: '/production', icon: CogIcon, color: 'text-amber-400', bg: 'bg-amber-50' },
     { label: 'Spedizioni', route: '/delivery', icon: TruckIcon, color: 'text-amber-400', bg: 'bg-amber-50' },
     { label: 'Stack Viewer', route: '/stack', icon: CubeIcon, color: 'text-amber-400', bg: 'bg-amber-50' },
-    { label: 'Configuratore Griglie', route: '/griglie', icon: Squares2X2Icon, color: 'text-amber-400', bg: 'bg-amber-50' },
+    { label: 'Configuratore SUA', route: '/griglie', icon: Squares2X2Icon, color: 'text-amber-400', bg: 'bg-amber-50' },
     { label: 'Impostazioni', route: '/admin/settings', icon: AdjustmentsHorizontalIcon, color: 'text-amber-400', bg: 'bg-amber-50' },
   ];
   

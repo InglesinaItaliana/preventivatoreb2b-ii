@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { appartiene, coloreFinitura, tinta, COLORE_NEUTRO } from '../finiture';
+import { appartiene, coloreFinitura, eBiancoDiSerie, tinta, COLORE_NEUTRO } from '../finiture';
 
 // I gruppi qui sotto sono quelli VERI del listino POPS (letti dal foglio, non
 // immaginati): il primo tentativo filtrava su "VERNICIAT" — che nel listino non
@@ -73,5 +73,18 @@ describe('tinta: distinguere le barre dal telaio senza cambiare colore', () => {
   it('un bianco scurito resta visibile su fondo chiaro', () => {
     const bordo = tinta('#F1EDE1', -0.45);
     expect(bordo).not.toBe('#f1ede1');
+  });
+});
+
+describe('finiture — il bianco di serie (piano ottimizzato sullo scarto)', () => {
+  it('solo il RAL 9010, anche scritto attaccato; non il rivestito BIANCO LE11 né altri numeri', () => {
+    expect(eBiancoDiSerie('BIANCO 9010')).toBe(true);
+    expect(eBiancoDiSerie('RAL9010')).toBe(true);
+    expect(eBiancoDiSerie('Bianco 9010 opaco')).toBe(true);
+    expect(eBiancoDiSerie('BIANCO LE11')).toBe(false);
+    expect(eBiancoDiSerie('GRIGIO ANTRACITE 7016')).toBe(false);
+    expect(eBiancoDiSerie('CODICE 19010')).toBe(false);
+    expect(eBiancoDiSerie('')).toBe(false);
+    expect(eBiancoDiSerie(undefined)).toBe(false);
   });
 });
