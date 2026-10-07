@@ -1070,8 +1070,8 @@ void editorRef
   min-width: 0;
 }
 .nd-editor :deep(.ProseMirror ul[data-type="taskList"] li[data-checked="true"] > div) {
-  text-decoration: line-through;
-  color: var(--md-sys-color-on-surface-variant);
+  opacity: 0.5;
+  transition: opacity 0.15s;
 }
 /* Nested TaskList: solo indentation, nessun bullet aggiuntivo */
 .nd-editor :deep(.ProseMirror ul[data-type="taskList"] ul[data-type="taskList"]) {
@@ -1209,27 +1209,29 @@ void editorRef
   .nd-share-btn { padding: 6px; }
 }
 
-/* ── Tabelle dentro l'editor (estensione @tiptap/extension-table) ─────────── */
-.nd-editor :deep(.nd-table) {
+/* ── Tabelle dentro l'editor (estensione @tiptap/extension-table) ───────────
+   Selettore sul tag, non sulla classe nd-table: con resizable:true la tabella
+   è disegnata dalla TableView di TipTap, che non applica HTMLAttributes. */
+.nd-editor :deep(.ProseMirror table) {
   border-collapse: collapse;
   margin: 12px 0;
   width: 100%;
   table-layout: fixed;
 }
-.nd-editor :deep(.nd-table td),
-.nd-editor :deep(.nd-table th) {
+.nd-editor :deep(.ProseMirror td),
+.nd-editor :deep(.ProseMirror th) {
   border: 1px solid var(--md-sys-color-outline-variant);
   padding: 6px 8px;
   vertical-align: top;
   min-width: 60px;
   position: relative;
 }
-.nd-editor :deep(.nd-table th) {
+.nd-editor :deep(.ProseMirror th) {
   background: var(--md-sys-color-surface-container);
   font-weight: 600;
   text-align: left;
 }
-.nd-editor :deep(.nd-table .selectedCell::after) {
+.nd-editor :deep(.ProseMirror .selectedCell::after) {
   position: absolute; inset: 0; pointer-events: none;
   background: color-mix(in srgb, var(--md-sys-color-primary) 12%, transparent);
   content: '';
